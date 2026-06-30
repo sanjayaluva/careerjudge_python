@@ -1,0 +1,1373 @@
+{
+  "meta": {
+    "project": "CareerJudge",
+    "document": "Question Types UI Specification",
+    "source": "1_1__Career_Judge_Question_Types_Details__19-02-2021.pdf",
+    "version": "1.0.0",
+    "total_screen_types": 21,
+    "generated_for": "AI/Agent UI development (Django + Alpine.js / HTMX)"
+  },
+
+  "shared": {
+    "global_layout": {
+      "type": "three_panel",
+      "panels": ["sidebar", "content", "footer"]
+    },
+    "header": {
+      "id": "header",
+      "components": [
+        {
+          "id": "test_title",
+          "type": "text",
+          "role": "heading",
+          "placeholder": "Test Title"
+        },
+        {
+          "id": "instructions_btn",
+          "type": "button",
+          "label": "Instructions",
+          "action": "show_instructions_modal"
+        },
+        {
+          "id": "timer",
+          "type": "countdown_display",
+          "direction": "backward",
+          "format": "HH:MM:SS",
+          "label": "Time left"
+        }
+      ]
+    },
+    "sidebar": {
+      "id": "sidebar",
+      "components": [
+        {
+          "id": "section_nav",
+          "type": "navigation_tree",
+          "label": "TEST PROGRESS",
+          "node_states": {
+            "active_attempted": { "color": "blue", "clickable": true },
+            "bookmarked": { "color": "brown", "clickable": true },
+            "inactive_not_attempted": { "color": "gray", "clickable": false }
+          },
+          "structure": "sections > questions",
+          "note": "Clicking a blue/brown link navigates to that question"
+        },
+        {
+          "id": "test_summary",
+          "type": "stats_panel",
+          "label": "Test Summary",
+          "fields": [
+            { "key": "total", "label": "Total" },
+            { "key": "attempted", "label": "Attempted" },
+            { "key": "bookmarked", "label": "Bookmarked", "color": "brown", "clickable": true, "action": "show_bookmarked_list" },
+            { "key": "skipped", "label": "Skipped", "color": "blue", "clickable": true, "action": "show_skipped_list" },
+            { "key": "not_attempted", "label": "Not Attempted" }
+          ]
+        }
+      ]
+    },
+    "footer": {
+      "id": "footer",
+      "components": [
+        {
+          "id": "next_btn",
+          "type": "button",
+          "label": "Next Question",
+          "action": "skip_to_next",
+          "position": "bottom_left"
+        },
+        {
+          "id": "bookmark_btn",
+          "type": "checkbox",
+          "label": "Bookmark",
+          "action": "bookmark_and_advance",
+          "position": "bottom_centre"
+        },
+        {
+          "id": "prev_btn",
+          "type": "button",
+          "label": "Previous Question",
+          "action": "go_to_previous",
+          "position": "bottom_left"
+        },
+        {
+          "id": "submit_btn",
+          "type": "button",
+          "label": "Submit Answer",
+          "action": "save_answer_and_advance",
+          "position": "bottom_right"
+        },
+        {
+          "id": "suspend_btn",
+          "type": "button",
+          "label": "Suspend Session",
+          "action": "pause_and_save_session",
+          "position": "bottom_right",
+          "behaviour": "On resume, test starts from the suspended question"
+        }
+      ]
+    },
+    "question_header_fields": [
+      { "id": "question_number", "type": "text", "label": "Question:" },
+      { "id": "question_text_primary", "type": "text", "multiline": true },
+      { "id": "question_text_secondary", "type": "text", "multiline": true, "optional": true }
+    ]
+  },
+
+  "ui_states": {
+    "question_states": ["not_attempted", "attempted", "bookmarked", "skipped", "inactive"],
+    "session_states": ["active", "suspended", "completed"],
+    "answer_states": ["unanswered", "answered", "bookmarked_unanswered", "bookmarked_answered"],
+    "media_states": ["not_played", "playing", "played", "replay_blocked"],
+    "hotspot_states": ["unclicked", "clicked_pending", "confirmed", "cancelled"]
+  },
+
+  "scoring_types": {
+    "binary": {
+      "code": "BINARY",
+      "description": "Correct=1, Incorrect=0",
+      "range": [0, 1]
+    },
+    "partial": {
+      "code": "PARTIAL",
+      "description": "Each correct item scores 1; incorrect scores 0",
+      "range": "0 to n"
+    },
+    "negative": {
+      "code": "NEGATIVE",
+      "description": "Correct=+1, Incorrect=-1; floor at 0 if negatives exceed positives",
+      "range": "0 to n",
+      "floor_rule": "If incorrect_count > correct_count → score = 0, not negative"
+    },
+    "rank": {
+      "code": "RANK",
+      "description": "Highest rank receives n (total options), lowest receives 1",
+      "range": "1 to n"
+    },
+    "rank_x_rate": {
+      "code": "RANK_RATE",
+      "description": "Final score = rank_score × rating_score",
+      "example": "Rank 1 of 4 options (score=4) × Rating 6 of 7 = 24; Max = 4×7 = 28"
+    },
+    "rating_scale": {
+      "code": "RATING",
+      "description": "Point on scale maps to score; forward or reverse direction configurable",
+      "modes": {
+        "forward": "Leftmost point = highest score",
+        "reverse": "Rightmost point = highest score"
+      }
+    },
+    "forced_choice": {
+      "code": "FORCED_CHOICE",
+      "description": "Score assigned per option at question creation; may be 0&1, 1&2, 1&3 etc.",
+      "range": "configurable"
+    },
+    "forced_choice_two_level": {
+      "code": "FORCED_CHOICE_RATED",
+      "description": "Final score = predefined_option_score × rating selected",
+      "range": "configurable"
+    }
+  },
+
+  "question_types": [
+
+    {
+      "id": "1a",
+      "code": "MCQ_TEXT_IMAGE",
+      "label": "Multiple Choice – Text/Image",
+      "category": "multiple_choice",
+      "scoring": { "type": "BINARY" },
+      "screens": ["question_answer"],
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        { "id": "question_id", "type": "text" },
+        { "id": "question_text_1", "type": "text", "multiline": true },
+        { "id": "question_text_2", "type": "text", "multiline": true, "optional": true },
+        { "id": "question_image", "type": "image", "optional": true },
+        {
+          "id": "response_options",
+          "type": "radio_group",
+          "option_type": "text",
+          "min": 2,
+          "max": "as_defined_at_creation",
+          "layout": "vertical_list"
+        }
+      ],
+      "footer": "shared",
+      "behaviour": [
+        "Single correct answer only",
+        "Submit saves answer and loads next question",
+        "Bookmark flags question and navigates to next"
+      ]
+    },
+
+    {
+      "id": "1b",
+      "code": "MCQ_TEXT_IMAGE_IMG_OPTIONS",
+      "label": "Multiple Choice – Text/Image with Image Response Options",
+      "category": "multiple_choice",
+      "scoring": { "type": "BINARY" },
+      "screens": ["question_answer"],
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        { "id": "question_id", "type": "text" },
+        { "id": "question_text_1", "type": "text", "multiline": true },
+        { "id": "question_text_2", "type": "text", "multiline": true, "optional": true },
+        { "id": "question_image", "type": "image", "optional": true },
+        {
+          "id": "response_options",
+          "type": "radio_group",
+          "option_type": "image",
+          "min": 2,
+          "max": "as_defined_at_creation",
+          "layout": "grid_2col",
+          "note": "Image options take significantly more vertical space than text options"
+        }
+      ],
+      "footer": "shared",
+      "behaviour": [
+        "Single correct answer only",
+        "Option images may be large; layout must account for extra vertical space"
+      ]
+    },
+
+    {
+      "id": "1c",
+      "code": "MCQ_AUDIO_MULTI",
+      "label": "Multiple Choice – Audio with Multiple Questions",
+      "category": "multiple_choice",
+      "scoring": { "type": "BINARY", "per": "sub_question" },
+      "screens": ["audio_play", "question_answer"],
+      "screen_sequence": "audio_play → question_answer (×n sub-questions)",
+      "screen_definitions": {
+        "audio_play": {
+          "id": "audio_play_screen",
+          "components": [
+            { "id": "test_title", "type": "text" },
+            { "id": "question_id", "type": "text" },
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "audio_player",
+              "type": "audio_player",
+              "controls": ["play"],
+              "replay_allowed": false,
+              "note": "Play once only; no replay after initial play"
+            }
+          ],
+          "footer_overrides": {
+            "submit_btn": { "visible": false },
+            "next_btn": { "visible": true },
+            "suspend_btn": { "visible": true }
+          }
+        },
+        "question_answer": {
+          "id": "audio_answer_screen",
+          "trigger": "appears_after_audio_play_screen",
+          "components": [
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "response_options",
+              "type": "radio_group",
+              "option_type": "text",
+              "min": 2,
+              "max": "as_defined_at_creation"
+            }
+          ],
+          "footer_overrides": {
+            "submit_btn": { "visible": true },
+            "prev_btn": {
+              "visible": true,
+              "label": "Previous Question",
+              "scope": "within_this_audio_only",
+              "note": "Returns to previous sub-question of this audio; no audio replay"
+            }
+          }
+        }
+      },
+      "sub_question_config": {
+        "count": "defined_at_creation",
+        "sequence": "linear",
+        "on_submit": "load_next_sub_question_or_advance"
+      },
+      "behaviour": [
+        "Audio plays once on display screen; NO REPLAY ever",
+        "Navigating back to this question only shows answer options, never re-plays audio",
+        "Each sub-question gets individual score of 0 or 1",
+        "Number of sub-questions defined at question creation"
+      ]
+    },
+
+    {
+      "id": "1d",
+      "code": "MCQ_VIDEO_MULTI",
+      "label": "Multiple Choice – Video with Multiple Questions",
+      "category": "multiple_choice",
+      "scoring": { "type": "BINARY", "per": "sub_question" },
+      "screens": ["video_play", "question_answer"],
+      "screen_sequence": "video_play → question_answer (×n sub-questions)",
+      "screen_definitions": {
+        "video_play": {
+          "id": "video_play_screen",
+          "components": [
+            { "id": "test_title", "type": "text" },
+            { "id": "question_id", "type": "text" },
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "video_player",
+              "type": "video_player",
+              "controls": ["play", "seek", "fullscreen"],
+              "replay_allowed": false,
+              "note": "Play once only; no replay"
+            }
+          ],
+          "footer_overrides": {
+            "submit_btn": { "visible": false }
+          }
+        },
+        "question_answer": {
+          "id": "video_answer_screen",
+          "trigger": "appears_after_video_play_screen",
+          "components": [
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "response_options",
+              "type": "radio_group",
+              "option_type": "text",
+              "min": 2,
+              "max": "as_defined_at_creation"
+            }
+          ],
+          "footer_overrides": {
+            "submit_btn": { "visible": true },
+            "prev_btn": { "scope": "within_this_video_only" }
+          }
+        }
+      },
+      "behaviour": [
+        "Video plays once; NO REPLAY ever",
+        "Navigating back only shows answer options, never re-plays video",
+        "Each sub-question scores 0 or 1 independently"
+      ]
+    },
+
+    {
+      "id": "1e",
+      "code": "MCQ_WORD_FLASH_MULTI",
+      "label": "Multiple Choice – Word Flash with Multiple Questions",
+      "category": "multiple_choice",
+      "scoring": { "type": "BINARY", "per": "sub_question" },
+      "screens": ["flash_display", "question_answer"],
+      "screen_sequence": "flash_display → question_answer (×n sub-questions)",
+      "screen_definitions": {
+        "flash_display": {
+          "id": "word_flash_screen",
+          "components": [
+            { "id": "test_title", "type": "text" },
+            { "id": "question_id", "type": "text" },
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "flash_display_box",
+              "type": "flash_text",
+              "source": "flash_list",
+              "selection": "random",
+              "config": {
+                "flash_list_size": "defined_at_creation",
+                "display_count": "defined_at_creation",
+                "interval_ms": "defined_at_creation (e.g. 500ms or 1000ms)",
+                "randomise": true
+              },
+              "replay_allowed": false
+            },
+            {
+              "id": "flash_list_sidebar",
+              "type": "ordered_list",
+              "position": "right_panel",
+              "items": "full_word_list",
+              "highlight_current": true
+            }
+          ],
+          "footer_overrides": {
+            "submit_btn": { "visible": false }
+          }
+        },
+        "question_answer": {
+          "id": "flash_answer_screen",
+          "trigger": "appears_after_flash_complete",
+          "components": [
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "response_options",
+              "type": "radio_group",
+              "option_type": "text"
+            }
+          ],
+          "footer_overrides": {
+            "prev_btn": { "scope": "within_this_flash_stimulus_only" }
+          }
+        }
+      },
+      "behaviour": [
+        "Words randomly selected from a larger list",
+        "Display count (how many words flash) set at creation",
+        "Time interval per word set at creation",
+        "NO REPLAY of flash list ever",
+        "Navigating back only shows answer options"
+      ]
+    },
+
+    {
+      "id": "1f",
+      "code": "MCQ_IMAGE_FLASH_MULTI",
+      "label": "Multiple Choice – Image Flash with Multiple Questions",
+      "category": "multiple_choice",
+      "scoring": { "type": "BINARY", "per": "sub_question" },
+      "screens": ["flash_display", "question_answer"],
+      "screen_sequence": "flash_display → question_answer (×n sub-questions)",
+      "screen_definitions": {
+        "flash_display": {
+          "id": "image_flash_screen",
+          "components": [
+            { "id": "test_title", "type": "text" },
+            { "id": "question_id", "type": "text" },
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "flash_display_box",
+              "type": "flash_image",
+              "source": "flash_list",
+              "selection": "random",
+              "config": {
+                "flash_list_size": "defined_at_creation",
+                "display_count": "defined_at_creation",
+                "interval_ms": "defined_at_creation",
+                "randomise": true
+              },
+              "replay_allowed": false
+            },
+            {
+              "id": "flash_list_sidebar",
+              "type": "ordered_image_list",
+              "position": "right_panel",
+              "items": "full_image_list",
+              "highlight_current": true
+            }
+          ],
+          "footer_overrides": {
+            "submit_btn": { "visible": false }
+          }
+        },
+        "question_answer": {
+          "id": "flash_image_answer_screen",
+          "trigger": "appears_after_flash_complete",
+          "components": [
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "response_options",
+              "type": "radio_group",
+              "option_type": "text"
+            }
+          ]
+        }
+      },
+      "behaviour": [
+        "Images randomly selected from larger list",
+        "NO REPLAY of image flash list ever"
+      ]
+    },
+
+    {
+      "id": "1g",
+      "code": "MCQ_PASSAGE_DISPLAY_MULTI",
+      "label": "Multiple Choice – Passage Display with Multiple Questions",
+      "category": "multiple_choice",
+      "scoring": { "type": "BINARY", "per": "sub_question" },
+      "screens": ["passage_display", "question_answer"],
+      "screen_sequence": "passage_display (timed) → question_answer (×n sub-questions)",
+      "screen_definitions": {
+        "passage_display": {
+          "id": "passage_display_screen",
+          "components": [
+            { "id": "test_title", "type": "text" },
+            { "id": "question_id", "type": "text" },
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "passage_box",
+              "type": "timed_text_display",
+              "content_fields": [
+                { "id": "passage_title", "type": "text" },
+                { "id": "passage_body", "type": "text", "multiline": true }
+              ],
+              "config": {
+                "display_duration_seconds": "defined_at_creation (e.g. 60s or 30s)",
+                "auto_hide": true,
+                "replay_allowed": false
+              }
+            }
+          ],
+          "footer_overrides": {
+            "submit_btn": { "visible": false }
+          }
+        },
+        "question_answer": {
+          "id": "passage_answer_screen",
+          "trigger": "appears_after_passage_timer_expires",
+          "components": [
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "response_options",
+              "type": "radio_group",
+              "option_type": "text"
+            }
+          ],
+          "footer_overrides": {
+            "prev_btn": { "scope": "within_this_passage_only" }
+          }
+        }
+      },
+      "behaviour": [
+        "Passage shown for a defined timed interval then auto-disappears",
+        "NO REPEAT DISPLAY of passage once timer expires",
+        "Navigating back only shows answer options, never re-shows passage"
+      ]
+    },
+
+    {
+      "id": "1h",
+      "code": "MCQ_IMAGE_DISPLAY_MULTI",
+      "label": "Multiple Choice – Image Display with Multiple Questions",
+      "category": "multiple_choice",
+      "scoring": { "type": "BINARY", "per": "sub_question" },
+      "screens": ["image_display", "question_answer"],
+      "screen_sequence": "image_display (timed) → question_answer (×n sub-questions)",
+      "screen_definitions": {
+        "image_display": {
+          "id": "image_display_screen",
+          "components": [
+            { "id": "test_title", "type": "text" },
+            { "id": "question_id", "type": "text" },
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "image_display_box",
+              "type": "timed_image_display",
+              "config": {
+                "display_duration_seconds": "defined_at_creation",
+                "auto_hide": true,
+                "replay_allowed": false
+              }
+            }
+          ],
+          "footer_overrides": {
+            "submit_btn": { "visible": false }
+          }
+        },
+        "question_answer": {
+          "id": "image_display_answer_screen",
+          "trigger": "appears_after_image_timer_expires",
+          "components": [
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "response_options",
+              "type": "radio_group",
+              "option_type": "text"
+            }
+          ],
+          "footer_overrides": {
+            "prev_btn": { "scope": "within_this_image_stimulus_only" }
+          }
+        }
+      },
+      "behaviour": [
+        "Image shown for defined timed interval then auto-disappears",
+        "NO REPEAT DISPLAY of image once timer expires",
+        "Navigating back only shows answer options, never re-shows image"
+      ]
+    },
+
+    {
+      "id": "2a",
+      "code": "FITB_SINGLE",
+      "label": "Fill-in-the-Blank – Single Field",
+      "category": "fill_in_blank",
+      "scoring": { "type": "BINARY" },
+      "screens": ["question_answer"],
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        { "id": "question_id", "type": "text" },
+        { "id": "question_text_1", "type": "text", "multiline": true },
+        { "id": "question_text_2", "type": "text", "multiline": true, "optional": true },
+        { "id": "question_image", "type": "image", "optional": true },
+        {
+          "id": "response_text_field",
+          "type": "text_input",
+          "single_field": true,
+          "label": "Enter your answer here"
+        }
+      ],
+      "answer_matching": {
+        "correct_answers_max": 5,
+        "match_mode": "exact_or_any_of_list",
+        "case_sensitive": "configurable_at_creation",
+        "percentage_match": {
+          "supported": true,
+          "note": "If % match set at 100, all letters must match; letter-by-letter comparison"
+        }
+      },
+      "footer": "shared",
+      "behaviour": [
+        "Up to 5 predefined correct answers; any match → score 1",
+        "Case sensitivity configurable at creation via checkbox",
+        "Percentage match mode: single correct answer, letter-by-letter comparison"
+      ]
+    },
+
+    {
+      "id": "2b",
+      "code": "FITB_MULTI_FIELD",
+      "label": "Fill-in-the-Blank – Multiple Fields",
+      "category": "fill_in_blank",
+      "scoring": { "type": "PARTIAL" },
+      "screens": ["question_answer"],
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        { "id": "question_id", "type": "text" },
+        { "id": "question_text_1", "type": "text", "multiline": true },
+        { "id": "question_text_2", "type": "text", "multiline": true, "optional": true },
+        { "id": "question_image", "type": "image", "optional": true },
+        {
+          "id": "response_fields",
+          "type": "text_input_group",
+          "multi_field": true,
+          "field_count": "defined_at_creation",
+          "label": "Enter your answer here",
+          "field_label_prefix": "Option",
+          "layout": "vertical_list"
+        }
+      ],
+      "answer_matching": {
+        "per_field": {
+          "correct_answers_max": 5,
+          "match_mode": "any_of_list",
+          "case_sensitive": "configurable_at_creation"
+        }
+      },
+      "footer": "shared",
+      "behaviour": [
+        "Each field scored independently: correct=1, incorrect=0",
+        "Total score = sum of correct field scores",
+        "Max score = number of answer fields",
+        "Up to 5 possible correct answers per field",
+        "Number of fields defined at creation"
+      ]
+    },
+
+    {
+      "id": "2c",
+      "code": "FITB_WORD_FLASH_MULTI",
+      "label": "Fill-in-the-Blank – Word Flash with Multiple Recall Fields",
+      "category": "fill_in_blank",
+      "scoring": { "type": "PARTIAL", "per": "correctly_recalled_item" },
+      "screens": ["flash_display", "recall_answer"],
+      "screen_definitions": {
+        "flash_display": {
+          "id": "fitb_word_flash_screen",
+          "components": [
+            { "id": "test_title", "type": "text" },
+            { "id": "question_id", "type": "text" },
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "flash_display_box",
+              "type": "flash_text",
+              "source": "flash_list",
+              "config": {
+                "selection": "random",
+                "display_count": "defined_at_creation",
+                "interval_ms": "defined_at_creation",
+                "randomise": true
+              },
+              "replay_allowed": false
+            },
+            {
+              "id": "flash_list_sidebar",
+              "type": "ordered_list",
+              "position": "right_panel",
+              "highlight_current": true
+            }
+          ],
+          "footer_overrides": {
+            "submit_btn": { "visible": false }
+          }
+        },
+        "recall_answer": {
+          "id": "fitb_recall_screen",
+          "trigger": "appears_after_flash_complete",
+          "components": [
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "recall_fields",
+              "type": "text_input_group",
+              "multi_field": true,
+              "field_count": "defined_at_creation",
+              "field_label_prefix": "Option",
+              "layout": "two_column_grid",
+              "dynamic_add_remove": true,
+              "note": "Field count adjustable at creation; candidate types what they remember"
+            }
+          ],
+          "footer_overrides": {
+            "submit_btn": { "visible": true }
+          }
+        }
+      },
+      "behaviour": [
+        "Candidate recalls and types words they remember from the flash list",
+        "Each correctly recalled word scores 1",
+        "7 correct recalls → total score 7",
+        "Fields can be added/removed at creation time",
+        "NO REPLAY of flash list"
+      ]
+    },
+
+    {
+      "id": "2d",
+      "code": "FITB_IMAGE_FLASH_MULTI",
+      "label": "Fill-in-the-Blank – Image Flash with Multiple Recall Fields",
+      "category": "fill_in_blank",
+      "scoring": { "type": "PARTIAL", "per": "correctly_recalled_item" },
+      "screens": ["flash_display", "recall_answer"],
+      "screen_definitions": {
+        "flash_display": {
+          "id": "fitb_image_flash_screen",
+          "components": [
+            { "id": "test_title", "type": "text" },
+            { "id": "question_id", "type": "text" },
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "flash_display_box",
+              "type": "flash_image",
+              "config": {
+                "selection": "random",
+                "display_count": "defined_at_creation",
+                "interval_ms": "defined_at_creation",
+                "randomise": true
+              },
+              "replay_allowed": false
+            },
+            {
+              "id": "flash_list_sidebar",
+              "type": "ordered_image_list",
+              "position": "right_panel",
+              "highlight_current": true
+            }
+          ],
+          "footer_overrides": {
+            "submit_btn": { "visible": false }
+          }
+        },
+        "recall_answer": {
+          "id": "fitb_image_recall_screen",
+          "trigger": "appears_after_flash_complete",
+          "components": [
+            { "id": "question_text", "type": "text", "multiline": true },
+            {
+              "id": "recall_fields",
+              "type": "text_input_group",
+              "multi_field": true,
+              "field_count": "defined_at_creation",
+              "layout": "two_column_grid",
+              "dynamic_add_remove": true
+            }
+          ]
+        }
+      },
+      "behaviour": [
+        "Candidate recalls and types names of images they remember",
+        "Each correctly recalled image name scores 1",
+        "NO REPLAY of image flash list"
+      ]
+    },
+
+    {
+      "id": "3",
+      "code": "MATCH_FOLLOWING",
+      "label": "Match-the-Following – Drag and Drop",
+      "category": "match_following",
+      "scoring": {
+        "type": "PARTIAL",
+        "per_match": 1,
+        "example": "5 matches all correct → score 5; 3 correct → score 3"
+      },
+      "screens": ["question_answer"],
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        { "id": "question_id", "type": "text" },
+        { "id": "question_text_1", "type": "text", "multiline": true },
+        { "id": "question_text_2", "type": "text", "multiline": true, "optional": true },
+        { "id": "question_image", "type": "image", "optional": true },
+        {
+          "id": "match_table",
+          "type": "drag_drop_match",
+          "group_a": {
+            "id": "group_a",
+            "label": "GROUP A",
+            "items": "defined_at_creation",
+            "item_type": "text",
+            "numbered": true
+          },
+          "group_b": {
+            "id": "group_b",
+            "label": "GROUP B",
+            "slots": "same_count_as_group_a",
+            "slot_type": "drop_target",
+            "numbered": true
+          },
+          "drag_pool": {
+            "id": "drag_drop_pool",
+            "label": "DRAG & DROP",
+            "items": "more_than_group_a",
+            "note": "Pool has more options than match slots to prevent guessing"
+          }
+        }
+      ],
+      "footer": "shared",
+      "behaviour": [
+        "Candidate drags from DRAG & DROP pool into GROUP B slots",
+        "Pool always has more items than match slots",
+        "Each correctly placed item scores 1",
+        "Max score = number of match pairs"
+      ]
+    },
+
+    {
+      "id": "4",
+      "code": "GRID_LIST_SELECTION",
+      "label": "Grid-List Selection – Multiple Answers",
+      "category": "grid_selection",
+      "scoring": {
+        "type": "NEGATIVE",
+        "correct": 1,
+        "incorrect": -1,
+        "floor_rule": "If incorrect_count > correct_count → score = 0",
+        "example": "5 correct + 3 incorrect = score 3"
+      },
+      "screens": ["question_answer"],
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        { "id": "question_id", "type": "text" },
+        { "id": "question_text_1", "type": "text", "multiline": true },
+        { "id": "question_text_2", "type": "text", "multiline": true, "optional": true },
+        {
+          "id": "response_grid",
+          "type": "grid_selector",
+          "grid_size": "defined_at_creation",
+          "grid_size_examples": ["2x2", "3x2", "3x3", "4x3", "5x6"],
+          "cell_type": "button",
+          "cell_content": "text_or_image",
+          "cell_behaviour": {
+            "on_click": "show_popup_with_full_text",
+            "popup_action": "select_button_in_popup"
+          },
+          "numbered": true,
+          "revisit_allowed": true
+        },
+        {
+          "id": "view_complete_list_btn",
+          "type": "button",
+          "label": "View Complete Grid Items",
+          "action": "show_full_option_list_modal",
+          "note": "Full list uses same numbering as grid"
+        }
+      ],
+      "footer": "shared",
+      "behaviour": [
+        "Candidate clicks cells to open popup showing full option text",
+        "SELECT in popup confirms that option",
+        "Candidate can revisit and modify selections",
+        "Negative marking: incorrect -1, but floor at 0"
+      ]
+    },
+
+    {
+      "id": "5a",
+      "code": "HOTSPOT_SINGLE",
+      "label": "HOTSPOT Selection – Single Answer per Question",
+      "category": "hotspot",
+      "scoring": { "type": "BINARY", "note": "Click on hotspot=1, non-hotspot=0, no negative" },
+      "screens": ["question_answer"],
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        { "id": "question_id", "type": "text" },
+        { "id": "question_text_1", "type": "text", "multiline": true },
+        { "id": "question_text_2", "type": "text", "multiline": true, "optional": true },
+        {
+          "id": "hotspot_image",
+          "type": "hotspot_canvas",
+          "hotspot_config": {
+            "hotspot_areas": "defined_at_creation",
+            "hotspot_pixel_size": "defined_at_creation (e.g. 2x2, 3x3, 4x4, 5x5, 6x6)",
+            "whole_figure_in_pixels": true,
+            "active_pixels": "hotspot_areas_only"
+          },
+          "interaction": {
+            "mode": "single_click",
+            "latest_click_only": true,
+            "click_indicator": {
+              "type": "red_button",
+              "state": "inactive_display_only"
+            }
+          }
+        }
+      ],
+      "multi_question_config": {
+        "supported": true,
+        "sequence": "one_question_at_a_time",
+        "on_submit": "load_next_sub_question_same_image"
+      },
+      "footer": "shared",
+      "behaviour": [
+        "Only the LATEST click is scored; previous clicks ignored",
+        "Click on non-hotspot pixel is invalid → score 0, no negative",
+        "Multiple sub-questions can be based on one pixelised figure",
+        "Each sub-question appears one at a time",
+        "Hotspot area pixel size defined at question creation"
+      ]
+    },
+
+    {
+      "id": "5b",
+      "code": "HOTSPOT_MULTI",
+      "label": "HOTSPOT Selection – Multiple Answers",
+      "category": "hotspot",
+      "scoring": {
+        "type": "NEGATIVE",
+        "correct_click": 1,
+        "incorrect_click": -1,
+        "floor_rule": "If incorrect_count > correct_count → score = 0",
+        "example": "4 correct + 1 non-hotspot = score 3"
+      },
+      "screens": ["question_answer"],
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        { "id": "question_id", "type": "text" },
+        { "id": "question_text_1", "type": "text", "multiline": true },
+        { "id": "question_text_2", "type": "text", "multiline": true, "optional": true },
+        {
+          "id": "hotspot_image",
+          "type": "hotspot_canvas",
+          "hotspot_config": {
+            "hotspot_areas": "two_or_more",
+            "hotspot_pixel_size": "defined_at_creation",
+            "active_pixels": "hotspot_areas_only"
+          },
+          "interaction": {
+            "mode": "multi_click",
+            "all_clicks_considered": true,
+            "per_click_flow": {
+              "step1": "click → red button marker appears at click location",
+              "step2": "popup appears: 'Confirm your selection'",
+              "step3a": "CONFIRM → click validated and counted",
+              "step3b": "CANCEL → click invalidated and not counted"
+            },
+            "popup": {
+              "id": "confirm_popup",
+              "type": "modal",
+              "components": [
+                { "id": "popup_title", "type": "text", "content": "Confirm your selection" },
+                { "id": "confirm_btn", "type": "button", "label": "Confirm", "action": "validate_click" },
+                { "id": "cancel_btn", "type": "button", "label": "Cancel", "action": "invalidate_click" }
+              ]
+            }
+          }
+        }
+      ],
+      "footer": "shared",
+      "behaviour": [
+        "All confirmed clicks are considered for scoring",
+        "Each click marked with red button indicator until confirmed/cancelled",
+        "Negative marking for wrong clicks; floor at 0"
+      ]
+    },
+
+    {
+      "id": "6a",
+      "code": "RANK_SIMPLE",
+      "label": "Simple Ranking Scale – Psychometric",
+      "category": "psychometric_rank",
+      "scoring": {
+        "type": "RANK",
+        "description": "Rank 1 (highest) = n points; last rank = 1 point",
+        "example": "4 options: Rank1→4pts, Rank2→3pts, Rank3→2pts, Rank4→1pt"
+      },
+      "screens": ["question_answer"],
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        { "id": "question_id", "type": "text" },
+        { "id": "question_text_1", "type": "text", "multiline": true },
+        { "id": "question_text_2", "type": "text", "multiline": true, "optional": true },
+        {
+          "id": "rank_options_list",
+          "type": "rank_selector_list",
+          "option_count": "defined_at_creation_based_on_sections",
+          "option_tagging": "each_option_tagged_to_one_section",
+          "max_sections": 6,
+          "per_option": {
+            "id": "rank_option_row",
+            "components": [
+              { "id": "option_label", "type": "text" },
+              { "id": "option_text", "type": "text" },
+              {
+                "id": "rank_btn",
+                "type": "button",
+                "style": "blue_square",
+                "action": "show_rank_popup"
+              },
+              {
+                "id": "assigned_rank_indicator",
+                "type": "badge",
+                "visible_when": "rank_assigned"
+              }
+            ]
+          },
+          "popup": {
+            "id": "rank_popup",
+            "type": "dropdown_popup",
+            "trigger": "rank_btn_click",
+            "components": [
+              { "id": "select_label", "type": "text", "content": "Select" },
+              {
+                "id": "rank_list",
+                "type": "option_list",
+                "options": "Rank 1 to Rank n (defined at creation)"
+              }
+            ]
+          }
+        }
+      ],
+      "footer": "shared",
+      "behaviour": [
+        "Option count = number of sections in the assessment",
+        "Each option is tagged to exactly one section",
+        "Candidate clicks RANK button → popup → selects rank",
+        "Rank 1 = highest priority/preference"
+      ]
+    },
+
+    {
+      "id": "6b",
+      "code": "RANK_THEN_RATE",
+      "label": "First Rank-Then Rate Scale – Psychometric",
+      "category": "psychometric_rank",
+      "scoring": {
+        "type": "RANK_RATE",
+        "formula": "rank_score × rating_score",
+        "example": "Rank 1 of 4 (score=4) × Rating 6 of 7 = 24; Max = 4×7 = 28"
+      },
+      "screens": ["question_answer"],
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        { "id": "question_id", "type": "text" },
+        { "id": "question_text_1", "type": "text", "multiline": true },
+        {
+          "id": "rank_rate_options_list",
+          "type": "rank_rate_selector_list",
+          "option_count": "defined_at_creation_based_on_sections",
+          "option_tagging": "each_option_tagged_to_one_section",
+          "max_sections": 4,
+          "per_option": {
+            "id": "rank_rate_option_row",
+            "components": [
+              { "id": "option_label", "type": "text" },
+              { "id": "option_text", "type": "text" },
+              {
+                "id": "rank_btn",
+                "type": "button",
+                "style": "blue_square",
+                "action": "show_rank_popup",
+                "level": 1
+              },
+              {
+                "id": "rank_indicator",
+                "type": "badge",
+                "visible_when": "rank_assigned",
+                "shows": "assigned_rank_number"
+              },
+              {
+                "id": "rating_indicator",
+                "type": "badge",
+                "visible_when": "rating_assigned",
+                "shows": "assigned_rating_number"
+              }
+            ]
+          },
+          "ranking_popup": {
+            "id": "ranking_popup",
+            "trigger": "rank_btn_click",
+            "type": "dropdown_popup",
+            "options": "Rank 1 to Rank n"
+          },
+          "rating_scale": {
+            "id": "rating_scale_row",
+            "type": "numeric_scale",
+            "trigger": "appears_after_rank_selected",
+            "position": "below_options_list",
+            "label": "Rate the selected option on the SCALE below:",
+            "scale_points": "defined_at_creation",
+            "scale_direction": "defined_at_creation"
+          }
+        }
+      ],
+      "two_level_flow": {
+        "level_1": "Candidate clicks RANK button → selects rank from popup",
+        "level_2": "Rating scale appears → candidate selects rating point",
+        "score_calculation": "rank_score × rating_score = final_option_score"
+      },
+      "footer": "shared",
+      "behaviour": [
+        "Two-level interaction per option: rank first, then rate",
+        "Rating scale extent defined at creation",
+        "Option count = number of sections in assessment",
+        "Each option tagged to exactly one section"
+      ]
+    },
+
+    {
+      "id": "7",
+      "code": "STANDARD_RATING_SCALE",
+      "label": "Standard Rating Scale – Psychometric",
+      "category": "psychometric_rating",
+      "scoring": {
+        "type": "RATING",
+        "scale_points": "defined_at_creation",
+        "direction": "forward_or_reverse",
+        "forward": "leftmost = highest score",
+        "reverse": "rightmost = highest score",
+        "example": "5-point scale: scores 1 to 5"
+      },
+      "screens": ["multi_question_continuous"],
+      "template": "MULTIPLE_QUESTION_TEMPLATE",
+      "display_order": "random_or_static_defined_at_creation",
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        {
+          "id": "instructions_block",
+          "type": "text_block",
+          "position": "above_question_table",
+          "example": "Indicate how true the following statements are..."
+        },
+        {
+          "id": "rating_question_table",
+          "type": "rating_grid",
+          "structure": {
+            "column_headers": {
+              "type": "descriptive_scale_labels",
+              "count": "matches_scale_points",
+              "examples": ["Very True", "True", "Not Sure", "Not True", "Not at all True"],
+              "alt_examples": ["Always", "Often", "Sometimes", "Rarely", "Never"]
+            },
+            "rows": {
+              "type": "question_row",
+              "count": "all_questions_in_section",
+              "per_row": [
+                { "id": "question_label", "type": "text" },
+                { "id": "question_text", "type": "text" },
+                {
+                  "id": "scale_cells",
+                  "type": "radio_cell_group",
+                  "count": "matches_scale_points",
+                  "selection_style": "highlight_selected_cell"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "footer_overrides": {
+        "submit_btn": { "label": "Submit Test" }
+      },
+      "behaviour": [
+        "All questions displayed in continuous scroll",
+        "Display order can be random or static",
+        "Each rating click highlights selected cell",
+        "Forward or reverse scoring direction set at creation"
+      ]
+    },
+
+    {
+      "id": "8a",
+      "code": "FORCED_CHOICE_SINGLE_LEVEL",
+      "label": "Forced-Choice Scale – Single Level Rating",
+      "category": "psychometric_forced_choice",
+      "scoring": {
+        "type": "FORCED_CHOICE",
+        "note": "Score values assigned to each option at creation; may be 0&1, 1&2, 1&3 etc."
+      },
+      "screens": ["multi_question_continuous"],
+      "template": "MULTIPLE_QUESTION_TEMPLATE",
+      "display_order": "random_or_static_defined_at_creation",
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        {
+          "id": "instructions_block",
+          "type": "text_block",
+          "example": "Choose the statement that most closely describes your Self. BE SPONTANEOUS."
+        },
+        {
+          "id": "forced_choice_question_list",
+          "type": "forced_choice_grid",
+          "per_question": {
+            "id": "fc_question_row",
+            "components": [
+              { "id": "question_stem", "type": "text", "role": "question_heading" },
+              {
+                "id": "option_1_row",
+                "type": "forced_choice_option",
+                "components": [
+                  { "id": "option_1_label", "type": "text", "content": "Option 1" },
+                  { "id": "option_1_text", "type": "text" },
+                  {
+                    "id": "option_1_select_btn",
+                    "type": "button",
+                    "style": "blue_square",
+                    "action": "select_this_option"
+                  }
+                ],
+                "section_tag": "tagged_to_one_section"
+              },
+              {
+                "id": "option_2_row",
+                "type": "forced_choice_option",
+                "components": [
+                  { "id": "option_2_label", "type": "text", "content": "Option 2" },
+                  { "id": "option_2_text", "type": "text" },
+                  {
+                    "id": "option_2_select_btn",
+                    "type": "button",
+                    "style": "blue_square",
+                    "action": "select_this_option"
+                  }
+                ],
+                "section_tag": "tagged_to_different_section"
+              }
+            ]
+          }
+        }
+      ],
+      "footer": "shared",
+      "behaviour": [
+        "Each question has exactly two options (both are questions, not simple answers)",
+        "Candidate selects one option by clicking its blue button",
+        "Options are tagged to different sections of the assessment",
+        "Score values are pre-defined at creation; not always 0&1",
+        "All questions displayed in continuous scroll"
+      ]
+    },
+
+    {
+      "id": "8b",
+      "code": "FORCED_CHOICE_TWO_LEVEL",
+      "label": "Forced-Choice Scale – Two-Level Rating",
+      "category": "psychometric_forced_choice",
+      "scoring": {
+        "type": "FORCED_CHOICE_RATED",
+        "formula": "predefined_option_score × selected_rating",
+        "note": "Pre-defined scores: may be 0&1, 1&2, 1&3 etc."
+      },
+      "screens": ["multi_question_continuous"],
+      "template": "MULTIPLE_QUESTION_TEMPLATE",
+      "display_order": "random_or_static_defined_at_creation",
+      "content_fields": [
+        { "id": "test_title", "type": "text" },
+        {
+          "id": "instructions_block",
+          "type": "text_block",
+          "example": "Choose the statement that most closely describes your Self. BE SPONTANEOUS."
+        },
+        {
+          "id": "forced_choice_question_list",
+          "type": "forced_choice_rated_grid",
+          "per_question": {
+            "components": [
+              { "id": "question_stem", "type": "text" },
+              {
+                "id": "option_1_row",
+                "type": "forced_choice_option",
+                "select_btn": { "action": "select_and_show_rating_scale" }
+              },
+              {
+                "id": "option_2_row",
+                "type": "forced_choice_option",
+                "select_btn": { "action": "select_and_show_rating_scale" }
+              }
+            ]
+          }
+        },
+        {
+          "id": "rating_scale_row",
+          "type": "numeric_scale",
+          "trigger": "appears_after_option_selected",
+          "position": "below_question_list",
+          "label": "Rate the selected option on the SCALE below:",
+          "scale_points": "defined_at_creation",
+          "layout": "horizontal_numbered_buttons"
+        }
+      ],
+      "two_level_flow": {
+        "level_1": "Candidate clicks blue button beside chosen option",
+        "level_2": "Rating scale appears below → candidate selects rating",
+        "score_calculation": "predefined_option_score × rating = final_score"
+      },
+      "footer": "shared",
+      "behaviour": [
+        "Two-level: select option first, then rate intensity on scale",
+        "Rating scale defined at creation (e.g. 1–7 points)",
+        "Pre-defined option scores set at creation; not always 0&1",
+        "Each question has exactly two options tagged to different sections"
+      ]
+    }
+
+  ],
+
+  "creation_time_config_summary": {
+    "description": "Parameters that must be configured at question creation time for each type",
+    "params_by_type": {
+      "1a_1b": ["number_of_response_options", "correct_option", "optional_image"],
+      "1c_1d": ["audio_or_video_file", "number_of_sub_questions", "sub_question_texts", "correct_options"],
+      "1e_1f": ["flash_list_items", "display_count", "interval_ms", "number_of_sub_questions", "correct_options"],
+      "1g_1h": ["passage_or_image", "display_duration_seconds", "number_of_sub_questions", "correct_options"],
+      "2a": ["correct_answers_list_max_5", "case_sensitive_flag", "percentage_match_threshold"],
+      "2b": ["number_of_fields", "correct_answers_per_field_max_5", "case_sensitive_flag"],
+      "2c_2d": ["flash_list", "display_count", "interval_ms", "number_of_recall_fields"],
+      "3": ["group_a_items", "correct_group_b_mappings", "drag_pool_items"],
+      "4": ["grid_dimensions", "cell_content_text_or_image", "correct_cells"],
+      "5a_5b": ["hotspot_image", "hotspot_pixel_areas", "pixel_size_per_hotspot"],
+      "6a": ["number_of_options", "section_tags_per_option"],
+      "6b": ["number_of_options", "section_tags_per_option", "rating_scale_points"],
+      "7": ["scale_points", "scale_labels", "scoring_direction", "question_display_order"],
+      "8a": ["option_scores", "section_tags", "question_display_order"],
+      "8b": ["option_scores", "section_tags", "rating_scale_points", "question_display_order"]
+    }
+  },
+
+  "component_library": {
+    "description": "Reusable component definitions referenced across question types",
+    "components": [
+      { "name": "text_input", "props": ["label", "placeholder", "case_sensitive", "max_length"] },
+      { "name": "radio_group", "props": ["options", "option_type", "layout", "min", "max"] },
+      { "name": "audio_player", "props": ["src", "replay_allowed", "show_controls"] },
+      { "name": "video_player", "props": ["src", "replay_allowed", "show_controls"] },
+      { "name": "flash_text", "props": ["word_list", "display_count", "interval_ms", "randomise"] },
+      { "name": "flash_image", "props": ["image_list", "display_count", "interval_ms", "randomise"] },
+      { "name": "timed_text_display", "props": ["content", "duration_seconds", "auto_hide"] },
+      { "name": "timed_image_display", "props": ["src", "duration_seconds", "auto_hide"] },
+      { "name": "drag_drop_match", "props": ["group_a_items", "group_b_slots", "drag_pool"] },
+      { "name": "grid_selector", "props": ["rows", "cols", "cell_content_type", "numbered"] },
+      { "name": "hotspot_canvas", "props": ["image_src", "hotspot_areas", "pixel_size", "mode"] },
+      { "name": "rank_selector_list", "props": ["options", "max_rank", "popup_trigger"] },
+      { "name": "numeric_scale", "props": ["min", "max", "labels", "direction", "layout"] },
+      { "name": "rating_grid", "props": ["questions", "scale_points", "scale_labels", "direction"] },
+      { "name": "forced_choice_grid", "props": ["questions", "option_scores", "two_level"] },
+      { "name": "countdown_display", "props": ["initial_seconds", "direction", "format"] },
+      { "name": "navigation_tree", "props": ["sections", "questions", "states"] },
+      { "name": "stats_panel", "props": ["fields", "clickable_fields"] },
+      { "name": "confirm_popup", "props": ["title", "on_confirm", "on_cancel"] }
+    ]
+  }
+}

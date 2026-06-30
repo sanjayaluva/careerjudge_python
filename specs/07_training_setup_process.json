@@ -1,0 +1,277 @@
+{
+  "meta": {
+    "file": "07_training_setup_process.json",
+    "source_pdf": "7__Training_Set_Up_Process.pdf",
+    "title": "Training Setup Process",
+    "version": "1.0"
+  },
+  "introduction": {
+    "objective": "To deliver training courses through online media and register students for online as well as live training programs.",
+    "main_processes": [
+      "Training Setup Process (Online-Standard)",
+      "Training Setup Process (Online-Live)",
+      "Training Setup Process (Offline-Live)",
+      "Training Management Process",
+      "Training Registration Process (Front End User)"
+    ]
+  },
+  "processes": {
+    "online_standard_training_setup": {
+      "section": "2",
+      "description": "Online standard training courses deliver a mix of media-based learning materials including videos, audios, text, along with assignments and assessments.",
+      "actor": "Trainer (user)",
+      "sub_processes": [
+        "Creating a new Training Course",
+        "Setting up Course Structure",
+        "Adding Session Contents",
+        "Adding Assessments",
+        "Adding Summary Live Session",
+        "Setting Parameters for Course Completion"
+      ],
+      "creating_new_training_course": {
+        "section": "2.1",
+        "add_new_training_course": {
+          "section": "2.1.1",
+          "steps": [
+            "User clicks 'New Course' button under a training category (Categories created by Admin)",
+            "System shows entry fields to enter title of the Course",
+            "User enters the title",
+            "System asks user to select: Scheduled / Non-Scheduled",
+            "User selects appropriate option",
+            "If Scheduled: System asks to specify total duration allowed for course completion",
+            "User specifies total duration",
+            "System saves the details"
+          ]
+        },
+        "add_objective_and_description": {
+          "section": "2.1.2",
+          "steps": [
+            "User clicks 'Add Objective' button",
+            "System shows entry fields for course objective",
+            "User enters objective and saves",
+            "System shows entry fields for descriptive details (text entry and image upload available)",
+            "User adds text entry/image upload fields, enters content, uploads images and saves",
+            "System adds inputs to the newly added training course"
+          ]
+        }
+      },
+      "setting_up_course_structure": {
+        "section": "2.2",
+        "steps": [
+          "User clicks 'Course Structure' button",
+          "System asks to specify number of lessons to be included",
+          "User specifies number of lessons",
+          "System asks to specify number of weeks or days for course structure",
+          "User specifies weeks or days",
+          "System equally divides lessons across weeks and displays lesson list on a weekly basis with entry fields for lesson names",
+          "User enters names of lessons",
+          "System shows entry fields to add topics to each lesson (any number of subtopics allowed)",
+          "User adds subtopics under each lesson",
+          "System asks to add sessions for each topic",
+          "User adds sessions to each topic",
+          "System displays all details as specified in the course structure"
+        ]
+      },
+      "adding_session_contents": {
+        "section": "2.3",
+        "add_main_session": {
+          "section": "2.3.1",
+          "description": "Main session is a video, flash video, audio, or text material.",
+          "steps": [
+            "User clicks 'Add Content' button",
+            "System asks to select: video (flash), audio, text format",
+            "User selects appropriate content format"
+          ],
+          "if_video_format": {
+            "steps": [
+              "System shows 'Video Upload' button and/or drag-and-drop function",
+              "User uploads or drag-and-drops video files as required",
+              "If user wants interactive questions during video:",
+              "  User clicks 'Timeliner' button",
+              "  System displays video player with timeliner function",
+              "  User sets timeline for the question",
+              "  System shows entry fields for question text, options, and correct option",
+              "  User enters question text, options, marks correct option and submits",
+              "  System shows two conditions: If answer is correct / If answer is incorrect",
+              "  System asks user to set timeline for each condition",
+              "  User sets timelines for both conditions",
+              "  Rule: When test taker selects an answer, system moves to the respective video material tagged to correct/incorrect condition, then continues playing",
+              "  System saves the interactive question inputs"
+            ]
+          },
+          "if_audio_format": {
+            "steps": [
+              "System shows 'Audio Upload' button and/or drag-and-drop function",
+              "User uploads or drag-and-drops audio files as required",
+              "If user wants interactive questions during audio: same process as video with audio player"
+            ]
+          },
+          "if_text_format": {
+            "steps": [
+              "System shows 'Text Upload' button and/or drag-and-drop function",
+              "User uploads or drag-and-drops text files as required",
+              "If user wants to embed video/audio within text:",
+              "  User clicks 'Embed a video/audio' button",
+              "  System shows field to embed the video/audio",
+              "  User enters source details of the video/audio and submits",
+              "  System saves the details"
+            ]
+          }
+        },
+        "add_assignments": {
+          "section": "2.3.2",
+          "description": "User adds additional training materials through videos, audios, doc files, YouTube links, websites etc. Assignments are NOT part of main session but additional study materials.",
+          "steps": [
+            "User clicks 'Add Assignments' button",
+            "System shows various options for attaching assignments: embed video/audio/document links, website links, etc.",
+            "User embeds/links required sources to the session",
+            "If user wants students to submit reports:",
+            "  System shows option: Enable Report Submission",
+            "  User clicks 'Enable Report' button",
+            "  System shows entry fields for description and instruction for the report",
+            "  User adds description and instructions",
+            "  System saves input details and enables report submission function"
+          ],
+          "rule": "When end-user (student) submits the report, a notification is sent to the trainer. Trainer can open and view the report, give a score/rating, and enter feedback."
+        }
+      },
+      "adding_assessments": {
+        "section": "2.4",
+        "description": "User can include assessments/tests at different points as part of training.",
+        "assessment_levels": [
+          "During the session",
+          "End of Session",
+          "End of Topic",
+          "End of Lesson",
+          "End of Course"
+        ],
+        "note": "Assessments can be scored or unscored, with reports or without reports.",
+        "add_assessment_during_session": {
+          "section": "2.4.1",
+          "description": "Within the main session, there may be multiple short videos or audios sequentially arranged and spaced/interlinked by assessments.",
+          "steps": [
+            "User clicks 'Add Assessment' button",
+            "System shows entry fields for assessment title, objective, and description/instruction",
+            "User enters inputs and submits",
+            "System shows filters to select questions from question bank",
+            "User applies filters, selects questions, and assigns to assessment",
+            "System shows assessment design features",
+            "User configures the assessment",
+            "If user wants to add a report: user defines report per the 'general report' process"
+          ],
+          "interlinking_contents_and_assessments": {
+            "section": "2.4.1.1",
+            "steps": [
+              "User clicks 'Interlink' button",
+              "System shows session contents and assessments with facility to sequentially interlink them",
+              "User interlinks session contents and assessments",
+              "System saves the interlink inputs"
+            ]
+          },
+          "automatic_sequence": {
+            "section": "2.4.1.2",
+            "steps": [
+              "User clicks 'Automatic Sequence' button",
+              "System asks user to enable automatic/manual sequence of session contents",
+              "User enables appropriate option",
+              "System saves sequencing inputs"
+            ]
+          }
+        },
+        "add_assessment_end_of_session_topic_lesson_course": {
+          "section": "2.4.2",
+          "description": "User can add assessment at the end of a session, topic, lesson, or course. Process is same as section 2.4.1."
+        }
+      },
+      "adding_summary_live_session": {
+        "section": "2.5",
+        "description": "User can add live session at the end of a week or two weeks. Live sessions are conducted online by trainer periodically.",
+        "steps": [
+          "User clicks 'Add Live Session' button",
+          "System asks to specify number of live sessions, objectives, and schedule",
+          "User specifies details about live sessions and submits",
+          "System saves the inputs"
+        ]
+      },
+      "setting_parameters_for_course_completion": {
+        "section": "2.6",
+        "description": "User can set conditions for completion of a session, lesson, and course.",
+        "steps": [
+          "User clicks 'Parameters for Course Completion' button",
+          "System shows all course contents (including assignments and assessments) and their schedule",
+          "User checks contents in each session/lesson/course to be mandatory for completion"
+        ]
+      }
+    },
+    "online_live_training_setup": {
+      "section": "3",
+      "description": "Online-live courses are ZOOM classrooms. Trainer creates a course, defines structure, assignments, and assessments (except main session) as above, and delivers Zoom sessions.",
+      "features": [
+        "Zoom-setup facilities available on the system",
+        "User can schedule online sessions in advance or on an ongoing basis",
+        "System provides notification facilities for end-users",
+        "System shows end-user a registration form for admission",
+        "Registration details are viewable on trainer's dashboard"
+      ]
+    },
+    "offline_live_training_setup": {
+      "section": "4",
+      "description": "Offline-live courses are real-time classroom sessions. Trainer creates course, defines structure, assignments, and assessments (except main session), and delivers live classroom sessions.",
+      "features": [
+        "User can schedule classroom sessions in advance or on an ongoing basis",
+        "System provides notification facilities for end-users",
+        "System shows end-user a registration form for admission",
+        "Registration details are viewable on trainer's dashboard"
+      ]
+    },
+    "training_management_process": {
+      "section": "5",
+      "description": "Trainer-user can modify course contents with Admin permission.",
+      "allowed_modifications": [
+        "Adding new assignments",
+        "Replacing main session contents with new ones"
+      ],
+      "not_allowed": [
+        "Course structure cannot be modified by trainer (Admin only)",
+        "Deleting a course is the right of Admin only"
+      ],
+      "daily_management_tasks": [
+        "Check messages from end-users and respond",
+        "View assignment reports submitted by end-users and give feedback and scores",
+        "Check schedule of live-online sessions and fix date/time and notify end-users"
+      ],
+      "scheduler_process": {
+        "steps": [
+          "User clicks 'Scheduler' button",
+          "System shows the scheduler",
+          "User sets the ZOOM meeting and clicks 'Notify' button",
+          "System saves the schedule details"
+        ],
+        "note": "When student opens course page, a popup notification about upcoming event (Live Session) appears with meeting link. When student clicks 'Consent' button, notification goes back to trainer about student participation."
+      }
+    },
+    "training_registration_process": {
+      "section": "6",
+      "actor": "End-user (student)",
+      "description": "End-user initiates registration for a training course.",
+      "steps": [
+        "End-User clicks on a training course",
+        "System shows general structure of the course and other details",
+        "User clicks 'Register' to register for the course",
+        "System displays a registration form",
+        "User fills the form and submits",
+        "System takes user to payment process",
+        "User makes necessary payment",
+        "System shows detailed structure of the course with active contents for the user to start training",
+        "Rule: If training course is scheduled, course duration starts from this time",
+        "User takes the program at his convenience",
+        "System provides following feedbacks on course progression on each entry:",
+        "  - Course Completion Status",
+        "  - Time Tracker (Time-spent, Time-left)",
+        "  - Score report (so far obtained)",
+        "  - Feedbacks and messages from trainer/admin",
+        "  - Option to resume from where last left"
+      ]
+    }
+  }
+}

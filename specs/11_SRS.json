@@ -1,0 +1,1557 @@
+{
+  "meta": {
+    "file": "11_SRS.json",
+    "source_pdf": "SRS.pdf",
+    "title": "CareerJudge \u2014 Use Cases & System Architecture (SRS)",
+    "client": "Career Judge",
+    "version": "1.0",
+    "proposed_architecture_version": "v1.0"
+  },
+  "system_architecture": {
+    "description": "Proposed Architecture v1.0 \u2014 CareerJudge multi-layer system",
+    "layers": {
+      "client_application_layer": [
+        "CJ Admin",
+        "Corporate Admin",
+        "Corporate Exclusive",
+        "Psychometrician",
+        "SME/Reviewer",
+        "Trainer",
+        "Group admins",
+        "Counsellor",
+        "Individuals"
+      ],
+      "api_layer": [
+        "WEB API",
+        "SERVICE API"
+      ],
+      "application_layer": {
+        "login_user_management": [
+          "Login",
+          "User Management"
+        ],
+        "assessment": [
+          "Assessment"
+        ],
+        "corp_group_management": [
+          "Corp Group Management"
+        ],
+        "training": [
+          "Training"
+        ],
+        "role_management": [
+          "Role Management"
+        ],
+        "counseling": [
+          "Counseling"
+        ],
+        "career_profiling": [
+          "Career Profiling"
+        ],
+        "question_bank": [
+          "Question Bank"
+        ],
+        "reporting": [
+          "Reporting"
+        ],
+        "profile_match": [
+          "Profile Match Index Band"
+        ],
+        "gap_values": [
+          "Gap Values Calculation"
+        ],
+        "variables_config": [
+          "Variables configuration for Career Match List"
+        ],
+        "career_profiling_report_blueprint": [
+          "Career Profiling Report Blue Print"
+        ],
+        "career_profiling_design": [
+          "Career Profiling Design"
+        ],
+        "reporting_gap_band": [
+          "Reporting",
+          "Gap Band Calculation"
+        ],
+        "cms_management": [
+          "CMS Management"
+        ]
+      },
+      "database_layer": [
+        "DATABASE",
+        "SERVER"
+      ],
+      "action_service_layer": {
+        "mail_notifications": [
+          "Mail Notifications"
+        ],
+        "content_generator": [
+          "Content Generator"
+        ],
+        "content_delivery": [
+          "Content Delivery"
+        ]
+      }
+    }
+  },
+  "use_cases": [
+    {
+      "id": "CJ_UC001",
+      "title": "Sign up",
+      "actors": "Individual users, Trial Users",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User enters the email id 2. System checks whether the email id already exists. If YES, then proceed to Exception flow E1 If NO, then proceed to next step. 3. System displays a form to set password"
+        },
+        {
+          "step": "4",
+          "text": "User enters the relevant details and chooses to save 5. System displays a message: an email with an activation link has been sent to the registered email id, please follow the instructions to complete the registration process."
+        },
+        {
+          "step": "6",
+          "text": "User validates the email ID 7. System validates the email id If valid, proceed to next step If not, proceed to alternate flow A1 8. System displays \u201cRegistration has been completed successfully\u201d A1 Email Link Expired Actor actions System response 1. System displays a message to resend a new link to continue If user chooses to continue, proceed to step 3 Else proceed to Exception flow E2"
+        }
+      ],
+      "alternate_flows": [
+        {
+          "id": "A1",
+          "description": "Email Link Expired Actor actions System response 1. System displays a message to resend a new link to continue If user chooses to continue, proceed to step 3 Else proceed to Exception flow E2"
+        }
+      ],
+      "exception_flows": [
+        {
+          "id": "E1",
+          "description": "If NO, then proceed to next step. 3. System displays a form to set password 4. User enters the relevant details and chooses to save 5. System displays a message: an email with an activation link has been sent to the registered email id, please follow the instructions to complete the registration process. 6. User validates the email ID 7. System validates the email id If valid, proceed to next step"
+        },
+        {
+          "id": "E1",
+          "description": "Email ID already exists Actor actions System response 1. System shows the message: email id already available in the system, please login to continue."
+        },
+        {
+          "id": "E2",
+          "description": "Email link expired; user chooses not to continue, usecase terminates Actor actions System response"
+        }
+      ],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": [
+        {
+          "foot_note": "1",
+          "details": "Email id Email id of the Y text 50 y"
+        },
+        {
+          "foot_note": "2",
+          "details": "Password Password of the y text 25 Should be a combination y"
+        },
+        {
+          "foot_note": "3",
+          "details": "Confirm Confirm y text 25 Password and confirm y"
+        }
+      ]
+    },
+    {
+      "id": "CJ_UC007",
+      "title": "Login",
+      "actors": "All users",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function. 2. System displays a form 3. User enters the credentials. 4. System accepts the credentials and validates If, the authentication is successful, proceed to the next step. Else, proceed to the alternate flow A1 5. System shows appropriate screen after successful login to the user. * Alternate A1: Credentials have not been verified Flow successfully Actor actions S"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC005",
+      "title": "Manage Profile",
+      "actors": "Individual user, Trial user, Corporate Admin, Corporate Exclusive admin, Channel Partner,",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function. 2. System displays the relevant screen. 3. User enters the relevant details and chooses to 4. System displays \u201cProfile has been added save successfully\u201d * Alternate Flow"
+        }
+      ],
+      "alternate_flows": [
+        {
+          "id": "A1",
+          "description": "Business rules 1. Customized view should be available for different roles 2. The create profile URL should be expired within a limited time period."
+        }
+      ],
+      "exception_flows": [],
+      "business_rules": [
+        "Customized view should be available for different roles",
+        "The create profile URL should be expired within a limited time period."
+      ],
+      "acceptance_criteria": [],
+      "field_table": [
+        {
+          "foot_note": "1",
+          "details": "Group name List of employee Y text 50 N"
+        },
+        {
+          "foot_note": "2",
+          "details": "Password Password of the Y text 20 Y"
+        },
+        {
+          "foot_note": "3",
+          "details": "Confirm Confirm Y text 20 Password and confirm Y"
+        },
+        {
+          "foot_note": "1",
+          "details": "Password Password of the Y text 20 Y"
+        },
+        {
+          "foot_note": "2",
+          "details": "Confirm Confirm password Y text 20 Password and confirm Y"
+        },
+        {
+          "foot_note": "3",
+          "details": "Gender Gender of the user N Y Male,"
+        },
+        {
+          "foot_note": "4",
+          "details": "Date of Date of birth of the N Date 10 DD/MM/YYYY format N"
+        },
+        {
+          "foot_note": "5",
+          "details": "Mobile Contact number of Y text 15 Only numerical value Y"
+        }
+      ]
+    },
+    {
+      "id": "CJ_UC006",
+      "title": "View Profile",
+      "actors": "Career Judge Admin, Psychometrician, SME/Reviewer, Counsellor, Trainer, Corporate Admin,",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function. 2. System displays the profile page. * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC002",
+      "title": "Add user",
+      "actors": "CJ Admin, Corporate Admin",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects a relevant action. 2. A form is displayed"
+        },
+        {
+          "step": "3",
+          "text": "User enters the relevant details and chooses to save 4. System checks if the user records are already available in the system. If yes, proceed to exception flow E1 If no, proceed to next step 5. System auto-generates a username and password for the new user. 6. Generate a URL and send that to the user\u2019s email id. * Exception E1: User is already registered. Flow Actor actions System response The us"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [
+        {
+          "id": "E1",
+          "description": "If no, proceed to next step 5. System auto-generates a username and password for the new user. 6. Generate a URL and send that to the user\u2019s email id. * Exception E1: User is already registered. Flow Actor actions System response The user is already registered. Use case terminates."
+        }
+      ],
+      "business_rules": [
+        "Registered Email ID should be unique",
+        "Corporate admin would add corporate Individuals",
+        "For corporate/Corporate Exclusive, the permission to view the assessment report would"
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC043",
+      "title": "Add user \u2013 Channel Partner",
+      "actors": "Channel Partner",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects a relevant action. 2. A form is displayed"
+        },
+        {
+          "step": "3",
+          "text": "User enters the relevant details and chooses to save 4. System checks if the user records are already available in the system. If yes, proceed to exception flow E1 If no, proceed to next step 5. System auto-generates a username and password for the new user. 6. Generate a URL and send that to the user\u2019s email id. * Exception E1: User is already registered. Flow Actor actions System response The us"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [
+        {
+          "id": "E1",
+          "description": "If no, proceed to next step 5. System auto-generates a username and password for the new user. 6. Generate a URL and send that to the user\u2019s email id. * Exception E1: User is already registered. Flow Actor actions System response The user is already registered. Use case terminates."
+        }
+      ],
+      "business_rules": [
+        "Registered Email ID should be unique"
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC003",
+      "title": "Edit User",
+      "actors": "CJ Admin",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the appropriate action 2. System displays the list of appropriate users"
+        },
+        {
+          "step": "3",
+          "text": "User selects the relevant actor 4. System displays the editable details of the actor"
+        },
+        {
+          "step": "5",
+          "text": "User modifies the relevant details and chose to save 6. Displays \u201cA user details has been modified \u201c * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "Details of the individual users cannot be modified by CJ Admin",
+        "Details of the Corporate users cannot be modified by CJ Admin",
+        "CJ admin can only modify the details of the user who has already been added in the system."
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC004",
+      "title": "Delete user",
+      "actors": "CJ Admin",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects appropriate action. 2. System displays the list of appropriate users."
+        },
+        {
+          "step": "3",
+          "text": "User selects the relevant users. 4. System displays a message to confirm the action If actor chooses to continue, proceed to next step 5. System displays \u201cA user has been deleted\u201d * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "CJ Admin cannot delete individual users.",
+        "CJ Admin cannot delete corporate individual users."
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC018",
+      "title": "Role Management",
+      "actors": "Career Judge Admin",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. A form is displayed."
+        },
+        {
+          "step": "3",
+          "text": "User specifies the role name, description and 4. System checks whether the role name already chooses to save. exists if YES, proceed to the exception flow E1 if NO, proceed to the next step 5. System displays a relevant screen."
+        },
+        {
+          "step": "6",
+          "text": "User selects action wise privileges and choose to 7. Displays \u201cA new role has been added successfully\u201d save. * Exception E1 : Role name already exists Flow Actor actions System response 1. System displays a message \u201cRole already exists\u201d, usecase terminates"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "Newly added role will have action wise control.",
+        "Once a role is created with appropriate privileges, those privileges should not be modified in the future."
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC009",
+      "title": "Assign Task",
+      "actors": "Career Judge Admin, Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays the list of available users"
+        },
+        {
+          "step": "3",
+          "text": "User selects the user and assigns a task. 4. A notification has been sent to the appropriate user * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC0013",
+      "title": "Add Questions",
+      "actors": "SME",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "By receiving notification",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function. 2. A Relevant screen is displayed."
+        },
+        {
+          "step": "3",
+          "text": "User enters all the relevant attributes for the question. 4. System displays a list of question type."
+        },
+        {
+          "step": "5",
+          "text": "User selects a question type from the available list 6. System displays a relevant page."
+        },
+        {
+          "step": "7",
+          "text": "User adds the question and the corresponding details 8. System sends a link to the reviewer to review the and chooses to save. questions. * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC014",
+      "title": "Review Questions",
+      "actors": "Reviewer",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays the page with all the newly added questions."
+        },
+        {
+          "step": "3",
+          "text": "User selects the relevant functions 4. System displays the page to add review comments and rate questions. (Against each questions)"
+        },
+        {
+          "step": "5",
+          "text": "User add rating and review comments and choses to save 6. System displays a message: \u201creview comments have been added\u201d. 7. System adds a log file with all the details, Sends a notification to the psychometrician. * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC015",
+      "title": "Confirm Questions",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays the page with all the newly added questions and add / edit logs."
+        },
+        {
+          "step": "3",
+          "text": "User selects the appropriate format of question (added by SME or edited by reviewer) to save in the question bank."
+        },
+        {
+          "step": "4",
+          "text": "User selects the relevant function to select the 5. System displays the page to enable psychometric Psychometric value manually or automatic values. 6. System displays a message: \u201cquestion has been added to the question bank.\u201d. 7. Log file details are updated. 8. Psychometrician\u2019s name and date of adding the question to the question bank has been updated and saved by the system. * Exception or Alt"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC010",
+      "title": "Add Category/Sub-category",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. A form is displayed (to add & edit category)"
+        },
+        {
+          "step": "3",
+          "text": "User edits the category and subcategory (Edit 4. System displays a message to confirm the action Category), add the category/sub-category (Add If user chooses to continue, proceed to next step Category) and chooses to save Else, proceed to Exception flow E1 5. System displays \u201cCategory/sub-category has been edited/added\u201d * Exception If user chooses not to continue, Use case Flow terminates"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [
+        {
+          "id": "E1",
+          "description": "Business rules 1. The available categories/subcategories should be displayed"
+        }
+      ],
+      "business_rules": [
+        "The available categories/subcategories should be displayed"
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC012",
+      "title": "Delete Category/Sub-category",
+      "actors": "CJ Admin",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "CJ Admin opens a notification 2. System displays the details of the notification."
+        },
+        {
+          "step": "3",
+          "text": "User clicks the relevant function and confirms the 4. System displays \u201cCategory/sub-category has been action. deleted\u201d * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "CJ admin should approve the delete request",
+        "When CJ Admin approve the delete action, all the corresponding category/sub-category should be taken off from the database."
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC011",
+      "title": "Request to Delete Category/Sub-category",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. List of all available categories/sub-categories are displayed."
+        },
+        {
+          "step": "3",
+          "text": "User selects the relevant category/sub-category and 4. System sent a notification to the CJ Admin. confirm the action. * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC016",
+      "title": "Request to Delete Question",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. List of all available categories are displayed."
+        },
+        {
+          "step": "3",
+          "text": "User selects the relevant category/sub-category 4. System displays the entire list of questions."
+        },
+        {
+          "step": "5",
+          "text": "User selects the relevant question and confirm the 6. System sent a notification to the CJ Admin. action. * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "When CJ Admin approves the delete action, all the corresponding question should be taken off from the question bank."
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC017",
+      "title": "Delete Question",
+      "actors": "CJ Admin",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User clicks the link displayed in the notification. 2. System redirects to the delete question request page."
+        },
+        {
+          "step": "3",
+          "text": "User clicks the relevant function 4. System displays a message \u201cA question has been deleted.\u201d * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "When CJ Admin approves the delete action, all the corresponding question should be taken off from the question bank.",
+        "There would be a confirmation message required to delete the question."
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC025",
+      "title": "Filter_Data",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function. 2. System displays the relevant page."
+        },
+        {
+          "step": "3",
+          "text": "User selects the relevant parameters. 4. System displays a page with all relevant details."
+        },
+        {
+          "step": "5",
+          "text": "User selects the row containing outliers and deletes 6. System save the data for further analysis. * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC026",
+      "title": "Set Psychometric values",
+      "actors": "System",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "",
+      "main_flow": [],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC029",
+      "title": "Prepare Assessment Blueprint",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Ad Hoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. A form is displayed."
+        },
+        {
+          "step": "3",
+          "text": "User enters relevant details and chooses to save. 4. System displays \u201cA blueprint has been successfully created\u201d System generates an auto Id for the blueprint. * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC030",
+      "title": "Take assessment",
+      "actors": "Trial user, Individuals, Corporate Individuals, Corporate exclusive Individuals",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function. 2. System displays a list of assessment options."
+        },
+        {
+          "step": "3",
+          "text": "User chooses an assessment 4. System redirects to the selected assessment page. If the assessment is a paid one, proceed to Alternate flow A1 Else, proceed to next step."
+        },
+        {
+          "step": "5",
+          "text": "User attempts the assessment and selects the relevant 6. System navigates to the relevant page and usecase function. terminates * Exception A1: Make Payment and continue to step 5 or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [
+        {
+          "id": "A1",
+          "description": "Else, proceed to next step. 5. User attempts the assessment and selects the relevant 6. System navigates to the relevant page and usecase function. terminates * Exception A1: Make Payment and continue to step 5 or Alternate Flow"
+        }
+      ],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC019",
+      "title": "Add criterion",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays the relevant page."
+        },
+        {
+          "step": "3",
+          "text": "User adds(or uploads) the name of the career, 4. System displays a page description and chooses to save. If the user chooses NOT to continue with rank order, go to step 5. Else continue with the alternate flow A1. 5. System displays a page to add relevant scores"
+        },
+        {
+          "step": "6",
+          "text": "User adds the relevant score band and other details 7. System displays a message: \u201cCriterion has been and choses to save. added\u201d * Exception A1: User selects Rank order or Alternate Flow Actor actions System response 1. System displays a page to assign rank to each Page 1 CAT/CIA variable."
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC020",
+      "title": "Edit criterion",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays a page and the score bands for a particular career."
+        },
+        {
+          "step": "3",
+          "text": "User edits the score and chooses to save 4. System displays a message: \u201cCriterion has been edited\u201d * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "Career id should be unique.",
+        "The user should be able to to change the career title in the future (If needed) and keep all other details unchanged. (As requested by the client)"
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC021",
+      "title": "Disable criterion",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays a page and the scores for a particular career."
+        },
+        {
+          "step": "3",
+          "text": "User disable a career from the list. 4. System displays a message: \u201cCriterion has been disabled\u201d * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC022",
+      "title": "Add Score Band",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays the relevant page."
+        },
+        {
+          "step": "3",
+          "text": "User adds the relevant details and chooses to save. 4. System displays the message: score band has been added successfully. * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC023",
+      "title": "Disable Score Band",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays the relevant page."
+        },
+        {
+          "step": "3",
+          "text": "User disables the score band and choses to save, 4. System displays the message: score band has been disabled successfully. * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "User can disable the CAT band.",
+        "If a CAT band has been disabled, that is no longer available to use.",
+        "User can disable the CIA band and is not available to use."
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC044",
+      "title": "Define Rank Scale",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function. 2. System displays the relevant page."
+        },
+        {
+          "step": "3",
+          "text": "User enters the relevant details and chooses to save. 4. System displays \u201cRank scale has been defined\u201d * Exception or Alternate Flow Actor actions System response"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": [
+        {
+          "foot_note": "1",
+          "details": "Rank Rank of the Y Y"
+        }
+      ]
+    },
+    {
+      "id": "CJ_UC024",
+      "title": "Value Allocation Rules",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function. 2. System displays the relevant page."
+        },
+        {
+          "step": "3",
+          "text": "User selects the score band name 4. System displays a screen to enter the rules (corresponding to the score band variables)"
+        },
+        {
+          "step": "5",
+          "text": "User enters the rule and chooses to save. 6. System displays \u201cA new rule set has been created\u201d. * Exception or Alternate Flow Actor actions System response"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": [
+        {
+          "foot_note": "1",
+          "details": "Rule Name of the rule Y Text 100 Rule name should be Y"
+        },
+        {
+          "foot_note": "2",
+          "details": "Descriptio Description N Text 3 Y"
+        },
+        {
+          "foot_note": "3",
+          "details": "Rule Rule Number N System generated by Y"
+        },
+        {
+          "foot_note": "4",
+          "details": "Criterion Criterion scores Y Selecti Y"
+        },
+        {
+          "foot_note": "5",
+          "details": "User Score received by Y Selecti Y"
+        },
+        {
+          "foot_note": "6",
+          "details": "Assign Assign Y Numeri Y"
+        }
+      ]
+    },
+    {
+      "id": "CJ_UC039",
+      "title": "Find profile Index",
+      "actors": "System",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "",
+      "main_flow": [],
+      "alternate_flows": [
+        {
+          "id": "A1",
+          "description": "System Action Calculate score for CAT when criterion is in rank order 1. In the case of criterion score in ranked order, multiply the assigned score of a given variable with the rank weight assigned to that variable\" .Let's call this calculated value \"Score-Weight Product\" 2. Multiply highest Band-Score value (used for finding assigned variable score) with each rank scale value (rank weights 3. Su"
+        }
+      ],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [
+        "Max Maximum score for N Numer System identifies score each category. ic maximum score for each category"
+      ],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC046",
+      "title": "Prepare Career Profiling Report Blueprint",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function. 2. System displays the relevant page. 3. User selects the relevant parameters. 4. System displays a page with all relevant details. * Exception or Alternate Flow Business 1. User should be able to select a row/multiple rows with outliers and delete. rules Notes \u25ba Acceptance 1. criteria 1.4 Design elements (completed with Application Engineering) [Imbed image to "
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC043",
+      "title": "Define Career Match Index",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays the relevant page."
+        },
+        {
+          "step": "3",
+          "text": "User enters relevant details and choses to save 4. System displays the message \u201cCareer match index band has been defined\u2019 or \u201cProfile Match index has been defined\u201d or \u2018gap band has been defined\u2019 * Exception Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [
+        {
+          "id": "E1",
+          "description": "Business rules"
+        }
+      ],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC042",
+      "title": "Define Gap Bands",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays the relevant page."
+        },
+        {
+          "step": "3",
+          "text": "User enters relevant details and choses to save 4. System displays the message \u201cGap band has been defined\u201d. * Exception Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [
+        {
+          "id": "E1",
+          "description": "Business rules"
+        }
+      ],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC041",
+      "title": "Define Profile Match Index",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays the relevant page."
+        },
+        {
+          "step": "3",
+          "text": "User enters relevant details and choses to save 4. System displays the message \u201cprofile match index band has been defined\u201d. * Exception Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [
+        {
+          "id": "E1",
+          "description": "Business rules 1. When defining a band, the cumulative band value should be 100."
+        }
+      ],
+      "business_rules": [
+        "When defining a band, the cumulative band value should be 100."
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC048",
+      "title": "Find Gap Values for Reporting",
+      "actors": "System",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "",
+      "main_flow": [],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "criteria 1.3 Design elements (completed with Application Engineering) [Imbed image to low fidelity user interface mockup if applicable] Foot Field label Description Edita Field Limi Defaul Business rule Requir Values note ble type* t t value ed 1 Gap value GAP value of the Y Numeri cat_pmi - cia_pmi",
+        "Gap Gap direction for Y Selecti If gap value is positive - direction that career on this is positive. If gap value is negative - this is negative. 1.4 Revision/verification history Date Version Description Author Set Variables for Career Match List 1.0 Requirement specification 1.1 Requirement trace"
+      ],
+      "acceptance_criteria": [],
+      "field_table": [
+        {
+          "foot_note": "1",
+          "details": "Gap value GAP value of the Y Numeri cat_pmi - cia_pmi Y"
+        }
+      ]
+    },
+    {
+      "id": "CJ_UC047",
+      "title": "Set Variables for career Match List",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays the relevant page."
+        },
+        {
+          "step": "3",
+          "text": "User selects relevant details and chooses to save 4. System sorts all careers according to career category and CMI values. 5. System displays a message: Variables for career match has been set. * Exception or Alternate Flow Actor actions System response"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "Name Name of the Career Y Text 100 Y match table field 2 Descriptio Description of the Y Text 100 N n match variable Area 0 3 Number of Number of Career Y Numeri 100 Y Career stream to be c Stream displayed 4 Number of Number of careers to Y Numeri 100 Y careers be displayed from c from each each ca"
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC032",
+      "title": "Prepare Report Blueprint",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. A form is displayed."
+        },
+        {
+          "step": "3",
+          "text": "User enters relevant details and chooses to save. 4. System displays \u201cA blueprint has been successfully created\u201d * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC033",
+      "title": "Convert Score",
+      "actors": "System",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "",
+      "main_flow": [],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC045",
+      "title": "Define Contrast Variable",
+      "actors": "Psychometrician",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects CIA Variable 2. System calculates the difference value (100 minus Variable score) (E.g. If candidate's score on Extrovert- Introvert Variable is 85, then system calculates 100 - 85 = 15) 3. System defines the original variable value as Contrast Variable1 (CV1) and the difference value as Contrast Variable2 (CV2"
+        },
+        {
+          "step": "4",
+          "text": "User assigns Name for CV1 (Extrovert) and CV2 8. System displays the message: variable and contrast (Introvert), defines bands for CV1(normal band definition variable has been defined. process)."
+        },
+        {
+          "step": "5",
+          "text": "User adds text corresponding to each band."
+        },
+        {
+          "step": "6",
+          "text": "User defines bands for CV2"
+        },
+        {
+          "step": "7",
+          "text": "User adds band-specific text. * Exception or Alternate Flow Actor actions System response"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "User should be able to select a row/multiple rows with outliers and delete."
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC031",
+      "title": "Book Counseling",
+      "actors": "Individual users",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays a set of available counselors"
+        },
+        {
+          "step": "3",
+          "text": "User selects the required counselor 4. System displays the details of the counselor"
+        },
+        {
+          "step": "5",
+          "text": "User selects the required time slot 6. System checks the availability of counselor If the counselor is available, proceeds to next step Else, proceeds to Alternate flow A1"
+        },
+        {
+          "step": "7",
+          "text": "User selects the relevant function 8. System displays the payment page"
+        },
+        {
+          "step": "9",
+          "text": "User make the payment for the counselling session 10. System displays \u201cYour booking is confirmed \u201cand sends an email to the corresponding user\u2019s email id and notify the counselor. * Exception or A1: Counselor is not available Alternate Flow Actor actions System response System displays \u201cCheck for any other time slots\u201d, proceeds to step no 3"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC031",
+      "title": "Cancel Counseling",
+      "actors": "Individual users",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays a relevant screen."
+        },
+        {
+          "step": "3",
+          "text": "User enters the reason for cancelling a particular 4. System displays a message \u201cYour counselling session and clicks the relevant function. session has been cancelled\u201d. 5. System sends a message notification regarding the cancelling of the counselling session to the counselor and counselee. 6. System credited the refund for the counselling to the corresponding bank account. * Exception or Alternat"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC013",
+      "title": "Add Training",
+      "actors": "Trainers",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. A form is displayed"
+        },
+        {
+          "step": "3",
+          "text": "User enters relevant details and chooses to save. 4. System displays \u201cTraining has been added successfully\u201d * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC050",
+      "title": "View Training",
+      "actors": "Individual Users",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays the available training * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "."
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC051",
+      "title": "Book Training",
+      "actors": "Individual Users",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays the relevant screen."
+        },
+        {
+          "step": "3",
+          "text": "User selects the required training 4. System displays the payment page"
+        },
+        {
+          "step": "5",
+          "text": "User completes the payment 6. System displays the relevant training material. * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC040",
+      "title": "Cancel Training",
+      "actors": "Individual user",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function. 2. System displays the information about the training."
+        },
+        {
+          "step": "3",
+          "text": "User selects the relevant function. 4. System verifies whether the training session can be cancelled or not If yes, proceeds to the next step If no, proceeds to the exception flow E1 5. System displays \u201cYour training session has been cancelled\u201d. 6. System sends a notification to the appropriate user. 7. System proceeds the steps to initiate the refund. * Exception Flow E1: Training session cannot "
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "The training session cannot be cancelled before few hours for the commencement of training."
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    },
+    {
+      "id": "CJ_UC013",
+      "title": "Delete Training",
+      "actors": "CJ Admin",
+      "pre_conditions": "",
+      "post_conditions": "",
+      "frequency": "Adhoc",
+      "main_flow": [
+        {
+          "step": "1",
+          "text": "User selects the relevant function 2. System displays a message \u201cTraining session has been deleted\u201d. * Exception or Alternate Flow"
+        }
+      ],
+      "alternate_flows": [],
+      "exception_flows": [],
+      "business_rules": [
+        "The user can only delete the corresponding link not the actual content from the platform.",
+        "There would be a confirmation message required to delete the training session."
+      ],
+      "acceptance_criteria": [],
+      "field_table": []
+    }
+  ],
+  "use_case_index": [
+    {
+      "id": "CJ_UC001",
+      "title": "Sign up"
+    },
+    {
+      "id": "CJ_UC007",
+      "title": "Login"
+    },
+    {
+      "id": "CJ_UC005",
+      "title": "Manage Profile"
+    },
+    {
+      "id": "CJ_UC006",
+      "title": "View Profile"
+    },
+    {
+      "id": "CJ_UC002",
+      "title": "Add user"
+    },
+    {
+      "id": "CJ_UC043",
+      "title": "Add user \u2013 Channel Partner"
+    },
+    {
+      "id": "CJ_UC003",
+      "title": "Edit User"
+    },
+    {
+      "id": "CJ_UC004",
+      "title": "Delete user"
+    },
+    {
+      "id": "CJ_UC018",
+      "title": "Role Management"
+    },
+    {
+      "id": "CJ_UC009",
+      "title": "Assign Task"
+    },
+    {
+      "id": "CJ_UC0013",
+      "title": "Add Questions"
+    },
+    {
+      "id": "CJ_UC014",
+      "title": "Review Questions"
+    },
+    {
+      "id": "CJ_UC015",
+      "title": "Confirm Questions"
+    },
+    {
+      "id": "CJ_UC010",
+      "title": "Add Category/Sub-category"
+    },
+    {
+      "id": "CJ_UC012",
+      "title": "Delete Category/Sub-category"
+    },
+    {
+      "id": "CJ_UC011",
+      "title": "Request to Delete Category/Sub-category"
+    },
+    {
+      "id": "CJ_UC016",
+      "title": "Request to Delete Question"
+    },
+    {
+      "id": "CJ_UC017",
+      "title": "Delete Question"
+    },
+    {
+      "id": "CJ_UC025",
+      "title": "Filter_Data"
+    },
+    {
+      "id": "CJ_UC026",
+      "title": "Set Psychometric values"
+    },
+    {
+      "id": "CJ_UC029",
+      "title": "Prepare Assessment Blueprint"
+    },
+    {
+      "id": "CJ_UC030",
+      "title": "Take assessment"
+    },
+    {
+      "id": "CJ_UC019",
+      "title": "Add criterion"
+    },
+    {
+      "id": "CJ_UC020",
+      "title": "Edit criterion"
+    },
+    {
+      "id": "CJ_UC021",
+      "title": "Disable criterion"
+    },
+    {
+      "id": "CJ_UC022",
+      "title": "Add Score Band"
+    },
+    {
+      "id": "CJ_UC023",
+      "title": "Disable Score Band"
+    },
+    {
+      "id": "CJ_UC044",
+      "title": "Define Rank Scale"
+    },
+    {
+      "id": "CJ_UC024",
+      "title": "Value Allocation Rules"
+    },
+    {
+      "id": "CJ_UC039",
+      "title": "Find profile Index"
+    },
+    {
+      "id": "CJ_UC046",
+      "title": "Prepare Career Profiling Report Blueprint"
+    },
+    {
+      "id": "CJ_UC043",
+      "title": "Define Career Match Index"
+    },
+    {
+      "id": "CJ_UC042",
+      "title": "Define Gap Bands"
+    },
+    {
+      "id": "CJ_UC041",
+      "title": "Define Profile Match Index"
+    },
+    {
+      "id": "CJ_UC048",
+      "title": "Find Gap Values for Reporting"
+    },
+    {
+      "id": "CJ_UC047",
+      "title": "Set Variables for career Match List"
+    },
+    {
+      "id": "CJ_UC032",
+      "title": "Prepare Report Blueprint"
+    },
+    {
+      "id": "CJ_UC033",
+      "title": "Convert Score"
+    },
+    {
+      "id": "CJ_UC045",
+      "title": "Define Contrast Variable"
+    },
+    {
+      "id": "CJ_UC031",
+      "title": "Book Counseling"
+    },
+    {
+      "id": "CJ_UC031",
+      "title": "Cancel Counseling"
+    },
+    {
+      "id": "CJ_UC013",
+      "title": "Add Training"
+    },
+    {
+      "id": "CJ_UC050",
+      "title": "View Training"
+    },
+    {
+      "id": "CJ_UC051",
+      "title": "Book Training"
+    },
+    {
+      "id": "CJ_UC040",
+      "title": "Cancel Training"
+    },
+    {
+      "id": "CJ_UC013",
+      "title": "Delete Training"
+    }
+  ]
+}

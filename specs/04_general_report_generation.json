@@ -1,0 +1,449 @@
+{
+  "meta": {
+    "file": "04_general_report_generation.json",
+    "source_pdf": "4__General_Report_Generation_Process.pdf",
+    "title": "General Report Generation Process",
+    "version": "1.0"
+  },
+  "introduction": {
+    "description": "Every assessment created on the platform must have one or more reports for specific objectives that serve the test taker.",
+    "key_distinction": "The main difference between a profiling report and general report is that the former is based on data from multiple assessments, whereas the latter is based on data from a single assessment.",
+    "main_processes": [
+      "Parameter Setting & Description",
+      "Report Configuration",
+      "Report Layout",
+      "Polar Assessment Score Definition"
+    ]
+  },
+  "processes": {
+    "parameter_setting_and_description": {
+      "section": "2",
+      "sub_processes": [
+        "Define Report Title, Objective & Description",
+        "Define Report Types",
+        "Define Data Inputs and Report Structure"
+      ],
+      "define_report_title_and_objective": {
+        "section": "2.1.1",
+        "steps": [
+          "User clicks 'Generate Report' button",
+          "System shows list of Assessments",
+          "User selects an assessment",
+          "System shows entry fields for Report Title and Report Objective",
+          "User enters report title and report objective and submits",
+          "System saves inputs and generates unique ID for the report"
+        ]
+      },
+      "add_description": {
+        "section": "2.1.2",
+        "steps": [
+          "User clicks 'Add Description' button",
+          "System shows entry fields with 'Add Field' and 'Image Upload' facility",
+          "User adds text entry/image upload fields, enters content, uploads images and saves",
+          "System stores inputs with the newly added Report"
+        ]
+      },
+      "define_report_types": {
+        "section": "2.2",
+        "types": [
+          {
+            "id": 1,
+            "name": "Descriptive Report",
+            "description": "Standard report where candidate scores are presented in tables or graphs and scores are explained against a cut-off."
+          },
+          {
+            "id": 2,
+            "name": "Typological Report",
+            "description": "Based on scores, candidates are grouped into different types."
+          },
+          {
+            "id": 3,
+            "name": "Interpretative Report",
+            "description": "More detailed, explanatory report where scores are analysed and explained against score ranges defined by score bands."
+          },
+          {
+            "id": 4,
+            "name": "Group Report",
+            "description": "Basically used by corporate managers to view their employees' performance on the assessment."
+          }
+        ],
+        "steps": [
+          "User clicks 'Select Report Type' button",
+          "System shows report types",
+          "User selects the type of report as per requirement"
+        ]
+      },
+      "defining_data_inputs_and_report_structure": {
+        "section": "2.3",
+        "description": "Inputs from assessment data can be derived from any of the levels: Level0, Level1, Level2, Level3, Level4, and Question level.",
+        "note": "Except for Question level data, all other data inputs represent summary scores at their respective levels. Summary scores are NOT retrieved in raw form but in statistically converted form.",
+        "statistical_conversion_types": [
+          "Percentage Score",
+          "Percentile Score",
+          "STEN Score",
+          "STENINE Score"
+        ],
+        "steps": [
+          "User clicks 'Data Inputs' button",
+          "System shows data input list: Level0, Level1, Level2, Level3, Level4, Question level",
+          "User selects one or more levels",
+          "System shows types of converted scores: Percentage, Percentile, STEN, STENINE",
+          "User selects converted score type and submits",
+          "System saves data input details"
+        ],
+        "data_input_selection_rules": [
+          "Level0 selected: summary score for entire assessment used",
+          "Level1 selected: summary scores of all Level1 variables used",
+          "Level2 selected: summary scores of all Level2 variables used",
+          "Level3 selected: summary scores of all Level3 variables used",
+          "Level4 selected: summary scores of all Level4 variables used",
+          "Question Level selected: question scores of all questions used",
+          "Multiple levels selected: summary scores belonging to those levels used"
+        ]
+      }
+    },
+    "report_configuration": {
+      "section": "3",
+      "descriptive_report": {
+        "section": "3.1",
+        "define_cutoffs": {
+          "section": "3.1.1",
+          "steps": [
+            "User clicks 'Cutoff' button",
+            "System shows list of variables as per levels defined and entry fields for: cutoff scores, cutoff label, above-cutoff description, below-cutoff description",
+            "User specifies cutoff scores and other details against each variable and saves",
+            "System saves cutoff data against each variable"
+          ],
+          "sample_output": {
+            "table_title": "Defining Cut-off scores",
+            "columns": [
+              "Variable Name",
+              "Cut-Off",
+              "Cut-off Label",
+              "Above-cut-off Description",
+              "Below Cut-off Description"
+            ],
+            "data": [
+              {
+                "variable": "Abstract",
+                "cutoff": 50,
+                "label": "Average Performance",
+                "above": "<Text>",
+                "below": "<Text>"
+              },
+              {
+                "variable": "Analytical",
+                "cutoff": 60,
+                "label": "Average Performance",
+                "above": "<Text>",
+                "below": "<Text>"
+              },
+              {
+                "variable": "Verbal",
+                "cutoff": 55,
+                "label": "Average Performance",
+                "above": "<Text>",
+                "below": "<Text>"
+              },
+              {
+                "variable": "Quantitative",
+                "cutoff": 65,
+                "label": "Average Performance",
+                "above": "<Text>",
+                "below": "<Text>"
+              },
+              {
+                "variable": "Spatial",
+                "cutoff": 75,
+                "label": "Average Performance",
+                "above": "<Text>",
+                "below": "<Text>"
+              },
+              {
+                "variable": "Executive",
+                "cutoff": 50,
+                "label": "Average Performance",
+                "above": "<Text>",
+                "below": "<Text>"
+              }
+            ]
+          }
+        },
+        "define_table_graph_layout": {
+          "section": "3.1.2",
+          "steps": [
+            "User selects 'Table' or 'Graph' button",
+            "System shows entry fields for Table Heads or Graph Legends",
+            "User enters relevant text"
+          ],
+          "sample_table_graph_head_definition": {
+            "Table_Graph_Title": "Your Intellectual Profile",
+            "Variable_Name": "Aptitude",
+            "Data_Input_Name": "Your Score",
+            "Label": "<Text>",
+            "Colour_Code": "<Text>",
+            "Description": "<Text>"
+          }
+        }
+      },
+      "typological_report": {
+        "section": "3.2",
+        "description": "Summary scores are ordered in descending order and a specified number of top scoring variables are used to create a personality/intellectual type/profile.",
+        "type_selection": {
+          "section": "3.2.1",
+          "steps": [
+            "User clicks 'Type Report' button",
+            "System shows list of variables and entry fields to specify alphabet/number for Code Generation against each variable",
+            "User enters alphabet or number in the CODE column against each variable",
+            "System shows entry field to specify number of variables to be drawn for type report",
+            "User specifies the number",
+            "System shows entry fields where user can define bands and their description for each specified variable",
+            "User defines bands and enters descriptive details and submits",
+            "System saves the details"
+          ],
+          "system_logic": "System orders summary scores of all variables in descending order, selects top score variables (as specified by user), applies band details, and generates a Profile Code using the CODE alphabet/number for all selected variables.",
+          "sample_output": {
+            "table_title": "TYPE Variable Definition - 3 Highest-score variables, 3 bands",
+            "columns": [
+              "Variable",
+              "Band Range",
+              "Band Label",
+              "Band Description"
+            ],
+            "data": [
+              {
+                "variable": "1st Top Variable",
+                "bands": [
+                  {
+                    "range": "80-100",
+                    "label": "<Text>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "50-80",
+                    "label": "<Text>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "<60",
+                    "label": "<Text>",
+                    "description": "<Text>"
+                  }
+                ]
+              },
+              {
+                "variable": "2nd Top Variable",
+                "bands": [
+                  {
+                    "range": "80-100",
+                    "label": "<Text>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "50-80",
+                    "label": "<Text>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "<60",
+                    "label": "<Text>",
+                    "description": "<Text>"
+                  }
+                ]
+              },
+              {
+                "variable": "3rd Top Variable",
+                "bands": [
+                  {
+                    "range": "80-100",
+                    "label": "<Text>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "50-80",
+                    "label": "<Text>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "<60",
+                    "label": "<Text>",
+                    "description": "<Text>"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "define_table_graph_layout": {
+          "section": "3.2.2",
+          "sample_table_graph_head_definition": {
+            "Table_Graph_Title": "Your Personality Profile",
+            "Variable_Name": "Personality Trait",
+            "Data_Input_Name": "Your Score",
+            "Label": "<Text>",
+            "Colour_Code": "<Text>",
+            "Description": "<Text>"
+          }
+        }
+      },
+      "interpretative_report": {
+        "section": "3.3",
+        "description": "Interpretative report is based on band definition of all variables in the assessment.",
+        "band_definition": {
+          "section": "3.3.1",
+          "steps": [
+            "User clicks 'Interpretative Report' button",
+            "System shows list of variables and entry fields to define bands, labels, and description against each variable",
+            "User defines bands and enters other details and submits",
+            "System saves inputs"
+          ],
+          "sample_output": {
+            "table_title": "Interpretative Report Banking and labeling",
+            "columns": [
+              "Variable",
+              "Band Range",
+              "Band Label",
+              "Band Color",
+              "Band Description"
+            ],
+            "data": [
+              {
+                "variable": "Abstract",
+                "bands": [
+                  {
+                    "range": "70-100",
+                    "label": "<Text>",
+                    "color": "<Code>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "40-70",
+                    "label": "<Text>",
+                    "color": "<Code>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "<40",
+                    "label": "<Text>",
+                    "color": "<Code>",
+                    "description": "<Text>"
+                  }
+                ]
+              },
+              {
+                "variable": "Analytical",
+                "bands": [
+                  {
+                    "range": "70-100",
+                    "label": "<Text>",
+                    "color": "<Code>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "40-70",
+                    "label": "<Text>",
+                    "color": "<Code>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "<40",
+                    "label": "<Text>",
+                    "color": "<Code>",
+                    "description": "<Text>"
+                  }
+                ]
+              },
+              {
+                "variable": "Verbal",
+                "bands": [
+                  {
+                    "range": "70-100",
+                    "label": "<Text>",
+                    "color": "<Code>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "40-70",
+                    "label": "<Text>",
+                    "color": "<Code>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "<40",
+                    "label": "<Text>",
+                    "color": "<Code>",
+                    "description": "<Text>"
+                  }
+                ]
+              },
+              {
+                "variable": "Executive",
+                "bands": [
+                  {
+                    "range": "70-100",
+                    "label": "<Text>",
+                    "color": "<Code>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "40-70",
+                    "label": "<Text>",
+                    "color": "<Code>",
+                    "description": "<Text>"
+                  },
+                  {
+                    "range": "<40",
+                    "label": "<Text>",
+                    "color": "<Code>",
+                    "description": "<Text>"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "define_table_graph_layout": {
+          "section": "3.3.2",
+          "sample_table_graph_head_definition": {
+            "Table_Graph_Title": "Your Aptitude Profile",
+            "Variable_Name": "Aptitude",
+            "Data_Input_Name": "Your Score",
+            "Label": "<Text>",
+            "Colour_Code": "<Text>",
+            "Description": "<Text>"
+          }
+        }
+      }
+    },
+    "report_layout": {
+      "section": "3_layout",
+      "description": "System generates output values for the report. User defines the layout template.",
+      "steps": [
+        "User clicks 'Report Layout' button",
+        "System displays standard report template formats",
+        "User selects relevant report template",
+        "System presents output values from relevant reports",
+        "User defines order of different reports by drag-and-dropping on selected template",
+        "System presents text and image insertion functions",
+        "User clicks appropriate buttons to insert free text fields or images",
+        "System shows preview of the report",
+        "User edits the layout if required, or submits to publish"
+      ]
+    },
+    "polar_assessment_score_definition": {
+      "section": "4",
+      "description": "Polar assessments have polar variables: same variable is defined as two opposites (e.g., Extroversion vs. Introversion).",
+      "rule": "Percentage score is used for polar assessments",
+      "computation": "Opposite variable score = Max Score (100) - Summary Score of the variable",
+      "example": "If test taker receives 85 on Extroversion-Introversion (predefined as extroversion), then introversion score = 100 - 85 = 15",
+      "result": "From summary score of each variable, another opposite variable is generated",
+      "steps": [
+        "User clicks 'Define Polar Variables' button",
+        "System shows variables from assessment with entry field to define the opposite variable",
+        "User enters opposite variable's name and submits",
+        "System computes the difference value and assigns it to the opposite variable, and saves"
+      ],
+      "note": "If there are six polar assessment variables, including opposite variables there will be 12 variables total."
+    }
+  }
+}

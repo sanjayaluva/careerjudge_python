@@ -1,0 +1,241 @@
+{
+  "meta": {
+    "file": "09_admin_system_administration.json",
+    "source_pdf": "9__Admin_User_System_Administration_Process.pdf",
+    "title": "System Administration Process",
+    "version": "1.0"
+  },
+  "introduction": {
+    "description": "System administration is the central loop that controls all different processes and maintains the system in a functional condition.",
+    "primary_actor": "Admin User",
+    "secondary_actors": [
+      "Corporate Admin users (limited responsibilities)"
+    ],
+    "responsibilities": [
+      "User Role Management",
+      "Task Management",
+      "System Management"
+    ]
+  },
+  "processes": {
+    "user_role_management": {
+      "section": "2",
+      "define_roles": {
+        "section": "2.1",
+        "description": "Admin User defines different roles and assigns each role's rights. Each role is attached to a predefined base role.",
+        "base_roles": [
+          "Psychometrician",
+          "SME",
+          "Reviewer",
+          "Trainer",
+          "Counsellor",
+          "Corporate Admin",
+          "Corporate Exclusive",
+          "Channel Partner"
+        ],
+        "steps": [
+          "User clicks 'Define Role' button",
+          "System shows list of base roles under which new roles can be defined",
+          "User selects a base role",
+          "System shows entry fields for new role's name and description",
+          "User enters relevant inputs and saves",
+          "System creates new role under the base role",
+          "User clicks 'Assign Rights' button",
+          "System shows checklist of various rights provided for the base role",
+          "User checks relevant rights and submits",
+          "System assigns selected rights to the new role"
+        ]
+      },
+      "add_user_by_admin": {
+        "section": "2.2",
+        "steps": [
+          "User clicks 'Add User' button",
+          "System shows list of roles",
+          "User selects a user role",
+          "System shows fields to enter user details"
+        ],
+        "user_detail_fields_by_role": {
+          "Psychometrician_SME_Reviewer_Trainer_Counsellor": [
+            "Name",
+            "E-mail ID"
+          ],
+          "Corporate_Admin_Corporate_Exclusive": [
+            "Name of organization",
+            "Name of Manager (primary contact)",
+            "Official Contact number",
+            "Email ID of Primary Contact",
+            "PAN/TAN of organization",
+            "Corporate Address"
+          ],
+          "Channel_Partner": [
+            "Name of Agency",
+            "Name of Primary Contact",
+            "Email ID of primary contact",
+            "Contact No. of Agency",
+            "Permanent Address",
+            "Allocated Region"
+          ]
+        },
+        "continued_steps": [
+          "User enters required inputs and submits",
+          "System shows user profile with default rights as active",
+          "User may restrict rights by inactivating them and submits",
+          "System saves user information along with rights assigned",
+          "System sends email to new user with link for signup"
+        ]
+      },
+      "add_user_by_corporate_admin": {
+        "section": "2.3",
+        "actors": [
+          "Corporate Admin",
+          "Corporate Exclusive Admin",
+          "Group Admin"
+        ],
+        "steps": [
+          "User clicks 'Add User' button",
+          "System shows list of roles",
+          "User selects a user role",
+          "System shows fields to enter user details"
+        ],
+        "user_detail_fields_by_role": {
+          "Group_Admin": [
+            "Name",
+            "Official E-mail ID",
+            "Employee ID",
+            "Region/Division"
+          ],
+          "Corporate_Individual_User": [
+            "Name",
+            "Official Email ID",
+            "Employee ID"
+          ]
+        },
+        "continued_steps": [
+          "System also shows a bulk upload option",
+          "User enters inputs in entry fields or uploads user details and submits",
+          "System sends email to new user with link for signup"
+        ]
+      },
+      "user_management": {
+        "section": "2.4",
+        "actors": [
+          "Admin User",
+          "Corporate Admin"
+        ],
+        "description": "Admin user and corporate admins can make a user account inactive, delete, or edit user details.",
+        "steps": [
+          "User clicks 'Manage User' button",
+          "System shows list of all types of users",
+          "User selects the user case to be modified",
+          "System shows user details",
+          "User makes necessary update"
+        ]
+      }
+    },
+    "task_management": {
+      "section": "3",
+      "actor": "Admin User only",
+      "description": "Admin User is the only one who assigns tasks to various users in the system and monitors their completion.",
+      "assign_task": {
+        "section": "3.1",
+        "steps": [
+          "User clicks 'Assign Task' button",
+          "System shows list of users for assigning tasks",
+          "User selects the user and submits",
+          "System generates task with unique Task ID against that user with entry field for description/message",
+          "User enters relevant description/message and submits"
+        ],
+        "SME_task_assignment": {
+          "section": "3.1.1",
+          "steps": [
+            "System shows QB categories and subcategories with a question-type drop list",
+            "User selects categories and subcategories and selects question type for each category",
+            "System generates table with prefilled categories/subcategories and question types",
+            "System asks to specify: Number of questions, number of options, number of correct options, Difficulty Level, Cognitive level, Due Date",
+            "User enters required details and submits (Difficulty level and cognitive level are optional)",
+            "System generates new task and sends to SME with task notification",
+            "System sends notification to Helpdesk for direct contact"
+          ]
+        },
+        "reviewer_task_assignment": {
+          "section": "3.1.2",
+          "steps": [
+            "System shows list of new SME tasks (not yet assigned to any reviewer)",
+            "User selects relevant SME task and submits",
+            "System generates new reviewer task and sends to reviewer with task notification",
+            "System sends notification to Helpdesk for direct contact"
+          ]
+        },
+        "psychometrician_task_assignment": {
+          "section": "3.1.3",
+          "steps": [
+            "System shows list of new SME/Reviewer tasks (not assigned to any psychometrician)",
+            "User selects relevant SME/Reviewer tasks and submits",
+            "System generates new psychometrician task and sends to psychometrician with task notification",
+            "System sends notification to Helpdesk for direct contact"
+          ]
+        },
+        "trainer_counsellor_task_assignment": {
+          "section": "3.1.4",
+          "steps": [
+            "System generates new trainer/counsellor task and sends to concerned trainer/counsellor with task notification",
+            "System sends notification to Helpdesk for direct contact"
+          ]
+        }
+      },
+      "manage_task": {
+        "section": "3.2",
+        "monitor_task_progress": {
+          "section": "3.2.1",
+          "steps": [
+            "User clicks 'Manage Task' button",
+            "System shows list of all pending/active tasks assigned to various users",
+            "User selects a particular task for viewing progress",
+            "System shows task details along with task progress update",
+            "User may initiate notification requesting update or conveying additional information",
+            "If request to extend due date:",
+            "  System shows the extend due date notification from concerned user",
+            "  User modifies due date field and submits",
+            "  System updates modified due date"
+          ]
+        },
+        "cancel_task": {
+          "section": "3.2.2",
+          "steps": [
+            "User clicks 'Cancel Task' button",
+            "System asks user to confirm cancel request",
+            "User confirms the request",
+            "System asks user to specify reasons for cancelling",
+            "User specifies reasons and submits",
+            "System cancels the task and sends notification to concerned user",
+            "Note: User can no longer access the cancelled task"
+          ]
+        },
+        "approve_task_completion": {
+          "section": "3.2.3",
+          "steps": [
+            "User selects an active task",
+            "System shows task details including task progress",
+            "If task is complete:",
+            "  User clicks 'Approve Task Completion' button",
+            "  System asks user to confirm approval request",
+            "  User confirms",
+            "  System shows entry field for comments",
+            "  User enters comments and submits",
+            "  System updates and shows task as complete"
+          ]
+        }
+      }
+    },
+    "system_management": {
+      "section": "4",
+      "description": "Admin User has overall supervisory role. Should be informed of all concerns and issues encountered by various users and initiate necessary action.",
+      "communication_flow": "Mostly one-way: from system user to Admin. Admin initiates responses through extra-system means (email, telephone).",
+      "steps": [
+        "System routes requests, feedbacks, issues from different users to the Admin User and Helpdesk",
+        "User opens such notifications and responds directly through email or telephone"
+      ],
+      "note": "Helpdesk also receives notifications and responds directly through email or telephone on behalf of Admin User, or intimates Admin about such notifications."
+    }
+  }
+}

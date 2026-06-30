@@ -1,0 +1,804 @@
+{
+  "meta": {
+    "file": "10_sample_profiling_report.json",
+    "source_pdf": "Sample_Profiling_Report_for_Reference.pdf",
+    "title": "Sample Career Profiling Report \u2013 Austin Sunil",
+    "version": "1.0",
+    "note": "Complete faithful extraction of all text, tables, graph data values, color codes and narrative from the sample report. Graphs are represented as data arrays."
+  },
+  "cover_page": {
+    "candidate_name": "Austin Sunil",
+    "institution": "Rajagiri College",
+    "place": "Kattappana",
+    "report_title": "YOUR CAREER PROFILING REPORT",
+    "prepared_by": "Career Judge: Center for Career Profiling & Development",
+    "tagline": "Specialists in Psychometric Assessments & Career Profiling",
+    "location": "Kottayam, Kerala",
+    "date": "20-08-2024",
+    "copyright": "Confidential Material. Copyright \u00a9 Career Judge: Center for Career Profiling & Development"
+  },
+  "identity_confirmation_page": {
+    "report_type": "Career Profiling & Mapping Report",
+    "prepared_by": "Dr. NC Joseph, Chief Consultant",
+    "candidate_details": {
+      "name": "Austin Sunil",
+      "age": 21,
+      "gender": "Male",
+      "occupation": "Student",
+      "education": "BBA",
+      "college": "Rajagiri College",
+      "place": "Kattappana"
+    },
+    "quote": {
+      "text": "Each man has his own vocation; his talent is his call. There is one direction in which all space is open to him.",
+      "author": "Ralph Waldo Emerson"
+    },
+    "disclaimer": "Please note that the validity of this report depends on how sincerely you responded to CIA and CAT assessments. All information shared here is confidential and should be treated responsibly."
+  },
+  "introduction_page": {
+    "intro_text": "Congratulations! You have taken a decisive step towards building a successful career. We are here to help you with every step you make towards this goal. In this report, we will analyze your career profiling results.",
+    "career_message": "For most of us career is a major concern. Taking right steps towards this goal will bring happiness and success in life. However, many don't realize how important it is. Some who don't care finally end up on the wrong track and bear the sad consequences of a wrong decision. To avoid this trap, and more importantly to realize your dreams, you need to plan carefully for your future. Making an informed career decision is the first step towards this direction.",
+    "self_awareness_message": "Self awareness is indeed a great personal asset; however, it doesn't come through without conscious effort. Often our self-knowledge is very limited and sometimes mistaken. It may mislead us in our career decisions too. So your first endeavor here is to understand yourself more accurately by systematically evaluating your latent capabilities, thinking style, personality traits and attitude towards different types of works.",
+    "report_structure": [
+      {
+        "part": 1,
+        "title": "Your Career Interest Profile",
+        "description": "Based on your interests, personality and propensities as revealed from the Career Interest Assessment (CIA)"
+      },
+      {
+        "part": 2,
+        "title": "Your Career Aptitude Profile",
+        "description": "Based on your potential in various intellectual spheres as revealed from the Career Aptitude Test (CAT)"
+      },
+      {
+        "part": 3,
+        "title": "Career Mapping",
+        "description": "Findings from interest and aptitude profiles are used to make career profiles for over 2000 careers. Careers which match well are listed along with a Career Match Index (CMI)."
+      },
+      {
+        "part": 4,
+        "title": "Career Information & Gap Analysis",
+        "description": "Careers showing highest CMI are explained, and the gaps between CIA profile and CAT profiles are discussed and illustrated through graphs."
+      }
+    ]
+  },
+  "section_I_career_interest_profile": {
+    "section": "I",
+    "title": "Your Career Interest Profile",
+    "description": "Career Interest Assessment (CIA) evaluates you on 12 career traits. Each trait represents a unique constellation of personality, interest, and behavior styles.",
+    "score_interpretation": {
+      "90_and_above": "Profound influence on professional life",
+      "75_to_89": "Strong preference for that work style",
+      "50_to_74": "Moderate tendency towards the career trait",
+      "26_to_49": "Weak tendency",
+      "25_and_below": "Minimal relevance in professional endeavors"
+    },
+    "cia_analysis_chart": {
+      "chart_title": "Your CIA Analysis",
+      "chart_type": "horizontal_bar",
+      "x_axis": "0 to 100",
+      "data": [
+        {
+          "trait": "Independence at Work",
+          "score": 25
+        },
+        {
+          "trait": "Conventional Style",
+          "score": 53
+        },
+        {
+          "trait": "Enjoy Physical Action",
+          "score": 53
+        },
+        {
+          "trait": "Extroverted",
+          "score": 75
+        },
+        {
+          "trait": "Comfort with Numbers",
+          "score": 31
+        },
+        {
+          "trait": "Analytical Approach",
+          "score": 81
+        },
+        {
+          "trait": "Verbal Disposition",
+          "score": 69
+        },
+        {
+          "trait": "Creative Inclination",
+          "score": 50
+        },
+        {
+          "trait": "Investigative Mind",
+          "score": 47
+        },
+        {
+          "trait": "Preference for Mental Work",
+          "score": 47
+        },
+        {
+          "trait": "Imaginative Thinking",
+          "score": 19
+        },
+        {
+          "trait": "Adventurous & Daring",
+          "score": 50
+        }
+      ]
+    },
+    "career_trait_descriptions": [
+      {
+        "rank": 1,
+        "trait": "Independence at Work",
+        "description": "Those scoring high on this trait prefer to work independently. They feel more effective when they work in their own way, without interference from others or even any support."
+      },
+      {
+        "rank": 2,
+        "trait": "Conventional Style",
+        "description": "Such people follow conventional wisdom. They are highly disciplined in life and organized at work. They prefer to follow established processes and procedures and have good practical sense."
+      },
+      {
+        "rank": 3,
+        "trait": "Enjoy Physical Action",
+        "description": "A high score means that one enjoys works that involve physical activity and tolerance. Working with tools and instruments gives them satisfaction at work."
+      },
+      {
+        "rank": 4,
+        "trait": "Sociable & Extroverted",
+        "description": "They enjoy the company of others and prefer to collaborate with people in getting works done."
+      },
+      {
+        "rank": 5,
+        "trait": "Comfort with Numbers",
+        "description": "They are comfortable with works that require dealing with numbers and data. Solving number problems are a pastime."
+      },
+      {
+        "rank": 6,
+        "trait": "Analytical Approach",
+        "description": "People with an analytical approach take a step-by-step approach to understanding situations and solving problems. Every minor detail is also important and needs to be carefully analyzed."
+      },
+      {
+        "rank": 7,
+        "trait": "Verbal Disposition",
+        "description": "Such people are good conversationalists. They understand and use complex language and prefer to engage in works involving the use of language, such as reading, writing, announcing, anchoring, etc."
+      },
+      {
+        "rank": 8,
+        "trait": "Creative Inclination",
+        "description": "Self-expression is the basic characteristic of such people. They always find a way to express things differently, in their own unique ways."
+      },
+      {
+        "rank": 9,
+        "trait": "Investigative Mind",
+        "description": "Being inquisitive, they try to discover what is unknown and hidden. They rarely stop until they find out every bit of proof and evidence."
+      },
+      {
+        "rank": 10,
+        "trait": "Preference for Mental Work",
+        "description": "Sitting in one place and working with the mind is the first choice when it comes to work interests. They generally don't prefer to exert physically."
+      },
+      {
+        "rank": 11,
+        "trait": "Imaginative Thinking",
+        "description": "Visualization is the primary tool to understand a situation or problem. Thinking happens only through the visual/imaginative mode."
+      },
+      {
+        "rank": 12,
+        "trait": "Adventurous & Daring",
+        "description": "Such people get a high when they take on something challenging. If such an opportunity comes they don't hesitate to grab."
+      }
+    ],
+    "top_3_career_interest_profile": [
+      {
+        "rank": 1,
+        "trait": "Analytical Approach",
+        "score": 81.25,
+        "chart_data": {
+          "chart_type": "horizontal_bar",
+          "label": "1",
+          "score": 81.25,
+          "x_axis": "0 to 100"
+        },
+        "description_heading": "ANALYTICAL APPROACH: Your most prominent behavioral trait",
+        "career_significance": "Your analytical approach to problem-solving fundamentally shapes your career interests. By selecting a career that leverages this core strength, you will achieve maximum success and satisfaction.",
+        "intellectual_style": "Your primary intellectual style is analytical, characterized by a methodical, step-by-step approach. This orientation significantly influences how you tackle problems and understand their practical aspects. Consequently, you are more practical and solution-focused, valuing facts and data over hypothetical or ideological considerations. This makes you appear organized and systematic in addressing situations. Abstract ideas and philosophy may not captivate you as much, but you excel in communicating logically and objectively, maintaining a clear focus on the issue at hand.",
+        "career_applications": "Analytical experts excel as planners and implementers. While all managerial roles benefit from a strong analytical approach, positions such as Finance Manager, Marketing Manager, Business Development Manager, Operations Manager, and Project Manager particularly require it for career success. Analytical professionals are highly sought after for roles involving extensive data coding, analysis, and numerical evaluation, including nearly all IT, finance, and accounting positions. The IT, banking, and insurance industries are continually in search of individuals with strong analytical capabilities."
+      },
+      {
+        "rank": 2,
+        "trait": "Extroverted",
+        "score": 75.0,
+        "chart_data": {
+          "chart_type": "horizontal_bar",
+          "label": "1",
+          "score": 75.0,
+          "x_axis": "0 to 100"
+        },
+        "description_heading": "EXTROVERTED: Next Important quality",
+        "career_significance": "The second key trait that will significantly impact both your personal and professional life is your extroverted nature. You thrive in social settings, preferring the company of friends and acquaintances over solitude.",
+        "intellectual_style": "An individual's behavior in social settings is shaped by their social needs and upbringing. Your inherent social disposition makes you well-suited for careers that involve networking and collaboration. Your CIA results indicate that your work style is significantly driven by your social needs. Therefore, it is essential to choose a career that provides ample opportunities for interpersonal interaction and social engagement. You excel in environments with numerous colleagues or followers, where frequent social interaction is possible. Solitary work settings may present challenges for you."
+      },
+      {
+        "rank": 3,
+        "trait": "Verbal Disposition",
+        "score": 69.23,
+        "chart_data": {
+          "chart_type": "horizontal_bar",
+          "label": "1",
+          "score": 69.23,
+          "x_axis": "0 to 100"
+        },
+        "description_heading": "VERBAL DISPOSITION: Third prominent trait",
+        "career_significance": "A high score in verbal disposition indicates a strong inclination towards activities that heavily involve language.",
+        "intellectual_style": "Language serves as the medium through which we convey ideas, emotions, and experiences. Your high score in Verbal Disposition indicates a strong desire and ability to articulate your inner world of thoughts and experiences. You likely possess excellent writing and oratory skills, along with a rich vocabulary.",
+        "career_applications": "Your verbal disposition trait aligns well with careers that demand extensive communication skills. Prominent opportunities exist in the media and entertainment industry: journalism, media presentation, publishing/editing, technical writing, literary writing, literary critique, and script writing. The legal profession: lawyer, jurist, legal adviser, judge, and magistrate. In education and training: college and school teachers, language trainers, linguists, and translators."
+      }
+    ]
+  },
+  "section_II_career_aptitude_profile": {
+    "section": "II",
+    "title": "Your Career Aptitude Profile",
+    "description": "Individual differences in aptitudes have serious implications for career decision and planning. Based on your Career Aptitude Test (CAT) scores, we have your career aptitude profile.",
+    "score_interpretation": {
+      "70_and_above": "High enough for professions requiring high levels of the aptitude",
+      "50_to_69": "Average range \u2014 sufficient for many professions of moderate to high intellectual involvement",
+      "below_40": "Adequate level for professions of low intellectual involvement",
+      "below_20": "Should not go for jobs that demand that aptitude at a high level"
+    },
+    "cat_analysis_chart": {
+      "chart_title": "Your Career Aptitude Results",
+      "chart_type": "horizontal_bar",
+      "x_axis": "0 to 100",
+      "data": [
+        {
+          "aptitude": "General Aptitude",
+          "score": 58
+        },
+        {
+          "aptitude": "Analytical Aptitude",
+          "score": 14
+        },
+        {
+          "aptitude": "Verbal Aptitude",
+          "score": 25
+        },
+        {
+          "aptitude": "Quantitative Aptitude",
+          "score": 71
+        },
+        {
+          "aptitude": "Spatial Aptitude",
+          "score": 44
+        },
+        {
+          "aptitude": "Executive Aptitude",
+          "score": 40
+        }
+      ]
+    },
+    "aptitude_definitions": [
+      {
+        "aptitude": "General Aptitude",
+        "description": "This is your hereditarily inherited intelligence potential. Also called 'fluid intelligence' or 'g-factor intelligence'. Remains stable through most of adult life."
+      },
+      {
+        "aptitude": "Analytical Aptitude",
+        "description": "We always use this ability to analyze and understand situations, and decide why things happened in a certain way. Involves logical, step-by-step reasoning. Indispensable in most work situations where cause and consequence have to be established."
+      },
+      {
+        "aptitude": "Verbal Aptitude",
+        "description": "Very much related to your smartness in the use of language. Your ability to apply grammatical rules in making meaningful sentences appropriate to the context and logically connecting them in a sequential manner."
+      },
+      {
+        "aptitude": "Quantitative Aptitude",
+        "description": "Easy handling of numbers and number problems is the hallmark of this aptitude. You apply logic and reason to understand situations that involve analysis of quantity or number."
+      },
+      {
+        "aptitude": "Spatial Aptitude",
+        "description": "Refers to your ability to manipulate objects in your mind. It is a distinct skill to hold 3-D forms in your mind and analyzing its details from all angles. A lot of imagination is required. To a large extent this aptitude is inherited."
+      },
+      {
+        "aptitude": "Executive Aptitude",
+        "description": "Your ability to work fast but without making mistakes. Your neural networks have to work really fast and efficiently, accessing relevant inputs from different locations, comparing them and making the right decision. Your ability to concentrate and work with good speed and agility."
+      }
+    ],
+    "top_3_aptitude_profile": [
+      {
+        "rank": 1,
+        "aptitude": "Quantitative Aptitude",
+        "score": 71.43,
+        "label": "QI",
+        "chart_data": {
+          "chart_type": "horizontal_bar",
+          "label": "QI",
+          "score": 71.43,
+          "x_axis": "0 to 100"
+        },
+        "description_heading": "QUANTITATIVE APTITUDE: Your Most Prominent Intelligence",
+        "significance": "Quantitative Intelligence is the most prominent aptitude that is going to impact your career development.",
+        "interpretation": "Our ability to apply mathematical concepts to real-life problems is the key component of quantitative intelligence. A high score (>=70) implies that if you have a strong interest in professions which use quantitative skills extensively, they are the ideal fit for you.",
+        "career_applications": "Careers in sectors such as business management, financial management, commerce, banking, insurance, engineering require proficiency in quantitative skills. Also consider careers in engineering, scientific research, and teaching."
+      },
+      {
+        "rank": 2,
+        "aptitude": "General Aptitude",
+        "score": 58,
+        "label": "GI",
+        "chart_data": {
+          "chart_type": "horizontal_bar",
+          "label": "GI",
+          "score": 58,
+          "x_axis": "0 to 100"
+        },
+        "description_heading": "GENERAL APTITUDE: Second Prominent Intelligence",
+        "significance": "General aptitude is the second prominent intelligence that is going to impact your career development.",
+        "interpretation": "General aptitude or fluid Intelligence represents the latent intellectual potential inherited at birth. Other types of intelligence such as verbal ability and quantitative ability are acquired during our lifetime. People with high Fluid Intelligence are capable of mastering any complex skills.",
+        "career_implication": "People who have high Fluid IQ (>=70) can take up any type of careers which demand high intellectual power. They can easily master the challenges posed by most professional degrees/courses. You have the flexibility to pursue any subject or field that interests you."
+      },
+      {
+        "rank": 3,
+        "aptitude": "Spatial Aptitude",
+        "score": 44.44,
+        "label": "SI",
+        "chart_data": {
+          "chart_type": "horizontal_bar",
+          "label": "SI",
+          "score": 44.44,
+          "x_axis": "0 to 100"
+        },
+        "description_heading": "Spatial Intelligence:",
+        "significance": "Spatial Intelligence is the third prominent aptitude that is going to impact your career development.",
+        "interpretation": "A very important mental faculty for visualizing physical objects and structures and their relationships. If you score 70 or above in this ability, it indicates high proficiency in spatial skills. Your intellectual approach is predominantly imaginative, utilizing mental imagery to understand, analyze, and solve problems.",
+        "career_applications": "Careers that leverage spatial intelligence as core faculty: architecture, design, or mechanical engineering (with interest in those fields). Alternatively, if strong artistic inclination: art director, movie director, or fine artist."
+      }
+    ]
+  },
+  "section_III_career_mapping": {
+    "section": "III",
+    "title": "Career Mapping: Spotting Right Careers For You",
+    "description": "The mapping process integrates your CIA profile with your CAT profile. Methodology is based on the premise that career success hinges on the balanced consideration of personal qualities and aptitudinal strengths. Complex algorithms grounded in psychometric principles achieve this integration.",
+    "career_streams_chart": {
+      "chart_title": "Careers matching your profile across different streams",
+      "chart_type": "horizontal_stacked_bar",
+      "legend": {
+        "yellow": "% 45-75 CMI",
+        "light_green": "% 75-90 CMI",
+        "green": "% >90 CMI"
+      },
+      "x_axis": "0 to 30 (number of careers)",
+      "data": [
+        {
+          "stream": "Social Science",
+          "pct_45_75": 10,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Physical Sciences",
+          "pct_45_75": 13,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Life Sciences",
+          "pct_45_75": 10,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Education & Training",
+          "pct_45_75": 10,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Tourism and Hospitality",
+          "pct_45_75": 8,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Business Management",
+          "pct_45_75": 10,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Law Enforcement",
+          "pct_45_75": 5,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Media & Entertainment",
+          "pct_45_75": 27,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Art & Craft",
+          "pct_45_75": 14,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Engineering & Technology",
+          "pct_45_75": 15,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Commerce & Finance",
+          "pct_45_75": 10,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Medicine",
+          "pct_45_75": 27,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Medicine (alt)",
+          "pct_45_75": 5,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Govt Services",
+          "pct_45_75": 8,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        },
+        {
+          "stream": "Information Technology",
+          "pct_45_75": 10,
+          "pct_75_90": 0,
+          "pct_above_90": 0
+        }
+      ],
+      "chart_note": "Green bar = careers >90% match; Light green = 75-90%; Yellow = 45-75%. Careers within a stream are similar; explore additional careers within each stream."
+    },
+    "matching_careers_table": {
+      "table_title": "Matching Careers For You",
+      "columns": [
+        "Career Stream",
+        "Matching Careers Options",
+        "CMI % Match",
+        "Color Code"
+      ],
+      "color_code_legend": {
+        "Green": "Excellent Match (>90 CMI) \u2014 Definitely take up this career",
+        "Light Green": "Adequate Match (75-90 CMI) \u2014 May choose if you really want",
+        "Yellow": "Modest Match (45-75 CMI) \u2014 Choose after considering all factors",
+        "Orange": "Inadequate Match \u2014 Advised to avoid if possible",
+        "Red": "Poor Match \u2014 Strongly recommended against"
+      },
+      "data": [
+        {
+          "stream": "Business Management",
+          "career": "Human Resources Manager",
+          "CMI": 64.36,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Business Management",
+          "career": "Public Relations Manager",
+          "CMI": 60.25,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Business Management",
+          "career": "Administrative Services Manager",
+          "CMI": 59.83,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Medicine",
+          "career": "Veterinarian",
+          "CMI": 60.73,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Medicine",
+          "career": "Ayurvedic Doctor",
+          "CMI": 60.14,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Medicine",
+          "career": "Dentist",
+          "CMI": 57.9,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Education & Training",
+          "career": "Lecturer/Professor",
+          "CMI": 64.36,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Education & Training",
+          "career": "Librarian",
+          "CMI": 64.56,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Education & Training",
+          "career": "School Psychologist",
+          "CMI": 62.34,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Physical Sciences",
+          "career": "Chemist",
+          "CMI": 60.44,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Physical Sciences",
+          "career": "Industrial Ecologist",
+          "CMI": 59.83,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Physical Sciences",
+          "career": "Geoscientist",
+          "CMI": 53.85,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Social Science",
+          "career": "College Teacher",
+          "CMI": 60.43,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Social Science",
+          "career": "Social Worker",
+          "CMI": 59.87,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Social Science",
+          "career": "Political Scientist",
+          "CMI": 59.26,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Alternate Health Services",
+          "career": "Dietitians and Nutritionist",
+          "CMI": 63.51,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Alternate Health Services",
+          "career": "Occupational Therapist",
+          "CMI": 62.83,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Alternate Health Services",
+          "career": "Counseling Psychologist",
+          "CMI": 62.59,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Commerce & Finance",
+          "career": "Corporate Accountant",
+          "CMI": 54.11,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Commerce & Finance",
+          "career": "Actuary",
+          "CMI": 54.11,
+          "color": "Yellow"
+        },
+        {
+          "stream": "Commerce & Finance",
+          "career": "Insurance Underwriter",
+          "CMI": 53.39,
+          "color": "Yellow"
+        }
+      ],
+      "note": "Career Match Index (CMI) shows the percentage match with the career. Color codes indicate implication for career decision."
+    }
+  },
+  "section_IV_diagnostic_career_gap_analysis": {
+    "section": "IV",
+    "title": "Diagnostic Career Gap Analysis",
+    "description": "From the 21 careers table, top 7 careers from each stream are selected and provided with detailed explanations. Objective is to offer diagnostic gap analysis highlighting strengths and areas for improvement in relation to each career.",
+    "gap_analysis_note": "For each career: a graph displays CAT and CIA results, followed by a table illustrating the extent of gap, its direction, and implications for career decisions.",
+    "color_codes": [
+      {
+        "color": "Green",
+        "meaning": "Excellent match \u2014 definitely take up the career"
+      },
+      {
+        "color": "Light Green",
+        "meaning": "Adequate match \u2014 may choose if you really want to pursue it"
+      },
+      {
+        "color": "Yellow",
+        "meaning": "Modest match \u2014 may choose after considering all relevant factors"
+      },
+      {
+        "color": "Orange",
+        "meaning": "Inadequate match \u2014 advised to avoid if possible"
+      },
+      {
+        "color": "Red",
+        "meaning": "Poor match \u2014 strongly recommended against choosing it"
+      }
+    ],
+    "careers_gap_analysis": [
+      {
+        "career": "Human Resources Manager",
+        "CAT_index": 76.67,
+        "CIA_index": 80.26,
+        "CAT_CIA_gap": -3.59,
+        "gap_direction": "NEGATIVE",
+        "CAT_color": "Yellow",
+        "CIA_color": "Light Green",
+        "gap_color": "Green",
+        "chart": {
+          "chart_type": "horizontal_bar",
+          "CAT_INDEX": 76.67,
+          "CIA_INDEX": 80.26,
+          "x_axis": "0 to 100"
+        },
+        "analysis": "The gap is really insignificant. CAT index is slightly lower than the CIA index. If the CAT score is really high (see the CAT match with this career) you can expect to smoothly sail through your studies. Go ahead with what your heart suggests.",
+        "CAT_interpretation": "CAT index is moderately matching with this career option. Your intellectual capabilities are moderately sufficient for succeeding in this career. You may face difficulties in mastering those technical skills, but with dedication and training you can make it!",
+        "CIA_interpretation": "Your CIA match with this career is good. Your personality and work style adequately match with those qualities required by the job.",
+        "gap_interpretation": "Gap is insignificant, hinting that you have both the capabilities and qualities required for this job. Probability of your success in this career is high."
+      },
+      {
+        "career": "Veterinarian",
+        "CAT_index": 76.67,
+        "CIA_index": 63.3,
+        "CAT_CIA_gap": 13.36,
+        "gap_direction": "POSITIVE",
+        "CAT_color": "Yellow",
+        "CIA_color": "Yellow",
+        "gap_color": "Light Green",
+        "chart": {
+          "chart_type": "horizontal_bar",
+          "CAT_INDEX": 76.67,
+          "CIA_INDEX": 63.3,
+          "x_axis": "0 to 100"
+        },
+        "analysis": "See the gap between your CAT and CIA match indices. It is less than 15 points, not a major gap! You can go for this career. Hopefully the gap may disappear in course of time, as you get along with this. Although we see a gap, it does not mean any serious issue. As CAT index is better than CIA index, it can be implied that you are capable even if you lack on certain personal attributes. Well, you can work on the latter.",
+        "CAT_interpretation": "CAT index is moderately matching with this career option. Your intellectual capabilities are moderately sufficient. You may face difficulties in mastering technical skills, but with dedication and training you can make it!",
+        "CIA_interpretation": "Your CIA match with this career option is moderately adequate. If you really like this career you can go for it; however, it will be a good idea if you can work on those personal areas where you need to strengthen yourself."
+      },
+      {
+        "career": "Lecturer/Professor",
+        "CAT_index": 76.67,
+        "CIA_index": 80.26,
+        "CAT_CIA_gap": -3.59,
+        "gap_direction": "NEGATIVE",
+        "CAT_color": "Yellow",
+        "CIA_color": "Light Green",
+        "gap_color": "Green",
+        "chart": {
+          "chart_type": "horizontal_bar",
+          "CAT_INDEX": 76.67,
+          "CIA_INDEX": 80.26,
+          "x_axis": "0 to 100"
+        },
+        "analysis": "The gap is really insignificant. CAT index is slightly lower than the CIA index. If the CAT score is really high you can expect to smoothly sail through your studies. Go ahead with what your heart suggests.",
+        "CAT_interpretation": "CAT index is moderately matching with this career option. Your intellectual capabilities are moderately sufficient for succeeding in this career.",
+        "CIA_interpretation": "Your CIA match with this career is good. Your personality and work style adequately match with those qualities required by the job.",
+        "gap_interpretation": "Gap is insignificant, hinting that you have both the capabilities and qualities required for this job."
+      },
+      {
+        "career": "Chemist",
+        "CAT_index": 76.67,
+        "CIA_index": 62.17,
+        "CAT_CIA_gap": 14.49,
+        "gap_direction": "POSITIVE",
+        "CAT_color": "Yellow",
+        "CIA_color": "Yellow",
+        "gap_color": "Light Green",
+        "chart": {
+          "chart_type": "horizontal_bar",
+          "CAT_INDEX": 76.67,
+          "CIA_INDEX": 62.17,
+          "x_axis": "0 to 100"
+        },
+        "analysis": "See the gap between your CAT and CIA match indices. It is less than 15 points, not a major gap! You can go for this career.",
+        "CAT_interpretation": "CAT index is moderately matching with this career option. Your intellectual capabilities are moderately sufficient. You may face difficulties in mastering technical skills, but with dedication and training you can make it!",
+        "CIA_interpretation": "Your CIA match with this career option is moderately adequate."
+      },
+      {
+        "career": "Industrial Ecologist",
+        "CAT_index": 76.67,
+        "CIA_index": 59.91,
+        "CAT_CIA_gap": 14.49,
+        "gap_direction": "POSITIVE",
+        "CAT_color": "Yellow",
+        "CIA_color": "Yellow",
+        "gap_color": "Light Green",
+        "chart": {
+          "chart_type": "horizontal_bar",
+          "CAT_INDEX": 76.67,
+          "CIA_INDEX": 59.91,
+          "x_axis": "0 to 100"
+        },
+        "analysis": "See the gap between your CAT and CIA match indices. It is less than 15 points, not a major gap! You can go for this career. Hopefully the gap may disappear in course of time.",
+        "CIA_interpretation": "Your CIA match with this career option is moderately adequate. If you really like this career you can go for it; however, it will be a good idea if you can work on those personal areas where you need to strengthen yourself."
+      },
+      {
+        "career": "College Teacher",
+        "CAT_index": 73.33,
+        "CIA_index": 80.26,
+        "CAT_CIA_gap": -6.93,
+        "gap_direction": "NEGATIVE",
+        "CAT_color": "Yellow",
+        "CIA_color": "Light Green",
+        "gap_color": "Green",
+        "chart": {
+          "chart_type": "horizontal_bar",
+          "CAT_INDEX": 73.33,
+          "CIA_INDEX": 80.26,
+          "x_axis": "0 to 100"
+        },
+        "analysis": "The gap is really insignificant. CAT index is slightly lower than the CIA index. If the CAT score is really high you can expect to smoothly sail through your studies. Go ahead with what your heart suggests.",
+        "CIA_interpretation": "Your CIA match with this career is good. Your personality and work style adequately match."
+      },
+      {
+        "career": "Dietitians and Nutritionist",
+        "CAT_index": 76.67,
+        "CIA_index": 75.74,
+        "CAT_CIA_gap": 0.93,
+        "gap_direction": "POSITIVE",
+        "CAT_color": "Yellow",
+        "CIA_color": "Light Green",
+        "gap_color": "Green",
+        "chart": {
+          "chart_type": "horizontal_bar",
+          "CAT_INDEX": 76.67,
+          "CIA_INDEX": 75.74,
+          "x_axis": "0 to 100"
+        },
+        "analysis": "See the gap between your CAT and CIA match indices. Actually it is insignificant, hinting that you have both the capabilities and qualities required for this job. Probability of your success in this career is high.",
+        "CIA_interpretation": "Your CIA match with this career is good. Your personality and work style adequately match with those qualities required by the job."
+      },
+      {
+        "career": "Corporate Accountant",
+        "CAT_index": 73.33,
+        "CIA_index": 52.0,
+        "CAT_CIA_gap": 21.33,
+        "gap_direction": "POSITIVE",
+        "CAT_color": "Yellow",
+        "CIA_color": "Yellow",
+        "gap_color": "Yellow",
+        "chart": {
+          "chart_type": "horizontal_bar",
+          "CAT_INDEX": 73.33,
+          "CIA_INDEX": 52.0,
+          "x_axis": "0 to 100"
+        },
+        "analysis": "See the gap between your CAT and CIA match indices. The gap is significant, but there is nothing to stop you from taking this up as your career. However, we advise you on certain possibilities you may face in future during your studies or actual work on job. Though major gap between CAT and CIA indices is not desirable, it does not call for any caution here, because your intellectual potential is on the higher side. You can work on the personal front and develop qualities and skills as required through dedicated and consistent effort.",
+        "CAT_interpretation": "CAT index is moderately matching with this career option. Your intellectual capabilities are moderately sufficient.",
+        "CIA_interpretation": "Your CIA match with this career option is moderately adequate."
+      }
+    ]
+  },
+  "conclusion": {
+    "section": "5",
+    "title": "Conclusion",
+    "text": "Career profiling is a crucial component of career planning. Understanding your career interests and intellectual strengths is essential before deciding on your ideal career path. This is particularly important because many students make hasty decisions influenced by peer pressure, incomplete knowledge about 'ideal careers', and cultural stereotypes. There is a common belief that professions like medicine and engineering are universally ideal. However, research and experience indicate that not everyone is suited for every job. People have diverse abilities and interests, and different careers require distinct sets of skills, abilities, and traits. Therefore, it is vital to identify the careers that align with your unique profile.",
+    "report_value": "This career profiling report offers a detailed analysis of your career interests, personality, and intellectual abilities. It identifies the most suitable careers based on your interests and provides a comprehensive evaluation of the compatibility between your career interests and intellectual potential.",
+    "recommendation": "While this report provides a comprehensive overview, it may not capture every nuance of your personality and interests. Therefore, it is advisable to complement this report with a more focused, individualized analysis, interpretation, and counseling by a qualified career psychologist.",
+    "contact": {
+      "website": "http://www.careercad.com",
+      "email": "info@careercad.com"
+    },
+    "closing": "Best Wishes for your Career!"
+  }
+}

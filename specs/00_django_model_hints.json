@@ -1,0 +1,221 @@
+{
+  "meta": {
+    "file": "django_model_hints.json",
+    "project": "CareerJudge",
+    "description": "Django ORM model structure hints for implementing all question types. Maps JSON spec to Django model fields, relationships, and constraints.",
+    "stack": "Django + PostgreSQL",
+    "note": "Use this to guide model creation; not a 1:1 migration file"
+  },
+
+  "models": [
+
+    {
+      "model": "Test",
+      "fields": [
+        { "name": "title", "type": "CharField", "max_length": 255 },
+        { "name": "instructions", "type": "TextField", "blank": true },
+        { "name": "total_duration_seconds", "type": "PositiveIntegerField" },
+        { "name": "display_order", "type": "CharField", "choices": ["RANDOM", "STATIC"], "default": "STATIC" },
+        { "name": "created_at", "type": "DateTimeField", "auto_now_add": true }
+      ]
+  },
+
+    {
+      "model": "Section",
+      "fields": [
+        { "name": "test", "type": "ForeignKey", "to": "Test", "on_delete": "CASCADE" },
+        { "name": "title", "type": "CharField", "max_length": 255 },
+        { "name": "order", "type": "PositiveIntegerField" }
+      ]
+  },
+
+    {
+      "model": "Question",
+      "fields": [
+        { "name": "test", "type": "ForeignKey", "to": "Test", "on_delete": "CASCADE" },
+        { "name": "section", "type": "ForeignKey", "to": "Section", "null": true, "blank": true },
+        { "name": "question_type", "type": "CharField", "max_length": 50, "choices": [
+            "MCQ_TEXT_IMAGE", "MCQ_TEXT_IMAGE_IMG_OPTIONS",
+            "MCQ_AUDIO_MULTI", "MCQ_VIDEO_MULTI",
+            "MCQ_WORD_FLASH_MULTI", "MCQ_IMAGE_FLASH_MULTI",
+            "MCQ_PASSAGE_DISPLAY_MULTI", "MCQ_IMAGE_DISPLAY_MULTI",
+            "FITB_SINGLE", "FITB_MULTI_FIELD",
+            "FITB_WORD_FLASH_MULTI", "FITB_IMAGE_FLASH_MULTI",
+            "MATCH_FOLLOWING", "GRID_LIST_SELECTION",
+            "HOTSPOT_SINGLE", "HOTSPOT_MULTI",
+            "RANK_SIMPLE", "RANK_THEN_RATE",
+            "STANDARD_RATING_SCALE",
+            "FORCED_CHOICE_SINGLE_LEVEL", "FORCED_CHOICE_TWO_LEVEL"
+        ] },
+        { "name": "question_id_label", "type": "CharField", "max_length": 50, "help_text": "Display ID shown to candidate" },
+        { "name": "question_text_1", "type": "TextField" },
+        { "name": "question_text_2", "type": "TextField", "blank": true },
+        { "name": "image", "type": "ImageField", "upload_to": "questions/images/", "null": true, "blank": true },
+        { "name": "order", "type": "PositiveIntegerField" },
+        { "name": "is_active", "type": "BooleanField", "default": true },
+        { "name": "scoring_type", "type": "CharField", "max_length": 30 },
+        { "name": "case_sensitive", "type": "BooleanField", "default": false, "help_text": "For FITB types" },
+        { "name": "pct_match_threshold", "type": "FloatField", "null": true, "blank": true, "help_text": "For FITB fuzzy match" },
+        { "name": "display_duration_seconds", "type": "PositiveIntegerField", "null": true, "blank": true, "help_text": "For timed display types 1g/1h" },
+        { "name": "flash_interval_ms", "type": "PositiveIntegerField", "null": true, "blank": true, "help_text": "For flash types 1e/1f/2c/2d" },
+        { "name": "flash_display_count", "type": "PositiveIntegerField", "null": true, "blank": true },
+        { "name": "grid_rows", "type": "PositiveIntegerField", "null": true, "blank": true, "help_text": "For type 4" },
+        { "name": "grid_cols", "type": "PositiveIntegerField", "null": true, "blank": true },
+        { "name": "rating_scale_points", "type": "PositiveIntegerField", "null": true, "blank": true, "help_text": "For 6b/7/8b" },
+        { "name": "rating_direction", "type": "CharField", "choices": ["FORWARD", "REVERSE"], "null": true, "blank": true },
+        { "name": "passage_title", "type": "CharField", "max_length": 255, "blank": true, "help_text": "For type 1g" },
+        { "name": "passage_body", "type": "TextField", "blank": true }
+      ],
+      "meta": { "ordering": ["order"] }
+  },
+
+    {
+      "model": "MediaFile",
+      "description": "Audio/video files for types 1c and 1d",
+      "fields": [
+        { "name": "question", "type": "ForeignKey", "to": "Question", "on_delete": "CASCADE" },
+        { "name": "media_type", "type": "CharField", "choices": ["AUDIO", "VIDEO"] },
+        { "name": "file", "type": "FileField", "upload_to": "questions/media/" }
+      ]
+  },
+
+    {
+      "model": "FlashItem",
+      "description": "Items in flash lists for types 1e/1f/2c/2d",
+      "fields": [
+        { "name": "question", "type": "ForeignKey", "to": "Question", "on_delete": "CASCADE" },
+        { "name": "item_type", "type": "CharField", "choices": ["TEXT", "IMAGE"] },
+        { "name": "text_value", "type": "CharField", "max_length": 255, "blank": true },
+        { "name": "image_file", "type": "ImageField", "upload_to": "questions/flash/", "null": true, "blank": true },
+        { "name": "order", "type": "PositiveIntegerField" },
+        { "name": "is_in_display_pool", "type": "BooleanField", "default": true, "help_text": "Whether this item can be randomly selected for display" }
+      ],
+      "meta": { "ordering": ["order"] }
+  },
+
+    {
+      "model": "ResponseOption",
+      "description": "Answer options for MCQ, FITB, Match, Grid, Rank, Forced-Choice types",
+      "fields": [
+        { "name": "question", "type": "ForeignKey", "to": "Question", "on_delete": "CASCADE" },
+        { "name": "sub_question_index", "type": "PositiveIntegerField", "default": 0, "help_text": "For multi-sub-question types; 0 = main question" },
+        { "name": "option_type", "type": "CharField", "choices": ["TEXT", "IMAGE", "MATCH_A", "MATCH_B", "DRAG_POOL", "RANK", "FORCED_CHOICE"] },
+        { "name": "label", "type": "CharField", "max_length": 100, "blank": true, "help_text": "e.g. Option 1, Group A item 3" },
+        { "name": "text_value", "type": "TextField", "blank": true },
+        { "name": "image_file", "type": "ImageField", "upload_to": "options/images/", "null": true, "blank": true },
+        { "name": "is_correct", "type": "BooleanField", "default": false, "help_text": "For MCQ, grid, hotspot etc." },
+        { "name": "match_pair_id", "type": "PositiveIntegerField", "null": true, "blank": true, "help_text": "For match-the-following: links Group A item to correct Group B item" },
+        { "name": "section_tag", "type": "ForeignKey", "to": "Section", "null": true, "blank": true, "help_text": "For psychometric types: which section this option scores toward" },
+        { "name": "predefined_score", "type": "FloatField", "default": 1.0, "help_text": "For forced-choice: may be 0,1,2,3 etc." },
+        { "name": "order", "type": "PositiveIntegerField" }
+      ],
+      "meta": { "ordering": ["sub_question_index", "order"] }
+  },
+
+    {
+      "model": "CorrectAnswer",
+      "description": "Multiple correct answer strings for FITB types (up to 5 per field)",
+      "fields": [
+        { "name": "response_option", "type": "ForeignKey", "to": "ResponseOption", "on_delete": "CASCADE" },
+        { "name": "answer_text", "type": "CharField", "max_length": 500 },
+        { "name": "order", "type": "PositiveIntegerField" }
+      ],
+      "constraint": "Max 5 CorrectAnswer objects per ResponseOption for FITB types"
+  },
+
+    {
+      "model": "HotspotArea",
+      "description": "Pixel-defined hotspot areas for types 5a/5b",
+      "fields": [
+        { "name": "question", "type": "ForeignKey", "to": "Question", "on_delete": "CASCADE" },
+        { "name": "sub_question_index", "type": "PositiveIntegerField", "default": 0 },
+        { "name": "x", "type": "PositiveIntegerField", "help_text": "Top-left x pixel coordinate" },
+        { "name": "y", "type": "PositiveIntegerField", "help_text": "Top-left y pixel coordinate" },
+        { "name": "width_px", "type": "PositiveIntegerField" },
+        { "name": "height_px", "type": "PositiveIntegerField" },
+        { "name": "area_size_code", "type": "CharField", "max_length": 10, "examples": ["2x2","3x3","4x4","5x5","6x6"] }
+      ]
+  },
+
+    {
+      "model": "TestSession",
+      "description": "A candidate's attempt at a test",
+      "fields": [
+        { "name": "candidate", "type": "ForeignKey", "to": "User", "on_delete": "CASCADE" },
+        { "name": "test", "type": "ForeignKey", "to": "Test", "on_delete": "CASCADE" },
+        { "name": "status", "type": "CharField", "choices": ["ACTIVE", "SUSPENDED", "COMPLETED"] },
+        { "name": "started_at", "type": "DateTimeField", "auto_now_add": true },
+        { "name": "suspended_at", "type": "DateTimeField", "null": true, "blank": true },
+        { "name": "completed_at", "type": "DateTimeField", "null": true, "blank": true },
+        { "name": "elapsed_seconds", "type": "PositiveIntegerField", "default": 0, "help_text": "Cumulative time spent; updated on suspend/complete" },
+        { "name": "current_question", "type": "ForeignKey", "to": "Question", "null": true, "on_delete": "SET_NULL", "help_text": "Last active question; used for resume" }
+      ]
+  },
+
+    {
+      "model": "QuestionAttempt",
+      "description": "One candidate's answer to one question within a session",
+      "fields": [
+        { "name": "session", "type": "ForeignKey", "to": "TestSession", "on_delete": "CASCADE" },
+        { "name": "question", "type": "ForeignKey", "to": "Question", "on_delete": "CASCADE" },
+        { "name": "sub_question_index", "type": "PositiveIntegerField", "default": 0 },
+        { "name": "status", "type": "CharField", "choices": ["NOT_ATTEMPTED", "ATTEMPTED", "BOOKMARKED", "SKIPPED"] },
+        { "name": "raw_answer", "type": "JSONField", "help_text": "Flexible storage for all answer types; see answer_schema below" },
+        { "name": "score", "type": "FloatField", "null": true, "blank": true },
+        { "name": "answered_at", "type": "DateTimeField", "null": true, "blank": true },
+        { "name": "media_played", "type": "BooleanField", "default": false, "help_text": "For audio/video/flash types: was stimulus played?" }
+      ],
+      "answer_schema_by_type": {
+        "MCQ": { "selected_option_id": "int" },
+        "FITB_SINGLE": { "text": "str" },
+        "FITB_MULTI": { "fields": { "option_1": "str", "option_2": "str" } },
+        "MATCH": { "matches": { "group_a_item_id": "group_b_value_or_drag_item_id" } },
+        "GRID": { "selected_cell_ids": ["int"] },
+        "HOTSPOT_SINGLE": { "click_x": "int", "click_y": "int" },
+        "HOTSPOT_MULTI": { "confirmed_clicks": [{ "x": "int", "y": "int" }] },
+        "RANK": { "option_ranks": { "option_id": "rank_number" } },
+        "RANK_RATE": { "option_ranks": { "option_id": "rank_number" }, "option_ratings": { "option_id": "rating_value" } },
+        "RATING": { "question_ratings": { "question_id": "scale_point" } },
+        "FORCED_CHOICE": { "selected_option_id": "int" },
+        "FORCED_CHOICE_RATED": { "selected_option_id": "int", "rating": "int" }
+  },
+      "unique_together": ["session", "question", "sub_question_index"]
+  },
+
+    {
+      "model": "SectionScore",
+      "description": "Aggregated score per section per session (for reporting/profiling)",
+      "fields": [
+        { "name": "session", "type": "ForeignKey", "to": "TestSession", "on_delete": "CASCADE" },
+        { "name": "section", "type": "ForeignKey", "to": "Section", "on_delete": "CASCADE" },
+        { "name": "raw_score", "type": "FloatField" },
+        { "name": "max_score", "type": "FloatField" },
+        { "name": "percentage", "type": "FloatField" }
+      ],
+      "unique_together": ["session", "section"]
+  }
+
+  ],
+
+  "key_relationships": [
+    "Test → Section (1:many)",
+    "Test → Question (1:many)",
+    "Question → ResponseOption (1:many)",
+    "Question → HotspotArea (1:many) — only for 5a/5b",
+    "Question → FlashItem (1:many) — only for flash types",
+    "Question → MediaFile (1:1 or 1:many) — only for 1c/1d",
+    "ResponseOption → CorrectAnswer (1:many, max 5) — only for FITB",
+    "ResponseOption → Section (many:1 via section_tag) — psychometric types",
+    "User → TestSession (1:many)",
+    "TestSession → QuestionAttempt (1:many)",
+    "TestSession → SectionScore (1:many)"
+  ],
+
+  "indexes_recommended": [
+    "QuestionAttempt: (session, question)",
+    "QuestionAttempt: (session, status)",
+    "ResponseOption: (question, sub_question_index)",
+    "FlashItem: (question, is_in_display_pool)",
+    "TestSession: (candidate, status)"
+  ]
+}

@@ -1,0 +1,876 @@
+{
+  "meta": {
+    "file": "06_profiling_report_generation.json",
+    "source_pdf": "6__Profiling_Report_Generation_Process.pdf",
+    "title": "Profiling Report Generation",
+    "version": "1.0"
+  },
+  "introduction": {
+    "description": "Profiling report process collects data inputs from Profiling Configuration Process to generate the profiling report.",
+    "distinction_from_general_report": "Profiling report uses multiple assessments and transformed data inputs; general report uses a single assessment.",
+    "stages": [
+      "General Description and Data Selection Criteria",
+      "Report Configuration (Raw Summary, FMI, PMI, VMI reports \u2014 all optional)",
+      "Report Layout"
+    ],
+    "note": "Stages 2-5 are optional. User selects which reports to include in a particular profiling solution."
+  },
+  "processes": {
+    "general_description_and_data_selection": {
+      "section": "2",
+      "define_report_title_and_description": {
+        "section": "2.1",
+        "steps": [
+          "User clicks 'Profile Report' button",
+          "System shows entry fields for report title and description",
+          "User enters relevant inputs and submits"
+        ],
+        "sample_output": {
+          "Report_Title": "Career Profiling Solution",
+          "Report_Description": "This report addresses these questions and helps you know what your real strengths and difficulties are and which careers of choice would match your intellectual and personality profile. In the subsequent counselling session, we will have a thorough analysis of all 'what's and 'whys' and how to overcome the limitations."
+        }
+      },
+      "defining_data_selection_criteria": {
+        "section": "2.2",
+        "description": "Only two types of data are pulled in for reporting due to large criterion lists.",
+        "data_types": [
+          {
+            "type": "HFMI data",
+            "label": "Data of criterions with highest FMIs"
+          },
+          {
+            "type": "LFMI data",
+            "label": "Data of criterions with lowest FMIs"
+          }
+        ],
+        "extraction_modes": [
+          "User-Initiated Selection",
+          "System-Initiated Selection"
+        ],
+        "rules": [
+          "One or both data types can be selected",
+          "Only one extraction mode can be selected"
+        ],
+        "steps": [
+          "User clicks 'Data Selection' button",
+          "System asks user to select type of data: HFMI and/or LFMI",
+          "User selects data type(s)",
+          "System asks user to select extraction mode: User-initiated or System-initiated"
+        ],
+        "user_initiated_HFMI": {
+          "steps": [
+            "System asks to specify range of HFMI data to be sorted and displayed",
+            "User specifies HFMI range (e.g., 85-100)",
+            "System displays entry fields for specifying number of Categories and Criterions to extract",
+            "User enters relevant numbers and submits",
+            "System sorts FMI data with criterions and categories in ASCENDING order and displays all categories/criterions with FMI values within specified range",
+            "User manually selects categories and criterions"
+          ]
+        },
+        "user_initiated_LFMI": {
+          "steps": [
+            "System asks to specify range of LFMI data",
+            "User specifies range (e.g., 85-100)",
+            "System displays entry fields for number of Categories and Criterions",
+            "User enters numbers and submits",
+            "System sorts FMI data in DESCENDING order and displays categories/criterions within specified range",
+            "User manually selects categories and criterions"
+          ]
+        },
+        "system_initiated_HFMI": {
+          "steps": [
+            "System displays entry fields for number of Categories and Criterions to extract",
+            "User enters numbers and submits",
+            "System executes: Sorts FMI data in DESCENDING order \u2192 Identifies category with highest FMI \u2192 Selects criterions (as many as specified) with highest FMIs within that category \u2192 Repeats for next highest FMI category \u2192 Continues until specified number reached"
+          ]
+        },
+        "system_initiated_LFMI": {
+          "steps": [
+            "System displays entry fields for number of Categories and Criterions",
+            "User enters numbers and submits",
+            "System executes: Sorts FMI data in ASCENDING order \u2192 Identifies category with lowest FMI \u2192 Selects criterions with lowest FMIs within that category \u2192 Repeats for next lowest FMI category \u2192 Continues until specified number reached"
+          ]
+        },
+        "note": "User can cancel a selection list, redefine the FMI range and ask system to bring up a new list."
+      }
+    },
+    "report_configuration": {
+      "section": "3",
+      "description": "User defines report specifics. System extracts four data inputs: FMI, PMI, VMI, RVS.",
+      "data_inputs": [
+        {
+          "code": "FMI",
+          "description": "System retrieves all FMI scores for all criterions included"
+        },
+        {
+          "code": "PMI",
+          "description": "System retrieves all PMI scores for all assessments for all criterions included"
+        },
+        {
+          "code": "VMI",
+          "description": "System retrieves all VMI scores for all Variables of assessments for all criterions included"
+        },
+        {
+          "code": "RVS",
+          "description": "System retrieves all Raw Summary scores for all variables of all assessments included"
+        }
+      ],
+      "note": "Band definition and table/graph layout processes are common for all data inputs but values included differ. User should define each data type separately.",
+      "raw_summary_report": {
+        "section": "3.1",
+        "description": "Raw summary scores are percentage scores derived from assessments included. Each variable (section) has a summary score: [Total obtained score / Total Max Score] \u00d7 100.",
+        "define_bands": {
+          "section": "3.1.1",
+          "steps": [
+            "User clicks 'Define Band' button",
+            "System displays list of data inputs and asks user to select any one",
+            "User selects Raw Summary Score (RS) as data input",
+            "System shows list of assessments (e.g., CAT and CIA)",
+            "User selects required assessments for RS banding (one or more can be selected)",
+            "System displays relevant entry fields",
+            "User enters inputs as required"
+          ],
+          "sample_output": {
+            "table_title": "Raw Score Banding/Labelling/Coding",
+            "columns": [
+              "Assessment",
+              "Variable",
+              "Band",
+              "Range",
+              "Label",
+              "Color Code",
+              "Description"
+            ],
+            "data": [
+              {
+                "assessment": "CAT",
+                "variable": "Abstract",
+                "bands": [
+                  {
+                    "band": "Band1",
+                    "range": ">80",
+                    "label": "Excellent",
+                    "color": "Green",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band2",
+                    "range": "60-80",
+                    "label": "Good",
+                    "color": "Pale Green",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band3",
+                    "range": "40-60",
+                    "label": "Average",
+                    "color": "Yellow",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band4",
+                    "range": "<40",
+                    "label": "Below Average",
+                    "color": "Orange",
+                    "description": "<Text>"
+                  }
+                ]
+              },
+              {
+                "assessment": "CAT",
+                "variable": "Analytical",
+                "bands": [
+                  {
+                    "band": "Band1",
+                    "range": ">80",
+                    "label": "Excellent",
+                    "color": "Green",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band2",
+                    "range": "60-80",
+                    "label": "Good",
+                    "color": "Pale Green",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band3",
+                    "range": "40-60",
+                    "label": "Average",
+                    "color": "Yellow",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band4",
+                    "range": "<40",
+                    "label": "Below Average",
+                    "color": "Orange",
+                    "description": "<Text>"
+                  }
+                ]
+              }
+            ],
+            "note": "Process repeated for each assessment specified"
+          }
+        },
+        "define_table_graph_layout": {
+          "section": "3.1.2",
+          "steps": [
+            "User clicks 'Table-Graph' button",
+            "System asks to check: Table or Graph",
+            "User chooses an option",
+            "System displays standard formats for table/graph",
+            "User selects one of the formats",
+            "System shows entry fields for Table Heads or Graph Legends",
+            "User enters relevant text"
+          ],
+          "sample_output": {
+            "Title": "Your CAT scores",
+            "Variable_Name": "Your Intellectual Abilities",
+            "Label": "Where you are positioned",
+            "Colour_Code": "What the signboard tell",
+            "Descriptions": "What it means for you"
+          },
+          "note": "Process repeated for each assessment specified"
+        }
+      },
+      "FMI_report": {
+        "section": "3.2",
+        "description": "FMI is the integrated profile match score derived from Profiling Configuration Process. It is a single value representing all assessments. For each criterion there is only ONE FMI value.",
+        "define_bands": {
+          "section": "3.2.1",
+          "steps": [
+            "User clicks 'Define Band' button",
+            "System displays list of data inputs",
+            "User selects FMI as data input",
+            "System displays relevant entry fields",
+            "User enters inputs as required"
+          ],
+          "sample_output": {
+            "table_title": "FMI Banding/Labelling/Coding",
+            "columns": [
+              "Band",
+              "Range",
+              "Label",
+              "Color Code",
+              "Description"
+            ],
+            "data": [
+              {
+                "band": "Band1",
+                "range": ">90",
+                "label": "Sure, go for it",
+                "color": "Green",
+                "description": "<Text>"
+              },
+              {
+                "band": "Band2",
+                "range": "75-90",
+                "label": "You can if you want",
+                "color": "Yellowish Green",
+                "description": "<Text>"
+              },
+              {
+                "band": "Band3",
+                "range": "45-75",
+                "label": "Be sure you want",
+                "color": "Yellow",
+                "description": "<Text>"
+              },
+              {
+                "band": "Band4",
+                "range": "16711",
+                "label": "Avoid if you can",
+                "color": "Orange",
+                "description": "<Text>"
+              },
+              {
+                "band": "Band5",
+                "range": "<10",
+                "label": "Better avoid",
+                "color": "Red",
+                "description": "<Text>"
+              }
+            ],
+            "note": "Process repeated for each criterion included. If both HFMI and LFMI selected, banding executed for each separately."
+          }
+        },
+        "define_table_graph_layout": {
+          "section": "3.2.2_FMI",
+          "sample_FMI_table_graph_head_definition": {
+            "Table_Graph_Title": "Best Matching Careers for You",
+            "Category_Name": "Career Stream",
+            "Criterion_Name": "Career",
+            "Data_Input_Name": "Career Match Index (CMI)",
+            "Label": "What we suggest",
+            "Colour_Code": "The Signboard",
+            "Description": "What it means for you"
+          },
+          "sample_FMI_report_table": {
+            "title": "Best Matching Careers for You",
+            "columns": [
+              "Career Stream",
+              "Career",
+              "Career Match Index (CMI)",
+              "Go Ahead or Not?",
+              "What We Suggest"
+            ],
+            "data": [
+              {
+                "stream": "IT Sector",
+                "career": "Web Designer",
+                "CMI": 92.03,
+                "suggestion": "Sure, go for it"
+              },
+              {
+                "stream": "IT Sector",
+                "career": "Video Game Designer",
+                "CMI": 90.75,
+                "suggestion": "Sure, go for it"
+              },
+              {
+                "stream": "IT Sector",
+                "career": "Software Engineer - Systems",
+                "CMI": 86.95,
+                "suggestion": "You can if you want"
+              },
+              {
+                "stream": "Medicine",
+                "career": "Surgeon",
+                "CMI": 92.03,
+                "suggestion": "Sure, go for it"
+              },
+              {
+                "stream": "Medicine",
+                "career": "Consultant",
+                "CMI": 89.33,
+                "suggestion": "You can if you want"
+              },
+              {
+                "stream": "Medicine",
+                "career": "Anaesthetist",
+                "CMI": 72.12,
+                "suggestion": "Be sure, you want it"
+              },
+              {
+                "stream": "Engineering",
+                "career": "Mechanical Engineer",
+                "CMI": 96.06,
+                "suggestion": "Sure, go for it"
+              },
+              {
+                "stream": "Engineering",
+                "career": "Electronic Engineer",
+                "CMI": 93.22,
+                "suggestion": "Sure, go for it"
+              },
+              {
+                "stream": "Engineering",
+                "career": "Electrical Engineer",
+                "CMI": 63.78,
+                "suggestion": "Be sure, you want it"
+              },
+              {
+                "stream": "Business Management",
+                "career": "Manager-Marketing",
+                "CMI": 96.06,
+                "suggestion": "Sure, go for it"
+              },
+              {
+                "stream": "Business Management",
+                "career": "Manager-HR",
+                "CMI": 93.38,
+                "suggestion": "Sure, go for it"
+              },
+              {
+                "stream": "Business Management",
+                "career": "Manager-Finance",
+                "CMI": 55.69,
+                "suggestion": "Sure, go for it"
+              }
+            ]
+          }
+        }
+      },
+      "PMI_report": {
+        "section": "3.3",
+        "description": "PMI is the profile match score derived for each assessment separately. If two assessments (CAT & CIA), there will be one PMI per assessment. For each criterion there will be two PMI values.",
+        "define_PMI_band": {
+          "section": "3.3.1",
+          "steps": [
+            "User clicks 'Define Band' button",
+            "System displays list of data inputs",
+            "User selects PMI as data input",
+            "System displays assessment options",
+            "User selects one assessment option",
+            "System displays relevant entry fields",
+            "User enters inputs",
+            "After completing one assessment, user selects second assessment and completes"
+          ],
+          "sample_output": {
+            "table_title": "PMI Band Definition",
+            "columns": [
+              "Assessment",
+              "Band",
+              "Range",
+              "Label",
+              "Colour Code",
+              "Description"
+            ],
+            "data": [
+              {
+                "assessment": "CAT",
+                "bands": [
+                  {
+                    "band": "Band1",
+                    "range": ">80",
+                    "label": "Very competent",
+                    "color": "Green",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band2",
+                    "range": "60-80",
+                    "label": "Adequately competent",
+                    "color": "Pale Green",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band3",
+                    "range": "40-60",
+                    "label": "Partly competent",
+                    "color": "Yellow-Green",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band4",
+                    "range": "20-40",
+                    "label": "May be inadequate",
+                    "color": "Yellow",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band5",
+                    "range": "<20",
+                    "label": "Not that good",
+                    "color": "Red",
+                    "description": "<Text>"
+                  }
+                ]
+              },
+              {
+                "assessment": "CIA",
+                "bands": [
+                  {
+                    "band": "Band1",
+                    "range": ">95",
+                    "label": "Excellent Match",
+                    "color": "Green",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band2",
+                    "range": "85-95",
+                    "label": "Good Match",
+                    "color": "Pale Green",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band3",
+                    "range": "60-80",
+                    "label": "Moderate Match",
+                    "color": "Yellow",
+                    "description": "<Text>"
+                  },
+                  {
+                    "band": "Band4",
+                    "range": "<60",
+                    "label": "Poor Match",
+                    "color": "Orange",
+                    "description": "<Text>"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "define_PMI_table_graph_layout": {
+          "section": "3.3.2",
+          "note": "After completing one assessment, user selects second and completes.",
+          "sample_outputs": {
+            "CAT_PMI": {
+              "Table_Graph_Title": "Your CAT Profile",
+              "Category_Name": "Career Stream",
+              "Criterion_Name": "Career",
+              "Data_Input_Name": "CAT-Index",
+              "Label": "How resourceful you are",
+              "Colour_Code": "The Signboard",
+              "Description": "What it means for you"
+            },
+            "CIA_PMI": {
+              "Table_Graph_Title": "Your CIA Profile",
+              "Category_Name": "Career Stream",
+              "Criterion_Name": "Career",
+              "Data_Input_Name": "CIA-Index",
+              "Label": "How your personality match",
+              "Colour_Code": "The Signboard",
+              "Description": "What it means for you"
+            }
+          }
+        },
+        "define_PMI_gap_index": {
+          "section": "3.3.3",
+          "description": "PMI Gap Index is an additional value generated by subtracting PMI of one assessment from PMI of the other.",
+          "steps": [
+            "User clicks 'PMI Difference' button",
+            "System displays entry fields for specifying order of PMIs",
+            "User specifies order for subtraction function"
+          ],
+          "example": {
+            "subtraction_table": {
+              "PMI": "CIA-PMI",
+              "subtract_from": "CAT-PMI"
+            },
+            "formula": "PMI-D = A1PMI - A2PMI",
+            "example_calculation": "75.2 - 98.5 = -23.3",
+            "note": "The difference value may be negative"
+          }
+        },
+        "define_PMI_D_band": {
+          "section": "3.3.4",
+          "steps": [
+            "User clicks 'Define PMI-D Band' button",
+            "System displays relevant entry fields",
+            "User enters inputs"
+          ],
+          "sample_output": {
+            "table_title": "PMI-D Banding/Labelling/Coding",
+            "columns": [
+              "Band",
+              "Range",
+              "Label",
+              "Color Code",
+              "Description"
+            ],
+            "data": [
+              {
+                "band": "Band1",
+                "range": ">40",
+                "label": "Huge gap!",
+                "color": "Violet",
+                "description": "<Text>"
+              },
+              {
+                "band": "Band2",
+                "range": "25-40",
+                "label": "Considerable Gap!",
+                "color": "Light Violet",
+                "description": "<Text>"
+              },
+              {
+                "band": "Band3",
+                "range": "5-25",
+                "label": "Moderate Gap",
+                "color": "Pink",
+                "description": "<Text>"
+              },
+              {
+                "band": "Band4",
+                "range": "-5 to 5",
+                "label": "Little Gap",
+                "color": "Green",
+                "description": "<Text>"
+              },
+              {
+                "band": "Band5",
+                "range": "-25 to -5",
+                "label": "Moderate Gap",
+                "color": "Yellow",
+                "description": "<Text>"
+              },
+              {
+                "band": "Band6",
+                "range": "-40 to -25",
+                "label": "Considerable Gap!",
+                "color": "Orange",
+                "description": "<Text>"
+              },
+              {
+                "band": "Band7",
+                "range": "<-40",
+                "label": "Huge gap!",
+                "color": "Red",
+                "description": "<Text>"
+              }
+            ],
+            "note": "For each criterion there is only one PMI-D value; band definition is done only once."
+          }
+        },
+        "define_PMI_D_table_graph_layout": {
+          "section": "3.3.5",
+          "sample_output": {
+            "Table_Graph_Title": "Your CAT-CIA Gap Analysis",
+            "Category_Name": "Career Stream",
+            "Criterion_Name": "Career",
+            "Data_Input_Name": "Gap Index",
+            "Label": "Is there a concern?",
+            "Colour_Code": "The Signboard",
+            "Description": "What it means for you"
+          }
+        }
+      },
+      "VMI_report": {
+        "section": "3.4",
+        "description": "VMIs (Variable Match Index) represent mapping score of each variable included in an assessment. User defines bands and table/graph specifications.",
+        "define_VMI_band": {
+          "section": "3.4.1",
+          "steps": [
+            "User clicks 'Define VMI-Band' button",
+            "System displays list of data inputs",
+            "User selects VMI as data input",
+            "System displays assessment options",
+            "User selects one option",
+            "System displays relevant entry fields",
+            "User enters inputs",
+            "After completing all variables in one assessment, user selects second set of variables in other assessment"
+          ],
+          "sample_output": {
+            "CAT_VMI_band_definition": {
+              "columns": [
+                "Variable",
+                "Band",
+                "Range",
+                "Color Code",
+                "Label",
+                "Description"
+              ],
+              "data": [
+                {
+                  "variable": "Abstract Reasoning",
+                  "bands": [
+                    {
+                      "band": "Band1",
+                      "range": ">90",
+                      "color": "Green",
+                      "label": "Surely adequate!",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band2",
+                      "range": "70-90",
+                      "color": "Pale Green",
+                      "label": "May be adequate",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band3",
+                      "range": "50-70",
+                      "color": "Yellow",
+                      "label": "Can't say!",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band4",
+                      "range": "30-50",
+                      "color": "Red",
+                      "label": "Might be challenging!",
+                      "description": "<Text>"
+                    }
+                  ]
+                },
+                {
+                  "variable": "Analytical Reasoning",
+                  "bands": [
+                    {
+                      "band": "Band1",
+                      "range": ">90",
+                      "color": "Green",
+                      "label": "Surely adequate!",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band2",
+                      "range": "70-90",
+                      "color": "Pale Green",
+                      "label": "May be adequate",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band3",
+                      "range": "50-70",
+                      "color": "Yellow",
+                      "label": "Can't say!",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band4",
+                      "range": "30-50",
+                      "color": "Red",
+                      "label": "Might be challenging!",
+                      "description": "<Text>"
+                    }
+                  ]
+                },
+                {
+                  "variable": "Verbal Reasoning",
+                  "bands": [
+                    {
+                      "band": "Band1",
+                      "range": ">90",
+                      "color": "Green",
+                      "label": "Surely adequate!",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band2",
+                      "range": "70-90",
+                      "color": "Pale Green",
+                      "label": "May be adequate",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band3",
+                      "range": "50-70",
+                      "color": "Yellow",
+                      "label": "Can't say!",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band4",
+                      "range": "30-50",
+                      "color": "Red",
+                      "label": "Might be challenging!",
+                      "description": "<Text>"
+                    }
+                  ]
+                }
+              ]
+            },
+            "CIA_VMI_band_definition": {
+              "data": [
+                {
+                  "variable": "Social-Reserved",
+                  "bands": [
+                    {
+                      "band": "Band1",
+                      "range": ">90",
+                      "color": "Green",
+                      "label": "Good Match",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band2",
+                      "range": "50-90",
+                      "color": "Pale Green",
+                      "label": "Modest Match",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band4",
+                      "range": "30-50",
+                      "color": "Red",
+                      "label": "Poor Match",
+                      "description": "<Text>"
+                    }
+                  ]
+                },
+                {
+                  "variable": "Numerical-Verbal",
+                  "bands": [
+                    {
+                      "band": "Band1",
+                      "range": ">90",
+                      "color": "Green",
+                      "label": "Good Match",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band2",
+                      "range": "70-90",
+                      "color": "Pale Green",
+                      "label": "Modest Match",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band4",
+                      "range": "30-50",
+                      "color": "Red",
+                      "label": "Poor Match",
+                      "description": "<Text>"
+                    }
+                  ]
+                },
+                {
+                  "variable": "Serial-Systemic",
+                  "bands": [
+                    {
+                      "band": "Band1",
+                      "range": ">90",
+                      "color": "Green",
+                      "label": "Good Match",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band2",
+                      "range": "70-90",
+                      "color": "Pale Green",
+                      "label": "Modest Match",
+                      "description": "<Text>"
+                    },
+                    {
+                      "band": "Band4",
+                      "range": "30-50",
+                      "color": "Red",
+                      "label": "Poor Match",
+                      "description": "<Text>"
+                    }
+                  ]
+                }
+              ]
+            },
+            "note": "Process repeated for all variables in both assessments"
+          }
+        },
+        "define_VMI_table_graph_layout": {
+          "section": "3.4.2",
+          "note": "After completing all variables in one assessment, user selects second set of variables in other assessment.",
+          "sample_outputs": {
+            "CAT_VMI_analytical": {
+              "Table_Graph_Title": "Your Aptitude Adequacy Report",
+              "Category_Name": "Career Stream",
+              "Criterion_Name": "Career",
+              "Data_Input_Name": "Analytical Ability",
+              "Label": "Adequacy Level",
+              "Colour_Code": "The Signboard",
+              "Description": "What it means for you"
+            },
+            "CIA_VMI_sociability": {
+              "Table_Graph_Title": "Your Personality Adequacy Report",
+              "Category_Name": "Career Stream",
+              "Criterion_Name": "Career",
+              "Data_Input_Name": "Sociability Index",
+              "Label": "How your personality match",
+              "Colour_Code": "The Signboard",
+              "Description": "What it means for you"
+            }
+          }
+        }
+      }
+    },
+    "report_layout": {
+      "section": "4",
+      "steps": [
+        "User clicks 'Report Layout' button",
+        "System displays standard report template formats",
+        "User selects relevant report template",
+        "System presents output values from the four report sections",
+        "User defines order of different reports by drag-and-dropping on selected template",
+        "System presents text and image insertion functions",
+        "User clicks appropriate buttons to insert free text fields or images (can directly enter text or copy-paste)",
+        "System shows preview of the report layout",
+        "User edits the layout if required, or submits to publish"
+      ]
+    }
+  }
+}

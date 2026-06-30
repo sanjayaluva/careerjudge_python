@@ -1,0 +1,1089 @@
+{
+  "meta": {
+    "file": "05_profiling_configuration.json",
+    "source_pdf": "5__Profiling_Configuration_Process.pdf",
+    "title": "Profiling Configuration Process",
+    "version": "1.0"
+  },
+  "introduction": {
+    "description": "Profiling solutions require data transformation and integration. Two or more assessments and their data are transformed and integrated in different ways to generate integrated information for reporting.",
+    "actor": "Psychometrician",
+    "stages": [
+      "Solution Definition",
+      "Assessment Selection (minimum 2 assessments)",
+      "Data Transformation (Banding, Mapping, Ranking with weights)",
+      "Data Integration (summarized into a single value)"
+    ],
+    "note": "If user selects a Polar Assessment, some steps in data transformation are treated differently."
+  },
+  "processes": {
+    "solution_definition": {
+      "section": "2",
+      "description": "Defines the title, purpose and description of the solution.",
+      "steps": [
+        "User clicks 'Create a New Solution' button",
+        "System presents screen with entry fields: Solution Title, Purpose, Description, Image Upload",
+        "User enters relevant text/uploads image and submits",
+        "System creates a new Profiling Solution"
+      ]
+    },
+    "assessment_selection": {
+      "section": "3",
+      "rules": [
+        "At least 2 assessments must be selected",
+        "Maximum 3 assessments"
+      ],
+      "precondition": "Assessments selected must have already been configured at Assessment Design phase",
+      "steps": [
+        "User clicks 'Select Assessments' button",
+        "System shows list of assessments available in the system",
+        "User selects assessments (at least 2, max 3)",
+        "System shows entry field to enter name for each selected assessment",
+        "User enters names for each selected assessment (e.g., CAT, CIA)"
+      ]
+    },
+    "data_transformation": {
+      "section": "4",
+      "description": "Configuration for data transformation should be performed for all selected assessments.",
+      "data_type_used": "Percentage data only",
+      "note": "Percentile, STEN, STENINE data types are NOT eligible for solutioning purpose.",
+      "standard_assessment": {
+        "section": "4.1",
+        "band_definition": {
+          "section": "4.1.1",
+          "description": "Summary scores (percentage scores) of assessment variables are called in for band definition.",
+          "rules": [
+            "At least two variables should be selected",
+            "Max selected should not exceed the total number",
+            "Min bands per variable: 2, Max: 10",
+            "Band range should be between 0 and 100",
+            "Two band values should not overlap"
+          ],
+          "steps": [
+            "User clicks 'Define Band' button",
+            "System asks to select one from list of selected assessments",
+            "System lists all variables in that assessment",
+            "User selects required number of variables",
+            "System shows selected variables and entry fields for number of bands per variable",
+            "User assigns numeric value (number of bands) for each variable",
+            "System shows band rows with fields for band range and band code per band",
+            "User defines band range and band code for each band for each variable"
+          ],
+          "sample_output": {
+            "table_title": "Band Definition Sample",
+            "columns": [
+              "Assessment",
+              "Variable",
+              "Band",
+              "Range",
+              "Code"
+            ],
+            "data": [
+              {
+                "assessment": "CAT",
+                "variable": "Analytical Reasoning",
+                "bands": [
+                  {
+                    "band": "Band1",
+                    "range": "0-20",
+                    "code": "ANL2"
+                  },
+                  {
+                    "band": "Band2",
+                    "range": "20-40",
+                    "code": "ANL1"
+                  },
+                  {
+                    "band": "Band3",
+                    "range": "40-60",
+                    "code": "ANM"
+                  },
+                  {
+                    "band": "Band4",
+                    "range": "60-80",
+                    "code": "ANH1"
+                  },
+                  {
+                    "band": "Band5",
+                    "range": "80-100",
+                    "code": "ANH2"
+                  }
+                ]
+              },
+              {
+                "assessment": "CAT",
+                "variable": "Logical Reasoning",
+                "bands": [
+                  {
+                    "band": "Band1",
+                    "range": "0-20",
+                    "code": "LRL2"
+                  },
+                  {
+                    "band": "Band2",
+                    "range": "20-40",
+                    "code": "LRL1"
+                  },
+                  {
+                    "band": "Band3",
+                    "range": "40-60",
+                    "code": "LRM"
+                  },
+                  {
+                    "band": "Band4",
+                    "range": "60-80",
+                    "code": "LRH1"
+                  },
+                  {
+                    "band": "Band5",
+                    "range": "80-100",
+                    "code": "LRH2"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "mapping_rule_definition": {
+          "section": "4.1.2",
+          "description": "Rules for comparing individual test scores against criterion scores. Each mapping output receives a score defined by user in the mapping rule table.",
+          "steps": [
+            "User clicks 'Define Mapping Rule' function",
+            "System shows screen with (n X n) number of band mapping combinations where n = number of bands",
+            "System asks User to assign a value for each combination",
+            "User defines mapping rules and assigns value for each rule",
+            "Rule definition process repeated for each variable (bands per variable may differ)"
+          ],
+          "sample_output": {
+            "table_title": "Variable1: Analytical Reasoning - Mapping Rules",
+            "description": "5 bands \u2192 5\u00d75 = 25 mapping combinations",
+            "columns": [
+              "Rule No.",
+              "If Criterion Profile Code is",
+              "and if User Profile Code is",
+              "then assign value"
+            ],
+            "data": [
+              {
+                "rule": "Rule 1",
+                "criterion_code": "ANH2",
+                "user_code": "ANH2",
+                "value": 5
+              },
+              {
+                "rule": "Rule 2",
+                "criterion_code": "ANH2",
+                "user_code": "ANH1",
+                "value": 4
+              },
+              {
+                "rule": "Rule 3",
+                "criterion_code": "ANH2",
+                "user_code": "ANM",
+                "value": 3
+              },
+              {
+                "rule": "Rule 4",
+                "criterion_code": "ANH2",
+                "user_code": "ANL1",
+                "value": 2
+              },
+              {
+                "rule": "Rule 5",
+                "criterion_code": "ANH2",
+                "user_code": "ANL2",
+                "value": 1
+              },
+              {
+                "rule": "Rule 6",
+                "criterion_code": "ANH1",
+                "user_code": "ANH2",
+                "value": 5
+              },
+              {
+                "rule": "Rule 7",
+                "criterion_code": "ANH1",
+                "user_code": "ANH1",
+                "value": 5
+              },
+              {
+                "rule": "Rule 8",
+                "criterion_code": "ANH1",
+                "user_code": "ANM",
+                "value": 4
+              },
+              {
+                "rule": "Rule 9",
+                "criterion_code": "ANH1",
+                "user_code": "ANL1",
+                "value": 3
+              },
+              {
+                "rule": "Rule 10",
+                "criterion_code": "ANH1",
+                "user_code": "ANL2",
+                "value": 2
+              },
+              {
+                "rule": "Rule 11",
+                "criterion_code": "ANM",
+                "user_code": "ANH2",
+                "value": 5
+              },
+              {
+                "rule": "Rule 12",
+                "criterion_code": "ANM",
+                "user_code": "ANH1",
+                "value": 5
+              },
+              {
+                "rule": "Rule 13",
+                "criterion_code": "ANM",
+                "user_code": "ANM",
+                "value": 5
+              },
+              {
+                "rule": "Rule 14",
+                "criterion_code": "ANM",
+                "user_code": "ANL1",
+                "value": 4
+              },
+              {
+                "rule": "Rule 15",
+                "criterion_code": "ANM",
+                "user_code": "ANL2",
+                "value": 3
+              },
+              {
+                "rule": "Rule 16",
+                "criterion_code": "ANL1",
+                "user_code": "ANH2",
+                "value": 5
+              },
+              {
+                "rule": "Rule 17",
+                "criterion_code": "ANL1",
+                "user_code": "ANH1",
+                "value": 5
+              },
+              {
+                "rule": "Rule 18",
+                "criterion_code": "ANL1",
+                "user_code": "ANM",
+                "value": 5
+              },
+              {
+                "rule": "Rule 19",
+                "criterion_code": "ANL1",
+                "user_code": "ANL1",
+                "value": 5
+              },
+              {
+                "rule": "Rule 20",
+                "criterion_code": "ANL1",
+                "user_code": "ANL2",
+                "value": 4
+              },
+              {
+                "rule": "Rule 21",
+                "criterion_code": "ANL2",
+                "user_code": "ANH2",
+                "value": 5
+              },
+              {
+                "rule": "Rule 22",
+                "criterion_code": "ANL2",
+                "user_code": "ANH1",
+                "value": 5
+              },
+              {
+                "rule": "Rule 23",
+                "criterion_code": "ANL2",
+                "user_code": "ANM",
+                "value": 5
+              },
+              {
+                "rule": "Rule 24",
+                "criterion_code": "ANL2",
+                "user_code": "ANL1",
+                "value": 5
+              },
+              {
+                "rule": "Rule 25",
+                "criterion_code": "ANL2",
+                "user_code": "ANL2",
+                "value": 5
+              }
+            ],
+            "logic_note": "Rule1: perfect match \u2192 max value 5. Rule2: one-step less than perfect \u2192 4. Rule3: two-step less \u2192 3. And so on."
+          }
+        },
+        "rank_definition": {
+          "section": "4.1.3",
+          "description": "Defines rules for assigning ranks for each variable in the assessment. This step is OPTIONAL.",
+          "rules": [
+            "Number of rank values must equal number of variables"
+          ],
+          "steps": [
+            "User clicks 'Define Rank Values' function",
+            "System shows relevant fields to add values (as many fields as number of variables)",
+            "User assigns values against each rank order"
+          ],
+          "sample_output": {
+            "table_title": "Rank Order Chart",
+            "columns": [
+              "Rank1",
+              "Rank2",
+              "Rank3",
+              "Rank4",
+              "Rank5",
+              "Rank6"
+            ],
+            "values": [
+              2.0,
+              1.8,
+              1.6,
+              1.4,
+              1.2,
+              1.0
+            ],
+            "note": "Rank1 receives the max value (2.0), whereas Rank6 gets the lowest value (1.0)"
+          }
+        },
+        "criterion_definition_upload": {
+          "section": "4.1.4",
+          "description": "User can either enter data manually or upload via template. Manual entry process described here.",
+          "steps": [
+            "User clicks 'Define Criterion' function",
+            "System shows list of Assessment Solutions and asks User to select the solution",
+            "User selects the appropriate assessment solution",
+            "System shows the two assessments included and asks User to select them one by one",
+            "System shows text boxes/dropdowns for criterion particulars: Criterion Category, Criterion Name, Criterion ID, Criterion Description, Variable (dropdown), Band (dropdown)",
+            "If Rank System selected: additional field Rank Order (dropdown) is included",
+            "User enters texts and selects appropriate band code and rank order for each variable",
+            "Process repeated for each variable and each criterion input"
+          ],
+          "criterion_data_upload_format": {
+            "columns": [
+              "Career Stream",
+              "Career Title",
+              "Career Description",
+              "Career Code",
+              "Variable1: Band Code",
+              "Variable1: Rank Order",
+              "Variable2: Band Code",
+              "Variable2: Rank Order",
+              "... (repeated for all variables)"
+            ],
+            "rule": "If Rank System is not selected, rank order column should be empty or assigned value of zero by default.",
+            "sample_data": [
+              {
+                "career_stream": "IT Sector",
+                "career_title": "Computer Programmer",
+                "career_code": "ITCP",
+                "abstract_band": "ARM",
+                "abstract_rank": 4,
+                "analytical_band": "ANH1",
+                "analytical_rank": 2
+              },
+              {
+                "career_stream": "IT Sector",
+                "career_title": "Software Engineer - Applications",
+                "career_code": "ITSEA",
+                "abstract_band": "ARH1",
+                "abstract_rank": 2,
+                "analytical_band": "ANH1",
+                "analytical_rank": 1
+              },
+              {
+                "career_stream": "IT Sector",
+                "career_title": "Software Engineer - Systems",
+                "career_code": "ITSES",
+                "abstract_band": "ARH1",
+                "abstract_rank": 2,
+                "analytical_band": "ANH1",
+                "analytical_rank": 1
+              },
+              {
+                "career_stream": "IT Sector",
+                "career_title": "Database Administrator",
+                "career_code": "ITDA",
+                "abstract_band": "ARM",
+                "abstract_rank": 3,
+                "analytical_band": "ANH1",
+                "analytical_rank": 1
+              },
+              {
+                "career_stream": "IT Sector",
+                "career_title": "Network & Systems Administrator",
+                "career_code": "ITNSA",
+                "abstract_band": "ARM",
+                "abstract_rank": 2,
+                "analytical_band": "ANH1",
+                "analytical_rank": 1
+              },
+              {
+                "career_stream": "IT Sector",
+                "career_title": "Network Designer",
+                "career_code": "ITND",
+                "abstract_band": "ARH1",
+                "abstract_rank": 3,
+                "analytical_band": "ANH1",
+                "analytical_rank": 1
+              }
+            ]
+          }
+        }
+      },
+      "polar_assessment": {
+        "section": "4.2",
+        "description": "Some steps in data transformation for Polar Assessment are different from standard assessment.",
+        "sub_variable_band_definition": {
+          "section": "4.2.1",
+          "description": "Additional step of sub-variable definition required for Polar-type assessment. Involves defining three sub-variables under the main variable, which are also bands. Sub-variable definition is same as banding but each band is further defined as a sub-variable.",
+          "rules": [
+            "At least two variables should be selected",
+            "Max selected should not exceed the total number",
+            "Min bands per variable: 2, Max: 10",
+            "Band range should be between 0 and 100",
+            "Two band values should not overlap"
+          ],
+          "steps": [
+            "User clicks 'Define Band/Sub-Variable' button",
+            "System asks to select one from list of assessments selected for solutioning",
+            "System lists all variables in selected assessment",
+            "User selects required number of variables",
+            "System shows selected variables and entry fields for number of bands per variable",
+            "User assigns numeric value for each variable",
+            "System shows band rows with fields for band range, sub-variable name, and band code",
+            "User defines band range, sub-variable name, and band code for each band"
+          ],
+          "sample_output": {
+            "table_title": "Polar-Assessment Band Definition",
+            "columns": [
+              "Assessment",
+              "Variable Name",
+              "Band",
+              "Band Range",
+              "Sub-Variable Name",
+              "Band Code"
+            ],
+            "data": [
+              {
+                "assessment": "CIA",
+                "variable": "Social-Reserved",
+                "bands": [
+                  {
+                    "band": "Band1",
+                    "range": "0-20",
+                    "sub_variable": "SRContrast1",
+                    "code": "SRC1"
+                  },
+                  {
+                    "band": "Band2",
+                    "range": "20-80",
+                    "sub_variable": "SRMiddle",
+                    "code": "SRM"
+                  },
+                  {
+                    "band": "Band3",
+                    "range": "80-100",
+                    "sub_variable": "SRContrast2",
+                    "code": "SRC2"
+                  }
+                ]
+              },
+              {
+                "assessment": "CIA",
+                "variable": "Numerical-Verbal",
+                "bands": [
+                  {
+                    "band": "Band1",
+                    "range": "0-20",
+                    "sub_variable": "NVContrast1",
+                    "code": "NVC1"
+                  },
+                  {
+                    "band": "Band2",
+                    "range": "20-80",
+                    "sub_variable": "NVMiddle",
+                    "code": "NVM"
+                  },
+                  {
+                    "band": "Band3",
+                    "range": "80-100",
+                    "sub_variable": "NVContrast2",
+                    "code": "NVC2"
+                  }
+                ]
+              },
+              {
+                "assessment": "CIA",
+                "variable": "Serial-Systemic",
+                "bands": [
+                  {
+                    "band": "Band1",
+                    "range": "0-20",
+                    "sub_variable": "SSContrast1",
+                    "code": "SSC1"
+                  },
+                  {
+                    "band": "Band2",
+                    "range": "20-80",
+                    "sub_variable": "SSMiddle",
+                    "code": "SSM"
+                  },
+                  {
+                    "band": "Band3",
+                    "range": "80-100",
+                    "sub_variable": "SSContrast2",
+                    "code": "SSC2"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "mapping_rule_definition": {
+          "section": "4.2.2",
+          "description": "Rules for comparing individual test scores against criterion scores for Polar Assessment. User assigns match code AND match value (unlike standard where only value is assigned).",
+          "match_codes": {
+            "HM": {
+              "label": "High Match",
+              "description": "Perfect match between criterion and user sub-variable"
+            },
+            "MM": {
+              "label": "Moderate Match",
+              "description": "Less-than-perfect match"
+            },
+            "LM": {
+              "label": "Low Match",
+              "description": "Lowest match"
+            }
+          },
+          "sample_output": {
+            "table_title": "Variable 1: Social-Reserved - Polar Mapping Rules",
+            "description": "3 bands \u2192 3\u00d73 = 9 mapping combinations",
+            "columns": [
+              "Rule No.",
+              "If Criterion Profile Code is",
+              "and if User Profile Code is",
+              "Match Code",
+              "Match Value"
+            ],
+            "data": [
+              {
+                "rule": "Rule 1",
+                "criterion": "SRC1",
+                "user": "SRC1",
+                "match_code": "HM",
+                "match_value": 5
+              },
+              {
+                "rule": "Rule 2",
+                "criterion": "SRC2",
+                "user": "SRC2",
+                "match_code": "HM",
+                "match_value": 5
+              },
+              {
+                "rule": "Rule 3",
+                "criterion": "SRM",
+                "user": "SRM",
+                "match_code": "HM",
+                "match_value": 5
+              },
+              {
+                "rule": "Rule 4",
+                "criterion": "SRC1",
+                "user": "SRM",
+                "match_code": "MM",
+                "match_value": 3
+              },
+              {
+                "rule": "Rule 5",
+                "criterion": "SRC2",
+                "user": "SRM",
+                "match_code": "MM",
+                "match_value": 3
+              },
+              {
+                "rule": "Rule 6",
+                "criterion": "SRM",
+                "user": "SRC1",
+                "match_code": "MM",
+                "match_value": 3
+              },
+              {
+                "rule": "Rule 7",
+                "criterion": "SRM",
+                "user": "SRC2",
+                "match_code": "MM",
+                "match_value": 3
+              },
+              {
+                "rule": "Rule 8",
+                "criterion": "SRC1",
+                "user": "SRC2",
+                "match_code": "LM",
+                "match_value": 1
+              },
+              {
+                "rule": "Rule 9",
+                "criterion": "SRC2",
+                "user": "SRC1",
+                "match_code": "LM",
+                "match_value": 1
+              }
+            ],
+            "logic_note": "Rules 1-3: perfect match \u2192 HM, value 5. Rules 4-7: moderate match \u2192 MM, value 3. Rules 8-9: low match \u2192 LM, value 1."
+          }
+        },
+        "rank_definition": {
+          "section": "4.2.3",
+          "description": "Ranking system for Polar-type Assessment is DIFFERENT and NOT OPTIONAL.",
+          "rules": [
+            "Number of rank values (fields) = number of variables \u00d7 number of sub-variables"
+          ],
+          "example": "6 variables \u00d7 3 sub-variables = 18 rank fields",
+          "steps": [
+            "User clicks 'Define Rank Values' function",
+            "System shows screen with relevant fields (product of variables \u00d7 sub-variables)",
+            "System identifies match code and respective rank value from Rank Order & Match Value Chart"
+          ],
+          "rank_order_and_match_value_chart": {
+            "table_title": "Rank Order and Match Value Chart",
+            "columns": [
+              "Match",
+              "Rank1",
+              "Rank2",
+              "Rank3",
+              "Rank4",
+              "Rank5",
+              "Rank6"
+            ],
+            "data": [
+              {
+                "match": "High (HM)",
+                "rank1": 7,
+                "rank2": 6.4,
+                "rank3": 5.6,
+                "rank4": 4.6,
+                "rank5": 3.4,
+                "rank6": 2
+              },
+              {
+                "match": "Moderate (MM)",
+                "rank1": 7,
+                "rank2": 6.4,
+                "rank3": 5.7,
+                "rank4": 4.9,
+                "rank5": 4,
+                "rank6": 3
+              },
+              {
+                "match": "Low (LM)",
+                "rank1": 3,
+                "rank2": 3.6,
+                "rank3": 4.3,
+                "rank4": 5.1,
+                "rank5": 6,
+                "rank6": 7
+              }
+            ]
+          },
+          "ranking_rules_computation": [
+            {
+              "condition": "match_code=HM, rank_order=Rank1",
+              "formula": "match_value(5) \u00d7 rank_value(7) = 35"
+            },
+            {
+              "condition": "match_code=MM, rank_order=Rank1",
+              "formula": "match_value(3) \u00d7 rank_value(7) = 21"
+            },
+            {
+              "condition": "match_code=LM, rank_order=Rank1",
+              "formula": "match_value(1) \u00d7 rank_value(3) = 3"
+            },
+            {
+              "condition": "match_code=HM, rank_order=Rank2",
+              "formula": "match_value(5) \u00d7 rank_value(6.4) = 32"
+            },
+            {
+              "condition": "match_code=MM, rank_order=Rank2",
+              "formula": "match_value(3) \u00d7 rank_value(6.4) = 19.2"
+            },
+            {
+              "condition": "match_code=LM, rank_order=Rank2",
+              "formula": "match_value(1) \u00d7 rank_value(3.6) = 3.6"
+            },
+            {
+              "condition": "match_code=HM, rank_order=Rank3",
+              "formula": "match_value(5) \u00d7 rank_value(5.6) = 28"
+            },
+            {
+              "condition": "match_code=MM, rank_order=Rank3",
+              "formula": "match_value(3) \u00d7 rank_value(5.7) = 17.1"
+            },
+            {
+              "condition": "match_code=LM, rank_order=Rank3",
+              "formula": "match_value(1) \u00d7 rank_value(4.3) = 4.3"
+            },
+            {
+              "condition": "match_code=HM, rank_order=Rank4",
+              "formula": "match_value(5) \u00d7 rank_value(4.6) = 23"
+            },
+            {
+              "condition": "match_code=MM, rank_order=Rank4",
+              "formula": "match_value(3) \u00d7 rank_value(4.9) = 14.7"
+            },
+            {
+              "condition": "match_code=LM, rank_order=Rank4",
+              "formula": "match_value(1) \u00d7 rank_value(5.1) = 5.1"
+            },
+            {
+              "condition": "match_code=HM, rank_order=Rank5",
+              "formula": "match_value(5) \u00d7 rank_value(3.4) = 17"
+            },
+            {
+              "condition": "match_code=MM, rank_order=Rank5",
+              "formula": "match_value(3) \u00d7 rank_value(4) = 12"
+            },
+            {
+              "condition": "match_code=LM, rank_order=Rank5",
+              "formula": "match_value(1) \u00d7 rank_value(6) = 6"
+            },
+            {
+              "condition": "match_code=HM, rank_order=Rank6",
+              "formula": "match_value(5) \u00d7 rank_value(2) = 10"
+            },
+            {
+              "condition": "match_code=MM, rank_order=Rank6",
+              "formula": "match_value(3) \u00d7 rank_value(3) = 9"
+            },
+            {
+              "condition": "match_code=LM, rank_order=Rank6",
+              "formula": "match_value(1) \u00d7 rank_value(7) = 7"
+            }
+          ],
+          "note": "System repeats above computation for all criterion data in the solutioning."
+        },
+        "criterion_definition_upload": {
+          "section": "4.2.4",
+          "description": "Same process as 4.1.4. Fields: Criterion Category, Criterion Name, Criterion ID, Criterion Description are common between assessments and should NOT be repeated when configuring second assessment.",
+          "sample_data": [
+            {
+              "career_stream": "IT Sector",
+              "career_title": "Computer Programmer",
+              "career_code": "ITCP",
+              "social_reserved_band": "SRM",
+              "social_reserved_rank": 5,
+              "numerical_verbal_band": "NVC1",
+              "numerical_verbal_rank": 4,
+              "serial_systemic_band": "SSC1",
+              "serial_systemic_rank": 3
+            }
+          ]
+        }
+      }
+    },
+    "data_integration": {
+      "section": "5",
+      "description": "Outputs from data transformation stage are used to compute integrated scores.",
+      "standard_assessment": {
+        "section": "5.1",
+        "mapping_score_computation": {
+          "section": "5.1.1",
+          "rules": [
+            "End user must have taken the assessment",
+            "Scores for each variable must be available",
+            "Criterion scores must have been defined"
+          ],
+          "without_ranking_system": {
+            "description": "System finds variable mapping score based on rules defined in Section 4.1.2.",
+            "sample_computation": {
+              "career_title": "Computer Programmer",
+              "columns": [
+                "Variable Name",
+                "Criterion Band Code",
+                "Individual Band Code",
+                "Mapping Score",
+                "Variable Mapping Index (VMI)"
+              ],
+              "data": [
+                {
+                  "variable": "Abstract",
+                  "criterion_band": "ARM",
+                  "user_band": "ARH1",
+                  "mapping_score": 5,
+                  "VMI": 100
+                },
+                {
+                  "variable": "Analytical",
+                  "criterion_band": "ANH1",
+                  "user_band": "ANH1",
+                  "mapping_score": 5,
+                  "VMI": 100
+                },
+                {
+                  "variable": "Verbal",
+                  "criterion_band": "VRM",
+                  "user_band": "VRH1",
+                  "mapping_score": 5,
+                  "VMI": 100
+                },
+                {
+                  "variable": "Quantitative",
+                  "criterion_band": "QRM",
+                  "user_band": "QRH1",
+                  "mapping_score": 5,
+                  "VMI": 100
+                },
+                {
+                  "variable": "Spatial",
+                  "criterion_band": "SRL1",
+                  "user_band": "SRL1",
+                  "mapping_score": 5,
+                  "VMI": 100
+                },
+                {
+                  "variable": "Executive",
+                  "criterion_band": "EXH1",
+                  "user_band": "EXM",
+                  "mapping_score": 4,
+                  "VMI": 80
+                },
+                {
+                  "variable": "TOTAL",
+                  "criterion_band": "",
+                  "user_band": "",
+                  "mapping_score": 29,
+                  "VMI": ""
+                }
+              ]
+            },
+            "VMI_formula": "VMI = (derived mapping score / max mapping score) \u00d7 100"
+          },
+          "with_ranking_system": {
+            "description": "System computes final mapping score by multiplying the mapping score by variable's respective rank value.",
+            "sample_computation": {
+              "career_title": "Computer Programmer",
+              "columns": [
+                "Variable Name",
+                "Criterion Band Code",
+                "Rank Order",
+                "Individual Band Code",
+                "Mapping Score",
+                "Rank Value",
+                "Product Score",
+                "VMI"
+              ],
+              "data": [
+                {
+                  "variable": "Abstract",
+                  "criterion_band": "ARM",
+                  "rank_order": 4,
+                  "user_band": "ARH1",
+                  "mapping_score": 5,
+                  "rank_value": 1.4,
+                  "product_score": 7,
+                  "VMI": 100
+                },
+                {
+                  "variable": "Analytical",
+                  "criterion_band": "ANH1",
+                  "rank_order": 2,
+                  "user_band": "ANH1",
+                  "mapping_score": 5,
+                  "rank_value": 1.8,
+                  "product_score": 9,
+                  "VMI": 100
+                },
+                {
+                  "variable": "Verbal",
+                  "criterion_band": "VRM",
+                  "rank_order": 5,
+                  "user_band": "VRH1",
+                  "mapping_score": 5,
+                  "rank_value": 1.2,
+                  "product_score": 6,
+                  "VMI": 100
+                },
+                {
+                  "variable": "Quantitative",
+                  "criterion_band": "QRM",
+                  "rank_order": 3,
+                  "user_band": "QRH1",
+                  "mapping_score": 5,
+                  "rank_value": 1.6,
+                  "product_score": 8,
+                  "VMI": 100
+                },
+                {
+                  "variable": "Spatial",
+                  "criterion_band": "SRL1",
+                  "rank_order": 6,
+                  "user_band": "SRL1",
+                  "mapping_score": 5,
+                  "rank_value": 1.0,
+                  "product_score": 5,
+                  "VMI": 100
+                },
+                {
+                  "variable": "Executive",
+                  "criterion_band": "EXH1",
+                  "rank_order": 1,
+                  "user_band": "EXM",
+                  "mapping_score": 4,
+                  "rank_value": 2.0,
+                  "product_score": 8,
+                  "VMI": 80
+                },
+                {
+                  "variable": "TOTAL",
+                  "product_score": 43
+                }
+              ]
+            },
+            "VMI_formula_with_rank": "VMI = (product score / (max mapping score \u00d7 rank value)) \u00d7 100"
+          }
+        },
+        "PMI_generation": {
+          "section": "5.1.2",
+          "description": "Profile Match Index (PMI) Generation using summary mapping scores.",
+          "without_rank_system": {
+            "steps": [
+              "Fetch Summary Mapping Score (from Section 5.1.1) \u2192 e.g., 29",
+              "Calculate Max Mapping Score = number of bands \u00d7 number of variables \u2192 5 \u00d7 6 = 30",
+              "Add constant: (Max Mapping Score / 100) + Max Mapping Score \u2192 (30/100) + 30 = 30.3",
+              "Calculate PMI = (Summary Mapping Score / adjusted Max) \u00d7 100 \u2192 (29/30.3) \u00d7 100 = 95.7"
+            ],
+            "formula": "PMI = (Summary Mapping Score / (Max Mapping Score + Max Mapping Score/100)) \u00d7 100",
+            "example": "PMI = (29 / 30.3) \u00d7 100 = 95.7"
+          },
+          "with_rank_system": {
+            "steps": [
+              "Fetch Summary Mapping Score (ranking applied) \u2192 e.g., 43",
+              "Calculate Max Mapping Score = sum of (highest mapping value \u00d7 each rank value) \u2192 (5\u00d72.0)+(5\u00d71.8)+(5\u00d71.6)+(5\u00d71.4)+(5\u00d71.2)+(5\u00d71.0) = 45",
+              "Add constant: (45/100) + 45 = 45.45",
+              "Calculate PMI = (43/45.45) \u00d7 100 = 94.6"
+            ],
+            "formula": "PMI = (Summary Mapping Score / (Max Mapping Score + Max Mapping Score/100)) \u00d7 100",
+            "example": "PMI = (43/45.45) \u00d7 100 = 94.6",
+            "note": "Process repeated for second assessment"
+          }
+        }
+      },
+      "polar_assessment": {
+        "section": "5.2",
+        "mapping_score_computation": {
+          "section": "5.2.1",
+          "description": "Same prerequisite as standard: end user must have taken assessment and criterion scores must be available.",
+          "sample_computation": {
+            "career_title": "Computer Programmer",
+            "columns": [
+              "Variable Name",
+              "Criterion Band Code",
+              "Rank",
+              "Individual Band Code",
+              "Match Value",
+              "Rank Value",
+              "Product Score",
+              "VMI"
+            ],
+            "data": [
+              {
+                "variable": "Social-Reserved",
+                "criterion": "SRC1",
+                "rank": 5,
+                "user": "SRC1",
+                "match_value": 5,
+                "rank_value": 3.4,
+                "product": 17,
+                "VMI": 100
+              },
+              {
+                "variable": "Numerical-Verbal",
+                "criterion": "NVC1",
+                "rank": 4,
+                "user": "NVC1",
+                "match_value": 5,
+                "rank_value": 4.6,
+                "product": 23,
+                "VMI": 100
+              },
+              {
+                "variable": "Serial-Systemic",
+                "criterion": "SSC1",
+                "rank": 3,
+                "user": "SSC1",
+                "match_value": 5,
+                "rank_value": 5.6,
+                "product": 28,
+                "VMI": 100
+              },
+              {
+                "variable": "Conventional-Investigative",
+                "criterion": "CIC1",
+                "rank": 1,
+                "user": "CIC1",
+                "match_value": 5,
+                "rank_value": 7,
+                "product": 35,
+                "VMI": 100
+              },
+              {
+                "variable": "Enterprising-Aesthetic",
+                "criterion": "EAM",
+                "rank": 6,
+                "user": "EAC1",
+                "match_value": 3,
+                "rank_value": 3,
+                "product": 9,
+                "VMI": 60
+              },
+              {
+                "variable": "Mental-Physical",
+                "criterion": "MPM",
+                "rank": 2,
+                "user": "MPM",
+                "match_value": 5,
+                "rank_value": 6.4,
+                "product": 32,
+                "VMI": 100
+              },
+              {
+                "variable": "TOTAL",
+                "product": 144
+              }
+            ]
+          },
+          "VMI_formula": "VMI = (Product Score / (highest mapping score \u00d7 respective ranking value)) \u00d7 100"
+        },
+        "PMI_generation": {
+          "section": "5.2.2",
+          "steps": [
+            "Fetch Summary Mapping Score \u2192 e.g., 144",
+            "Calculate Max Mapping Score = sum of (highest mapping value \u00d7 HM rank value for each rank) \u2192 (5\u00d77)+(5\u00d76.4)+(5\u00d76.6)+(5\u00d74.6)+(5\u00d73.4)+(5\u00d72) = 145",
+            "Add constant: (145/100) + 145 = 146.45",
+            "Calculate PMI = (144/146.45) \u00d7 100 = 98.33"
+          ],
+          "formula": "PMI = (Summary Mapping Score / (Max Mapping Score + Max Mapping Score/100)) \u00d7 100",
+          "example": "PMI = (144/146.45) \u00d7 100 = 98.33"
+        }
+      },
+      "final_match_index_generation": {
+        "section": "5.3",
+        "description": "System computes Final Match Index (FMI) by integrating PMI for Assessment-1 and PMI for Assessment-2. Generated for each criterion in the criterion list.",
+        "formula": "FMI = (PMI_Assessment1 + PMI_Assessment2) / number of PMIs",
+        "example": {
+          "PMI_CAT_without_rank": 95.7,
+          "PMI_CAT_with_rank": 94.6,
+          "PMI_CIA_with_rank": 98.33,
+          "FMI_without_rank": "(95.7 + 98.33) / 2 = 97.01",
+          "FMI_with_rank": "(94.6 + 98.33) / 2 = 96.46"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "file": "08_counseling_process.json",
+    "source_pdf": "8__Counseling_Process.pdf",
+    "title": "Counselling Process",
+    "version": "1.0"
+  },
+  "introduction": {
+    "description": "Counselling module serves as a hub for conducting online and offline counselling. Every counselling is routed through the System.",
+    "user_fronts": [
+      "End-user (counselee)",
+      "Counsellor",
+      "Helpdesk"
+    ],
+    "counselling_categories": [
+      "Career counselling",
+      "Counselling related to learning difficulties",
+      "Emotional problems",
+      "Relationship problems",
+      "Marital problems",
+      "Clinical problems",
+      "Health counselling"
+    ]
+  },
+  "processes": {
+    "end_user_counselee": {
+      "section": "2",
+      "entry_points": [
+        "Directed to counselling after reading assessment report",
+        "Direct registration via website visit"
+      ],
+      "booking_counselling_session": {
+        "section": "2.1",
+        "steps": [
+          "User clicks 'Register' button for a particular counselling",
+          "System shows registration form with fields: basic information, topic/issue for counselling, terms and conditions (form viewable by counsellor)",
+          "User fills registration form and submits",
+          "System asks user to choose a counsellor (counsellor details viewable)",
+          "User selects a counsellor and clicks 'Take Appointment' button",
+          "System shows available timeslots of the counsellor for a week (user can check next weeks too)",
+          "If user selects an available slot:",
+          "  System sends message to respective counsellor and Helpdesk",
+          "  System displays message: 'Appointment will be confirmed by the counsellor within 6 hours; If counsellor is not available, you can select a fresh timeslot or check with other counsellors. Or if you want to cancel, press Cancel - money will be refunded in 48 hours'",
+          "User clicks 'Proceed to Payment' button",
+          "System directs user to payment gateway",
+          "If payment done: System shows confirmation message with Helpdesk button"
+        ]
+      },
+      "cancelling_counselling_session": {
+        "section": "2.2",
+        "trigger": "User wants to cancel a confirmed counselling session",
+        "cancellation_rules": [
+          {
+            "condition": "Cancellation 24+ hours before scheduled time",
+            "refund": "Full refund within 48 hours"
+          },
+          {
+            "condition": "Cancellation 4+ hours before scheduled time",
+            "refund": "50% refund within 48 hours"
+          },
+          {
+            "condition": "Cancellation less than 4 hours before scheduled time",
+            "refund": "No refund"
+          }
+        ],
+        "steps": [
+          "User clicks 'Cancel Counselling' button",
+          "System shows appropriate message based on cancellation timing",
+          "User clicks 'Proceed' or 'Cancel' button",
+          "If user proceeds to cancel:",
+          "  System asks user to enter reason for cancellation (optional)",
+          "  User enters reason and submits",
+          "  System cancels counselling session and initiates refund process if eligible"
+        ]
+      },
+      "counselling_delivery": {
+        "section": "2.3",
+        "description": "Counselling delivery is via ZOOM or similar video conference platforms, customized to feel integrated in the System.",
+        "steps": [
+          "System displays countdown clock to remind user about upcoming counselling session",
+          "User clicks 'Join Session' button when time is up",
+          "If time is not up: System shows message 'Your appointment is --- hours away. Please wait until your turn comes.'",
+          "System opens the third-party meeting link",
+          "User attends the counselling session",
+          "When session is over:",
+          "  System asks user to give feedback and opens feedback form",
+          "  Form has questions about user experience and effectiveness of counselling and counsellor",
+          "  User enters feedback and submits",
+          "  System saves feedback (Rule: User feedbacks are available only to Admin User)"
+        ]
+      }
+    },
+    "counsellor": {
+      "section": "3",
+      "updating_timeslot_availability": {
+        "section": "3.1",
+        "description": "Counsellor must update timeslots available for counselling at least weekly (maximum 3 weeks ahead).",
+        "steps": [
+          "User clicks 'Update Timeslots' button",
+          "System shows calendar with time-setting facility",
+          "User updates timeslot availability for at least one week, maximum three weeks",
+          "System saves timeslot availability details",
+          "System sends reminder notification daily if timeslot calendar falls short of one week minimum",
+          "System sends reminder to Helpdesk too so they can directly contact user to update"
+        ]
+      },
+      "confirming_cancelling_appointment": {
+        "section": "3.2",
+        "description": "After counselee takes an appointment, counsellor must confirm or ask counselee to take another timeslot.",
+        "steps": [
+          "System shows appointment notifications when user signs in",
+          "User opens notifications and confirms/cancels appointments",
+          "System sends confirmation/cancellation notification to counselee and Helpdesk",
+          "Helpdesk executive directly contacts counselee about confirmation/cancellation",
+          "System keeps track of every cancellation by user"
+        ],
+        "note": "Counsellors are strictly advised against cancelling requests for appointment as it seriously affects end-user motivation. System tracks cancellation frequency per counsellor."
+      },
+      "conducting_concluding_counselling_session": {
+        "section": "3.3",
+        "description": "Counselling session delivered by counsellor through third-party video conference (ZOOM). Admin controls meeting settings; counsellor/counselee have guest role only.",
+        "steps": [
+          "User clicks 'Start a Session' button",
+          "System redirects user to the third-party platform",
+          "User conducts the counselling session",
+          "When session is over:",
+          "  User ends session by clicking 'End Session' button",
+          "  System ends session and asks user to fill up Session Summary Form",
+          "  User fills Summary form and submits",
+          "  System saves summary form (Rule: Session Summary details available only to user and Admin)",
+          "  System asks whether a followup-counselling session is consented/fixed",
+          "  If YES:",
+          "    System asks user to specify date and time",
+          "    User specifies date and time for proposed followup session",
+          "    System sends notification to counselee and Helpdesk",
+          "  When counselee signs in to dashboard:",
+          "    System shows countdown clock reminding of next proposed session, asking to initiate payment",
+          "    User initiates payment and confirms appointment",
+          "    System stores the confirmation details"
+        ]
+      }
+    },
+    "helpdesk": {
+      "section": "4",
+      "description": "Helpdesk represents a support executive who is the liaison between counsellors, counselees, trainers, and training students.",
+      "role": "Receives notifications about new events and reminds of upcoming events, cancellations, postponements through messages or direct calls.",
+      "note": "This is a new user role with minimum user role in the system."
+    }
+  }
+}

@@ -1,0 +1,409 @@
+{
+  "meta": {
+    "file": "03_assessment_configuration.json",
+    "source_pdf": "3__Assessment_Configuration_Process.pdf",
+    "title": "Assessment Configuration Process",
+    "version": "1.0"
+  },
+  "introduction": {
+    "objective": "To facilitate the design of various types of assessments on different subject domains using various types of questions.",
+    "design_stages": [
+      "Assessment Definition",
+      "Variable Structure Definition",
+      "Question Assignment",
+      "Setting Question Scores",
+      "Setting Display Parameters"
+    ]
+  },
+  "processes": {
+    "assessment_definition": {
+      "section": "2",
+      "add_new_assessment": {
+        "section": "2.1",
+        "add_title_and_objective": {
+          "section": "2.1.1",
+          "steps": [
+            "User clicks 'Add Assessment' button",
+            "System shows entry fields for Assessment Title and Assessment Objective",
+            "User enters assessment title and objective and submits",
+            "System saves inputs and generates unique ID for the assessment"
+          ]
+        },
+        "add_description_and_instructions": {
+          "section": "2.1.2",
+          "steps": [
+            "User clicks 'Add Description' button",
+            "System shows entry fields with 'Add Field' and 'Image Upload' facility",
+            "User adds text entry fields, enters content, uploads images and saves",
+            "System stores inputs with the assessment",
+            "User clicks 'Add Instruction' button",
+            "System shows entry fields with 'Add Field' and 'Image Upload' facility",
+            "User adds text entry fields, enters content, uploads images and saves",
+            "System stores inputs with the assessment"
+          ]
+        }
+      },
+      "edit_assessment": {
+        "section": "2.2",
+        "rules": [
+          "After going live, user cannot directly edit Assessment Title. An edit request is sent to Admin for approval."
+        ],
+        "steps": [
+          "User clicks 'Edit Assessment' button",
+          "System shows list of Assessments",
+          "User selects Assessment to be edited",
+          "System shows edit fields",
+          "User edits and submits",
+          "System saves updated inputs"
+        ]
+      },
+      "delete_assessment": {
+        "section": "2.3",
+        "rules": [
+          "After going live, user cannot directly delete Assessment. An edit request is sent to Admin for approval."
+        ],
+        "steps": [
+          "User selects 'Delete Assessment' button",
+          "System shows list of Assessments",
+          "User selects Assessment and clicks 'Delete Request' button",
+          "System asks user to confirm",
+          "User confirms",
+          "System sends 'Request to delete category' message to Admin",
+          "If user clicks 'Cancel': System cancels the request",
+          "System shows updated category list"
+        ]
+      }
+    },
+    "variable_structure_definition": {
+      "section": "3",
+      "description": "An assessment has various sections, each represented by Assessment Variables. Each section has subsections or sub-variables.",
+      "rules": [
+        "Rule 1: Maximum of four variable levels in the variable structure",
+        "Rule 2: Questions shall be attached only to the last level"
+      ],
+      "variable_structure_rules": {
+        "section": "3.1",
+        "hierarchy": [
+          "First-level variable is parent of 2nd, 3rd, and 4th levels",
+          "Second-level variable is parent of 3rd and 4th levels",
+          "Third-level variable is parent of 4th level",
+          "Under 1st, 2nd and 3rd levels there shall be multiple variables (upside-down tree structure)"
+        ],
+        "note": "User may apply four-level, three-level, two-level or one-level variable structure. All sub-variables and questions are tagged under their parent variable."
+      },
+      "score_summation_rules": {
+        "section": "3.2",
+        "rules": [
+          "Question level scores are added up for Level4-Summary Score",
+          "Level4-summary scores are added up for Level3-Summary Score",
+          "Level3-summary scores are added up for Level2-Summary Score",
+          "Level2-summary scores are added up for Level1-Summary Score"
+        ],
+        "note": "Any of these summary scores may be called for report generation."
+      },
+      "setting_variable_structure": {
+        "section": "3.3",
+        "steps": [
+          "User clicks 'Variable Structure' button",
+          "System shows entry fields for specifying number of variables (Level1)",
+          "User enters number of variables",
+          "System shows entry fields for names of Level1 Variables",
+          "User enters names of Level1 Variables",
+          "System shows entry fields to specify number of levels for each Level1 Variable",
+          "User enters number of levels for each variable",
+          "System shows Level1 Variables with entry fields for subvariables as per levels specified",
+          "User enters names of subvariables under each Level1 Variable",
+          "System saves variables, subvariables and their names"
+        ]
+      }
+    },
+    "question_assignment": {
+      "section": "4",
+      "question_assignment_steps": {
+        "section": "4.1",
+        "steps": [
+          "User clicks 'Assign Question' button",
+          "System shows list of variables and subvariables",
+          "User selects last-level variable of each Level1 Variable for question assignment",
+          "System presents filter facility for drawing questions from QB",
+          "User applies filters",
+          "System shows list of questions as per filter",
+          "User clicks on a question to open it",
+          "System presents full-view of question with all parameters (psychometric values, SME inputs, review comments, question solution)",
+          "User examines question and clicks 'Select' or 'Cancel'",
+          "If selected: question gets attached to selected last-level variable",
+          "System returns to list of filtered questions",
+          "User continues selection for all last-level variables",
+          "System displays total number of questions against each level post assignment"
+        ],
+        "setting_delivery_count": {
+          "section": "4.1.1",
+          "description": "User specifies number of questions to be presented during assessment delivery for each level.",
+          "rules": [
+            "Delivery Count should NOT be less than the Assigned Count"
+          ],
+          "steps": [
+            "User clicks 'Delivery Count' button",
+            "System shows entry field against each last-level variable with Assigned Count",
+            "User enters delivery count for each last-level variable and saves",
+            "System displays variable with Assigned Count and Delivery Count"
+          ],
+          "note": "For randomized delivery, assigned count should be greater than delivery count."
+        }
+      },
+      "psychometric_question_settings": {
+        "section": "4.2",
+        "rating_questions": {
+          "section": "4.2.1",
+          "steps": [
+            "User clicks 'Set Rating-Type Questions' button",
+            "System displays list of psychometric-type questions assigned for the assessment",
+            "User clicks 'Apply Rating Scale' button",
+            "System asks user to specify number of rating points on the scale",
+            "User specifies number of rating points",
+            "System displays scale with specified rating points and two entry fields for rating value and legend for each point",
+            "User enters required inputs and submits",
+            "System applies rating scale to selected questions"
+          ],
+          "note": "User can continue selecting more sets of questions and assign different rating values and captions.",
+          "sample_output": {
+            "table_title": "Rating-type Question Score setting",
+            "columns": [
+              "Rating Point",
+              "Rating Value",
+              "Legend"
+            ],
+            "data": [
+              {
+                "rating_point": "Rating Point 1",
+                "rating_value": 5,
+                "legend": "Always"
+              },
+              {
+                "rating_point": "Rating Point 2",
+                "rating_value": 4,
+                "legend": "Most times"
+              },
+              {
+                "rating_point": "Rating Point 3",
+                "rating_value": 3,
+                "legend": "Some times"
+              },
+              {
+                "rating_point": "Rating Point 4",
+                "rating_value": 2,
+                "legend": "Rarely"
+              },
+              {
+                "rating_point": "Rating Point 5",
+                "rating_value": 1,
+                "legend": "Very Rarely"
+              }
+            ]
+          }
+        },
+        "paired_type_questions": {
+          "section": "4.2.2",
+          "description": "Two questions belonging to two different variables are paired together and displayed as one question. Test taker selects one of the pair; scoring based on selection.",
+          "steps": [
+            "User clicks 'Set Paired-Type' button",
+            "System displays list of psychometric-type questions assigned for the assessment",
+            "User clicks 'Set Pair' button",
+            "System shows template where user can drag and drop questions to be paired",
+            "User drags and drops questions to be paired from selected list",
+            "System shows two entry fields to enter scores based on selection",
+            "User enters score values for selected question and non-selected question and submits",
+            "System saves the values"
+          ],
+          "sample_output": {
+            "paired_question_score_setting": {
+              "selected_question_score": 1,
+              "non_selected_question_score": 0
+            }
+          }
+        },
+        "rank_type_questions": {
+          "section": "4.2.3",
+          "description": "Two or more questions from different variables are grouped together. Test taker ranks each question in order of preference; scoring based on rank assigned.",
+          "steps": [
+            "User clicks 'Set Rank-Type' button",
+            "System displays list of psychometric-type questions assigned for the assessment",
+            "User clicks 'Set Rank' button",
+            "System asks to specify number of questions to be grouped",
+            "User specifies the number",
+            "System shows template where user can drag and drop questions to be ranked",
+            "User drags and drops questions from selected list",
+            "System shows entry fields for specifying score value for each rank",
+            "User enters score values against each rank and submits",
+            "System saves grouping with score inputs"
+          ],
+          "sample_output": {
+            "rank_question_score_setting": [
+              {
+                "rank": "Rank 1",
+                "score": 4
+              },
+              {
+                "rank": "Rank 2",
+                "score": 3
+              },
+              {
+                "rank": "Rank 3",
+                "score": 2
+              },
+              {
+                "rank": "Rank 4",
+                "score": 1
+              }
+            ]
+          }
+        },
+        "rank_rate_questions": {
+          "section": "4.2.4",
+          "description": "Combines ranking with rating. Group of questions is ranked first, then rated. Combines Section 4.2.3 (ranking) and 4.2.1 (rating).",
+          "steps": [
+            "User clicks 'Set Rank-Rate Type' button",
+            "System displays list of psychometric-type questions",
+            "System shows entry fields to specify number of questions to be grouped",
+            "User specifies the number",
+            "System shows template for drag and drop ranking",
+            "User drags and drops questions from selected list",
+            "System shows entry fields for score value for each rank",
+            "User enters score values against each rank and submits",
+            "System saves grouping with score inputs",
+            "User clicks 'Apply Rating Scale' button",
+            "System asks user to specify number of rating points on the scale",
+            "User specifies number of rating points",
+            "System displays scale with entry fields for rating value and legend for each point",
+            "User enters required inputs and submits",
+            "System applies rating scale to the ranking questions"
+          ],
+          "scoring_formula": "Final score = rank value \u00d7 rating value",
+          "example": "If end user selects first question from a 4-question group, assigns Rank 1 (score=4) and Rating 5 (from 5-point scale): final score = 4 \u00d7 5 = 20"
+        },
+        "display_interval_setting": {
+          "section": "4.3",
+          "description": "User sets time-interval for display-based questions (paragraph/image display followed by questions; flash display of words/images followed by questions).",
+          "steps": [
+            "User selects display-based questions from original list",
+            "System shows entry field for time interval for each question",
+            "User enters time interval and saves",
+            "System saves time interval against each question"
+          ]
+        }
+      }
+    },
+    "setting_question_scores": {
+      "section": "4_scores",
+      "note": "Psychometric questions are excluded from this list as their scoring is set differently.",
+      "steps": [
+        "User clicks 'Set Score' button",
+        "System shows all questions assigned with their variable information",
+        "User selects a question from the list",
+        "System shows entry field to add score against each option (incorrect options given zero or negative scores)",
+        "User assigns score values and saves",
+        "System stores score values against question options"
+      ],
+      "rules": [
+        "If no value is assigned, default values are: 1 for correct option and 0 for incorrect options"
+      ]
+    },
+    "setting_display_parameters": {
+      "section": "5",
+      "parameters": [
+        "Setting the order of delivery",
+        "Timed delivery",
+        "Setting Navigation/Multiple Attempt Rules"
+      ],
+      "order_of_delivery": {
+        "section": "5.1",
+        "description": "User sets order in which questions are delivered. Can be set at Level1, Level2, Level3, Level4, and/or question level.",
+        "rules": [
+          "If order is not set at any level, default delivery mode will be random"
+        ],
+        "steps": [
+          "User clicks 'Set Order of Delivery' button",
+          "System shows variables and their levels",
+          "User specifies display order for one or more levels",
+          "System stores specified order for assessment delivery"
+        ],
+        "display_order_rules": [
+          "Only Level1 ordered: order applied to Level1 only; subvariables and questions random within Level1",
+          "Level1 and Level2 ordered: order applied to Level1 and Level2; lower levels random within Level2",
+          "Level1, Level2, Level3 ordered: order applied to these three; lower levels random within Level3",
+          "Level1-4 ordered: order applied to all four levels; questions random within Level4",
+          "Level1-4 plus Question Level ordered: order applied to all levels and questions; questions displayed in specified order"
+        ]
+      },
+      "timed_delivery": {
+        "section": "5.2",
+        "description": "User sets time allotted for display at Assessment level or any variable/question level.",
+        "rules": [
+          "Timer can be set at only ONE of the levels"
+        ],
+        "steps": [
+          "User clicks 'Set Timer' button",
+          "System shows variables, questions and their levels (Level0 = Assessment Level)",
+          "User selects one level for setting time duration",
+          "System saves timer inputs"
+        ],
+        "timer_expiry_rules": [
+          "Level0 (Assessment Level): Test finishes at expiry. End-user can divide time across variables at convenience.",
+          "Level1: Each Level1 variable gets time duration; section finishes at expiry. End-user can divide across Level2/3/4.",
+          "Level2: Each Level2 variable gets time duration; section disappears at expiry. End-user can divide across Level3/4.",
+          "Level3: Each Level3 variable gets time duration; section disappears at expiry. End-user can divide across Level4.",
+          "Level4: Each Level4 variable gets time duration; section disappears at expiry. End-user can divide across questions.",
+          "Question Level: Each question gets time duration; question disappears at expiry of respective duration."
+        ]
+      },
+      "navigation_and_attempt_rules": {
+        "section": "5.4",
+        "navigation_rules": {
+          "section": "5.4.1",
+          "description": "User sets limits on navigation across sections or questions during assessment delivery.",
+          "options": [
+            {
+              "name": "Free Navigation and Response Review",
+              "description": "End user can navigate backward and forward as he wishes and review already attempted questions or attempt any question from any succeeding section."
+            },
+            {
+              "name": "Only Previous Section Backward Navigation",
+              "description": "End user can navigate only to just previous section and no further backward. Can review already attempted questions of previous section only."
+            },
+            {
+              "name": "No Backward/Forward Navigation (Section Level)",
+              "description": "End user cannot navigate to any previous or succeeding sections, and cannot review already attempted or attempt from succeeding sections."
+            },
+            {
+              "name": "No Backward/Forward Navigation (Question Level)",
+              "description": "Do not allow movement backward and forward across sections or questions."
+            }
+          ]
+        },
+        "multiple_attempt_rules": {
+          "section": "5.4.2",
+          "description": "User sets limits on number of attempts the end-user is allowed.",
+          "options": [
+            {
+              "name": "Multiple Retakes Allowed",
+              "description": "End user can retake same assessment any number of times."
+            },
+            {
+              "name": "Multiple Retakes Not Allowed",
+              "description": "End user can take assessment only once."
+            },
+            {
+              "name": "Multiple Sessions Allowed",
+              "description": "End user can break session at any point and renew at a later time."
+            },
+            {
+              "name": "Multiple Sessions Not Allowed",
+              "description": "End-user must finish assessment in single go. No break allowed. If break occurs, must freshly start another session."
+            }
+          ],
+          "note": "Fresh session needs Admin approval, or automatic mechanism based on incomplete session condition."
+        }
+      }
+    }
+  }
+}

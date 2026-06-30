@@ -1,0 +1,179 @@
+{
+  "meta": {
+    "file": "agent_prompts.json",
+    "project": "CareerJudge",
+    "description": "Ready-to-use prompts for feeding the spec files to AI coding agents. Each prompt references the correct spec files and gives the agent precise task scope.",
+    "usage": "Copy the prompt text from any task below and paste into Claude Code, Cursor, v0, or similar agent. Attach the referenced files alongside the prompt."
+  },
+
+  "prompts": [
+
+    {
+      "task_id": "T01",
+      "task": "Generate Django Models",
+      "files_to_attach": ["django_model_hints.json", "question_types_spec.json"],
+      "target_agent": ["Claude Code", "Cursor", "Copilot"],
+      "prompt": "You are a senior Django developer. Using the attached `django_model_hints.json` and `question_types_spec.json`, generate a complete `models.py` file for the CareerJudge application. Requirements:\n\n1. Create all models listed in `django_model_hints.json` with correct field types, null/blank settings, and help_text.\n2. Add `__str__` methods to every model.\n3. Add Meta classes with ordering and verbose_name where relevant.\n4. Use `JSONField` for `QuestionAttempt.raw_answer`.\n5. Add all `unique_together` constraints listed.\n6. Use Django's `FileField` / `ImageField` for media uploads with the specified `upload_to` paths.\n7. Do NOT create migrations — only `models.py`.\n8. Add comments above each model referencing which question type IDs from `question_types_spec.json` it serves."
+    },
+
+    {
+      "task_id": "T02",
+      "task": "Generate Django Serializers (DRF)",
+      "files_to_attach": ["django_model_hints.json", "question_types_spec.json"],
+      "target_agent": ["Claude Code", "Cursor"],
+      "prompt": "Using the attached `django_model_hints.json`, generate Django REST Framework serializers in `serializers.py` for the CareerJudge app. Requirements:\n\n1. Create a serializer for each model.\n2. `QuestionSerializer` must be a nested serializer that includes `ResponseOption`, `HotspotArea`, `FlashItem`, and `MediaFile` as nested lists (read-only).\n3. `QuestionAttemptSerializer` must validate `raw_answer` structure based on `question_type` — use the `answer_schema_by_type` map in the hints file.\n4. `TestSessionSerializer` must include calculated fields: `remaining_seconds`, `completion_percentage`.\n5. Use `read_only_fields` for all auto-generated timestamps.\n6. Add `validate_` methods for critical business rules (e.g. max 5 CorrectAnswer per field, unique ranks in RANK type)."
+    },
+
+    {
+      "task_id": "T03",
+      "task": "Generate Django Views / API endpoints",
+      "files_to_attach": ["question_types_spec.json", "scoring_rules.json", "django_model_hints.json"],
+      "target_agent": ["Claude Code", "Cursor"],
+      "prompt": "Using the attached spec files, generate Django REST Framework ViewSets and URL routes for the CareerJudge test-taking API. Requirements:\n\n1. `TestSessionViewSet`: create session (POST), resume session (GET by ID), suspend (PATCH), complete (PATCH).\n2. `QuestionAttemptViewSet`: submit answer (POST/PATCH). On submit, call the scoring function matching the question's `scoring_type` from `scoring_rules.json`. Store score in `QuestionAttempt.score`.\n3. Scoring logic must implement all 8 scoring types: BINARY, BINARY_FUZZY, PARTIAL, NEGATIVE, RANK, RANK_RATE, RATING, FORCED_CHOICE, FORCED_CHOICE_RATED. Refer to pseudocode in `scoring_rules.json`.\n4. `SectionScoreViewSet`: auto-calculate and update `SectionScore` after each answer submission.\n5. Add `bookmark` and `skip` endpoints for questions.\n6. Session timer: calculate `remaining_seconds = total_duration_seconds - elapsed_seconds` on each GET.\n7. Use `IsAuthenticated` permission on all endpoints."
+    },
+
+    {
+      "task_id": "T04",
+      "task": "Generate Django Templates — Shared Layout",
+      "files_to_attach": ["question_types_spec.json"],
+      "target_agent": ["Claude Code", "Cursor"],
+      "prompt": "Using the `shared` section of the attached `question_types_spec.json`, generate a Django base template `base_test.html` using Tailwind CSS and Alpine.js. Requirements:\n\n1. Three-panel layout: left sidebar (TEST PROGRESS), main content area, sticky bottom footer.\n2. Sidebar: render `section_nav` as a collapsible tree with three link states — blue (active/attempted), brown (bookmarked), gray (inactive/not-yet-attempted).\n3. Sidebar: render `test_summary` stats panel below the nav tree (Total, Attempted, Bookmarked as clickable brown link, Skipped as clickable blue link, Not Attempted).\n4. Header: test title (centered), Instructions button (opens modal), countdown timer ticking backward in HH:MM:SS.\n5. Footer: Next Question (bottom-left), Bookmark checkbox (bottom-centre), Previous Question (bottom-left), Submit Answer (bottom-right), Suspend Session (bottom-right).\n6. Use Alpine.js `x-data` for timer countdown, bookmark toggle, and sidebar state.\n7. The main content area should be a `{% block content %}{% endblock %}` for question-type-specific templates to fill.\n8. Make the layout responsive for desktop; sidebar collapses on mobile."
+    },
+
+    {
+      "task_id": "T05",
+      "task": "Generate Question Templates — MCQ types (1a + 1b)",
+      "files_to_attach": ["question_types_spec.json"],
+      "target_agent": ["Claude Code", "Cursor", "v0"],
+      "prompt": "Using question types `1a` (MCQ_TEXT_IMAGE) and `1b` (MCQ_TEXT_IMAGE_IMG_OPTIONS) from the attached `question_types_spec.json`, generate two Django HTML templates that extend `base_test.html`:\n\n1. `question_1a.html`: renders question text (×2 fields), optional image (centred), radio group with text options in vertical list. On Submit, POST answer via HTMX to the answer endpoint.\n2. `question_1b.html`: same as 1a but radio options are images displayed in a 2-column grid. Image options must be large enough to be clearly visible.\n3. Both templates use Tailwind CSS and Alpine.js.\n4. Radio selection should visually highlight the selected option.\n5. Submit button disabled until an option is selected (Alpine.js)."
+    },
+
+    {
+      "task_id": "T06",
+      "task": "Generate Question Templates — Media types (1c Audio, 1d Video)",
+      "files_to_attach": ["question_types_spec.json"],
+      "target_agent": ["Claude Code", "Cursor"],
+      "prompt": "Using question types `1c` (MCQ_AUDIO_MULTI) and `1d` (MCQ_VIDEO_MULTI) from `question_types_spec.json`, generate Django HTML templates:\n\n1. `question_1c.html` — Screen A: audio player widget with single PLAY button; no submit button; Next and Suspend only. Screen B: shown after audio plays (Alpine.js state transition); displays sub-question text + radio options + Submit + Previous (scoped to this audio only). NO replay button ever.\n2. `question_1d.html` — identical to 1c but with HTML5 `<video>` player. NO replay.\n3. Use Alpine.js to manage screen transitions (play_screen → answer_screen).\n4. Block all browser native replay controls after first play.\n5. Sub-question index managed via Alpine.js state; on Submit advance to next sub-question index or to next main question."
+    },
+
+    {
+      "task_id": "T07",
+      "task": "Generate Question Templates — Flash types (1e Word, 1f Image)",
+      "files_to_attach": ["question_types_spec.json"],
+      "target_agent": ["Claude Code", "Cursor"],
+      "prompt": "Using types `1e` (MCQ_WORD_FLASH_MULTI) and `1f` (MCQ_IMAGE_FLASH_MULTI) from `question_types_spec.json`:\n\n1. `question_1e.html`: Flash screen shows words one at a time in a large centred display box using Alpine.js `setInterval`. A sidebar list shows all words with the current word highlighted. After all words flash, transition to answer screen (radio MCQ). NO replay.\n2. `question_1f.html`: same but display images instead of words. Images fill the flash display box.\n3. Flash interval and display count come from `question.flash_interval_ms` and `question.flash_display_count`.\n4. Items randomly selected from the full flash list using JS `shuffle` on page load.\n5. After flash sequence completes, answer screen appears automatically."
+    },
+
+    {
+      "task_id": "T08",
+      "task": "Generate Question Templates — Timed Display types (1g Passage, 1h Image)",
+      "files_to_attach": ["question_types_spec.json"],
+      "target_agent": ["Claude Code", "Cursor"],
+      "prompt": "Using types `1g` (MCQ_PASSAGE_DISPLAY_MULTI) and `1h` (MCQ_IMAGE_DISPLAY_MULTI) from `question_types_spec.json`:\n\n1. `question_1g.html`: shows passage title + body text for `display_duration_seconds`. A progress bar or countdown shows time remaining. After timer expires, passage hides and answer screen appears. NO repeat display.\n2. `question_1h.html`: same but shows an image instead of a text passage.\n3. Use Alpine.js `$watch` or `setInterval` for the timer.\n4. Navigating back to this question: only answer options are shown; the passage/image is never re-displayed."
+    },
+
+    {
+      "task_id": "T09",
+      "task": "Generate Question Templates — FITB types (2a, 2b)",
+      "files_to_attach": ["question_types_spec.json"],
+      "target_agent": ["Claude Code", "Cursor", "v0"],
+      "prompt": "Using types `2a` (FITB_SINGLE) and `2b` (FITB_MULTI_FIELD) from `question_types_spec.json`:\n\n1. `question_2a.html`: single text input field labelled 'Enter your answer here'. Submit POSTs via HTMX.\n2. `question_2b.html`: multiple text input fields (count from `response_options`), each labelled 'Option 1', 'Option 2' etc. in a vertical list.\n3. Both templates: optional image above the input fields.\n4. Input fields should be clean, full-width, bordered text boxes.\n5. Submit disabled until at least one field has content."
+    },
+
+    {
+      "task_id": "T10",
+      "task": "Generate Question Template — Match-the-Following (type 3)",
+      "files_to_attach": ["question_types_spec.json"],
+      "target_agent": ["Claude Code", "Cursor", "v0"],
+      "prompt": "Using type `3` (MATCH_FOLLOWING) from `question_types_spec.json`, generate `question_3.html`:\n\n1. Three-column layout: Group A (numbered items, read-only), Group B (numbered drop targets), Drag & Drop pool (right side).\n2. Items in the Drag & Drop pool are draggable cards (HTML5 drag-and-drop API or Alpine.js drag).\n3. Group B slots accept dropped items; show the dropped item text inside the slot when dropped.\n4. Allow un-dropping: clicking an occupied Group B slot removes the item back to the pool.\n5. Submit POSTs the mapping of `{group_a_item_id: dropped_item_id}` for all slots.\n6. Drag pool has more items than Group B slots (per spec).\n7. Style with Tailwind; clear visual distinction between draggable items and drop targets."
+    },
+
+    {
+      "task_id": "T11",
+      "task": "Generate Question Template — Grid Selection (type 4)",
+      "files_to_attach": ["question_types_spec.json"],
+      "target_agent": ["Claude Code", "Cursor", "v0"],
+      "prompt": "Using type `4` (GRID_LIST_SELECTION) from `question_types_spec.json`, generate `question_4.html`:\n\n1. Render a numbered grid of cells (rows × cols defined by question config). Grid size examples: 5×6 = 30 cells.\n2. Each cell is a clickable button showing its number.\n3. On cell click: open a popup/modal showing the full option text (or image) for that cell number, with a SELECT button inside the popup.\n4. SELECT in popup marks that cell as selected (highlight it in the grid).\n5. A 'View Complete Grid Items' button below the grid opens a modal listing all 30 options with checkboxes.\n6. Checkboxes in the full-list modal sync with grid selections.\n7. Negative marking warning shown somewhere on screen.\n8. Submit POSTs array of selected cell IDs."
+    },
+
+    {
+      "task_id": "T12",
+      "task": "Generate Question Templates — HOTSPOT types (5a, 5b)",
+      "files_to_attach": ["question_types_spec.json"],
+      "target_agent": ["Claude Code", "Cursor"],
+      "prompt": "Using types `5a` (HOTSPOT_SINGLE) and `5b` (HOTSPOT_MULTI) from `question_types_spec.json`:\n\n1. Both templates render a pixelised image as an HTML `<canvas>` or `<img>` with an absolutely-positioned click overlay.\n2. On canvas/image click: calculate click coordinates (x, y) relative to image top-left.\n3. `question_5a.html`: only the latest click is stored; previous click marker (red dot) is removed and replaced. Submit POSTs `{click_x, click_y}`.\n4. `question_5b.html`: every click shows a red dot marker and immediately opens a confirm popup ('Confirm your selection' with Confirm/Cancel buttons). Confirmed clicks accumulate. Cancelled clicks are removed. Submit POSTs array of confirmed `{x, y}` coordinates.\n5. Use Alpine.js for click state management.\n6. Negative marking note displayed on page for 5b."
+    },
+
+    {
+      "task_id": "T13",
+      "task": "Generate Question Templates — Psychometric Rank types (6a, 6b)",
+      "files_to_attach": ["question_types_spec.json", "scoring_rules.json"],
+      "target_agent": ["Claude Code", "Cursor"],
+      "prompt": "Using types `6a` (RANK_SIMPLE) and `6b` (RANK_THEN_RATE) from the attached spec files:\n\n1. `question_6a.html`: render a list of options (count from question config). Each row has option text and a blue square RANK button. Clicking RANK opens a dropdown popup (Rank 1 to Rank N). Selecting a rank closes popup and shows a badge with the selected rank on the row. All options must be ranked before Submit enables.\n2. `question_6b.html`: same as 6a but after selecting a rank, a numeric rating scale (1 to N points, defined by question config) appears below the options list. Candidate selects a rating for the just-ranked option. Show both rank badge and rating badge per row. Submit requires all options ranked AND rated.\n3. Both templates use Alpine.js for popup and badge state.\n4. Scoring formula reminder from `scoring_rules.json`: 6b final = rank_score × rating."
+    },
+
+    {
+      "task_id": "T14",
+      "task": "Generate Question Template — Standard Rating Scale (type 7)",
+      "files_to_attach": ["question_types_spec.json", "scoring_rules.json"],
+      "target_agent": ["Claude Code", "Cursor", "v0"],
+      "prompt": "Using type `7` (STANDARD_RATING_SCALE) from the attached spec files:\n\n1. `question_7.html`: display all sub-questions in one continuous scrollable table.\n2. Table columns: question text (left), then N scale-point columns with descriptive labels as headers (e.g. 'Very True', 'True', 'Not Sure', 'Not True', 'Not at all True') — rotated 45° for compact display.\n3. Each row = one question statement. Each scale column cell = a clickable coloured button.\n4. Clicking a cell highlights it (fills with teal/green) and deselects others in the same row.\n5. Scale direction (forward/reverse) determines which column maps to which score — handle this in the backend.\n6. Submit POSTs `{question_id: selected_scale_point}` for all rows.\n7. Submit disabled until all visible questions have a rating selected."
+    },
+
+    {
+      "task_id": "T15",
+      "task": "Generate Question Templates — Forced-Choice types (8a, 8b)",
+      "files_to_attach": ["question_types_spec.json", "scoring_rules.json"],
+      "target_agent": ["Claude Code", "Cursor", "v0"],
+      "prompt": "Using types `8a` (FORCED_CHOICE_SINGLE_LEVEL) and `8b` (FORCED_CHOICE_TWO_LEVEL) from the attached spec files:\n\n1. Both templates display all questions in continuous scroll (MULTIPLE_QUESTION_TEMPLATE).\n2. Each question has a stem and two option rows. Each option row has option text and a blue selection button on the right.\n3. `question_8a.html`: clicking a blue button highlights that option as selected. Submit POSTs `{question_id: selected_option_id}` for all questions.\n4. `question_8b.html`: after clicking a blue button, a horizontal numeric rating scale (1–N) appears below the options for that question. Candidate selects a rating. Show both selected option highlight and selected rating highlight. Submit POSTs `{question_id: {selected_option_id, rating}}` for all questions.\n5. Instructions block shown at top of both templates.\n6. Submit disabled until all questions have an answer (and for 8b, a rating)."
+    },
+
+    {
+      "task_id": "T16",
+      "task": "Generate Admin Interface (Django Admin)",
+      "files_to_attach": ["django_model_hints.json", "question_types_spec.json"],
+      "target_agent": ["Claude Code", "Cursor"],
+      "prompt": "Using the attached `django_model_hints.json`, generate a `admin.py` for the CareerJudge app. Requirements:\n\n1. Register all models with appropriate `ModelAdmin` classes.\n2. `QuestionAdmin`: use `list_display` for id, question_type, section, is_active. Add `list_filter` by question_type, section, is_active. Add `search_fields` for question_text_1. Use `inlines` for ResponseOption, HotspotArea, FlashItem, MediaFile.\n3. `ResponseOptionInline`: tabular inline with ordering by `order`. Show `is_correct`, `label`, `text_value`, `section_tag`, `predefined_score`.\n4. `TestSessionAdmin`: list_display for candidate, test, status, started_at, elapsed_seconds. Add action 'Mark as completed'.\n5. `QuestionAttemptAdmin`: list_display for session, question, status, score, answered_at. Add `raw_id_fields` for session and question.\n6. Use `readonly_fields` for all auto-generated timestamps across all admins."
+    },
+
+    {
+      "task_id": "T17",
+      "task": "Full stack integration test",
+      "files_to_attach": ["question_types_spec.json", "scoring_rules.json", "django_model_hints.json"],
+      "target_agent": ["Claude Code"],
+      "prompt": "Using all three attached spec files, generate a Django management command `create_sample_test.py` that seeds the database with one complete sample test containing:\n\n1. One question of each of the 21 types defined in `question_types_spec.json`.\n2. Correct scoring type set per question matching `scoring_rules.json`.\n3. For MCQ types: 4 options, one correct.\n4. For FITB types: 3 correct answers in the correct_answers list.\n5. For flash types: 20 items in the flash list, display_count=5, interval_ms=1000.\n6. For timed types: display_duration_seconds=30.\n7. For psychometric types: 4 options each tagged to a different section.\n8. For hotspot types: a placeholder 600×400 image with one hotspot area at (200,150) size 50×50.\n9. Print a summary table at the end listing question type, question_id, and scoring_type for verification."
+    }
+
+  ],
+
+  "file_feeding_guide": {
+    "description": "How to feed these spec files to different agents",
+    "agents": {
+      "Claude_Code": {
+        "method": "Drag and drop JSON files into the Claude Code terminal session, then paste the prompt",
+        "tip": "Feed one task at a time; Claude Code handles large JSON well in context"
+      },
+      "Cursor": {
+        "method": "Add JSON files to the project root, then reference them in the Cursor chat with @filename.json",
+        "tip": "Use Cursor's 'Apply' button to write generated code directly to files"
+      },
+      "v0_by_Vercel": {
+        "method": "Paste the prompt + relevant JSON sections directly into the v0 chat",
+        "tip": "v0 is best for T04/T05/T10/T11/T14/T15 (UI-heavy templates); use Claude Code for models and APIs"
+      },
+      "GitHub_Copilot": {
+        "method": "Open JSON files in editor, then use Copilot Chat with the prompt referencing the open files",
+        "tip": "Use /new for new files, /fix for iterating on generated code"
+      }
+    },
+    "recommended_order": [
+      "T01 — Models first (everything depends on this)",
+      "T02 — Serializers second",
+      "T03 — Views/API third",
+      "T16 — Admin fourth (for data entry)",
+      "T17 — Seed data (to test before building templates)",
+      "T04 — Base template",
+      "T05–T15 — Question type templates (in any order)"
+    ]
+  }
+}

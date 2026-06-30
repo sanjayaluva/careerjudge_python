@@ -1,0 +1,289 @@
+{
+  "meta": {
+    "file": "scoring_rules.json",
+    "project": "CareerJudge",
+    "description": "Complete scoring logic for all question types. Includes rules, edge cases, and Python pseudocode for each scoring mode.",
+    "applies_to": "question_types_spec.json"
+  },
+
+  "scoring_rules": [
+
+    {
+      "code": "BINARY",
+      "label": "Binary Scoring",
+      "used_by": ["1a", "1b", "1c", "1d", "1e", "1f", "1g", "1h", "2a", "5a"],
+      "range": { "min": 0, "max": 1 },
+      "rules": [
+        "Correct answer selected → score = 1",
+        "Incorrect answer selected → score = 0",
+        "No answer → score = 0"
+      ],
+      "edge_cases": [
+        "For audio/video/flash/passage/image multi-sub-question types (1c–1h): each sub-question is scored independently as BINARY",
+        "For hotspot single (5a): only the LATEST click is evaluated; earlier clicks are discarded"
+      ],
+      "pseudocode": [
+        "def score_binary(candidate_answer, correct_answer):",
+        "    return 1 if candidate_answer == correct_answer else 0"
+      ]
+    },
+
+    {
+      "code": "BINARY_FUZZY",
+      "label": "Binary Scoring with Fuzzy/Percentage Match",
+      "used_by": ["2a"],
+      "range": { "min": 0, "max": 1 },
+      "rules": [
+        "Mode A — Exact match against list: if candidate text matches any of up to 5 predefined correct answers → score = 1",
+        "Mode B — Percentage match: single correct answer; candidate text matched letter-by-letter; if match% >= threshold → score = 1",
+        "Case sensitivity: optional; configurable at question creation",
+        "Unless capitalisation is explicitly required, upper/lowercase treated as equivalent"
+      ],
+      "edge_cases": [
+        "Mode A and Mode B are mutually exclusive; selection made at question creation",
+        "In Mode B at 100% threshold: every character must match exactly (modulo case setting)"
+      ],
+      "pseudocode": [
+        "def score_fitb_single(candidate, correct_list, case_sensitive=False, pct_threshold=None):",
+        "    if not case_sensitive:",
+        "        candidate = candidate.lower()",
+        "        correct_list = [c.lower() for c in correct_list]",
+        "    if pct_threshold is None:",
+        "        # Mode A: match any in list",
+        "        return 1 if candidate.strip() in [c.strip() for c in correct_list] else 0",
+        "    else:",
+        "        # Mode B: percentage match against single correct answer",
+        "        correct = correct_list[0]",
+        "        matches = sum(a == b for a, b in zip(candidate, correct))",
+        "        pct = (matches / len(correct)) * 100 if len(correct) > 0 else 0",
+        "        return 1 if pct >= pct_threshold else 0"
+      ]
+    },
+
+    {
+      "code": "PARTIAL",
+      "label": "Partial Credit Scoring",
+      "used_by": ["2b", "2c", "2d", "3"],
+      "range": { "min": 0, "max": "n (number of scoreable items)" },
+      "rules": [
+        "Each scoreable item (field, match, recalled word/image) scored independently",
+        "Correct item → +1",
+        "Incorrect item → 0 (no negative)",
+        "Total score = sum of correct items",
+        "Maximum score = total number of items to complete"
+      ],
+      "edge_cases": [
+        "For FITB multi-field (2b): each field checked against its own correct answers list (up to 5 per field)",
+        "For recall types (2c, 2d): order of recall does not matter; any field matching any flashed item counts",
+        "For match-following (3): each pair checked independently"
+      ],
+      "pseudocode": [
+        "def score_partial(candidate_answers, correct_answers_map):",
+        "    score = 0",
+        "    for field_id, candidate_value in candidate_answers.items():",
+        "        correct_list = correct_answers_map.get(field_id, [])",
+        "        if candidate_value.strip().lower() in [c.strip().lower() for c in correct_list]:",
+        "            score += 1",
+        "    return score",
+        "",
+        "def score_recall(recalled_items, flashed_items):",
+        "    # Order-independent recall scoring",
+        "    flashed_normalised = {item.strip().lower() for item in flashed_items}",
+        "    score = 0",
+        "    for item in recalled_items:",
+        "        if item.strip().lower() in flashed_normalised:",
+        "            score += 1",
+        "    return score"
+      ]
+    },
+
+    {
+      "code": "NEGATIVE",
+      "label": "Negative Marking",
+      "used_by": ["4", "5b"],
+      "range": { "min": 0, "max": "n (correct items)" },
+      "rules": [
+        "Each correct selection → +1",
+        "Each incorrect selection → -1",
+        "Final score = correct_count - incorrect_count",
+        "Floor rule: if incorrect_count > correct_count → score = 0 (never negative)",
+        "Not selecting an item (omission) → no penalty"
+      ],
+      "edge_cases": [
+        "For grid (4): only selected cells count; unselected cells have no penalty",
+        "For hotspot multi (5b): only CONFIRMED clicks count; cancelled clicks have no penalty",
+        "The floor prevents candidates being penalised below zero"
+      ],
+      "pseudocode": [
+        "def score_negative(selected_items, correct_items_set):",
+        "    correct_count = sum(1 for item in selected_items if item in correct_items_set)",
+        "    incorrect_count = sum(1 for item in selected_items if item not in correct_items_set)",
+        "    raw_score = correct_count - incorrect_count",
+        "    return max(0, raw_score)  # floor at 0"
+      ]
+    },
+
+    {
+      "code": "RANK",
+      "label": "Rank Scoring",
+      "used_by": ["6a"],
+      "range": { "min": 1, "max": "n (number of options)" },
+      "rules": [
+        "n options in the question; candidate assigns unique ranks 1 through n",
+        "Option assigned Rank 1 (highest) → score = n",
+        "Option assigned Rank 2 → score = n-1",
+        "...",
+        "Option assigned Rank n (lowest) → score = 1",
+        "Each option's score is stored against its section tag"
+      ],
+      "edge_cases": [
+        "Each rank must be unique per question (Rank 1 can only be assigned to one option)",
+        "All options must be ranked before submission"
+      ],
+      "pseudocode": [
+        "def score_rank(option_ranks, total_options):",
+        "    # option_ranks: dict of {option_id: rank_number (1=highest)}",
+        "    scores = {}",
+        "    for option_id, rank in option_ranks.items():",
+        "        scores[option_id] = total_options - rank + 1",
+        "    return scores",
+        "",
+        "# Example: 4 options, candidate ranks them 2,1,4,3",
+        "# Option A: rank=2 → score=3",
+        "# Option B: rank=1 → score=4",
+        "# Option C: rank=4 → score=1",
+        "# Option D: rank=3 → score=2"
+      ]
+    },
+
+    {
+      "code": "RANK_RATE",
+      "label": "Rank-then-Rate Scoring",
+      "used_by": ["6b"],
+      "range": { "min": 1, "max": "n × max_rating_points" },
+      "rules": [
+        "Two-level scoring per option:",
+        "  Level 1: Rank score = (n - rank + 1)  e.g. Rank 1 of 4 → rank_score = 4",
+        "  Level 2: Rating score = selected point on rating scale (e.g. 1–7)",
+        "Final score per option = rank_score × rating_score",
+        "Maximum per option = n × max_scale_point  (e.g. 4 × 7 = 28)",
+        "Each option's final score stored against its section tag"
+      ],
+      "edge_cases": [
+        "Both rank AND rating must be assigned for an option to be scored",
+        "Partial completion (only rank or only rating) should either block submission or score as 0"
+      ],
+      "pseudocode": [
+        "def score_rank_rate(option_ranks, option_ratings, total_options):",
+        "    scores = {}",
+        "    for option_id in option_ranks:",
+        "        rank = option_ranks[option_id]",
+        "        rating = option_ratings.get(option_id, 0)",
+        "        rank_score = total_options - rank + 1",
+        "        scores[option_id] = rank_score * rating",
+        "    return scores",
+        "",
+        "# Example: 4 options, option_B ranked 1 and rated 6",
+        "# rank_score = 4 - 1 + 1 = 4",
+        "# final = 4 × 6 = 24",
+        "# max possible = 4 × 7 = 28"
+      ]
+    },
+
+    {
+      "code": "RATING",
+      "label": "Rating Scale Scoring",
+      "used_by": ["7"],
+      "range": { "min": 1, "max": "n (scale points)" },
+      "rules": [
+        "Each question on the rating grid is scored by the scale point selected",
+        "Forward scoring: leftmost point = highest score (= n), rightmost = 1",
+        "Reverse scoring: rightmost point = highest score (= n), leftmost = 1",
+        "Middle points take progressively decreasing values",
+        "Unanswered items → score = 0 or excluded from total (configurable)"
+      ],
+      "edge_cases": [
+        "Forward vs reverse direction is set per question or per section at creation",
+        "Scale labels are descriptive (e.g. 'Very True' to 'Not at all True') but scores are numeric"
+      ],
+      "pseudocode": [
+        "def score_rating(selected_point, scale_points, direction='forward'):",
+        "    # selected_point: 1-indexed from left",
+        "    if direction == 'forward':",
+        "        return scale_points - selected_point + 1",
+        "    else:  # reverse",
+        "        return selected_point",
+        "",
+        "# Example forward, 5-point scale:",
+        "# Point 1 (leftmost/Very True) → score 5",
+        "# Point 5 (rightmost/Not at all True) → score 1",
+        "",
+        "# Example reverse, 5-point scale:",
+        "# Point 1 (leftmost) → score 1",
+        "# Point 5 (rightmost) → score 5"
+      ]
+    },
+
+    {
+      "code": "FORCED_CHOICE",
+      "label": "Forced-Choice Scoring",
+      "used_by": ["8a"],
+      "range": { "min": 0, "max": "predefined_option_score" },
+      "rules": [
+        "Each question has exactly 2 options",
+        "Score values for each option are pre-defined at question creation",
+        "Score pairs may be: (0,1), (1,2), (1,3), or any custom pair",
+        "Candidate selects one option → that option's pre-defined score is assigned",
+        "Unselected option scores 0",
+        "Scores are accumulated per section (via option → section tag)"
+      ],
+      "edge_cases": [
+        "Unlike rating, scores are not always 0 and 1",
+        "If candidate does not answer, both options score 0"
+      ],
+      "pseudocode": [
+        "def score_forced_choice(selected_option_id, option_score_map):",
+        "    # option_score_map: {option_id: predefined_score}",
+        "    return option_score_map.get(selected_option_id, 0)"
+      ]
+    },
+
+    {
+      "code": "FORCED_CHOICE_RATED",
+      "label": "Forced-Choice Two-Level Scoring",
+      "used_by": ["8b"],
+      "range": { "min": 0, "max": "predefined_score × max_rating" },
+      "rules": [
+        "Candidate selects one of two options (Level 1)",
+        "Candidate rates the selected option on a scale (Level 2)",
+        "Final score for selected option = predefined_option_score × rating",
+        "Unselected option scores 0",
+        "Scores accumulated per section"
+      ],
+      "pseudocode": [
+        "def score_forced_choice_rated(selected_option_id, rating, option_score_map):",
+        "    predefined = option_score_map.get(selected_option_id, 0)",
+        "    return predefined * rating"
+      ]
+    }
+
+  ],
+
+  "section_score_aggregation": {
+    "description": "How individual question scores roll up to section and assessment scores",
+    "rules": [
+      "Each option/answer is tagged to a section at question creation",
+      "Section score = sum of all option scores tagged to that section",
+      "Assessment total = sum of all section scores",
+      "For psychometric types (6a, 6b, 7, 8a, 8b): section scores feed into profile computation (RVS, VMI, PMI, FMI etc.)",
+      "For cognitive types (1a–5b): section scores feed into aptitude/ability profiles"
+    ]
+  },
+
+  "global_scoring_constraints": [
+    "No score can go below 0 for any question (floor at 0 always applies)",
+    "Unattempted questions score 0",
+    "Suspended and resumed sessions preserve all answered scores",
+    "Bookmarked-but-unanswered questions score 0 at submission"
+  ]
+}

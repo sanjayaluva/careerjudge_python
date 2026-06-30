@@ -1,0 +1,362 @@
+{
+  "meta": {
+    "file": "01_question_bank_creation.json",
+    "source_pdf": "1__Question_Bank_Creation.pdf",
+    "title": "Question Bank Creation & Management Process",
+    "version": "1.0"
+  },
+  "introduction": {
+    "description": "Question Bank (QB) is the reservoir where various types of questions are created, stored and maintained. Questions are drawn from this reserve for creating different types of assessments.",
+    "processes": [
+      "QB Category Creation",
+      "Question Creation",
+      "QB Management"
+    ]
+  },
+  "processes": {
+    "QB_category_creation": {
+      "section": "2",
+      "add_category": {
+        "section": "2.1",
+        "description": "QB has the facility to create categories and sub-categories as many times and levels as required.",
+        "actor": "Psychometrician",
+        "steps": [
+          "User clicks 'Create Category' button",
+          "System shows multiple entry fields to enter category names",
+          "User enters names of categories and saves",
+          "System creates list of categories and shows for subcategory creation",
+          "User selects category name and clicks",
+          "System shows multiple entry fields to enter subcategory names",
+          "System creates list of subcategories and shows for next level subcategory creation",
+          "Process repeats as many levels as required"
+        ]
+      },
+      "edit_category": {
+        "section": "2.2",
+        "steps": [
+          "User selects 'View Category' button",
+          "System shows list of categories and subcategories",
+          "User selects category/subcategory to be edited",
+          "System shows edit field",
+          "User edits and saves",
+          "System shows updated category list"
+        ]
+      },
+      "delete_category": {
+        "section": "2.3",
+        "rules": [
+          "To delete a category/subcategory, user needs permission from Admin"
+        ],
+        "steps": [
+          "User selects 'View Category' button",
+          "System shows list of categories and subcategories",
+          "User selects category/subcategory and clicks 'Delete Request' button",
+          "System asks user to confirm the request",
+          "User confirms the action",
+          "System sends 'Request to delete category' message to the Admin",
+          "If user clicks 'Cancel': System cancels the request",
+          "System shows updated category list post deletion/cancellation"
+        ]
+      }
+    },
+    "question_creation": {
+      "section": "3",
+      "actors": {
+        "SME": "Creates questions",
+        "Reviewer": "Reviews question content quality",
+        "Psychometrician": "Reviews question psychometric quality"
+      },
+      "stages": [
+        "Question Creation (SME user)",
+        "Question Content Review (Reviewer user)",
+        "Question Psychometric Review (Psychometrician user)"
+      ],
+      "SME_question_creation": {
+        "section": "3.1",
+        "description": "SME receives question creation tasks from Admin. System shows pending task notifications on sign-in.",
+        "add_question": {
+          "section": "3.1.1",
+          "steps": [
+            "User clicks 'Add Question' button",
+            "System shows list of Categories/subcategories",
+            "User selects appropriate category/subcategory",
+            "System shows list of question types",
+            "User selects the question type",
+            "System shows relevant entry fields for the question type",
+            "User enters/uploads question inputs and submits",
+            "System shows preview of the question",
+            "User clicks 'Save' button",
+            "System saves data in temporary folder (NOT attached to QB at this stage)"
+          ],
+          "input_fields": [
+            "question text",
+            "answer options",
+            "number of options",
+            "number of correct options",
+            "alternative answers",
+            "worked-out solutions",
+            "difficulty level",
+            "cognitive level"
+          ]
+        },
+        "edit_question": {
+          "section": "3.1.2",
+          "rules": [
+            "User does NOT have access to any other users' questions or the Question Bank"
+          ],
+          "steps": [
+            "User selects 'View Question' button",
+            "System shows list of categories or tasks",
+            "User selects relevant category or task",
+            "System shows list of questions under selected category/task",
+            "User selects question to be edited",
+            "System shows edit fields",
+            "User edits and submits",
+            "System shows preview",
+            "User clicks 'Save'",
+            "System shows updated question list"
+          ]
+        },
+        "delete_question": {
+          "section": "3.1.3",
+          "rules": [
+            "User does NOT have access to any other users' questions or the Question Bank"
+          ],
+          "steps": [
+            "User selects 'View Question' button",
+            "System shows options to sort by category or task",
+            "User selects option",
+            "System shows list of categories or tasks",
+            "User selects relevant category/task",
+            "System shows list of questions",
+            "User selects question and clicks 'Delete' button",
+            "System asks user to confirm",
+            "User confirms or cancels",
+            "System shows updated question list"
+          ]
+        },
+        "SME_review_response": {
+          "section": "3.1.4",
+          "trigger": "Reviewer sends back questions for review",
+          "steps": [
+            "User checks notifications and clicks 'Review Request' button",
+            "System displays list of questions for review",
+            "User clicks on a question",
+            "System shows question in Edit template with reviewer comments",
+            "User edits the question and submits",
+            "System shows preview",
+            "User clicks 'Save'",
+            "System shows updated question list"
+          ]
+        },
+        "task_submission": {
+          "section": "3.1.5",
+          "steps": [
+            "When task is complete: User submits the task; System sends it for review",
+            "When review task is complete: User submits the review task; System sends it for review"
+          ]
+        },
+        "question_types": {
+          "section": "3.1.6",
+          "standard_questions": {
+            "description": "Used in academic performance testing, aptitude/ability testing, or skill testing",
+            "multiple_choice": {
+              "subtypes": [
+                {
+                  "id": "i",
+                  "name": "Text-based",
+                  "description": "Question and options are text"
+                },
+                {
+                  "id": "ii",
+                  "name": "Image-based",
+                  "description": "Question and options are images"
+                },
+                {
+                  "id": "iii",
+                  "name": "Text-image mixed",
+                  "description": "Either question or options are text or image"
+                },
+                {
+                  "id": "iv",
+                  "name": "Audio-based",
+                  "description": "Question has audio clip played, followed by text questions with MCQ text/image options"
+                },
+                {
+                  "id": "v",
+                  "name": "Video-based",
+                  "description": "Question has video clip played, followed by text questions with MCQ text/image options"
+                },
+                {
+                  "id": "vi",
+                  "name": "Paragraph-based",
+                  "description": "Question includes a paragraph, followed by text questions with MCQ text options"
+                },
+                {
+                  "id": "vii",
+                  "name": "Hotspot",
+                  "description": "Question is text and options are hotspots on an image; end user clicks on hotspot"
+                },
+                {
+                  "id": "viii",
+                  "name": "Flash-based",
+                  "description": "Question involves list of words/images flashed at specified interval, followed by text questions with MCQ text/image options"
+                }
+              ]
+            },
+            "fill_in_blank": {
+              "subtypes": [
+                {
+                  "id": "i",
+                  "name": "Text-based",
+                  "description": "Question is text, option is text entry"
+                },
+                {
+                  "id": "ii",
+                  "name": "Image-based",
+                  "description": "Question is image, option is text entry"
+                },
+                {
+                  "id": "iii",
+                  "name": "Audio-based",
+                  "description": "Question has audio clip played, followed by text questions with text entry option"
+                },
+                {
+                  "id": "iv",
+                  "name": "Video-based",
+                  "description": "Question has video clip played, followed by text questions with text entry option"
+                },
+                {
+                  "id": "v",
+                  "name": "Paragraph-based",
+                  "description": "Question includes a paragraph, followed by text questions with text entry option"
+                },
+                {
+                  "id": "vi",
+                  "name": "Flash-based",
+                  "description": "Question involves list of words/images flashed at specified interval, followed by text questions with text entry option"
+                }
+              ]
+            }
+          },
+          "psychometric_questions": {
+            "description": "Simply words, phrases or statements (always text based) without answer options",
+            "note": "Variants are defined at Assessment Configuration stage. At question creation, only text entry is involved."
+          }
+        }
+      },
+      "content_review": {
+        "section": "3.2",
+        "actor": "Reviewer",
+        "description": "Reviewer receives review tasks from Admin. System shows pending task notifications on sign-in.",
+        "steps": [
+          "User clicks 'Content Review' button",
+          "System shows question list specified in the task",
+          "User clicks on a question",
+          "System shows all parameters of the question as entered by SME",
+          "User reviews the question and selects one of: Send Back or Approve",
+          "If Send Back: System shows entry field for reason/comment; User enters and submits",
+          "If Approve: System shows entry fields for approval comment; User enters and submits",
+          "System displays 5-point rating scale (1-5) for content quality rating",
+          "User selects rating and submits",
+          "System sends question for psychometric review"
+        ]
+      },
+      "psychometric_review": {
+        "section": "3.3",
+        "actor": "Psychometrician",
+        "description": "Psychometrician receives review tasks from Admin. System shows pending task notifications on sign-in.",
+        "steps": [
+          "User clicks 'Psychometric Review' button",
+          "System shows question list specified in the task",
+          "User clicks on a question",
+          "System shows all parameters as entered by SME and Reviewer",
+          "User reviews and selects: Send Back or Approve",
+          "If Send Back: System shows entry field for reason/comment; User enters and submits; System sends back to SME",
+          "If Approve: System shows entry fields for approval comment; User enters comments",
+          "System displays 5-point rating scale (1-5) for content quality AND entry field to specify exposure limit",
+          "User selects rating, enters exposure limit, and submits",
+          "System sends questions to Question Bank (Questions are NOW attached to QB)"
+        ],
+        "rules": [
+          "Questions saved at this stage are attached to the Question Bank"
+        ],
+        "exposure_limit_definition": "The number of times a question is displayed to an end user"
+      }
+    },
+    "QB_management": {
+      "section": "4",
+      "actor": "Psychometrician",
+      "functions": [
+        "Psychometric Analysis",
+        "Question Exposure Setting",
+        "Periodic QB Updation"
+      ],
+      "psychometric_analysis": {
+        "section": "4.1",
+        "modes": {
+          "automatic_analysis": {
+            "steps": [
+              "User clicks 'Psychometric Analysis' button",
+              "System shows two options: Automatic Analysis or Manual Analysis",
+              "User selects Automatic Analysis",
+              "System shows filter options (Category, Time Period, Region, User Age range, Question ID)",
+              "User specifies filter criteria and clicks 'Extract'",
+              "System extracts and lists questions",
+              "User views and selects questions (individually or 'select all')",
+              "System displays options for type of analysis",
+              "User selects analyses (Item difficulty, Item Discrimination, Item Total) and submits",
+              "System performs analyses and returns outputs",
+              "User inspects outputs and submits or cancels",
+              "If cancelled: System returns to previous screen",
+              "When submitted: System stores output values against respective questions"
+            ]
+          },
+          "manual_analysis": {
+            "steps": [
+              "User selects Manual Analysis",
+              "System shows filter options",
+              "User specifies filter criteria and clicks 'Extract'",
+              "System extracts and displays question list",
+              "User views and selects questions",
+              "System displays option to download questions with user data",
+              "After performing analyses manually: User uploads output values or manually enters values",
+              "System stores output values against respective questions"
+            ]
+          }
+        }
+      },
+      "question_exposure_setting": {
+        "section": "4.2",
+        "description": "User sets the limit for question exposure. When exposure limit is reached, question becomes inactive automatically.",
+        "steps": [
+          "User clicks 'Exposure Limit' button",
+          "System shows filter options",
+          "User specifies filter criteria and clicks 'Extract'",
+          "System extracts questions and shows entry field to specify exposure limit",
+          "User views questions, sets exposure limit, and submits",
+          "System saves questions with exposure limit values"
+        ]
+      },
+      "QB_updation": {
+        "section": "4.3",
+        "description": "User conducts periodic review of categories and their questions.",
+        "functions": [
+          "Removal/inactivation of Low-Quality questions",
+          "Activation of Expired Questions"
+        ],
+        "steps": [
+          "System shows filter options including Question Expiry and Psychometric Values",
+          "User specifies filter criteria and clicks 'Extract'",
+          "System extracts and displays question list",
+          "User reviews and selects questions",
+          "User clicks 'Activate' or 'Inactivate' as required",
+          "If removal needed: User selects questions; System shows selected list; User clicks 'Request to Delete'",
+          "System sends notification to Admin with request and question list",
+          "If Admin approves: System removes questions from QB",
+          "If Admin does not approve: System retains questions in original positions"
+        ]
+      }
+    }
+  }
+}

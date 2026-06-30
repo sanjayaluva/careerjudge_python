@@ -1,0 +1,165 @@
+{
+  "meta": {
+    "file": "02_psychometric_analysis_computation.json",
+    "source_pdf": "2__Psychometric_Analysis_Computation_Process.pdf",
+    "title": "Computation Process For Psychometric Analysis (Item Bank)",
+    "version": "1.0"
+  },
+  "introduction": {
+    "description": "This document describes the computation processes of different psychometric analyses. The analysis is system-initiated; the user (Psychometrician) specifies filtering criteria for extracting relevant user data.",
+    "key_concept": "Target question is the question whose analysis is performed. All questions undergo analysis separately.",
+    "analyses_covered": [
+      "Item Difficulty Index (for MCQ)",
+      "Item Difficulty Index (for non-MCQ)",
+      "Item Discrimination Index (for MCQ)",
+      "Item Total Correlation Index (for non-MCQ)"
+    ]
+  },
+  "computations": {
+    "item_difficulty_index_MCQ": {
+      "section": "2",
+      "description": "Item difficulty Index represents the difficulty level of a question experienced by an average end user.",
+      "sub_indices": {
+        "total_group_difficulty_index_IDI": {
+          "section": "2.1",
+          "steps": [
+            "Count total number of responses for target question (Total Count)",
+            "Count number of correct responses for target question (Correct Count)",
+            "Divide Correct Count by Total Count"
+          ],
+          "formula": "IDI = Correct Count / Total Count"
+        },
+        "top_group_difficulty_index_TDI": {
+          "section": "2.2",
+          "steps": [
+            "Sum up scores of all questions for each user (Total Score)",
+            "Find the top 27% of total scores",
+            "Count total number of responses for target question in top 27% (Total Count-Top)",
+            "Count number of correct responses for target question in top 27% (Correct Count-Top)",
+            "Divide Correct Count-Top by Total Count-Top"
+          ],
+          "formula": "TDI = Correct Count-Top / Total Count-Top"
+        },
+        "bottom_group_difficulty_index_BDI": {
+          "section": "2.3",
+          "steps": [
+            "Sum up scores of all questions for each user (Total Score)",
+            "Find the bottom 27% of total scores",
+            "Count total number of responses for target question in bottom 27% (Total Count-Bottom)",
+            "Count number of correct responses for target question in bottom 27% (Correct Count-Bottom)",
+            "Divide Correct Count-Bottom by Total Count-Bottom"
+          ],
+          "formula": "BDI = Correct Count-Bottom / Total Count-Bottom"
+        },
+        "difference_difficulty_index_DDI": {
+          "section": "2.4",
+          "inputs": "Results from TDI (Section 2.2) and BDI (Section 2.3)",
+          "formula": "DDI = TDI - BDI"
+        }
+      }
+    },
+    "item_difficulty_index_non_MCQ": {
+      "section": "3",
+      "description": "Item difficulty Index calculated slightly differently for non-multiple-choice questions.",
+      "sub_indices": {
+        "total_group_difficulty_index_TDI": {
+          "section": "3.1",
+          "steps": [
+            "Sum up scores of all users on the target question (Sum Score-Target)",
+            "Divide Sum Score-Target by total number of users [N] to get Mean-Target",
+            "Divide Mean-Target by maximum score for the target question"
+          ],
+          "formula": "TDI = (Sum Score-Target / N) / Max Score"
+        },
+        "top_group_difficulty_index_UDI": {
+          "section": "3.2",
+          "steps": [
+            "Sum up scores of all questions for each user (Total Score)",
+            "Find the top 27% total scores",
+            "Sum up scores of target question for users in top 27% (Sum Score-Top Target)",
+            "Divide Sum Score-Top Target by number of users in top 27% [N-T] to get Mean-Top Target",
+            "Divide Mean-Top Target by maximum score for the target question"
+          ],
+          "formula": "UDI = (Sum Score-Top Target / N-T) / Max Score"
+        },
+        "bottom_group_difficulty_index_BDI": {
+          "section": "3.3",
+          "steps": [
+            "Sum up scores of all questions for each user (Total Score)",
+            "Find bottom 27% of total scores",
+            "Sum up scores of target question for users in bottom 27% (Sum Score-Bottom Target)",
+            "Divide Sum Score-Bottom Target by number of users in bottom 27% [N-B] to get Mean-Bottom Target",
+            "Divide Mean-Bottom Target by maximum score for the target question"
+          ],
+          "formula": "BDI = (Sum Score-Bottom Target / N-B) / Max Score"
+        },
+        "difference_difficulty_index_DDI": {
+          "section": "3.4",
+          "formula": "DDI = UDI - BDI"
+        }
+      }
+    },
+    "item_discrimination_index_MCQ": {
+      "section": "4",
+      "description": "Item discrimination Index signifies the psychometric validity of a question. Calculated per question separately.",
+      "steps": [
+        "Sum up scores of all questions EXCEPT target question for each user (Total Score)",
+        "Sum up total scores of all users (Summary Score)",
+        "Find mean: Summary Score / total number of users [N] = Mean Score",
+        "Subtract mean score from each summary score and square the output (Squared Difference)",
+        "Sum up squared differences (Total Squared Difference [TSD])",
+        "Divide TSD by N and find square root \u2192 Standard Deviation [SD]",
+        "Sum up total scores of users who got target question CORRECT (Summary Score-Correct)",
+        "Divide Summary Score-Correct by number of users who got target correct [N1] = Mean-Correct",
+        "Sum up total scores of users who got target question INCORRECT (Summary Score-Incorrect)",
+        "Divide Summary Score-Incorrect by number of users who got target incorrect [N2] = Mean-Incorrect",
+        "Divide N1 by N \u2192 N1Quotient",
+        "Divide N2 by N \u2192 N2Quotient",
+        "Multiply N1Quotient by N2Quotient and find square root \u2192 N-Coefficient",
+        "Subtract Mean-Incorrect from Mean-Correct and multiply by N-Coefficient \u2192 Mean-Coefficient",
+        "Divide Mean-Coefficient by SD \u2192 Item Discrimination Index"
+      ],
+      "formula": "Discrimination Index = ((Mean-Correct - Mean-Incorrect) \u00d7 sqrt(N1/N \u00d7 N2/N)) / SD"
+    },
+    "item_total_correlation_index_non_MCQ": {
+      "section": "5",
+      "description": "For non-MCQ, item total correlation index is the analysis performed.",
+      "note": "System pulls out only data of users who have attempted ALL questions in the list.",
+      "steps": [
+        "Sum up scores of all questions EXCEPT target question for each user (Total Score)",
+        "Sum up total scores of all users (Summary Score)",
+        "Divide Summary Score by total number of users [N] \u2192 Mean-Total",
+        "Subtract Mean-Total from each summary score \u2192 Difference-Total",
+        "Square each Difference-Total value (Squared Difference)",
+        "Sum up squared differences (Total Squared Difference [TSD])",
+        "Divide TSD by N and find square root \u2192 Standard Deviation-Total [SD-Total]",
+        "Sum up scores of all users for target question and divide by N \u2192 Mean-Target",
+        "Subtract Mean-Target from each user's target question score \u2192 Difference-Target",
+        "Square each Difference-Target (Squared Difference-Target)",
+        "Sum up Squared Differences-Target (Total Squared Difference-Target [TSD-T])",
+        "Divide TSD-T by N and find square root \u2192 Standard Deviation-Target [SD-T]",
+        "Multiply Difference-Total for each user by Difference-Target for same user \u2192 Difference-Product",
+        "Sum up Difference-Product of all users (Sum Difference-Product)",
+        "Multiply SD-Total by SD-Target and multiply by N \u2192 SD-N-Product",
+        "Divide Sum Difference-Product by SD-N-Product \u2192 Item Total Correlation Index"
+      ],
+      "formula": "Item Total Correlation = Sum(Difference-Total \u00d7 Difference-Target) / (SD-Total \u00d7 SD-Target \u00d7 N)"
+    }
+  },
+  "output_values_stored_per_question": {
+    "MCQ": [
+      "Item Difficulty Index-Total Group (IDI)",
+      "Item Difficulty Index-Top Group (TDI)",
+      "Item Difficulty Index-Bottom Group (BDI)",
+      "Difference Difficulty Index (DDI)",
+      "Item Discrimination Index"
+    ],
+    "non_MCQ": [
+      "Item Difficulty Index-Total Group (IDI)",
+      "Item Difficulty Index-Top Group (TDI)",
+      "Item Difficulty Index-Bottom Group (BDI)",
+      "Difference Difficulty Index (DDI)",
+      "Item Total Correlation Index"
+    ]
+  }
+}
