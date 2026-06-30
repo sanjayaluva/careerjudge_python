@@ -1,9 +1,16 @@
 # Dev docker-compose — runs on GCP CE (1 vCPU / 1 GB)
 # DB is external (Neon free tier). Redis skipped (Celery eager).
+# Frontend is OPTIONAL — only built when --profile full-stack is used.
+# Default mode (hybrid with Vercel): backend + caddy only.
+# Full-stack mode (no Vercel): backend + frontend + caddy.
 #
 # Usage:
-#   docker compose -f infra/docker/docker-compose.dev.yml up -d --build
-#   docker compose -f infra/docker/docker-compose.dev.yml logs -f
+#   Hybrid (Vercel + GCP backend):
+#     docker compose -f infra/docker/docker-compose.dev.yml up -d --build backend caddy
+#   Full-stack (everything on VM):
+#     docker compose -f infra/docker/docker-compose.dev.yml --profile full-stack up -d --build
+#   Logs:
+#     docker compose -f infra/docker/docker-compose.dev.yml logs -f
 
 services:
   backend:
@@ -27,6 +34,8 @@ services:
       - cj-net
 
   frontend:
+    # Only built when --profile full-stack is used
+    profiles: ["full-stack"]
     build:
       context: ../../frontend
       dockerfile: Dockerfile
@@ -57,7 +66,6 @@ services:
       - cj-net
     depends_on:
       - backend
-      - frontend
 
 networks:
   cj-net:

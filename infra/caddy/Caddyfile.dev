@@ -1,12 +1,16 @@
-# CareerJudge Caddyfile — dev environment
+# CareerJudge Caddyfile — dev environment (hybrid mode: Vercel frontend + GCP backend)
 # Domain: careerjudge.pp.ua (already pointed to GCP 35.208.224.41)
 #
 # Caddy auto-provisions Let's Encrypt TLS certs.
 # Routes:
-#   /api/*  → backend (gunicorn on :8000)
-#   /*      → frontend static files (built into nginx on :80)
+#   /api/*      → backend (gunicorn on :8000)
+#   /admin/*    → backend (Django admin for superuser emergency access)
+#   /*          → redirect to Vercel frontend URL (set VERCEL_FRONTEND_URL below)
 #
-# Run: docker compose -f infra/docker/docker-compose.dev.yml up -d caddy
+# If running full-stack mode (with frontend container), replace the redirect
+# with: reverse_proxy frontend:80
+#
+# Run: docker compose -f infra/docker/docker-compose.dev.yml up -d backend caddy
 
 careerjudge.pp.ua {
 	encode gzip zstd
@@ -24,9 +28,15 @@ careerjudge.pp.ua {
 		reverse_proxy backend:8000
 	}
 
-	# Frontend SPA
+	# Health check passthrough
+	handle /api/health/* {
+		reverse_proxy backend:8000
+	}
+
+	# Frontend — redirect to Vercel (hybrid mode)
+	# Replace this URL with your actual Vercel deployment URL
 	handle {
-		reverse_proxy frontend:80
+		redir https://careerjudge-python.vercel.app{uri} permanent
 	}
 
 	# Security headers
