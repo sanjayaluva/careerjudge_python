@@ -1,4 +1,5 @@
 """App config for Question Bank."""
+
 from django.apps import AppConfig
 
 

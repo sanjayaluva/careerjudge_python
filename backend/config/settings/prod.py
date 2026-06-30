@@ -1,5 +1,6 @@
 """Production settings — security hardened."""
-from .base import *  # noqa: F401,F403
+
+from .base import *  # noqa: F403
 from .base import env
 
 DEBUG = False
@@ -42,4 +43,5 @@ SENTRY_DSN = env("SENTRY_DSN")
 if SENTRY_DSN:
     import sentry_sdk
     from sentry_sdk.integrations.django import DjangoIntegration
+
     sentry_sdk.init(dsn=SENTRY_DSN, integrations=[DjangoIntegration()], traces_sample_rate=0.1)

@@ -1,4 +1,5 @@
 """App config for Organizations."""
+
 from django.apps import AppConfig
 
 

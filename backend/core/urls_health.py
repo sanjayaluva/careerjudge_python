@@ -1,6 +1,8 @@
-"""Health check endpoints."""
-from django.http import JsonResponse
+"""Health check URLs — included directly at /api/health/."""
+
 from django.db import connection
+from django.http import JsonResponse
+from django.urls import path
 
 
 def health(request):
@@ -20,3 +22,9 @@ def health_db(request):
             {"status": "error", "db": "down", "error": str(e)},
             status=503,
         )
+
+
+urlpatterns = [
+    path("", health),
+    path("db/", health_db),
+]

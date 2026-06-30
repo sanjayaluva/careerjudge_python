@@ -1,4 +1,5 @@
 """App config for CMS."""
+
 from django.apps import AppConfig
 
 

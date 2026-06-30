@@ -1,7 +1,13 @@
 """Custom DRF exception handler that returns a consistent error envelope."""
-from rest_framework.views import exception_handler as drf_default_handler
-from rest_framework.response import Response
+
 from rest_framework import status
+from rest_framework.exceptions import (
+    AuthenticationFailed,
+    NotAuthenticated,
+    PermissionDenied,
+)
+from rest_framework.response import Response
+from rest_framework.views import exception_handler as drf_default_handler
 
 
 def exception_handler(exc, context):
@@ -18,6 +24,14 @@ def exception_handler(exc, context):
             },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+    # Determine error code from exception type
+    if isinstance(exc, (NotAuthenticated, AuthenticationFailed)):
+        code = "unauthorized" if response.status_code == 401 else "forbidden"
+    elif isinstance(exc, PermissionDenied):
+        code = "forbidden"
+    else:
+        code = "error"
 
     # Normalize the response body to { error: { code, message, details } }
     data = response.data
@@ -37,7 +51,7 @@ def exception_handler(exc, context):
         else:
             response.data = {
                 "error": {
-                    "code": data.get("code", "error"),
+                    "code": data.get("code", code),
                     "message": data.get("detail", "Error."),
                     "details": {},
                 }
@@ -53,7 +67,7 @@ def exception_handler(exc, context):
     else:
         response.data = {
             "error": {
-                "code": "error",
+                "code": code,
                 "message": str(data),
                 "details": {},
             }

@@ -1,4 +1,5 @@
 """App config for Accounts."""
+
 from django.apps import AppConfig
 
 

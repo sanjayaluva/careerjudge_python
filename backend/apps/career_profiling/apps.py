@@ -1,4 +1,5 @@
 """App config for Career Profiling."""
+
 from django.apps import AppConfig
 
 

@@ -1,4 +1,5 @@
 """App config for Counseling."""
+
 from django.apps import AppConfig
 
 

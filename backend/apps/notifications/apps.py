@@ -1,4 +1,5 @@
 """App config for Notifications."""
+
 from django.apps import AppConfig
 
 

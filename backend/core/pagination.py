@@ -1,4 +1,5 @@
 """Standard pagination for DRF list views."""
+
 from rest_framework.pagination import PageNumberPagination
 
 

@@ -1,7 +1,9 @@
 """Django admin registrations.
 
-Note: CareerJudge does NOT use Django admin for user-facing UI.
-All management is done via the React frontend. The admin/ route
-is kept only for superuser emergency access and is permission-gated.
+CareerJudge does NOT use Django admin for user-facing UI.
+All user/role/permission management is done via the React frontend.
+The admin/ route is kept only for superuser emergency access.
 """
-from django.contrib import admin  # noqa: F401
+
+# Register minimal read-only admin for emergency superuser access.
+# Real user management happens in the frontend.

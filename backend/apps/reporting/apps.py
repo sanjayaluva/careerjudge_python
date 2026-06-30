@@ -1,4 +1,5 @@
 """App config for Reporting."""
+
 from django.apps import AppConfig
 
 
