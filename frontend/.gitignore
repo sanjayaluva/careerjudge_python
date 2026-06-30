@@ -37,3 +37,8 @@ e2e/.playwright
 # Misc
 *.tsbuildinfo
 *.config.d.ts
+# Don't compile TS config files to JS
+vite.config.js
+vitest.config.js
+playwright.config.js
+tailwind.config.js
