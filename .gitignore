@@ -4,37 +4,36 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
+
+# Python build artifacts — root-level only (don't match frontend/src/lib/)
+/build/
+/dist/
+/eggs/
+/.eggs/
+/parts/
+/sdist/
+/var/
+/wheels/
+/downloads/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
-
-# === Virtual envs ===
-.venv/
-venv/
-env/
-ENV/
 
 # === Django ===
 *.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
-media/
-staticfiles/
-static_collected/
+backend/media/
+backend/staticfiles/
+backend/static_collected/
+
+# === Virtual envs ===
+.venv/
+venv/
+env/
+ENV/
 
 # === Environment ===
 .env
