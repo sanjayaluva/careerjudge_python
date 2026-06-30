@@ -65,6 +65,13 @@ class Role(models.Model):
     privileges should not be modified in the future.' We enforce this at the
     application layer (frozen roles can only receive additional permissions,
     never removals).
+
+    SME vs Reviewer (split per client clarification 2026-06-30):
+      - sme:      Creates / views / edits / deletes OWN questions
+                  (only while unreviewed; once reviewed, cannot edit/delete
+                  directly — must request admin deletion).
+      - reviewer: Reviews questions submitted by SMEs. Cannot create/edit/
+                  delete questions. Can approve/reject.
     """
 
     ROLE_CHOICES = [
@@ -72,7 +79,8 @@ class Role(models.Model):
         ("corp_admin", "Corporate Admin"),
         ("corp_exclusive", "Corporate Exclusive"),
         ("psychometrician", "Psychometrician"),
-        ("sme_reviewer", "SME / Reviewer"),
+        ("sme", "SME (Subject Matter Expert)"),
+        ("reviewer", "Reviewer"),
         ("trainer", "Trainer"),
         ("group_admin", "Group Admin"),
         ("counsellor", "Counsellor"),
@@ -112,9 +120,12 @@ class ModuleRight(models.Model):
         ("change", "Change"),
         ("delete", "Delete"),
         ("approve", "Approve"),
+        ("reject", "Reject"),
+        ("review", "Review"),
         ("assign", "Assign"),
         ("export", "Export"),
         ("generate_report", "Generate Report"),
+        ("request_delete", "Request Deletion"),
     ]
 
     MODULE_CHOICES = [

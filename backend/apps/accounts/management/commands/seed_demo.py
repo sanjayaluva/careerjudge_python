@@ -4,13 +4,18 @@ Usage:
     python manage.py seed_demo
 
 Creates:
-- 9 roles (cj_admin, corp_admin, corp_exclusive, psychometrician,
-  sme_reviewer, trainer, group_admin, counsellor, individual)
-- 9 demo users (one per role) with predictable passwords
+- 10 roles (cj_admin, corp_admin, corp_exclusive, psychometrician,
+  sme, reviewer, trainer, group_admin, counsellor, individual)
+- 10 demo users (one per role) with predictable passwords
 - 1 superuser for emergency access
 - Sample module rights per role (view/add/change/delete on relevant modules)
 
-Idempotent — safe to run multiple times.
+SME vs Reviewer (split per client clarification 2026-06-30):
+  - sme:      creates/views/edits/deletes OWN questions (unreviewed only).
+              Once reviewed, can only `request_delete` (admin approves).
+  - reviewer: reviews questions, approves/rejects. No create/edit/delete.
+
+Idempotent - safe to run multiple times.
 """
 
 from django.contrib.auth import get_user_model
@@ -32,7 +37,8 @@ DEMO_USERS = [
     ("corp_admin", "corp.admin@demo.careerjudge.pp.ua", "Corp Admin", "Demo@1234"),
     ("corp_exclusive", "corp.exclusive@demo.careerjudge.pp.ua", "Corp Exclusive", "Demo@1234"),
     ("psychometrician", "psychometrician@demo.careerjudge.pp.ua", "Psychometrician", "Demo@1234"),
-    ("sme_reviewer", "sme.reviewer@demo.careerjudge.pp.ua", "SME Reviewer", "Demo@1234"),
+    ("sme", "sme@demo.careerjudge.pp.ua", "SME User", "Demo@1234"),
+    ("reviewer", "reviewer@demo.careerjudge.pp.ua", "Reviewer", "Demo@1234"),
     ("trainer", "trainer@demo.careerjudge.pp.ua", "Trainer", "Demo@1234"),
     ("group_admin", "group.admin@demo.careerjudge.pp.ua", "Group Admin", "Demo@1234"),
     ("counsellor", "counsellor@demo.careerjudge.pp.ua", "Counsellor", "Demo@1234"),
@@ -55,6 +61,9 @@ ROLE_PERMISSIONS = {
         ("question_bank", "add"),
         ("question_bank", "change"),
         ("question_bank", "delete"),
+        ("question_bank", "approve"),
+        ("question_bank", "reject"),
+        ("question_bank", "review"),
         ("assessment", "view"),
         ("assessment", "add"),
         ("assessment", "change"),
@@ -100,15 +109,30 @@ ROLE_PERMISSIONS = {
         ("reporting", "generate_report"),
     ],
     "psychometrician": [
+        # Psychometrician: full QB access (configures psychometric properties)
         ("question_bank", "view"),
         ("question_bank", "add"),
         ("question_bank", "change"),
+        ("question_bank", "review"),
         ("assessment", "view"),
         ("reporting", "view"),
     ],
-    "sme_reviewer": [
+    "sme": [
+        # SME: creates/edits/deletes OWN questions (unreviewed only).
+        # Once reviewed, can only request_delete (admin approves).
         ("question_bank", "view"),
+        ("question_bank", "add"),
+        ("question_bank", "change"),
+        ("question_bank", "delete"),
+        ("question_bank", "request_delete"),
+        ("assessment", "view"),
+    ],
+    "reviewer": [
+        # Reviewer: reviews questions, approves/rejects. No create/edit/delete.
+        ("question_bank", "view"),
+        ("question_bank", "review"),
         ("question_bank", "approve"),
+        ("question_bank", "reject"),
         ("assessment", "view"),
     ],
     "trainer": [

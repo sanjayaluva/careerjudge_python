@@ -5,6 +5,10 @@ module-scoped RBAC (per UC018). django-role-permissions is wired for
 compatibility with libraries that depend on it (e.g. some third-party
 packages). The canonical source of truth for permissions is our ModuleRight
 table.
+
+SME vs Reviewer (split per client clarification 2026-06-30):
+  - SME:      Creates / views / edits / deletes OWN questions (unreviewed).
+  - Reviewer: Reviews questions, approves/rejects. No create/edit/delete.
 """
 
 from rolepermissions.roles import AbstractUserRole
@@ -52,14 +56,31 @@ class Psychometrician(AbstractUserRole):
         "view_question_bank",
         "add_question",
         "change_question",
+        "review_question",
         "view_assessment_result",
     ]
 
 
-class SMEReviewer(AbstractUserRole):
+class SME(AbstractUserRole):
+    """Subject Matter Expert — creates/edits/deletes own questions (unreviewed)."""
+
+    available_permissions = [
+        "view_question_bank",
+        "add_question",
+        "change_question",
+        "delete_question",
+        "request_delete_question",
+    ]
+
+
+class Reviewer(AbstractUserRole):
+    """Reviewer — reviews questions, approves/rejects. No create/edit/delete."""
+
     available_permissions = [
         "view_question_bank",
         "review_question",
+        "approve_question",
+        "reject_question",
     ]
 
 
