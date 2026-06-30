@@ -1,0 +1,71 @@
+# =============================================================================
+# CareerJudge — pyproject.toml (ruff, black, mypy, pytest config)
+# =============================================================================
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["migrations", "specs"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",   # pycodestyle / pyflakes
+    "I",              # isort
+    "B",              # bugbear
+    "C4",             # comprehensions
+    "DJ",             # django
+    "UP",             # pyupgrade
+    "SIM",            # simplify
+    "TID",            # tidy imports
+    "RUF",            # ruff-specific
+]
+ignore = [
+    "E501",   # line length (handled by black)
+    "DJ001",  # null=True on CharField (intentional in some places)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "apps", "core"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+extend-exclude = "/migrations/"
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+strict = false
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+exclude = "migrations/"
+
+[[tool.mypy.overrides]]
+module = ["apps.*.migrations.*"]
+ignore_errors = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings.dev"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+addopts = "-v --tb=short --strict-markers --reuse-db --cov=apps --cov=core --cov-report=term-missing --cov-report=html --cov-fail-under=80"
+markers = [
+    "django_db: marks tests that need database access",
+]
+testpaths = ["apps"]
+
+[tool.coverage.run]
+source = ["apps", "core"]
+omit = ["*/migrations/*", "*/tests/*", "*/tests.py", "*/admin.py", "*/apps.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

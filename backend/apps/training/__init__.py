@@ -1,0 +1,1 @@
+"""CareerJudge Training app."""
