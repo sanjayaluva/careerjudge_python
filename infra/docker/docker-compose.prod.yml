@@ -1,0 +1,157 @@
+# Prod docker-compose — runs on OCI Ampere A1 (1 OCPU / 6 GB, Always Free)
+# Full stack: backend + Postgres + Redis + Celery worker + Celery beat + Caddy
+#
+# Usage:
+#   docker compose -f infra/docker/docker-compose.prod.yml up -d --build
+#   docker compose -f infra/docker/docker-compose.prod.yml exec backend python manage.py migrate
+#   docker compose -f infra/docker/docker-compose.prod.yml exec backend python manage.py seed_demo
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: cj-db-prod
+    restart: always
+    env_file:
+      - ../../.env.prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-careerjudge}
+      POSTGRES_USER: ${POSTGRES_USER:-cj}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.prod}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cj} -d ${POSTGRES_DB:-careerjudge}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cj-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: cj-redis-prod
+    restart: always
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - cj-net
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: cj-backend-prod
+    env_file:
+      - ../../.env.prod
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.prod
+      - DATABASE_URL=postgres://${POSTGRES_USER:-cj}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-careerjudge}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000
+             --workers 4 --timeout 60
+             --access-logfile - --error-logfile -"
+    ports:
+      - "8000:8000"
+    networks:
+      - cj-net
+
+  celery-worker:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: cj-celery-worker-prod
+    env_file:
+      - ../../.env.prod
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.prod
+      - DATABASE_URL=postgres://${POSTGRES_USER:-cj}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-careerjudge}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      - backend
+      - redis
+    restart: always
+    command: celery -A config worker --loglevel=info --concurrency=2
+    networks:
+      - cj-net
+
+  celery-beat:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: cj-celery-beat-prod
+    env_file:
+      - ../../.env.prod
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.prod
+      - DATABASE_URL=postgres://${POSTGRES_USER:-cj}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-careerjudge}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      - backend
+      - redis
+    restart: always
+    command: celery -A config beat --loglevel=info
+    networks:
+      - cj-net
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    container_name: cj-frontend-prod
+    restart: always
+    ports:
+      - "8080:80"
+    networks:
+      - cj-net
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: cj-caddy-prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../caddy/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - cj-net
+
+networks:
+  cj-net:
+    driver: bridge
+
+volumes:
+  pg_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

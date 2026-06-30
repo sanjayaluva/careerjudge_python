@@ -1,0 +1,12 @@
+# Frontend .dockerignore
+node_modules
+dist
+.vite
+*.log
+.env
+.env.local
+.git
+.github
+coverage
+playwright-report
+test-results

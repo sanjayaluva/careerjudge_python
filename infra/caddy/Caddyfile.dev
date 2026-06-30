@@ -1,0 +1,48 @@
+# CareerJudge Caddyfile — dev environment
+# Domain: careerjudge.pp.ua (already pointed to GCP 35.208.224.41)
+#
+# Caddy auto-provisions Let's Encrypt TLS certs.
+# Routes:
+#   /api/*  → backend (gunicorn on :8000)
+#   /*      → frontend static files (built into nginx on :80)
+#
+# Run: docker compose -f infra/docker/docker-compose.dev.yml up -d caddy
+
+careerjudge.pp.ua {
+	encode gzip zstd
+
+	# Backend API
+	handle_path /api/* {
+		reverse_proxy backend:8000 {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+		}
+	}
+
+	# Django admin (superuser-only, kept for emergencies)
+	handle /admin/* {
+		reverse_proxy backend:8000
+	}
+
+	# Frontend SPA
+	handle {
+		reverse_proxy frontend:80
+	}
+
+	# Security headers
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy same-origin
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+	}
+
+	log {
+		output file /data/caddy/access.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+		format json
+	}
+}

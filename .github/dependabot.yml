@@ -1,0 +1,66 @@
+# Dependabot — keep dependencies fresh and secure.
+# Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+
+version: 2
+updates:
+  # Backend (Python)
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["deps", "backend"]
+    commit-message:
+      prefix: "chore(backend)"
+    groups:
+      django:
+        patterns: ["django*", "djangorestframework*"]
+      dev-tools:
+        patterns: ["ruff", "black", "mypy", "pytest*", "factory-boy"]
+        dependency-type: "development"
+
+  # Frontend (npm)
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["deps", "frontend"]
+    commit-message:
+      prefix: "chore(frontend)"
+    groups:
+      react:
+        patterns: ["react", "react-dom", "react-router-dom", "react-hook-form"]
+      tanstack:
+        patterns: ["@tanstack/*"]
+      dev-tools:
+        patterns: ["vite", "vitest", "typescript", "eslint*", "@typescript-eslint/*"]
+        dependency-type: "development"
+
+  # Docker
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "monthly"
+    labels: ["deps", "docker"]
+    commit-message:
+      prefix: "chore(backend)"
+
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "monthly"
+    labels: ["deps", "docker"]
+    commit-message:
+      prefix: "chore(frontend)"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels: ["deps", "ci"]
+    commit-message:
+      prefix: "chore(ci)"

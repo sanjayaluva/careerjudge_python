@@ -1,0 +1,18 @@
+# Backend .dockerignore — keeps build context small
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+htmlcov
+.coverage
+db.sqlite3
+*.log
+.env
+.env.local
+.github
+.git
+specs

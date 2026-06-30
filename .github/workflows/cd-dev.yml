@@ -1,0 +1,43 @@
+# CD workflow — auto-deploy to dev (GCP CE) on push to main.
+name: Deploy Dev
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false  # never cancel a deploy mid-flight
+
+jobs:
+  deploy:
+    name: Deploy to Dev (GCP CE)
+    runs-on: ubuntu-latest
+    needs: []  # CI runs separately on push; this runs in parallel but will fail fast if SSH fails
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEV_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.DEV_SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy repo to dev server
+        run: |
+          rsync -avz --delete --exclude='.git' --exclude='node_modules' --exclude='.venv' \
+            ./ ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}:/opt/careerjudge/
+
+      - name: Run deploy script
+        run: |
+          ssh ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }} \
+            "cd /opt/careerjudge && bash infra/deploy/deploy-dev.sh"
+
+      - name: Notify
+        if: always()
+        run: |
+          echo "Deploy to dev ${{ job.status == 'success' && 'succeeded' || 'failed' }}"
+          echo "URL: https://careerjudge.pp.ua"

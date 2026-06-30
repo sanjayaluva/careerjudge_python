@@ -1,0 +1,78 @@
+# CD workflow — auto-deploy to prod (OCI) on version tag.
+name: Deploy Prod
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to deploy (e.g. v1.0.0)"
+        required: true
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false  # NEVER cancel a prod deploy
+
+jobs:
+  # Gate: require CI to have passed on the commit being deployed
+  ci-gate:
+    name: CI Must Be Green
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify CI passed on this commit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref = context.ref;
+            const sha = context.sha;
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ci.yml',
+              head_sha: sha,
+              status: 'completed',
+              per_page: 5,
+            });
+            const success = runs.data.workflow_runs.some(r => r.conclusion === 'success');
+            if (!success) {
+              core.setFailed(`No successful CI run found for commit ${sha}. Tag and push after CI is green.`);
+            }
+
+  deploy:
+    name: Deploy to Prod (OCI)
+    runs-on: ubuntu-latest
+    needs: ci-gate
+    timeout-minutes: 15
+    env:
+      GIT_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.PROD_SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy repo to prod server
+        run: |
+          rsync -avz --delete --exclude='.git' --exclude='node_modules' --exclude='.venv' \
+            ./ ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:/opt/careerjudge/
+
+      - name: Run deploy script
+        env:
+          POSTGRES_USER: ${{ secrets.PROD_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.PROD_POSTGRES_PASSWORD }}
+        run: |
+          ssh ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} \
+            "cd /opt/careerjudge && GIT_TAG=${{ env.GIT_TAG }} bash infra/deploy/deploy-prod.sh"
+
+      - name: Notify
+        if: always()
+        run: |
+          echo "Deploy to prod ${{ job.status == 'success' && 'succeeded' || 'failed' }}"
+          echo "Tag: ${{ env.GIT_TAG }}"
+          echo "URL: https://careerjudge.pp.ua"

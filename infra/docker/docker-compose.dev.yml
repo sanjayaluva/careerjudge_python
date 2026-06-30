@@ -1,0 +1,68 @@
+# Dev docker-compose — runs on GCP CE (1 vCPU / 1 GB)
+# DB is external (Neon free tier). Redis skipped (Celery eager).
+#
+# Usage:
+#   docker compose -f infra/docker/docker-compose.dev.yml up -d --build
+#   docker compose -f infra/docker/docker-compose.dev.yml logs -f
+
+services:
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: cj-backend-dev
+    env_file:
+      - ../../.env.dev
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.dev
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - cj-net
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    container_name: cj-frontend-dev
+    environment:
+      - VITE_API_BASE_URL=/api
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - cj-net
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: cj-caddy-dev
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../caddy/Caddyfile.dev:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - cj-net
+    depends_on:
+      - backend
+      - frontend
+
+networks:
+  cj-net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
