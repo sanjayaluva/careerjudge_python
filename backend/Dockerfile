@@ -1,4 +1,6 @@
 # Backend Dockerfile — multi-stage build for smaller image
+# Uses psycopg2-binary (no libpq build needed) and skips WeasyPrint in Phase 1
+# (PDF report generation is Phase 3 — we'll add cairo/pango deps when we need them)
 FROM python:3.12-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -8,14 +10,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install build deps for psycopg2 and weasyprint
+# Minimal build deps — only what pip needs to compile packages without wheels.
+# psycopg2-binary ships as a wheel → no libpq-dev needed.
+# All other deps (cryptography, etc.) ship as wheels on linux/amd64.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
-    libffi-dev \
-    libcairo2-dev \
-    libpango1.0-dev \
-    libgdk-pixbuf2.0-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -33,12 +34,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Runtime deps (psycopg2 needs libpq, weasyprint needs cairo/pango)
+# Runtime deps: libpq5 (psycopg2 runtime), curl (healthcheck)
+# WeasyPrint + cairo/pango NOT included — will add in Phase 3 when PDF reports ship
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
-    libcairo2 \
-    libpango1.0-0 \
-    libgdk-pixbuf2.0-0 \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1000 cj
@@ -53,4 +52,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS http://localhost:8000/api/health/ || exit 1
 
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "60", "--access-logfile", "-", "--error-logfile", "-"]
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "60", "--access-logfile", "-", "--error-logfile", "-"]
