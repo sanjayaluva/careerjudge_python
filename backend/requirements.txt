@@ -29,7 +29,7 @@ structlog==24.2.0
 sentry-sdk==2.6.0
 
 # PDF
-weasyprint==62.1
+weasyprint==69.0
 reportlab==4.2.0
 
 # Dev / test
