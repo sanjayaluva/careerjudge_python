@@ -3,9 +3,15 @@
 #
 # Caddy auto-provisions Let's Encrypt TLS certs.
 # Routes:
-#   /api/*      → backend (gunicorn on :8000) — PRESERVES /api prefix
-#   /admin/*    → backend (Django admin for superuser emergency access)
-#   /*          → proxy to Vercel frontend (browser stays on careerjudge.pp.ua)
+#   /api/*                → backend (gunicorn on :8000) — PRESERVES /api prefix
+#   /admin/ (exact)       → backend (Django admin for superuser emergency access)
+#   /admin/login/         → backend (Django admin login)
+#   /admin/static/*       → backend (Django admin CSS/JS)
+#   /*                    → proxy to Vercel frontend (browser stays on careerjudge.pp.ua)
+#
+# IMPORTANT: /admin/users, /admin/roles, /admin/permissions are REACT ROUTES
+# (served by Vercel), NOT Django admin. Only /admin/ (exactly) and its
+# sub-paths that Django admin actually uses should go to the backend.
 #
 # Run: docker compose -f infra/docker/docker-compose.dev.yml up -d backend caddy
 
@@ -21,12 +27,23 @@ careerjudge.pp.ua {
 		}
 	}
 
-	# Django admin (superuser-only, kept for emergencies)
-	handle /admin/* {
+	# Django admin — ONLY the exact paths Django admin uses.
+	# /admin/users, /admin/roles, /admin/permissions are React routes (go to Vercel).
+	# Django admin paths: /admin/, /admin/login/, /admin/logout/,
+	# /admin/auth/, /admin/accounts/, /admin/static/admin/*, etc.
+	# We match these specific patterns to avoid catching React's /admin/* routes.
+	@djangoAdmin {
+		path /admin /admin/ /admin/login /admin/login/ /admin/logout /admin/logout/
+		path /admin/auth/* /admin/accounts/* /admin/token_blacklist/*
+		path /admin/static/admin/*
+		path /admin/jsi18n/*
+	}
+	handle @djangoAdmin {
 		reverse_proxy backend:8000
 	}
 
 	# Frontend — proxy to Vercel (browser stays on careerjudge.pp.ua)
+	# This catches everything else including /admin/users, /admin/roles, etc.
 	handle {
 		reverse_proxy https://careerjudge-python.vercel.app {
 			header_up Host careerjudge-python.vercel.app
