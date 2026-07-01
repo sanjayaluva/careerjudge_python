@@ -271,9 +271,15 @@ class UserWriteSerializer(serializers.ModelSerializer):
 
 
 class UpdateProfileSerializer(serializers.ModelSerializer):
-    """PATCH /api/me/ — update current user's basic info + profile."""
+    """PATCH /api/me/ — update current user's basic info + profile.
 
-    profile = UserProfileSerializer(required=False)
+    The profile field is a dict of profile attributes (not a nested
+    serializer) to avoid strict validation on gender choices etc.
+    """
+
+    profile = serializers.DictField(
+        required=False, child=serializers.CharField(allow_blank=True, allow_null=True)
+    )
 
     class Meta:
         model = User
@@ -286,8 +292,14 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
         instance.save()
         if profile_data:
             profile, _ = UserProfile.objects.get_or_create(user=instance)
+            # Only set fields that exist on the UserProfile model
+            valid_fields = {f.name for f in UserProfile._meta.get_fields()}
             for attr, value in profile_data.items():
-                setattr(profile, attr, value)
+                if attr in valid_fields and attr != "id" and attr != "user":
+                    # Convert empty strings to None for nullable fields
+                    if value == "" and UserProfile._meta.get_field(attr).null:
+                        value = None
+                    setattr(profile, attr, value)
             profile.save()
         return instance
 

@@ -1,5 +1,7 @@
 """Custom DRF exception handler that returns a consistent error envelope."""
 
+import logging
+
 from rest_framework import status
 from rest_framework.exceptions import (
     AuthenticationFailed,
@@ -9,11 +11,14 @@ from rest_framework.exceptions import (
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_default_handler
 
+logger = logging.getLogger(__name__)
+
 
 def exception_handler(exc, context):
     response = drf_default_handler(exc, context)
     if response is None:
-        # Unhandled 500 — return a clean envelope
+        # Unhandled 500 — log the full exception and return a clean envelope
+        logger.exception("Unhandled exception in view: %s", exc)
         return Response(
             {
                 "error": {
@@ -48,12 +53,25 @@ def exception_handler(exc, context):
                     "details": data,
                 }
             }
-        else:
+        elif "detail" in data:
+            # DRF-style error with a detail message
+            detail = data["detail"]
+            detail_code = getattr(detail, "code", code) if hasattr(detail, "code") else code
             response.data = {
                 "error": {
-                    "code": data.get("code", code),
-                    "message": data.get("detail", "Error."),
+                    "code": detail_code,
+                    "message": str(detail) if str(detail) else "Error.",
                     "details": {},
+                }
+            }
+        else:
+            # Unknown dict structure — include the raw data in details for debugging
+            logger.warning("Unhandled error response structure: %s", data)
+            response.data = {
+                "error": {
+                    "code": code,
+                    "message": str(data) if data else "Error.",
+                    "details": data,
                 }
             }
     elif isinstance(data, list):
@@ -68,7 +86,7 @@ def exception_handler(exc, context):
         response.data = {
             "error": {
                 "code": code,
-                "message": str(data),
+                "message": str(data) if data else "Error.",
                 "details": {},
             }
         }

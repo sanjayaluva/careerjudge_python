@@ -48,6 +48,44 @@ class TestMeView:
         assert cj_admin_user.profile.gender == "female"
         assert cj_admin_user.profile.city == "Mumbai"
 
+    def test_patch_me_gender_other(self, authed_client, cj_admin_user):
+        """Gender 'other' should be accepted (matches frontend schema)."""
+        resp = authed_client.patch(
+            "/api/me/",
+            {"profile": {"gender": "other"}},
+            format="json",
+        )
+        assert resp.status_code == 200
+        cj_admin_user.refresh_from_db()
+        assert cj_admin_user.profile.gender == "other"
+
+    def test_patch_me_with_all_profile_fields(self, authed_client, cj_admin_user):
+        """All profile fields should be updateable."""
+        resp = authed_client.patch(
+            "/api/me/",
+            {
+                "profile": {
+                    "gender": "male",
+                    "mobile": "+1234567890",
+                    "date_of_birth": "1990-01-15",
+                    "address_line1": "123 Main St",
+                    "address_line2": "Apt 4B",
+                    "city": "New York",
+                    "state": "NY",
+                    "country": "USA",
+                    "postal_code": "10001",
+                    "bio": "Software engineer",
+                }
+            },
+            format="json",
+        )
+        assert resp.status_code == 200
+        cj_admin_user.refresh_from_db()
+        assert cj_admin_user.profile.gender == "male"
+        assert cj_admin_user.profile.mobile == "+1234567890"
+        assert cj_admin_user.profile.city == "New York"
+        assert cj_admin_user.profile.bio == "Software engineer"
+
 
 @pytest.mark.django_db
 class TestChangePassword:
