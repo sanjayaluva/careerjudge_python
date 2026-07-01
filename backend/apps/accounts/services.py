@@ -107,10 +107,27 @@ def reset_password(token: PasswordResetToken, new_password: str) -> User:
 
 
 def get_or_create_default_roles() -> dict[str, Role]:
-    """Idempotently create the 9 default roles. Returns name → Role map."""
+    """Idempotently create the 10 system roles. Returns name → Role map.
+
+    System roles are marked is_system=True and is_frozen=True — their
+    permissions cannot be modified after creation.
+    """
     roles: dict[str, Role] = {}
     for code, label in Role.ROLE_CHOICES:
-        role, _ = Role.objects.get_or_create(name=code, defaults={"description": label})
+        role, created = Role.objects.get_or_create(
+            name=code,
+            defaults={
+                "description": label,
+                "is_system": True,
+                "is_frozen": True,
+            },
+        )
+        # If role already existed but wasn't marked as system (migration scenario),
+        # update it.
+        if not role.is_system:
+            role.is_system = True
+            role.is_frozen = True
+            role.save(update_fields=["is_system", "is_frozen", "updated_at"])
         roles[code] = role
     return roles
 

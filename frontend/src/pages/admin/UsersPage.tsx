@@ -507,7 +507,9 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
               <option value="">Select a role...</option>
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {ROLE_LABELS[r.name]}
+                  {r.is_system
+                    ? (ROLE_LABELS[r.name as RoleName] ?? r.name)
+                    : r.name}
                 </option>
               ))}
             </select>

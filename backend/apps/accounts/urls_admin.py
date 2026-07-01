@@ -6,6 +6,7 @@ from rest_framework.routers import DefaultRouter
 from .views_admin import (
     AssignPermissionView,
     AssignRoleView,
+    RemovePermissionView,
     RoleViewSet,
     UserViewSet,
 )
@@ -23,5 +24,10 @@ urlpatterns = [
         "roles/<int:role_id>/assign-permission",
         AssignPermissionView.as_view(),
         name="role-assign-permission",
+    ),
+    path(
+        "roles/<int:role_id>/remove-permission",
+        RemovePermissionView.as_view(),
+        name="role-remove-permission",
     ),
 ]

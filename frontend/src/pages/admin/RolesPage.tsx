@@ -11,6 +11,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Input,
   Label,
   Modal,
   Spinner,
@@ -22,21 +23,40 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
-import { assignPermission, createRole, listRoles, PERMISSION_CATALOG } from "@/api/roles";
+import {
+  assignPermission as apiAssignPermission,
+  createCustomRole as apiCreateCustomRole,
+  deleteCustomRole as apiDeleteCustomRole,
+  listRoles,
+  PERMISSION_CATALOG,
+  removePermission as apiRemovePermission,
+} from "@/api/roles";
 import { extractApiError } from "@/api/client";
-import { ROLE_LABELS, ROLE_NAME_CHOICES, type RoleName } from "@/lib/constants";
-import type { CreateRolePayload, Role } from "@/api/types";
+import { ROLE_LABELS } from "@/lib/constants";
+import type { ModuleRight, Role } from "@/api/types";
 
 const ROLES_KEY = ["admin", "roles"];
 
 export default function RolesPage() {
+  const queryClient = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [permissionsRole, setPermissionsRole] = useState<Role | null>(null);
+  const [deleteRole, setDeleteRole] = useState<Role | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const { data: roles = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ROLES_KEY,
     queryFn: listRoles,
   });
 
-  const [createOpen, setCreateOpen] = useState(false);
-  const [permissionTarget, setPermissionTarget] = useState<Role | null>(null);
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiDeleteCustomRole(id),
+    onSuccess: () => {
+      setDeleteRole(null);
+      void queryClient.invalidateQueries({ queryKey: ROLES_KEY });
+    },
+    onError: (err) => setDeleteError(extractApiError(err)),
+  });
 
   return (
     <div className="space-y-6">
@@ -46,10 +66,11 @@ export default function RolesPage() {
             <div>
               <CardTitle>Roles & Permissions</CardTitle>
               <CardDescription>
-                Roles group module-specific rights. Frozen roles accept additive grants only.
+                {roles.length} role{roles.length === 1 ? "" : "s"} total. System roles are
+                frozen; custom roles can be modified.
               </CardDescription>
             </div>
-            <Button onClick={() => setCreateOpen(true)}>Create role</Button>
+            <Button onClick={() => setCreateOpen(true)}>Create custom role</Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -58,6 +79,7 @@ export default function RolesPage() {
               <AlertDescription>{extractApiError(error)}</AlertDescription>
             </Alert>
           )}
+
           {isLoading ? (
             <div className="flex justify-center py-12">
               <Spinner size="lg" />
@@ -66,11 +88,11 @@ export default function RolesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Description</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Base role</TableHead>
+                  <TableHead>Permissions</TableHead>
                   <TableHead>Users</TableHead>
-                  <TableHead>Rights</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -81,33 +103,54 @@ export default function RolesPage() {
                   roles.map((r) => (
                     <TableRow key={r.id}>
                       <TableCell className="font-medium text-slate-900">
-                        {ROLE_LABELS[r.name] ?? r.name}
-                      </TableCell>
-                      <TableCell className="text-slate-500">
-                        {r.description || "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="default">{r.user_count}</Badge>
+                        {r.is_system && r.name in ROLE_LABELS
+                          ? ROLE_LABELS[r.name as keyof typeof ROLE_LABELS]
+                          : r.name}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{r.rights.length} rights</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {r.is_frozen ? (
-                          <Badge variant="warning">Frozen</Badge>
+                        {r.is_system ? (
+                          <Badge variant="default">System (Frozen)</Badge>
                         ) : (
-                          <Badge variant="default">Mutable</Badge>
+                          <Badge variant="primary">Custom</Badge>
                         )}
                       </TableCell>
+                      <TableCell className="text-slate-500">
+                        {r.base_role_name
+                          ? ROLE_LABELS[r.base_role_name as keyof typeof ROLE_LABELS] ??
+                            r.base_role_name
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-slate-500">
+                        {r.effective_rights?.length ?? r.rights?.length ?? 0} permission
+                        {(r.effective_rights?.length ?? r.rights?.length ?? 0) === 1 ? "" : "s"}
+                      </TableCell>
+                      <TableCell className="text-slate-500">{r.user_count}</TableCell>
                       <TableCell>
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setPermissionTarget(r)}
+                            onClick={() => setPermissionsRole(r)}
+                            disabled={r.is_system}
+                            title={r.is_system ? "System roles cannot be modified" : "Manage permissions"}
                           >
                             Permissions
                           </Button>
+                          {!r.is_system && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-danger hover:bg-danger-50"
+                              onClick={() => {
+                                setDeleteError(null);
+                                setDeleteRole(r);
+                              }}
+                              disabled={r.user_count > 0}
+                              title={r.user_count > 0 ? "Reassign users before deleting" : "Delete role"}
+                            >
+                              Delete
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -116,88 +159,209 @@ export default function RolesPage() {
               </TableBody>
             </Table>
           )}
+
           <div className="mt-4 flex justify-end">
-            <Button variant="outline" onClick={() => refetch()}>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
               Refresh
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      <CreateRoleModal open={createOpen} onClose={() => setCreateOpen(false)} />
-      <AssignPermissionModal role={permissionTarget} onClose={() => setPermissionTarget(null)} />
+      <CreateCustomRoleModal open={createOpen} onClose={() => setCreateOpen(false)} roles={roles} />
+      <PermissionsModal role={permissionsRole} onClose={() => setPermissionsRole(null)} />
+      <DeleteRoleModal
+        role={deleteRole}
+        error={deleteError}
+        loading={deleteMutation.isPending}
+        onClose={() => setDeleteRole(null)}
+        onConfirm={() => deleteRole && deleteMutation.mutate(deleteRole.id)}
+      />
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Create role modal
+// Create custom role modal — with base role + permission selector
 // ---------------------------------------------------------------------------
 
-function CreateRoleModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+interface CreateCustomRoleModalProps {
+  open: boolean;
+  onClose: () => void;
+  roles: Role[];
+}
+
+function CreateCustomRoleModal({ open, onClose, roles }: CreateCustomRoleModalProps) {
   const queryClient = useQueryClient();
-  const [name, setName] = useState<RoleName>("individual");
+  const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [baseRoleId, setBaseRoleId] = useState<number | "">("");
+  const [selectedPerms, setSelectedPerms] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
+  const systemRoles = roles.filter((r) => r.is_system);
+
+  const togglePerm = (module: string, action: string) => {
+    const key = `${module}.${action}`;
+    setSelectedPerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const resetForm = () => {
+    setName("");
+    setDescription("");
+    setBaseRoleId("");
+    setSelectedPerms(new Set());
+    setError(null);
+  };
+
   const mutation = useMutation({
-    mutationFn: (payload: CreateRolePayload) => createRole(payload),
-    onSuccess: () => {
+    mutationFn: () => {
+      // The backend CreateCustomRoleSerializer only accepts name, description, base_role.
+      // Custom permissions are added after creation via assign-permission endpoint.
+      return apiCreateCustomRole({
+        name,
+        description,
+        base_role: baseRoleId === "" ? null : baseRoleId,
+      });
+    },
+    onSuccess: async (createdRole) => {
+      // Add any selected custom permissions (not inherited from base_role)
+      const inheritedKeys = new Set(
+        (createdRole.effective_rights ?? []).map((r: ModuleRight) => `${r.module}.${r.action}`),
+      );
+      const customPerms = Array.from(selectedPerms).filter((k) => !inheritedKeys.has(k));
+      for (const key of customPerms) {
+        const [module, action] = key.split(".");
+        try {
+          await apiAssignPermission(createdRole.id, { module, action: action as never });
+        } catch {
+          // continue even if one fails
+        }
+      }
       void queryClient.invalidateQueries({ queryKey: ROLES_KEY });
-      setName("individual");
-      setDescription("");
-      setError(null);
+      resetForm();
       onClose();
     },
     onError: (err) => setError(extractApiError(err)),
   });
 
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!name.trim()) {
+      setError("Role name is required.");
+      return;
+    }
+    mutation.mutate();
+  };
+
   return (
-    <Modal open={open} onClose={onClose} title="Create role" size="sm">
+    <Modal
+      open={open}
+      onClose={() => {
+        resetForm();
+        onClose();
+      }}
+      title="Create custom role"
+      description="Custom roles inherit permissions from a base system role and can have additional custom permissions."
+      size="xl"
+    >
       {error && (
         <Alert variant="error" className="mb-4">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          setError(null);
-          mutation.mutate({ name, description });
-        }}
-        className="space-y-4"
-      >
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="cr-name" required>
+              Role name
+            </Label>
+            <Input
+              id="cr-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Senior Reviewer"
+              autoFocus
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Must be unique. Cannot use a system role name.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="cr-base">Base role (optional)</Label>
+            <select
+              id="cr-base"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              value={baseRoleId}
+              onChange={(e) => setBaseRoleId(e.target.value === "" ? "" : Number(e.target.value))}
+            >
+              <option value="">No base role (start from scratch)</option>
+              {systemRoles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {ROLE_LABELS[r.name as keyof typeof ROLE_LABELS] ?? r.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Base role permissions are inherited and cannot be removed.
+            </p>
+          </div>
+          <div className="sm:col-span-2">
+            <Label htmlFor="cr-desc">Description</Label>
+            <Input
+              id="cr-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What is this role for?"
+            />
+          </div>
+        </div>
+
         <div>
-          <Label htmlFor="cr-name" required>
-            Role name
-          </Label>
-          <select
-            id="cr-name"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={name}
-            onChange={(e) => setName(e.target.value as RoleName)}
-          >
-            {ROLE_NAME_CHOICES.map((n) => (
-              <option key={n} value={n}>
-                {ROLE_LABELS[n]}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-slate-500">
-            Role names are constrained to the predefined set above.
+          <Label>Custom permissions (optional)</Label>
+          <p className="mb-2 text-xs text-slate-500">
+            These can be added/removed later via the Permissions button on the roles table.
           </p>
+          <div className="max-h-60 overflow-y-auto rounded-md border border-slate-200 p-3">
+            <div className="space-y-3">
+              {PERMISSION_CATALOG.map((cat) => (
+                <div key={cat.module}>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    {cat.label}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {cat.actions.map((action) => {
+                      const key = `${cat.module}.${action}`;
+                      const isSelected = selectedPerms.has(key);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => togglePerm(cat.module, action)}
+                          className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
+                            isSelected
+                              ? "border-primary-600 bg-primary-50 text-primary-700"
+                              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          {action}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-        <div>
-          <Label htmlFor="cr-desc">Description</Label>
-          <textarea
-            id="cr-desc"
-            rows={3}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-        <div className="flex justify-end gap-2">
+
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -211,139 +375,169 @@ function CreateRoleModal({ open, onClose }: { open: boolean; onClose: () => void
 }
 
 // ---------------------------------------------------------------------------
-// Assign permission modal
+// Permissions modal — reusable permission selector for editing custom roles
 // ---------------------------------------------------------------------------
 
-function AssignPermissionModal({
-  role,
-  onClose,
-}: {
+interface PermissionsModalProps {
   role: Role | null;
   onClose: () => void;
-}) {
+}
+
+function PermissionsModal({ role, onClose }: PermissionsModalProps) {
   const queryClient = useQueryClient();
-  const [module, setModule] = useState(PERMISSION_CATALOG[0]!.module);
-  const [action, setAction] = useState(PERMISSION_CATALOG[0]!.actions[0] ?? "view");
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
-  // Reset on open.
-  if (role && !module) {
-    setModule(PERMISSION_CATALOG[0]!.module);
-    setAction(PERMISSION_CATALOG[0]!.actions[0] ?? "view");
-  }
-
-  const mutation = useMutation({
+  const assignMutation = useMutation({
     mutationFn: (payload: { module: string; action: string }) =>
-      assignPermission(role!.id, payload as Parameters<typeof assignPermission>[1]),
+      apiAssignPermission(role!.id, { module: payload.module, action: payload.action as never }),
     onSuccess: () => {
-      setSuccess("Permission granted.");
-      setError(null);
       void queryClient.invalidateQueries({ queryKey: ROLES_KEY });
     },
-    onError: (err) => {
-      setError(extractApiError(err));
-      setSuccess(null);
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (payload: { module: string; action: string }) =>
+      apiRemovePermission(role!.id, { module: payload.module, action: payload.action as never }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ROLES_KEY });
     },
+    onError: (err) => setError(extractApiError(err)),
   });
 
   if (!role) return null;
 
-  const currentModuleEntry =
-    PERMISSION_CATALOG.find((m) => m.module === module) ?? PERMISSION_CATALOG[0]!;
+  // Build a map of (module.action) → right for quick lookup
+  const rightMap = new Map<string, ModuleRight>();
+  for (const r of role.effective_rights ?? role.rights ?? []) {
+    rightMap.set(`${r.module}.${r.action}`, r);
+  }
+
+  const togglePerm = (module: string, action: string) => {
+    setError(null);
+    const key = `${module}.${action}`;
+    const existing = rightMap.get(key);
+    if (existing) {
+      if (existing.is_inherited) {
+        setError("Cannot remove inherited permission (from base role).");
+        return;
+      }
+      removeMutation.mutate({ module, action });
+    } else {
+      assignMutation.mutate({ module, action });
+    }
+  };
 
   return (
     <Modal
       open={Boolean(role)}
       onClose={onClose}
-      title="Assign permission"
-      description={ROLE_LABELS[role.name] ?? role.name}
-      size="md"
+      title={`Permissions: ${role.name}`}
+      description={
+        role.base_role_name
+          ? `Inherits from ${ROLE_LABELS[role.base_role_name as keyof typeof ROLE_LABELS] ?? role.base_role_name}. Inherited permissions cannot be removed.`
+          : "Toggle permissions on/off. Changes apply immediately."
+      }
+      size="xl"
     >
       {error && (
         <Alert variant="error" className="mb-4">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {success && (
-        <Alert variant="success" className="mb-4">
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
 
-      {/* Existing rights */}
-      <div className="mb-4">
-        <p className="mb-2 text-sm font-medium text-slate-700">Existing rights</p>
-        <div className="max-h-32 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3">
-          {role.rights.length === 0 ? (
-            <p className="text-xs text-slate-500">No rights assigned yet.</p>
-          ) : (
-            <div className="flex flex-wrap gap-1">
-              {role.rights.map((r) => (
-                <Badge key={r.id} variant="outline" className="text-xs">
-                  {r.module}.{r.action}
-                </Badge>
-              ))}
+      <div className="max-h-[60vh] space-y-4 overflow-y-auto">
+        {PERMISSION_CATALOG.map((cat) => (
+          <div key={cat.module} className="rounded-md border border-slate-200 p-3">
+            <p className="mb-2 text-sm font-semibold text-slate-900">{cat.label}</p>
+            <div className="flex flex-wrap gap-2">
+              {cat.actions.map((action) => {
+                const key = `${cat.module}.${action}`;
+                const right = rightMap.get(key);
+                const isAssigned = Boolean(right);
+                const isInherited = Boolean(right?.is_inherited);
+                const isLoading =
+                  (assignMutation.isPending || removeMutation.isPending) &&
+                  assignMutation.variables?.module === cat.module &&
+                  assignMutation.variables?.action === action;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={isInherited || isLoading}
+                    onClick={() => togglePerm(cat.module, action)}
+                    className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+                      isAssigned
+                        ? isInherited
+                          ? "border-slate-300 bg-slate-100 text-slate-500"
+                          : "border-primary-600 bg-primary-50 text-primary-700 hover:bg-primary-100"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                    title={
+                      isInherited
+                        ? "Inherited from base role — cannot remove"
+                        : isAssigned
+                          ? "Click to remove"
+                          : "Click to add"
+                    }
+                  >
+                    {action}
+                    {isInherited && " (inherited)"}
+                  </button>
+                );
+              })}
             </div>
-          )}
-        </div>
+          </div>
+        ))}
       </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          setError(null);
-          setSuccess(null);
-          mutation.mutate({ module, action });
-        }}
-        className="space-y-4"
-      >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="ap-module">Module</Label>
-            <select
-              id="ap-module"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={module}
-              onChange={(e) => {
-                const m = e.target.value;
-                setModule(m);
-                const entry = PERMISSION_CATALOG.find((p) => p.module === m);
-                if (entry && entry.actions.length > 0) setAction(entry.actions[0]!);
-              }}
-            >
-              {PERMISSION_CATALOG.map((m) => (
-                <option key={m.module} value={m.module}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="ap-action">Action</Label>
-            <select
-              id="ap-action"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={action}
-              onChange={(e) => setAction(e.target.value)}
-            >
-              {currentModuleEntry.actions.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Close
-          </Button>
-          <Button type="submit" loading={mutation.isPending}>
-            Grant permission
-          </Button>
-        </div>
-      </form>
+      <div className="mt-4 flex justify-end border-t border-slate-100 pt-4">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Done
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Delete role modal
+// ---------------------------------------------------------------------------
+
+interface DeleteRoleModalProps {
+  role: Role | null;
+  error: string | null;
+  loading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
+function DeleteRoleModal({ role, error, loading, onClose, onConfirm }: DeleteRoleModalProps) {
+  if (!role) return null;
+  return (
+    <Modal
+      open={Boolean(role)}
+      onClose={onClose}
+      title="Delete custom role"
+      description="This action cannot be undone."
+      size="sm"
+    >
+      {error && (
+        <Alert variant="error" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      <p className="text-sm text-slate-600">
+        Are you sure you want to delete <strong>{role.name}</strong>?
+      </p>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="button" variant="danger" loading={loading} onClick={onConfirm}>
+          Delete role
+        </Button>
+      </div>
     </Modal>
   );
 }

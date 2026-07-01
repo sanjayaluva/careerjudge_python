@@ -9,16 +9,18 @@ from rest_framework.viewsets import ModelViewSet
 
 from core.permissions import HasModulePermission
 
-from .models import Role, User
+from .models import ModuleRight, Role, User
 from .serializers import (
     AssignPermissionSerializer,
     AssignRoleSerializer,
+    CreateCustomRoleSerializer,
     ModuleRightSerializer,
+    RemovePermissionSerializer,
     RoleSerializer,
     UserSerializer,
     UserWriteSerializer,
 )
-from .services import assign_permission_to_role, assign_role_to_user
+from .services import assign_permission_to_role
 
 
 class HasAccountsPermission(HasModulePermission):
@@ -139,11 +141,13 @@ class AssignRoleView(APIView):
         user = get_object_or_404(User, id=user_id)
         serializer = AssignRoleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        role = assign_role_to_user(user, serializer.validated_data["role_name"])
+        role = serializer.validated_data["role"]
+        user.role = role
+        user.save(update_fields=["role", "updated_at"])
         return Response(
             {
                 "message": f"Role '{role.name}' assigned.",
-                "data": {"user_id": user.id, "role": role.name},
+                "data": {"user_id": user.id, "role": role.name, "role_id": role.id},
             },
             status=status.HTTP_200_OK,
         )
@@ -152,17 +156,24 @@ class AssignRoleView(APIView):
 class RoleViewSet(ModelViewSet):
     """CRUD for roles — admin only.
 
-    GET    /api/accounts/roles/
-    POST   /api/accounts/roles/
-    GET    /api/accounts/roles/<id>/
-    POST   /api/accounts/roles/<id>/assign-permission/
+    GET    /api/accounts/roles/                       — list all roles (system + custom)
+    POST   /api/accounts/roles/                       — create a custom role
+    GET    /api/accounts/roles/<id>/                  — retrieve a role
+    PATCH  /api/accounts/roles/<id>/                  — update description (custom only)
+    DELETE /api/accounts/roles/<id>/                  — delete (custom only, no users)
+    POST   /api/accounts/roles/<id>/assign-permission/  — add custom permission
+    POST   /api/accounts/roles/<id>/remove-permission/  — remove custom permission
     """
 
-    queryset = Role.objects.prefetch_related("rights", "users").all()
+    queryset = Role.objects.prefetch_related("rights", "users", "base_role").all()
     permission_classes = [IsAuthenticated, HasAccountsPermission]
-    serializer_class = RoleSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ["name", "description"]
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return CreateCustomRoleSerializer
+        return RoleSerializer
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -185,37 +196,47 @@ class RoleViewSet(ModelViewSet):
         role = serializer.save()
         return Response(
             {
-                "message": "Role created.",
+                "message": "Custom role created.",
                 "data": RoleSerializer(role).data,
             },
             status=status.HTTP_201_CREATED,
         )
 
     def update(self, request, *args, **kwargs):
-        # Per UC018: role privileges should not be modified after creation.
-        # We allow updating description only (additive).
+        """Only custom roles can be updated, and only description + base_role."""
         kwargs.pop("partial", False)
         instance = self.get_object()
-        if instance.is_frozen and "description" in request.data:
-            instance.description = request.data["description"]
-            instance.save(update_fields=["description", "updated_at"])
-            return Response(
-                {
-                    "message": "Role description updated (frozen role — only description editable).",
-                    "data": RoleSerializer(instance).data,
-                },
-                status=status.HTTP_200_OK,
-            )
-        return super().update(request, *args, **kwargs)
-
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        if instance.is_frozen:
+        if instance.is_system:
             return Response(
                 {
                     "error": {
                         "code": "forbidden",
-                        "message": "Cannot delete a frozen role.",
+                        "message": "System roles cannot be modified.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        # Only allow description updates (name + base_role are immutable after creation)
+        if "description" in request.data:
+            instance.description = request.data["description"]
+            instance.save(update_fields=["description", "updated_at"])
+        return Response(
+            {
+                "message": "Role updated.",
+                "data": RoleSerializer(instance).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.is_system:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "System roles cannot be deleted.",
                         "details": {},
                     }
                 },
@@ -226,7 +247,8 @@ class RoleViewSet(ModelViewSet):
                 {
                     "error": {
                         "code": "forbidden",
-                        "message": "Cannot delete a role that has users assigned.",
+                        "message": "Cannot delete a role that has users assigned. "
+                        "Reassign users first.",
                         "details": {},
                     }
                 },
@@ -234,13 +256,16 @@ class RoleViewSet(ModelViewSet):
             )
         instance.delete()
         return Response(
-            {"message": "Role deleted.", "data": {}},
+            {"message": "Custom role deleted.", "data": {}},
             status=status.HTTP_200_OK,
         )
 
 
 class AssignPermissionView(APIView):
-    """POST /api/accounts/roles/<id>/assign-permission/ — additive only."""
+    """POST /api/accounts/roles/<id>/assign-permission/ — add a custom permission.
+
+    Only allowed for custom (non-system) roles.
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -257,6 +282,17 @@ class AssignPermissionView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         role = get_object_or_404(Role, id=role_id)
+        if role.is_system:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Cannot modify permissions on a system (frozen) role.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = AssignPermissionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         right = assign_permission_to_role(
@@ -266,8 +302,78 @@ class AssignPermissionView(APIView):
         )
         return Response(
             {
-                "message": "Permission assigned (additive).",
+                "message": "Permission added to custom role.",
                 "data": ModuleRightSerializer(right).data,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+class RemovePermissionView(APIView):
+    """POST /api/accounts/roles/<id>/remove-permission/ — remove a custom permission.
+
+    Only allowed for custom (non-system) roles, and only for permissions NOT
+    inherited from the base_role.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, role_id):
+        if not request.user.has_module_right("accounts", "change"):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "You do not have permission to remove permissions.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        role = get_object_or_404(Role, id=role_id)
+        if role.is_system:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Cannot remove permissions from a system (frozen) role.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = RemovePermissionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        module = serializer.validated_data["module"]
+        action = serializer.validated_data["action"]
+
+        # Check if this permission is inherited from base_role — cannot remove
+        if (module, action) in role.inherited_right_keys:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": f"Cannot remove inherited permission {module}.{action} "
+                        f"(inherited from base role '{role.base_role.name}').",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        deleted, _ = ModuleRight.objects.filter(role=role, module=module, action=action).delete()
+        if not deleted:
+            return Response(
+                {
+                    "error": {
+                        "code": "not_found",
+                        "message": f"Permission {module}.{action} not found on this role.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(
+            {"message": f"Permission {module}.{action} removed.", "data": {}},
+            status=status.HTTP_200_OK,
         )

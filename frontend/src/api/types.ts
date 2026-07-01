@@ -140,10 +140,7 @@ export interface AdminUpdateUserPayload {
   is_email_verified?: boolean;
   is_trial_user?: boolean;
   role?: number;
-}
-
-export interface AssignRolePayload {
-  role_name: RoleName;
+  password?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -156,35 +153,54 @@ export type ModuleAction =
   | "change"
   | "delete"
   | "approve"
+  | "reject"
+  | "review"
   | "assign"
   | "export"
-  | "generate_report";
+  | "generate_report"
+  | "request_delete";
 
 export interface ModuleRight {
   id: number;
   role: number;
   module: string; // accounts, organizations, etc.
   action: ModuleAction;
+  is_inherited?: boolean; // true if inherited from base_role (cannot be removed)
   created_at: string;
 }
 
 export interface Role {
   id: number;
-  name: RoleName;
+  name: string; // system role code OR custom role name
   description: string;
-  is_frozen: boolean;
-  rights: ModuleRight[];
+  is_system: boolean; // true for the 10 built-in roles
+  is_frozen: boolean; // true for system roles (permissions can't change)
+  base_role: number | null; // for custom roles: the system role they inherit from
+  base_role_name: string | null;
+  rights: ModuleRight[]; // direct rights only
+  effective_rights: ModuleRight[]; // direct + inherited
   user_count: number;
   created_at: string;
   updated_at: string;
 }
 
-export interface CreateRolePayload {
-  name: RoleName;
-  description: string;
+export interface CreateCustomRolePayload {
+  name: string;
+  description?: string;
+  base_role?: number | null; // system role id to inherit from
+}
+
+export interface AssignRolePayload {
+  role_id?: number;
+  role_name?: string;
 }
 
 export interface AssignPermissionPayload {
+  module: string;
+  action: ModuleAction;
+}
+
+export interface RemovePermissionPayload {
   module: string;
   action: ModuleAction;
 }

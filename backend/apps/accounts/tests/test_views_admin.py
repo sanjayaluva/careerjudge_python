@@ -147,15 +147,46 @@ class TestRoleList:
 
 @pytest.mark.django_db
 class TestRoleCreate:
-    def test_admin_can_create_role(self, authed_client):
-        # Note: Role.name is constrained to ROLE_CHOICES, so we use a valid one
-        # but unique_together prevents duplicates. We need to test the validation.
+    def test_admin_can_create_custom_role(self, authed_client, individual_role):
+        """Admin can create a custom role with a new name + base_role."""
         resp = authed_client.post(
             "/api/accounts/roles/",
             {
-                "name": "individual",  # already exists from seed
-                "description": "Duplicate",
+                "name": "Senior Reviewer",
+                "description": "Reviewer with extra permissions",
+                "base_role": individual_role.id,
             },
+            format="json",
+        )
+        assert resp.status_code == 201
+        from apps.accounts.models import Role
+
+        role = Role.objects.get(name="Senior Reviewer")
+        assert role.is_system is False
+        assert role.is_frozen is False
+        assert role.base_role_id == individual_role.id
+
+    def test_cannot_create_role_with_system_name(self, authed_client):
+        """Cannot create a custom role with a system role name."""
+        resp = authed_client.post(
+            "/api/accounts/roles/",
+            {"name": "individual", "description": "Duplicate"},
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_cannot_create_role_with_duplicate_name(self, authed_client):
+        """Cannot create a custom role with an existing role name."""
+        # First create a custom role
+        authed_client.post(
+            "/api/accounts/roles/",
+            {"name": "Senior Reviewer", "description": "First"},
+            format="json",
+        )
+        # Try to create another with the same name
+        resp = authed_client.post(
+            "/api/accounts/roles/",
+            {"name": "Senior Reviewer", "description": "Duplicate"},
             format="json",
         )
         assert resp.status_code == 400
@@ -168,27 +199,59 @@ class TestRoleRetrieve:
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data["name"] == "cj_admin"
+        assert data["is_system"] is True
         assert "rights" in data
+        assert "effective_rights" in data
 
 
 @pytest.mark.django_db
 class TestAssignPermission:
-    def test_happy_path(self, authed_client, individual_role):
+    def test_happy_path_custom_role(self, authed_client, individual_role):
+        """Can add a permission to a CUSTOM role (not a system role)."""
+        # Create a custom role based on individual
+        resp = authed_client.post(
+            "/api/accounts/roles/",
+            {"name": "Power User", "base_role": individual_role.id},
+            format="json",
+        )
+        assert resp.status_code == 201
+        custom_role_id = resp.json()["data"]["id"]
+
+        # Now assign a permission to the custom role
+        resp = authed_client.post(
+            f"/api/accounts/roles/{custom_role_id}/assign-permission",
+            {"module": "accounts", "action": "view"},
+            format="json",
+        )
+        assert resp.status_code == 201
+        from apps.accounts.models import Role
+
+        role = Role.objects.get(id=custom_role_id)
+        assert ModuleRight.objects.filter(role=role, module="accounts", action="view").exists()
+
+    def test_cannot_assign_permission_to_system_role(self, authed_client, individual_role):
+        """Cannot add a permission to a SYSTEM (frozen) role."""
         resp = authed_client.post(
             f"/api/accounts/roles/{individual_role.id}/assign-permission",
             {"module": "accounts", "action": "view"},
             format="json",
         )
-        assert resp.status_code == 201
-        assert ModuleRight.objects.filter(
-            role=individual_role, module="accounts", action="view"
-        ).exists()
+        assert resp.status_code == 403
+        assert "system" in resp.json()["error"]["message"].lower()
 
     def test_idempotent(self, authed_client, individual_role):
-        # Assigning same permission twice should not error
+        """Assigning same permission twice to a custom role should not error."""
+        # Create a custom role
+        resp = authed_client.post(
+            "/api/accounts/roles/",
+            {"name": "Power User 2", "base_role": individual_role.id},
+            format="json",
+        )
+        custom_role_id = resp.json()["data"]["id"]
+
         for _ in range(2):
             resp = authed_client.post(
-                f"/api/accounts/roles/{individual_role.id}/assign-permission",
+                f"/api/accounts/roles/{custom_role_id}/assign-permission",
                 {"module": "accounts", "action": "view"},
                 format="json",
             )

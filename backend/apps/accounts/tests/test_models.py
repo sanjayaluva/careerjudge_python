@@ -68,9 +68,15 @@ class TestUserModel:
 
 @pytest.mark.django_db
 class TestRoleModel:
-    def test_str(self):
-        role = RoleFactory(name="individual")
+    def test_str_system_role(self):
+        """System roles use the label from ROLE_CHOICES."""
+        role = RoleFactory(name="individual", is_system=True)
         assert "Individual" in str(role)
+
+    def test_str_custom_role(self):
+        """Custom roles use their name directly."""
+        role = RoleFactory(name="Senior Reviewer", is_system=False)
+        assert str(role) == "Senior Reviewer"
 
     def test_unique_name(self):
         RoleFactory(name="individual")

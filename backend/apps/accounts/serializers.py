@@ -239,9 +239,7 @@ class UserWriteSerializer(serializers.ModelSerializer):
         if self.instance is not None:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
-            raise serializers.ValidationError(
-                "A user with this email address already exists."
-            )
+            raise serializers.ValidationError("A user with this email address already exists.")
         return value
 
     def create(self, validated_data: dict) -> User:
@@ -300,15 +298,26 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
 
 
 class ModuleRightSerializer(serializers.ModelSerializer):
+    is_inherited = serializers.SerializerMethodField()
+
     class Meta:
         model = ModuleRight
-        fields = ["id", "role", "module", "action", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields = ["id", "role", "module", "action", "is_inherited", "created_at"]
+        read_only_fields = ["id", "is_inherited", "created_at"]
+
+    def get_is_inherited(self, obj) -> bool:
+        """True if this right is inherited from the role's base_role (cannot be removed)."""
+        role = obj.role
+        if not role.base_role_id:
+            return False
+        return (obj.module, obj.action) in role.inherited_right_keys
 
 
 class RoleSerializer(serializers.ModelSerializer):
     rights = ModuleRightSerializer(many=True, read_only=True)
+    effective_rights = ModuleRightSerializer(many=True, read_only=True)
     user_count = serializers.IntegerField(source="users.count", read_only=True)
+    base_role_name = serializers.CharField(source="base_role.name", read_only=True, default=None)
 
     class Meta:
         model = Role
@@ -316,23 +325,121 @@ class RoleSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "description",
+            "is_system",
             "is_frozen",
+            "base_role",
+            "base_role_name",
             "rights",
+            "effective_rights",
             "user_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "is_frozen", "created_at", "updated_at"]
+        read_only_fields = ["id", "is_system", "is_frozen", "created_at", "updated_at"]
+
+
+class CreateCustomRoleSerializer(serializers.ModelSerializer):
+    """POST /api/accounts/roles/ — create a custom role.
+
+    Fields:
+      - name (required, unique): the custom role name (e.g. 'Senior Reviewer')
+      - description (optional): free text
+      - base_role (optional): ID of a system role whose permissions are inherited
+        and cannot be removed from this custom role.
+    """
+
+    class Meta:
+        model = Role
+        fields = ["name", "description", "base_role"]
+        extra_kwargs = {
+            "name": {"required": True},
+        }
+
+    def validate_name(self, value: str) -> str:
+        """Custom role name must be unique and not clash with system role names."""
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Name is required.")
+        # Check it doesn't clash with a system role name
+        system_names = [code for code, _ in Role.ROLE_CHOICES]
+        if value.lower() in [n.lower() for n in system_names]:
+            raise serializers.ValidationError(
+                "Cannot use a system role name. Choose a different name."
+            )
+        if Role.objects.filter(name__iexact=value).exists():
+            raise serializers.ValidationError("A role with this name already exists.")
+        return value
+
+    def validate_base_role(self, value) -> "Role | None":
+        """base_role must be a system role if provided."""
+        if value is None:
+            return None
+        if not value.is_system:
+            raise serializers.ValidationError("base_role must be a system (built-in) role.")
+        return value
+
+    def create(self, validated_data: dict) -> Role:
+        """Create a custom role and copy base_role's permissions (as inherited)."""
+        base_role = validated_data.get("base_role")
+        role = Role.objects.create(
+            name=validated_data["name"],
+            description=validated_data.get("description", ""),
+            base_role=base_role,
+            is_system=False,
+            is_frozen=False,
+        )
+        # Copy base_role's permissions to the custom role (so effective_rights works
+        # even without querying base_role). These are marked as inherited via the
+        # is_inherited serializer field.
+        if base_role:
+            for right in base_role.rights.all():
+                ModuleRight.objects.get_or_create(
+                    role=role, module=right.module, action=right.action
+                )
+        return role
 
 
 class AssignRoleSerializer(serializers.Serializer):
-    """POST /api/accounts/users/<id>/assign-role/."""
+    """POST /api/accounts/users/<id>/assign-role/.
 
-    role_name = serializers.ChoiceField(choices=[c[0] for c in Role.ROLE_CHOICES])
+    Accepts role_id (preferred) or role_name (backward compat with system roles).
+    """
+
+    role_id = serializers.IntegerField(required=False)
+    role_name = serializers.CharField(max_length=100, required=False)
+
+    def validate(self, attrs: dict) -> dict:
+        if not attrs.get("role_id") and not attrs.get("role_name"):
+            raise serializers.ValidationError("Either role_id or role_name is required.")
+        # Resolve to a Role instance
+        role = None
+        if attrs.get("role_id"):
+            try:
+                role = Role.objects.get(id=attrs["role_id"])
+            except Role.DoesNotExist as exc:
+                raise serializers.ValidationError({"role_id": "Role not found."}) from exc
+        else:
+            try:
+                role = Role.objects.get(name=attrs["role_name"])
+            except Role.DoesNotExist as exc:
+                raise serializers.ValidationError({"role_name": "Role not found."}) from exc
+        attrs["role"] = role
+        return attrs
 
 
 class AssignPermissionSerializer(serializers.Serializer):
-    """POST /api/accounts/roles/<id>/assign-permission/."""
+    """POST /api/accounts/roles/<id>/assign-permission/ — add a custom permission."""
+
+    module = serializers.ChoiceField(choices=[c[0] for c in ModuleRight.MODULE_CHOICES])
+    action = serializers.ChoiceField(choices=[c[0] for c in ModuleRight.ACTION_CHOICES])
+
+
+class RemovePermissionSerializer(serializers.Serializer):
+    """POST /api/accounts/roles/<id>/remove-permission/ — remove a custom permission.
+
+    Only allowed for custom roles, and only for permissions NOT inherited from
+    the base_role.
+    """
 
     module = serializers.ChoiceField(choices=[c[0] for c in ModuleRight.MODULE_CHOICES])
     action = serializers.ChoiceField(choices=[c[0] for c in ModuleRight.ACTION_CHOICES])

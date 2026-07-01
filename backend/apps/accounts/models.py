@@ -58,13 +58,25 @@ class UserManager(BaseUserManager):
 
 
 class Role(models.Model):
-    """Named role — e.g. 'cj_admin', 'corp_admin', 'individual'.
+    """Named role — e.g. 'cj_admin', 'corp_admin', 'individual', or custom roles.
 
-    A role groups a set of module-specific action rights. Per business rule
-    (UC018): 'Once a role is created with appropriate privileges, those
-    privileges should not be modified in the future.' We enforce this at the
-    application layer (frozen roles can only receive additional permissions,
-    never removals).
+    Two types of roles:
+      1. **System (base) roles** (is_system=True, is_frozen=True): the 10 built-in
+         roles defined in ROLE_CHOICES. Their permissions are FROZEN — cannot be
+         added, removed, or modified. Seeded by `seed_demo` management command.
+      2. **Custom roles** (is_system=False, is_frozen=False): created by admins.
+         A custom role has:
+           - A unique name (e.g. 'Senior Reviewer', 'Junior SME')
+           - An optional base_role FK (points to a system role whose permissions
+             are inherited and CANNOT be removed from the custom role)
+           - Custom permissions (ModuleRight rows) that CAN be added/removed
+           - A description
+
+    Per business rule (UC018): 'Once a role is created with appropriate
+    privileges, those privileges should not be modified in the future.'
+    For system roles, this is absolute — no permission changes at all.
+    For custom roles, only the custom permissions (not inherited from base)
+    can be modified after creation.
 
     SME vs Reviewer (split per client clarification 2026-06-30):
       - sme:      Creates / views / edits / deletes OWN questions
@@ -87,12 +99,35 @@ class Role(models.Model):
         ("individual", "Individual"),
     ]
 
-    name = models.CharField(_("name"), max_length=50, choices=ROLE_CHOICES, unique=True)
+    # Name is no longer constrained to ROLE_CHOICES — custom roles can have any name.
+    # The choices are only used for seeding system roles.
+    name = models.CharField(_("name"), max_length=100, unique=True)
     description = models.TextField(_("description"), blank=True)
+    is_system = models.BooleanField(
+        _("system role"),
+        default=False,
+        help_text=_(
+            "System roles are the 10 built-in roles. Cannot be deleted or have "
+            "permissions modified."
+        ),
+    )
     is_frozen = models.BooleanField(
         _("frozen"),
         default=False,
-        help_text=_("Frozen roles accept additive permission grants only."),
+        help_text=_(
+            "Frozen roles' permissions cannot be modified. System roles are " "always frozen."
+        ),
+    )
+    base_role = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="custom_roles",
+        null=True,
+        blank=True,
+        help_text=_(
+            "For custom roles: the system role whose permissions are inherited "
+            "and cannot be removed."
+        ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -103,7 +138,35 @@ class Role(models.Model):
         verbose_name_plural = _("roles")
 
     def __str__(self) -> str:
-        return self.get_name_display()
+        # For system roles, use the label from ROLE_CHOICES
+        if self.is_system:
+            for code, label in Role.ROLE_CHOICES:
+                if code == self.name:
+                    return label
+        return self.name
+
+    @property
+    def effective_rights(self):
+        """All rights this role has — its own + inherited from base_role."""
+        rights = list(self.rights.all())
+        if self.base_role_id:
+            rights.extend(self.base_role.rights.all())
+        # Deduplicate by (module, action)
+        seen = set()
+        unique = []
+        for r in rights:
+            key = (r.module, r.action)
+            if key not in seen:
+                seen.add(key)
+                unique.append(r)
+        return unique
+
+    @property
+    def inherited_right_keys(self):
+        """Set of (module, action) tuples inherited from base_role — cannot be removed."""
+        if not self.base_role_id:
+            return set()
+        return {(r.module, r.action) for r in self.base_role.rights.all()}
 
 
 class ModuleRight(models.Model):
