@@ -204,7 +204,12 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserWriteSerializer(serializers.ModelSerializer):
-    """Write serializer for admin user management."""
+    """Write serializer for admin user management.
+
+    Used for both create and update. Email uniqueness is enforced but
+    excludes the current instance during PATCH (so editing a user without
+    changing their email doesn't trigger a false uniqueness error).
+    """
 
     class Meta:
         model = User
@@ -216,25 +221,55 @@ class UserWriteSerializer(serializers.ModelSerializer):
             "is_email_verified",
             "is_trial_user",
             "role",
+            "password",
         ]
         extra_kwargs = {
-            "password": {"write_only": True, "required": False},
+            "password": {"write_only": True, "required": False, "allow_blank": True},
+            "email": {"required": False},  # allow PATCH without email
+            "full_name": {"required": False},
         }
+
+    def validate_email(self, value: str) -> str:
+        """Email must be unique, but exclude the current instance on update."""
+        if not value:
+            return value
+        value = value.lower()
+        qs = User.objects.filter(email__iexact=value)
+        # If updating, exclude the current user
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                "A user with this email address already exists."
+            )
+        return value
 
     def create(self, validated_data: dict) -> User:
         password = validated_data.pop("password", None)
-        user = User(**validated_data)
+        # Use create_user to properly hash the password and normalize email
+        user = User.objects.create_user(**validated_data)
         if password:
             user.set_password(password)
+            user.save(update_fields=["password"])
         else:
             # generate random password and email it (per UC002)
             from django.utils.crypto import get_random_string
 
             random_pw = get_random_string(length=12)
             user.set_password(random_pw)
-        user.save()
+            user.save(update_fields=["password"])
         UserProfile.objects.get_or_create(user=user)
         return user
+
+    def update(self, instance: User, validated_data: dict) -> User:
+        """Update user. Hash password if provided; ignore blank password."""
+        password = validated_data.pop("password", None)
+        if password:  # only update if a non-empty password was sent
+            instance.set_password(password)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
 
 
 class UpdateProfileSerializer(serializers.ModelSerializer):

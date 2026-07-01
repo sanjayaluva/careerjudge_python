@@ -18,8 +18,8 @@ env = environ.Env(
     CELERY_BROKER_URL=(str, "redis://localhost:6379/1"),
     CELERY_RESULT_BACKEND=(str, "redis://localhost:6379/2"),
     CELERY_TASK_ALWAYS_EAGER=(bool, False),
-    JWT_ACCESS_TTL_MINUTES=(int, 15),
-    JWT_REFRESH_TTL_DAYS=(int, 7),
+    JWT_ACCESS_TTL_MINUTES=(int, 60),
+    JWT_REFRESH_TTL_DAYS=(int, 30),
     EMAIL_BACKEND=(str, "django.core.mail.backends.console.EmailBackend"),
     EMAIL_HOST=(str, ""),
     EMAIL_PORT=(int, 587),
@@ -150,6 +150,11 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
+    # Sliding session: access token is 60 min, refresh token is 30 days.
+    # The frontend axios interceptor auto-refreshes on 401 (see api/client.ts).
+    # Refresh tokens rotate on use (old one blacklisted) for security.
+    # 60 min access TTL means users won't see "session expired" during normal
+    # active use; only after 60 min of API inactivity will a refresh be needed.
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env("JWT_ACCESS_TTL_MINUTES")),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env("JWT_REFRESH_TTL_DAYS")),
     "ROTATE_REFRESH_TOKENS": True,
