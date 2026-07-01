@@ -99,7 +99,20 @@ export function extractApiError(err: unknown): string {
   if (axios.isAxiosError(err)) {
     const data = err.response?.data;
     if (isApiErrorEnvelope(data)) {
-      return data.error.message;
+      const { message, details } = data.error;
+      // If there are field-specific details, include them for clarity
+      if (details && typeof details === "object" && Object.keys(details).length > 0) {
+        const parts: string[] = [message];
+        for (const [field, msgs] of Object.entries(details)) {
+          if (Array.isArray(msgs)) {
+            parts.push(`${field}: ${(msgs as string[]).join(", ")}`);
+          } else if (typeof msgs === "string") {
+            parts.push(`${field}: ${msgs}`);
+          }
+        }
+        return parts.join(" — ");
+      }
+      return message;
     }
     if (typeof data === "object" && data !== null && "detail" in data) {
       const detail = (data as { detail: unknown }).detail;

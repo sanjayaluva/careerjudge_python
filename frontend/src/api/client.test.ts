@@ -82,6 +82,28 @@ describe("extractApiError", () => {
     expect(extractApiError(err)).toBe("Token expired.");
   });
 
+  it("includes field-specific details from the envelope", () => {
+    const err = {
+      isAxiosError: true,
+      response: {
+        status: 400,
+        data: {
+          error: {
+            code: "validation_error",
+            message: "Validation failed.",
+            details: {
+              name: ["A role with this name already exists."],
+            },
+          },
+        },
+      },
+      message: "Request failed",
+    };
+    const result = extractApiError(err);
+    expect(result).toContain("Validation failed.");
+    expect(result).toContain("name: A role with this name already exists.");
+  });
+
   it("falls back to DRF `detail` field when no envelope", () => {
     const err = {
       isAxiosError: true,
