@@ -40,7 +40,7 @@ const ROLES_KEY = ["admin", "roles"];
 export default function RolesPage() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
-  const [permissionsRole, setPermissionsRole] = useState<Role | null>(null);
+  const [permissionsRoleId, setPermissionsRoleId] = useState<number | null>(null);
   const [deleteRole, setDeleteRole] = useState<Role | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -145,7 +145,7 @@ export default function RolesPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => setPermissionsRole(r)}
+                                onClick={() => setPermissionsRoleId(r.id)}
                               >
                                 Permissions
                               </Button>
@@ -188,7 +188,7 @@ export default function RolesPage() {
       </Card>
 
       <CreateCustomRoleModal open={createOpen} onClose={() => setCreateOpen(false)} roles={roles} />
-      <PermissionsModal role={permissionsRole} onClose={() => setPermissionsRole(null)} />
+      <PermissionsModal roleId={permissionsRoleId} onClose={() => setPermissionsRoleId(null)} />
       <DeleteRoleModal
         role={deleteRole}
         error={deleteError}
@@ -395,20 +395,33 @@ function CreateCustomRoleModal({ open, onClose, roles }: CreateCustomRoleModalPr
 
 // ---------------------------------------------------------------------------
 // Permissions modal — reusable permission selector for editing custom roles
+// Uses fresh data from the roles query so toggles update immediately.
 // ---------------------------------------------------------------------------
 
 interface PermissionsModalProps {
-  role: Role | null;
+  roleId: number | null;
   onClose: () => void;
 }
 
-function PermissionsModal({ role, onClose }: PermissionsModalProps) {
+function PermissionsModal({ roleId, onClose }: PermissionsModalProps) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
+  // Get fresh role data from the query cache — this ensures the modal
+  // re-renders with updated permissions after each assign/remove mutation.
+  const { data: roles = [] } = useQuery({
+    queryKey: ROLES_KEY,
+    queryFn: listRoles,
+    enabled: roleId !== null,
+  });
+  const role = roles.find((r) => r.id === roleId) ?? null;
+
   const assignMutation = useMutation({
     mutationFn: (payload: { module: string; action: string }) =>
-      apiAssignPermission(role!.id, { module: payload.module, action: payload.action as never }),
+      apiAssignPermission(role!.id, {
+        module: payload.module,
+        action: payload.action as never,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ROLES_KEY });
     },
@@ -417,7 +430,10 @@ function PermissionsModal({ role, onClose }: PermissionsModalProps) {
 
   const removeMutation = useMutation({
     mutationFn: (payload: { module: string; action: string }) =>
-      apiRemovePermission(role!.id, { module: payload.module, action: payload.action as never }),
+      apiRemovePermission(role!.id, {
+        module: payload.module,
+        action: payload.action as never,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ROLES_KEY });
     },
@@ -475,10 +491,15 @@ function PermissionsModal({ role, onClose }: PermissionsModalProps) {
                 const right = rightMap.get(key);
                 const isAssigned = Boolean(right);
                 const isInherited = Boolean(right?.is_inherited);
-                const isLoading =
-                  (assignMutation.isPending || removeMutation.isPending) &&
+                const isAssigning =
+                  assignMutation.isPending &&
                   assignMutation.variables?.module === cat.module &&
                   assignMutation.variables?.action === action;
+                const isRemoving =
+                  removeMutation.isPending &&
+                  removeMutation.variables?.module === cat.module &&
+                  removeMutation.variables?.action === action;
+                const isLoading = isAssigning || isRemoving;
                 return (
                   <button
                     key={key}
@@ -500,7 +521,7 @@ function PermissionsModal({ role, onClose }: PermissionsModalProps) {
                           : "Click to add"
                     }
                   >
-                    {action}
+                    {isLoading ? "..." : action}
                     {isInherited && " (inherited)"}
                   </button>
                 );

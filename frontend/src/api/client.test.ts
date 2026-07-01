@@ -106,8 +106,15 @@ describe("extractApiError", () => {
   });
 
   it("falls back to err.message when no response body", () => {
+    const err = { isAxiosError: true, message: "Some other error" };
+    expect(extractApiError(err)).toBe("Some other error");
+  });
+
+  it("provides helpful message for Network Error", () => {
     const err = { isAxiosError: true, message: "Network Error" };
-    expect(extractApiError(err)).toBe("Network Error");
+    const result = extractApiError(err);
+    expect(result).toContain("Network error");
+    expect(result).toContain("server may be");
   });
 
   it("handles plain Error instances", () => {

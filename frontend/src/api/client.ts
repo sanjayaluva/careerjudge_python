@@ -117,6 +117,10 @@ export function extractApiError(err: unknown): string {
       }
       if (parts.length > 0) return parts.join("; ");
     }
+    // No response received (Network Error) — provide a helpful message
+    if (!err.response && err.message === "Network Error") {
+      return "Network error — the server may be restarting or unreachable. Please try again in a moment.";
+    }
     if (err.message) return err.message;
     return `Request failed with status ${err.response?.status ?? "?"}`;
   }
