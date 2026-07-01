@@ -1,22 +1,20 @@
 # CareerJudge Caddyfile — dev environment (hybrid mode: Vercel frontend + GCP backend)
-# Domain: careerjudge.pp.ua (already pointed to GCP 35.208.224.41)
+# Domain: careerjudge.pp.ua (pointed to GCP 35.207.59.232)
 #
 # Caddy auto-provisions Let's Encrypt TLS certs.
 # Routes:
-#   /api/*      → backend (gunicorn on :8000)
+#   /api/*      → backend (gunicorn on :8000) — PRESERVES /api prefix
 #   /admin/*    → backend (Django admin for superuser emergency access)
-#   /*          → redirect to Vercel frontend URL (set VERCEL_FRONTEND_URL below)
-#
-# If running full-stack mode (with frontend container), replace the redirect
-# with: reverse_proxy frontend:80
+#   /*          → proxy to Vercel frontend (browser stays on careerjudge.pp.ua)
 #
 # Run: docker compose -f infra/docker/docker-compose.dev.yml up -d backend caddy
 
 careerjudge.pp.ua {
 	encode gzip zstd
 
-	# Backend API
-	handle_path /api/* {
+	# Backend API — use `handle` (not `handle_path`) to preserve the /api prefix
+	# Django's urls.py expects /api/auth/login, /api/me/, /api/accounts/, etc.
+	handle /api/* {
 		reverse_proxy backend:8000 {
 			header_up X-Forwarded-Proto {scheme}
 			header_up X-Forwarded-Host {host}
@@ -28,15 +26,13 @@ careerjudge.pp.ua {
 		reverse_proxy backend:8000
 	}
 
-	# Health check passthrough
-	handle /api/health/* {
-		reverse_proxy backend:8000
-	}
-
-	# Frontend — redirect to Vercel (hybrid mode)
-	# Replace this URL with your actual Vercel deployment URL
+	# Frontend — proxy to Vercel (browser stays on careerjudge.pp.ua)
 	handle {
-		redir https://careerjudge-python.vercel.app{uri} permanent
+		reverse_proxy https://careerjudge-python.vercel.app {
+			header_up Host careerjudge-python.vercel.app
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 
 	# Security headers
