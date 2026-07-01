@@ -23,6 +23,7 @@ import SettingsPage from "@/pages/account/SettingsPage";
 import PermissionsPage from "@/pages/admin/PermissionsPage";
 import RolesPage from "@/pages/admin/RolesPage";
 import UsersPage from "@/pages/admin/UsersPage";
+import UserViewPage from "@/pages/admin/UserViewPage";
 import { useAuthStore } from "@/stores/auth";
 
 const queryClient = new QueryClient({
@@ -95,6 +96,14 @@ export default function App() {
                 element={
                   <AdminRoute module="users">
                     <UsersPage />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="admin/users/:id"
+                element={
+                  <AdminRoute module="users">
+                    <UserViewPage />
                   </AdminRoute>
                 }
               />

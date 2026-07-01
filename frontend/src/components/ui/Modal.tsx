@@ -21,8 +21,8 @@ export interface ModalProps {
 const sizeClasses: Record<NonNullable<ModalProps["size"]>, string> = {
   sm: "max-w-sm",
   md: "max-w-md",
-  lg: "max-w-lg",
-  xl: "max-w-2xl",
+  lg: "max-w-2xl",
+  xl: "max-w-4xl",
 };
 
 export function Modal({
@@ -70,14 +70,14 @@ export function Modal({
       />
       <div
         className={cn(
-          "relative z-10 w-full overflow-hidden rounded-xl bg-white shadow-lg animate-fade-in",
+          "relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl bg-white shadow-lg animate-fade-in",
           sizeClasses[size],
           className,
         )}
         role="document"
       >
         {(title || description) && (
-          <div className="border-b border-slate-200 p-6 pb-4">
+          <div className="shrink-0 border-b border-slate-200 p-6 pb-4">
             {title && (
               <h2 className="text-lg font-semibold text-slate-900" id="modal-title">
                 {title}
@@ -88,9 +88,9 @@ export function Modal({
             )}
           </div>
         )}
-        <div className="p-6">{children}</div>
+        <div className="overflow-y-auto p-6">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4">
             {footer}
           </div>
         )}

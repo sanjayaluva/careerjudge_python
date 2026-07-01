@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
   Alert,
@@ -52,11 +53,13 @@ export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [roleFilter, setRoleFilter] = useState<string>(""); // "" = all roles
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
   const [assignTarget, setAssignTarget] = useState<User | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Debounce search input.
   useEffect(() => {
@@ -68,9 +71,12 @@ export default function UsersPage() {
   }, [search]);
 
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: [...USERS_KEY, page, debouncedSearch],
+    queryKey: [...USERS_KEY, page, debouncedSearch, roleFilter],
     queryFn: () =>
-      listUsers({ page, ...(debouncedSearch ? { search: debouncedSearch } : {}) }),
+      listUsers({
+        page,
+        ...(debouncedSearch ? { search: debouncedSearch } : {}),
+      }),
   });
 
   const { data: roles = [] } = useQuery({
@@ -89,9 +95,14 @@ export default function UsersPage() {
       setDeleteError(extractApiError(err));
     },
   });
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const users = data?.results ?? [];
+  // Client-side role filter (backend doesn't filter by role yet — additive TODO)
+  const users = useMemo(() => {
+    const all = data?.results ?? [];
+    if (!roleFilter) return all;
+    return all.filter((u) => u.role === roleFilter);
+  }, [data?.results, roleFilter]);
+
   const count = data?.count ?? 0;
   const hasNext = Boolean(data?.next);
   const hasPrev = Boolean(data?.previous);
@@ -111,7 +122,7 @@ export default function UsersPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex items-center gap-2">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
             <Input
               type="search"
               placeholder="Search by email or name..."
@@ -120,6 +131,22 @@ export default function UsersPage() {
               className="max-w-sm"
               aria-label="Search users"
             />
+            <select
+              aria-label="Filter by role"
+              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              value={roleFilter}
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All roles</option>
+              {ROLE_NAME_CHOICES.map((name) => (
+                <option key={name} value={name}>
+                  {ROLE_LABELS[name]}
+                </option>
+              ))}
+            </select>
             <Button
               variant="outline"
               size="md"
@@ -144,8 +171,8 @@ export default function UsersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Email</TableHead>
                   <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Joined</TableHead>
@@ -155,15 +182,22 @@ export default function UsersPage() {
               <TableBody>
                 {users.length === 0 ? (
                   <TableEmpty colSpan={6}>
-                    {debouncedSearch
-                      ? "No users match your search."
+                    {debouncedSearch || roleFilter
+                      ? "No users match your filters."
                       : "No users yet. Create one to get started."}
                   </TableEmpty>
                 ) : (
                   users.map((u) => (
                     <TableRow key={u.id}>
-                      <TableCell className="font-medium text-slate-900">{u.email}</TableCell>
-                      <TableCell>{u.full_name || "—"}</TableCell>
+                      <TableCell className="font-medium text-slate-900">
+                        <Link
+                          to={`/admin/users/${u.id}`}
+                          className="text-primary-600 hover:underline"
+                        >
+                          {u.full_name || "—"}
+                        </Link>
+                      </TableCell>
+                      <TableCell>{u.email}</TableCell>
                       <TableCell>
                         {u.role ? (
                           <Badge variant="primary">{ROLE_LABELS[u.role]}</Badge>
@@ -221,12 +255,9 @@ export default function UsersPage() {
             </Table>
           )}
 
-          {/* Pagination */}
           {(hasPrev || hasNext) && (
             <div className="mt-4 flex items-center justify-between">
-              <p className="text-sm text-slate-500">
-                Page {page}
-              </p>
+              <p className="text-sm text-slate-500">Page {page}</p>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -250,20 +281,20 @@ export default function UsersPage() {
         </CardContent>
       </Card>
 
-      <CreateUserModal
+      <UserFormModal
+        mode="create"
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         roles={roles}
       />
-      <EditUserModal
+      <UserFormModal
+        mode="edit"
         user={editUser}
+        open={Boolean(editUser)}
         onClose={() => setEditUser(null)}
         roles={roles}
       />
-      <AssignRoleModal
-        user={assignTarget}
-        onClose={() => setAssignTarget(null)}
-      />
+      <AssignRoleModal user={assignTarget} onClose={() => setAssignTarget(null)} />
       <DeleteUserModal
         user={deleteUser}
         error={deleteError}
@@ -276,19 +307,26 @@ export default function UsersPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Create user modal
+// Unified User Form Modal — used for both create and edit
+// Wide horizontal layout, 2-column grid, fits within viewport.
 // ---------------------------------------------------------------------------
 
-interface CreateUserModalProps {
+interface UserFormModalProps {
+  mode: "create" | "edit";
   open: boolean;
+  user?: User | null;
   onClose: () => void;
   roles: Role[];
 }
 
-function CreateUserModal({ open, onClose, roles }: CreateUserModalProps) {
+function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps) {
   const queryClient = useQueryClient();
+  const isEdit = mode === "edit";
+
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [roleId, setRoleId] = useState<number | "">("");
   const [isActive, setIsActive] = useState(true);
   const [isVerified, setIsVerified] = useState(false);
@@ -296,34 +334,60 @@ function CreateUserModal({ open, onClose, roles }: CreateUserModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const mutation = useMutation({
+  // Load user data when editing
+  useEffect(() => {
+    if (isEdit && user) {
+      setEmail(user.email);
+      setFullName(user.full_name);
+      setPhone(user.phone);
+      const match = roles.find((r) => r.name === user.role);
+      setRoleId(match?.id ?? "");
+      setIsActive(user.is_active);
+      setIsVerified(user.is_email_verified);
+      setIsTrial(user.is_trial_user);
+      setPassword("");
+      setError(null);
+      setSuccess(null);
+    } else if (!isEdit) {
+      // Reset form for create mode
+      setEmail("");
+      setFullName("");
+      setPhone("");
+      setPassword("");
+      setRoleId("");
+      setIsActive(true);
+      setIsVerified(false);
+      setIsTrial(false);
+      setError(null);
+      setSuccess(null);
+    }
+  }, [isEdit, user, roles, open]);
+
+  const createMutation = useMutation({
     mutationFn: (payload: AdminCreateUserPayload) => apiCreateUser(payload),
     onSuccess: () => {
-      setSuccess("User created.");
+      setSuccess("User created successfully.");
       void queryClient.invalidateQueries({ queryKey: USERS_KEY });
-      setTimeout(() => {
-        resetForm();
-        onClose();
-      }, 800);
+      setTimeout(() => onClose(), 800);
     },
     onError: (err) => setError(extractApiError(err)),
   });
 
-  function resetForm() {
-    setEmail("");
-    setFullName("");
-    setRoleId("");
-    setIsActive(true);
-    setIsVerified(false);
-    setIsTrial(false);
-    setError(null);
-    setSuccess(null);
-  }
+  const updateMutation = useMutation({
+    mutationFn: (payload: AdminUpdateUserPayload) => apiUpdateUser(user!.id, payload),
+    onSuccess: () => {
+      setSuccess("User updated successfully.");
+      void queryClient.invalidateQueries({ queryKey: USERS_KEY });
+      setTimeout(() => onClose(), 800);
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError("Enter a valid email address.");
       return;
@@ -336,26 +400,37 @@ function CreateUserModal({ open, onClose, roles }: CreateUserModalProps) {
       setError("Select a role.");
       return;
     }
-    mutation.mutate({
+
+    const payload = {
       email,
       full_name: fullName,
+      phone,
       is_active: isActive,
       is_email_verified: isVerified,
       is_trial_user: isTrial,
       role: roleId as number,
-    });
+    };
+
+    if (isEdit) {
+      // Only send password if provided
+      updateMutation.mutate({
+        ...payload,
+        ...(password ? { password } : {}),
+      });
+    } else {
+      createMutation.mutate(payload);
+    }
   };
+
+  const isLoading = createMutation.isPending || updateMutation.isPending;
 
   return (
     <Modal
       open={open}
-      onClose={() => {
-        resetForm();
-        onClose();
-      }}
-      title="Create user"
-      description="Create a new account and assign a role."
-      size="md"
+      onClose={onClose}
+      title={isEdit ? "Edit user" : "Create user"}
+      description={isEdit ? user?.email : "Create a new account and assign a role."}
+      size="lg"
     >
       {error && (
         <Alert variant="error" className="mb-4">
@@ -368,31 +443,78 @@ function CreateUserModal({ open, onClose, roles }: CreateUserModalProps) {
         </Alert>
       )}
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        <div>
-          <Label htmlFor="cu-email" required>Email</Label>
-          <Input id="cu-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        {/* 2-column grid for wider forms — fits within viewport */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="uf-name" required>
+              Full name
+            </Label>
+            <Input
+              id="uf-name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div>
+            <Label htmlFor="uf-email" required>
+              Email
+            </Label>
+            <Input
+              id="uf-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="uf-phone">Phone</Label>
+            <Input
+              id="uf-phone"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="uf-password">
+              Password {isEdit && <span className="text-slate-400">(leave blank to keep current)</span>}
+            </Label>
+            <Input
+              id="uf-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={isEdit ? "••••••••" : "Set initial password"}
+              autoComplete="new-password"
+            />
+            {!isEdit && (
+              <p className="mt-1 text-xs text-slate-500">
+                Leave blank to auto-generate and email the user.
+              </p>
+            )}
+          </div>
+          <div className="sm:col-span-2">
+            <Label htmlFor="uf-role" required>
+              Role
+            </Label>
+            <select
+              id="uf-role"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              value={roleId}
+              onChange={(e) => setRoleId(e.target.value === "" ? "" : Number(e.target.value))}
+            >
+              <option value="">Select a role...</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {ROLE_LABELS[r.name]}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div>
-          <Label htmlFor="cu-name" required>Full name</Label>
-          <Input id="cu-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-        </div>
-        <div>
-          <Label htmlFor="cu-role" required>Role</Label>
-          <select
-            id="cu-role"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={roleId}
-            onChange={(e) => setRoleId(e.target.value === "" ? "" : Number(e.target.value))}
-          >
-            <option value="">Select a role...</option>
-            {roles.map((r) => (
-              <option key={r.id} value={r.id}>
-                {ROLE_LABELS[r.name]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-2">
+
+        <div className="flex flex-wrap gap-4 rounded-md border border-slate-200 bg-slate-50 p-3">
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
               type="checkbox"
@@ -421,157 +543,13 @@ function CreateUserModal({ open, onClose, roles }: CreateUserModalProps) {
             Trial account
           </label>
         </div>
-        <div className="flex justify-end gap-2">
+
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" loading={mutation.isPending}>
-            Create user
-          </Button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Edit user modal
-// ---------------------------------------------------------------------------
-
-interface EditUserModalProps {
-  user: User | null;
-  onClose: () => void;
-  roles: Role[];
-}
-
-function EditUserModal({ user, onClose, roles }: EditUserModalProps) {
-  const queryClient = useQueryClient();
-  const [email, setEmail] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [roleId, setRoleId] = useState<number | "">("");
-  const [isActive, setIsActive] = useState(true);
-  const [isVerified, setIsVerified] = useState(false);
-  const [isTrial, setIsTrial] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!user) return;
-    setEmail(user.email);
-    setFullName(user.full_name);
-    setPhone(user.phone);
-    const match = roles.find((r) => r.name === user.role);
-    setRoleId(match?.id ?? "");
-    setIsActive(user.is_active);
-    setIsVerified(user.is_email_verified);
-    setIsTrial(user.is_trial_user);
-    setError(null);
-  }, [user, roles]);
-
-  const mutation = useMutation({
-    mutationFn: (payload: AdminUpdateUserPayload) => apiUpdateUser(user!.id, payload),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: USERS_KEY });
-      onClose();
-    },
-    onError: (err) => setError(extractApiError(err)),
-  });
-
-  if (!user) return null;
-
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Enter a valid email address.");
-      return;
-    }
-    if (roleId === "") {
-      setError("Select a role.");
-      return;
-    }
-    mutation.mutate({
-      email,
-      full_name: fullName,
-      phone,
-      is_active: isActive,
-      is_email_verified: isVerified,
-      is_trial_user: isTrial,
-      role: roleId as number,
-    });
-  };
-
-  return (
-    <Modal open={Boolean(user)} onClose={onClose} title="Edit user" description={user.email} size="md">
-      {error && (
-        <Alert variant="error" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        <div>
-          <Label htmlFor="eu-email" required>Email</Label>
-          <Input id="eu-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div>
-          <Label htmlFor="eu-name" required>Full name</Label>
-          <Input id="eu-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-        </div>
-        <div>
-          <Label htmlFor="eu-phone">Phone</Label>
-          <Input id="eu-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        </div>
-        <div>
-          <Label htmlFor="eu-role" required>Role</Label>
-          <select
-            id="eu-role"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={roleId}
-            onChange={(e) => setRoleId(e.target.value === "" ? "" : Number(e.target.value))}
-          >
-            <option value="">Select a role...</option>
-            {roles.map((r) => (
-              <option key={r.id} value={r.id}>
-                {ROLE_LABELS[r.name]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
-            />
-            Active
-          </label>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              checked={isVerified}
-              onChange={(e) => setIsVerified(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
-            />
-            Email verified
-          </label>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              checked={isTrial}
-              onChange={(e) => setIsTrial(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
-            />
-            Trial account
-          </label>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" loading={mutation.isPending}>
-            Save changes
+          <Button type="submit" loading={isLoading}>
+            {isEdit ? "Save changes" : "Create user"}
           </Button>
         </div>
       </form>

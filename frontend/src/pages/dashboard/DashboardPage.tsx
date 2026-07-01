@@ -22,6 +22,7 @@ import {
   NAV_ITEMS,
   ROLE_LABELS,
   type ModuleKey,
+  type RoleName,
 } from "@/lib/constants";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -46,8 +47,15 @@ export default function DashboardPage() {
   const denied = searchParams.get("denied");
 
   const roleLabel = user?.role ? ROLE_LABELS[user.role] : null;
+
+  // Filter modules by the user's role — only show what they can actually access.
+  // Exclude 'dashboard' (we're on it) and 'profile' (shown in topbar avatar menu).
+  const userRole = (user?.role ?? "individual") as RoleName;
   const visibleModules = NAV_ITEMS.filter(
-    (item) => item.key !== "dashboard" && item.key !== "profile",
+    (item) =>
+      item.key !== "dashboard" &&
+      item.key !== "profile" &&
+      item.roles.includes(userRole),
   );
 
   return (
@@ -102,28 +110,37 @@ export default function DashboardPage() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
           Your modules
         </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {visibleModules.map((item) => {
-            const Icon = ICONS[item.icon] ?? LayoutDashboard;
-            return (
-              <Link
-                key={item.key as ModuleKey}
-                to={item.to}
-                className="group block rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
-              >
-                <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary-50 text-primary-600 group-hover:bg-primary-100">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                </div>
-                <h3 className="text-base font-semibold text-slate-900">
-                  {MODULE_LABELS[item.key]}
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  {MODULE_DESCRIPTIONS[item.key]}
-                </p>
-              </Link>
-            );
-          })}
-        </div>
+        {visibleModules.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-slate-500">
+              You don&apos;t have access to any modules yet. Contact an administrator if you
+              believe this is an error.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {visibleModules.map((item) => {
+              const Icon = ICONS[item.icon] ?? LayoutDashboard;
+              return (
+                <Link
+                  key={item.key as ModuleKey}
+                  to={item.to}
+                  className="group block rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                >
+                  <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary-50 text-primary-600 group-hover:bg-primary-100">
+                    <Icon className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <h3 className="text-base font-semibold text-slate-900">
+                    {MODULE_LABELS[item.key]}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {MODULE_DESCRIPTIONS[item.key]}
+                  </p>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
