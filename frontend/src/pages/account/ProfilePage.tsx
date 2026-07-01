@@ -158,9 +158,7 @@ export default function ProfilePage() {
   if (meError && !me) {
     return (
       <Alert variant="error">
-        <AlertDescription>
-          Failed to load your profile. {extractApiError(meError)}
-        </AlertDescription>
+        <AlertDescription>Failed to load your profile. {extractApiError(meError)}</AlertDescription>
       </Alert>
     );
   }
@@ -186,7 +184,9 @@ export default function ProfilePage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Account status</dt>
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Account status
+              </dt>
               <dd className="mt-1 flex flex-wrap gap-1">
                 {me?.is_active ? (
                   <Badge variant="success">Active</Badge>
@@ -198,7 +198,9 @@ export default function ProfilePage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Member since</dt>
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Member since
+              </dt>
               <dd className="mt-1 text-sm text-slate-900">
                 {me?.created_at ? new Date(me.created_at).toLocaleDateString() : "—"}
               </dd>
@@ -210,9 +212,7 @@ export default function ProfilePage() {
       <Card>
         <CardHeader>
           <CardTitle>Profile</CardTitle>
-          <CardDescription>
-            Update your personal information and contact details.
-          </CardDescription>
+          <CardDescription>Update your personal information and contact details.</CardDescription>
         </CardHeader>
         <CardContent>
           {serverError && (
@@ -267,10 +267,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    loading={basicForm.formState.isSubmitting}
-                  >
+                  <Button type="submit" loading={basicForm.formState.isSubmitting}>
                     Save changes
                   </Button>
                 </div>
@@ -304,7 +301,11 @@ export default function ProfilePage() {
                   </div>
                   <div>
                     <Label htmlFor="date_of_birth">Date of birth</Label>
-                    <Input id="date_of_birth" type="date" {...profileForm.register("date_of_birth")} />
+                    <Input
+                      id="date_of_birth"
+                      type="date"
+                      {...profileForm.register("date_of_birth")}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="city">City</Label>
@@ -341,10 +342,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    loading={profileForm.formState.isSubmitting}
-                  >
+                  <Button type="submit" loading={profileForm.formState.isSubmitting}>
                     Save profile details
                   </Button>
                 </div>

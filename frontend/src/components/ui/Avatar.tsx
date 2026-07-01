@@ -24,18 +24,14 @@ export const Avatar = forwardRef<HTMLSpanElement, AvatarProps>(
       <span
         ref={ref}
         className={cn(
-          "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-100 text-primary-700 font-semibold",
+          "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-100 font-semibold text-primary-700",
           sizeClasses[size],
           className,
         )}
         {...props}
       >
         {src ? (
-          <img
-            src={src}
-            alt={name || "User avatar"}
-            className="h-full w-full object-cover"
-          />
+          <img src={src} alt={name || "User avatar"} className="h-full w-full object-cover" />
         ) : (
           <span aria-hidden="true">{initials}</span>
         )}

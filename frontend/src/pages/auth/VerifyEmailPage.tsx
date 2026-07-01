@@ -99,9 +99,7 @@ export default function VerifyEmailPage() {
           </Alert>
 
           <div className="rounded-md border border-slate-200 bg-white p-4">
-            <p className="mb-3 text-sm font-medium text-slate-700">
-              Need a new verification link?
-            </p>
+            <p className="mb-3 text-sm font-medium text-slate-700">Need a new verification link?</p>
             <form onSubmit={handleResend} className="space-y-3">
               <div>
                 <Label htmlFor="resendEmail">Email</Label>
@@ -113,9 +111,7 @@ export default function VerifyEmailPage() {
                   onChange={(e) => setResendEmail(e.target.value)}
                   hasError={Boolean(resendError)}
                 />
-                {resendError && (
-                  <p className="mt-1 text-xs text-danger">{resendError}</p>
-                )}
+                {resendError && <p className="mt-1 text-xs text-danger">{resendError}</p>}
                 {resendSuccess && (
                   <p className="mt-1 text-xs text-success-700">
                     If an account exists, a new link has been sent.

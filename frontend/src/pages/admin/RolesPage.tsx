@@ -44,7 +44,13 @@ export default function RolesPage() {
   const [deleteRole, setDeleteRole] = useState<Role | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const { data: roles = [], isLoading, isError, error, refetch } = useQuery({
+  const {
+    data: roles = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ROLES_KEY,
     queryFn: listRoles,
   });
@@ -66,8 +72,8 @@ export default function RolesPage() {
             <div>
               <CardTitle>Roles & Permissions</CardTitle>
               <CardDescription>
-                {roles.length} role{roles.length === 1 ? "" : "s"} total. System roles are
-                frozen; custom roles can be modified.
+                {roles.length} role{roles.length === 1 ? "" : "s"} total. System roles are frozen;
+                custom roles can be modified.
               </CardDescription>
             </div>
             <Button onClick={() => setCreateOpen(true)}>Create custom role</Button>
@@ -110,59 +116,62 @@ export default function RolesPage() {
                     const baseRoleDisplay = r.is_system
                       ? "—"
                       : r.base_role_name
-                        ? (ROLE_LABELS[r.base_role_name as keyof typeof ROLE_LABELS] ?? r.base_role_name)
+                        ? (ROLE_LABELS[r.base_role_name as keyof typeof ROLE_LABELS] ??
+                          r.base_role_name)
                         : "None (fully custom)";
                     return (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-medium text-slate-900">
-                        {displayName}
-                      </TableCell>
-                      <TableCell>
-                        {r.is_system ? (
-                          <Badge variant="default">System (Frozen)</Badge>
-                        ) : (
-                          <Badge variant="primary">Custom</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-slate-500">{baseRoleDisplay}</TableCell>
-                      <TableCell className="text-slate-500">
-                        {r.effective_rights?.length ?? r.rights?.length ?? 0} permission
-                        {(r.effective_rights?.length ?? r.rights?.length ?? 0) === 1 ? "" : "s"}
-                      </TableCell>
-                      <TableCell className="text-slate-500">{r.user_count}</TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
+                      <TableRow key={r.id}>
+                        <TableCell className="font-medium text-slate-900">{displayName}</TableCell>
+                        <TableCell>
                           {r.is_system ? (
-                            <span className="inline-flex items-center px-3 py-1.5 text-xs text-slate-400">
-                              Immutable
-                            </span>
+                            <Badge variant="default">System (Frozen)</Badge>
                           ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setPermissionsRole(r)}
-                            >
-                              Permissions
-                            </Button>
+                            <Badge variant="primary">Custom</Badge>
                           )}
-                          {!r.is_system && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-danger hover:bg-danger-50"
-                              onClick={() => {
-                                setDeleteError(null);
-                                setDeleteRole(r);
-                              }}
-                              disabled={r.user_count > 0}
-                              title={r.user_count > 0 ? "Reassign users before deleting" : "Delete role"}
-                            >
-                              Delete
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                        </TableCell>
+                        <TableCell className="text-slate-500">{baseRoleDisplay}</TableCell>
+                        <TableCell className="text-slate-500">
+                          {r.effective_rights?.length ?? r.rights?.length ?? 0} permission
+                          {(r.effective_rights?.length ?? r.rights?.length ?? 0) === 1 ? "" : "s"}
+                        </TableCell>
+                        <TableCell className="text-slate-500">{r.user_count}</TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            {r.is_system ? (
+                              <span className="inline-flex items-center px-3 py-1.5 text-xs text-slate-400">
+                                Immutable
+                              </span>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setPermissionsRole(r)}
+                              >
+                                Permissions
+                              </Button>
+                            )}
+                            {!r.is_system && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-danger hover:bg-danger-50"
+                                onClick={() => {
+                                  setDeleteError(null);
+                                  setDeleteRole(r);
+                                }}
+                                disabled={r.user_count > 0}
+                                title={
+                                  r.user_count > 0
+                                    ? "Reassign users before deleting"
+                                    : "Delete role"
+                                }
+                              >
+                                Delete
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
                     );
                   })
                 )}

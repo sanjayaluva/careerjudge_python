@@ -25,12 +25,7 @@ export interface ApiPaginatedEnvelope<T> {
 }
 
 export type ApiErrorCode =
-  | "validation_error"
-  | "unauthorized"
-  | "forbidden"
-  | "server_error"
-  | "not_found"
-  | "throttled";
+  "validation_error" | "unauthorized" | "forbidden" | "server_error" | "not_found" | "throttled";
 
 export interface ApiErrorEnvelope {
   error: {

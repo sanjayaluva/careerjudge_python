@@ -64,13 +64,13 @@ export function Modal({
       aria-modal="true"
     >
       <div
-        className="absolute inset-0 bg-slate-900/50 animate-fade-in"
+        className="animate-fade-in absolute inset-0 bg-slate-900/50"
         onClick={closeOnBackdrop ? onClose : undefined}
         aria-hidden="true"
       />
       <div
         className={cn(
-          "relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl bg-white shadow-lg animate-fade-in",
+          "animate-fade-in relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl bg-white shadow-lg",
           sizeClasses[size],
           className,
         )}
@@ -83,9 +83,7 @@ export function Modal({
                 {title}
               </h2>
             )}
-            {description && (
-              <p className="mt-1 text-sm text-slate-500">{description}</p>
-            )}
+            {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
           </div>
         )}
         <div className="overflow-y-auto p-6">{children}</div>

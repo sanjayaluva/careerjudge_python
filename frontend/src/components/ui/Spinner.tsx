@@ -17,8 +17,7 @@ const spinnerVariants = cva("animate-spin", {
 });
 
 export interface SpinnerProps
-  extends HTMLAttributes<SVGSVGElement>,
-    VariantProps<typeof spinnerVariants> {}
+  extends HTMLAttributes<SVGSVGElement>, VariantProps<typeof spinnerVariants> {}
 
 export const Spinner = forwardRef<SVGSVGElement, SpinnerProps>(
   ({ className, size, ...props }, ref) => (

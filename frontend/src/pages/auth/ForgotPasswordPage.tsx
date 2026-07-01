@@ -47,8 +47,8 @@ export default function ForgotPasswordPage() {
       {sent ? (
         <Alert variant="success">
           <AlertDescription>
-            If an account with <strong>{email}</strong> exists, you&apos;ll receive an email
-            with a password reset link shortly.
+            If an account with <strong>{email}</strong> exists, you&apos;ll receive an email with a
+            password reset link shortly.
           </AlertDescription>
         </Alert>
       ) : (

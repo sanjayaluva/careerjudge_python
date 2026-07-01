@@ -33,17 +33,8 @@ import {
 } from "@/api/users";
 import { listRoles } from "@/api/roles";
 import { extractApiError } from "@/api/client";
-import {
-  ROLE_LABELS,
-  ROLE_NAME_CHOICES,
-  type RoleName,
-} from "@/lib/constants";
-import type {
-  AdminCreateUserPayload,
-  AdminUpdateUserPayload,
-  Role,
-  User,
-} from "@/api/types";
+import { ROLE_LABELS, ROLE_NAME_CHOICES, type RoleName } from "@/lib/constants";
+import type { AdminCreateUserPayload, AdminUpdateUserPayload, Role, User } from "@/api/types";
 import { formatDate } from "@/lib/utils";
 
 const USERS_KEY = ["admin", "users"];
@@ -115,7 +106,9 @@ export default function UsersPage() {
             <div>
               <CardTitle>Users</CardTitle>
               <CardDescription>
-                {count > 0 ? `${count} user${count === 1 ? "" : "s"} total` : "Manage user accounts"}
+                {count > 0
+                  ? `${count} user${count === 1 ? "" : "s"} total`
+                  : "Manage user accounts"}
               </CardDescription>
             </div>
             <Button onClick={() => setCreateOpen(true)}>Create user</Button>
@@ -147,12 +140,7 @@ export default function UsersPage() {
                 </option>
               ))}
             </select>
-            <Button
-              variant="outline"
-              size="md"
-              onClick={() => refetch()}
-              aria-label="Refresh list"
-            >
+            <Button variant="outline" size="md" onClick={() => refetch()} aria-label="Refresh list">
               Refresh
             </Button>
           </div>
@@ -212,27 +200,17 @@ export default function UsersPage() {
                           ) : (
                             <Badge variant="warning">Inactive</Badge>
                           )}
-                          {u.is_email_verified && (
-                            <Badge variant="default">Verified</Badge>
-                          )}
+                          {u.is_email_verified && <Badge variant="default">Verified</Badge>}
                           {u.is_trial_user && <Badge variant="outline">Trial</Badge>}
                         </div>
                       </TableCell>
                       <TableCell className="text-slate-500">{formatDate(u.created_at)}</TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setAssignTarget(u)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => setAssignTarget(u)}>
                             Role
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setEditUser(u)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => setEditUser(u)}>
                             Edit
                           </Button>
                           <Button
@@ -478,7 +456,8 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
           </div>
           <div>
             <Label htmlFor="uf-password">
-              Password {isEdit && <span className="text-slate-400">(leave blank to keep current)</span>}
+              Password{" "}
+              {isEdit && <span className="text-slate-400">(leave blank to keep current)</span>}
             </Label>
             <Input
               id="uf-password"
@@ -507,9 +486,7 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
               <option value="">Select a role...</option>
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.is_system
-                    ? (ROLE_LABELS[r.name as RoleName] ?? r.name)
-                    : r.name}
+                  {r.is_system ? (ROLE_LABELS[r.name as RoleName] ?? r.name) : r.name}
                 </option>
               ))}
             </select>
@@ -592,7 +569,13 @@ function AssignRoleModal({ user, onClose }: AssignRoleModalProps) {
   if (!user) return null;
 
   return (
-    <Modal open={Boolean(user)} onClose={onClose} title="Assign role" description={user.email} size="sm">
+    <Modal
+      open={Boolean(user)}
+      onClose={onClose}
+      title="Assign role"
+      description={user.email}
+      size="sm"
+    >
       {error && (
         <Alert variant="error" className="mb-4">
           <AlertDescription>{error}</AlertDescription>

@@ -47,10 +47,7 @@ describe("<SignupPage />", () => {
     await user.type(screen.getByLabelText(/full name/i), "Jane Doe");
     await user.type(screen.getByLabelText(/email/i), "jane@example.com");
     await user.type(document.getElementById("password") as HTMLInputElement, "Password1");
-    await user.type(
-      document.getElementById("confirmPassword") as HTMLInputElement,
-      "Password2",
-    );
+    await user.type(document.getElementById("confirmPassword") as HTMLInputElement, "Password2");
     await user.click(screen.getByRole("button", { name: /create account/i }));
 
     expect(await screen.findByText(/passwords do not match/i)).toBeInTheDocument();
@@ -63,10 +60,7 @@ describe("<SignupPage />", () => {
     await user.type(screen.getByLabelText(/full name/i), "Jane Doe");
     await user.type(screen.getByLabelText(/email/i), "jane@example.com");
     await user.type(document.getElementById("password") as HTMLInputElement, "short");
-    await user.type(
-      document.getElementById("confirmPassword") as HTMLInputElement,
-      "short",
-    );
+    await user.type(document.getElementById("confirmPassword") as HTMLInputElement, "short");
     await user.click(screen.getByRole("button", { name: /create account/i }));
 
     // The password is too short — error message must appear in the error area

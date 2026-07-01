@@ -10,8 +10,7 @@ const inputSizeClasses: Record<InputSize, string> = {
   lg: "h-12 text-base",
 };
 
-export interface InputProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
+export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
   /** Optional id — if omitted, the label's htmlFor will be derived from name. */
   id?: string;
   /** Show an error state — typically passed `errors.field`. */
@@ -27,12 +26,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         type={type}
         id={id}
         className={cn(
-          "w-full rounded-md border bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors",
+          "w-full rounded-md border bg-white px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400",
           "focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-1",
           inputSizeClasses[inputSize],
-          hasError
-            ? "border-danger focus:ring-danger"
-            : "border-slate-200 hover:border-slate-300",
+          hasError ? "border-danger focus:ring-danger" : "border-slate-200 hover:border-slate-300",
           disabled && "cursor-not-allowed bg-slate-50 opacity-60",
           className,
         )}

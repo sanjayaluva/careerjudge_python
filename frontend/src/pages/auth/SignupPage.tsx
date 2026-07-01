@@ -13,10 +13,7 @@ import { isEmail, isStrongPassword } from "@/lib/utils";
 const schema = z
   .object({
     full_name: z.string().min(1, "Full name is required").max(255),
-    email: z
-      .string()
-      .min(1, "Email is required")
-      .refine(isEmail, "Enter a valid email address"),
+    email: z.string().min(1, "Email is required").refine(isEmail, "Enter a valid email address"),
     password: z
       .string()
       .min(8, "Password must be at least 8 characters")
@@ -78,9 +75,9 @@ export default function SignupPage() {
       >
         <Alert variant="success" className="mb-4">
           <AlertDescription>
-            Account created for <strong>{success.email}</strong>. Click the activation link in
-            your email to complete registration.
-        </AlertDescription>
+            Account created for <strong>{success.email}</strong>. Click the activation link in your
+            email to complete registration.
+          </AlertDescription>
         </Alert>
         <div className="rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-600">
           <p className="mb-2 font-medium text-slate-700">Didn&apos;t get the email?</p>

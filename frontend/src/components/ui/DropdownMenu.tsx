@@ -49,8 +49,7 @@ export function DropdownMenu({ children, open: controlled, onOpenChange }: Dropd
   );
 }
 
-export interface DropdownMenuTriggerProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface DropdownMenuTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   asChild?: boolean;
 }
 
@@ -127,8 +126,7 @@ export function DropdownMenuContent({
   );
 }
 
-export interface DropdownMenuItemProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface DropdownMenuItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   destructive?: boolean;
 }
 
@@ -161,9 +159,20 @@ export function DropdownMenuSeparator({ className }: { className?: string }) {
   return <div className={cn("my-1 h-px bg-slate-200", className)} />;
 }
 
-export function DropdownMenuLabel({ className, children }: { className?: string; children: ReactNode }) {
+export function DropdownMenuLabel({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <div className={cn("px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500", className)}>
+    <div
+      className={cn(
+        "px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500",
+        className,
+      )}
+    >
       {children}
     </div>
   );

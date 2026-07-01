@@ -1,11 +1,4 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Badge,
-} from "@/components/ui";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge } from "@/components/ui";
 import { PERMISSION_CATALOG } from "@/api/roles";
 
 export default function PermissionsPage() {

@@ -15,7 +15,15 @@ import {
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { Alert, AlertDescription, Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui";
 import {
   MODULE_DESCRIPTIONS,
   MODULE_LABELS,
@@ -52,10 +60,7 @@ export default function DashboardPage() {
   // Exclude 'dashboard' (we're on it) and 'profile' (shown in topbar avatar menu).
   const userRole = (user?.role ?? "individual") as RoleName;
   const visibleModules = NAV_ITEMS.filter(
-    (item) =>
-      item.key !== "dashboard" &&
-      item.key !== "profile" &&
-      item.roles.includes(userRole),
+    (item) => item.key !== "dashboard" && item.key !== "profile" && item.roles.includes(userRole),
   );
 
   return (
@@ -63,8 +68,8 @@ export default function DashboardPage() {
       {denied && (
         <Alert variant="warning">
           <AlertDescription>
-            You don&apos;t have permission to access that page. You&apos;ve been redirected to
-            your dashboard.
+            You don&apos;t have permission to access that page. You&apos;ve been redirected to your
+            dashboard.
           </AlertDescription>
         </Alert>
       )}
@@ -113,8 +118,8 @@ export default function DashboardPage() {
         {visibleModules.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-sm text-slate-500">
-              You don&apos;t have access to any modules yet. Contact an administrator if you
-              believe this is an error.
+              You don&apos;t have access to any modules yet. Contact an administrator if you believe
+              this is an error.
             </CardContent>
           </Card>
         ) : (
@@ -133,9 +138,7 @@ export default function DashboardPage() {
                   <h3 className="text-base font-semibold text-slate-900">
                     {MODULE_LABELS[item.key]}
                   </h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {MODULE_DESCRIPTIONS[item.key]}
-                  </p>
+                  <p className="mt-1 text-sm text-slate-500">{MODULE_DESCRIPTIONS[item.key]}</p>
                 </Link>
               );
             })}

@@ -34,8 +34,8 @@ export function AuthLayout({ title, description, children, footer }: AuthLayoutP
             Modern career assessment, profiling, and counseling.
           </h2>
           <p className="text-primary-100">
-            Assess candidates, profile careers, and deliver counseling — all from one platform
-            built for educators and enterprises.
+            Assess candidates, profile careers, and deliver counseling — all from one platform built
+            for educators and enterprises.
           </p>
         </div>
 

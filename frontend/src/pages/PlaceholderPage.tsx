@@ -22,8 +22,8 @@ export default function PlaceholderPage({ title, description }: PlaceholderPageP
       </CardHeader>
       <CardContent>
         <p className="text-sm text-slate-600">
-          This page is a placeholder. Full functionality will be delivered in a later phase of
-          the CareerJudge roadmap.
+          This page is a placeholder. Full functionality will be delivered in a later phase of the
+          CareerJudge roadmap.
         </p>
         {searchParams.toString() && (
           <p className="mt-2 text-xs text-slate-400">Query: {searchParams.toString()}</p>

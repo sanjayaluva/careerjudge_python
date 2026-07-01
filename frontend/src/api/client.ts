@@ -234,27 +234,43 @@ export async function apiGetPaged<T>(
   url: string,
   config?: AxiosRequestConfig,
 ): Promise<{ count: number; next: string | null; previous: string | null; results: T[] }> {
-  const res = await apiClient.get<ApiSuccessEnvelope<{ count: number; next: string | null; previous: string | null; results: T[] }>>(
-    url,
-    config,
-  );
+  const res = await apiClient.get<
+    ApiSuccessEnvelope<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: T[];
+    }>
+  >(url, config);
   return res.data.data;
 }
 
 /** POST — returns the unwrapped `data`. */
-export async function apiPost<T>(url: string, body?: unknown, config?: AxiosRequestConfig): Promise<T> {
+export async function apiPost<T>(
+  url: string,
+  body?: unknown,
+  config?: AxiosRequestConfig,
+): Promise<T> {
   const res = await apiClient.post<ApiSuccessEnvelope<T>>(url, body, config);
   return res.data.data;
 }
 
 /** PATCH — returns the unwrapped `data`. */
-export async function apiPatch<T>(url: string, body?: unknown, config?: AxiosRequestConfig): Promise<T> {
+export async function apiPatch<T>(
+  url: string,
+  body?: unknown,
+  config?: AxiosRequestConfig,
+): Promise<T> {
   const res = await apiClient.patch<ApiSuccessEnvelope<T>>(url, body, config);
   return res.data.data;
 }
 
 /** PUT — returns the unwrapped `data`. */
-export async function apiPut<T>(url: string, body?: unknown, config?: AxiosRequestConfig): Promise<T> {
+export async function apiPut<T>(
+  url: string,
+  body?: unknown,
+  config?: AxiosRequestConfig,
+): Promise<T> {
   const res = await apiClient.put<ApiSuccessEnvelope<T>>(url, body, config);
   return res.data.data;
 }

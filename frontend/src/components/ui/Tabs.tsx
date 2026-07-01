@@ -74,9 +74,7 @@ export function TabsTrigger({
       onClick={() => setValue(value)}
       className={cn(
         "inline-flex h-8 items-center justify-center whitespace-nowrap rounded-sm px-3 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600",
-        selected
-          ? "bg-white text-slate-900 shadow-sm"
-          : "text-slate-500 hover:text-slate-700",
+        selected ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700",
         className,
       )}
     >
@@ -101,7 +99,7 @@ export function TabsContent({
       role="tabpanel"
       id={`${baseId}-panel-${value}`}
       aria-labelledby={`${baseId}-tab-${value}`}
-      className={cn("mt-4 animate-fade-in", className)}
+      className={cn("animate-fade-in mt-4", className)}
     >
       {children}
     </div>

@@ -60,7 +60,9 @@ export function Sidebar({ open, onClose, className }: SidebarProps) {
         </div>
 
         <div className="border-t border-slate-200 p-4 text-xs text-slate-400">
-          <p>&copy; {new Date().getFullYear()} {APP_NAME}</p>
+          <p>
+            &copy; {new Date().getFullYear()} {APP_NAME}
+          </p>
         </div>
       </aside>
     </>

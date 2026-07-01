@@ -119,9 +119,7 @@ export default function SettingsPage() {
                 onChange={(e) => setConfirm(e.target.value)}
                 hasError={Boolean(errors.confirm)}
               />
-              {errors.confirm && (
-                <p className="mt-1 text-xs text-danger">{errors.confirm}</p>
-              )}
+              {errors.confirm && <p className="mt-1 text-xs text-danger">{errors.confirm}</p>}
             </div>
             <div className="flex justify-end">
               <Button type="submit" loading={submitting}>

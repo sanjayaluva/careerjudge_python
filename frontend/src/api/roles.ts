@@ -40,10 +40,7 @@ export function assignPermission(
   return apiPost(`/accounts/roles/${id}/assign-permission`, payload);
 }
 
-export function removePermission(
-  id: number,
-  payload: RemovePermissionPayload,
-): Promise<void> {
+export function removePermission(id: number, payload: RemovePermissionPayload): Promise<void> {
   return apiPost(`/accounts/roles/${id}/remove-permission`, payload);
 }
 
