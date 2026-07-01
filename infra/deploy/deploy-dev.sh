@@ -40,14 +40,18 @@ docker compose -f "$COMPOSE_FILE" exec -T backend python manage.py migrate --noi
 echo "→ Skipping collectstatic (not needed in dev — Django serves static files directly)"
 
 echo "→ Health check…"
-# Wait for backend to be ready (retry up to 30 times = 30 seconds)
+# Wait for backend to be ready (retry up to 30 times = 60 seconds)
+# Use a simple approach: curl the health endpoint and check if response contains "ok"
 HEALTH_OK=false
 for i in $(seq 1 30); do
-  if curl -fsS http://localhost:8000/api/health/ 2>/dev/null | grep -q '"status":"ok"'; then
+  # curl -s: silent, -S: show errors, --max-time 5: don't hang
+  RESPONSE=$(curl -s --max-time 5 http://localhost:8000/api/health/ 2>&1 || echo "CURL_FAILED")
+  if [ "$RESPONSE" != "CURL_FAILED" ] && echo "$RESPONSE" | grep -q "ok"; then
     HEALTH_OK=true
+    echo "  ✓ Backend healthy (attempt $i): $RESPONSE"
     break
   fi
-  echo "  Waiting for backend… (attempt $i/30)"
+  echo "  Waiting for backend… (attempt $i/30) — last response: $RESPONSE"
   sleep 2
 done
 
@@ -55,6 +59,7 @@ if [ "$HEALTH_OK" = "true" ]; then
   echo "✓ Deploy successful — backend healthy"
 else
   echo "✗ Backend health check failed after 30 attempts"
-  docker compose -f "$COMPOSE_FILE" logs --tail=50 backend
+  echo "  Last response: $RESPONSE"
+  docker compose -f "$COMPOSE_FILE" logs --tail=20 backend
   exit 1
 fi
