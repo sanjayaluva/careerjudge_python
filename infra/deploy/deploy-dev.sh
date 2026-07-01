@@ -37,8 +37,7 @@ sleep 10
 echo "→ Running migrations…"
 docker compose -f "$COMPOSE_FILE" exec -T backend python manage.py migrate --noinput
 
-echo "→ Collecting static files…"
-docker compose -f "$COMPOSE_FILE" exec -T backend python manage.py collectstatic --noinput
+echo "→ Skipping collectstatic (not needed in dev — Django serves static files directly)"
 
 echo "→ Health check…"
 sleep 5

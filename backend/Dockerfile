@@ -45,6 +45,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /opt/venv /opt/venv
 COPY --chown=cj:cj . /app
 
+# Create writable directories for the cj user (collectstatic, staticfiles, media)
+# These are referenced in config/settings/base.py: STATIC_ROOT, MEDIA_ROOT
+RUN mkdir -p /app/static_collected /app/media /app/staticfiles && \
+    chown -R cj:cj /app/static_collected /app/media /app/staticfiles
+
 USER cj
 
 EXPOSE 8000
