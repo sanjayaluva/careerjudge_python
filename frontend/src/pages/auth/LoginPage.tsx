@@ -1,4 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -23,6 +24,7 @@ type FormValues = z.infer<typeof schema>;
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const login = useAuthStore((s) => s.login);
 
@@ -49,6 +51,9 @@ export default function LoginPage() {
         email: values.email,
         password: values.password,
       });
+      // Clear ALL cached queries from any previous session — prevents
+      // the dashboard from showing the old user's data after login.
+      queryClient.clear();
       login(response);
       navigate(from && from.startsWith("/") ? from : "/dashboard", { replace: true });
     } catch (err) {

@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   Alert,
   AlertDescription,
+  Badge,
   Button,
   Card,
   CardContent,
@@ -24,6 +25,7 @@ import { updateMe } from "@/api/me";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthStore } from "@/stores/auth";
+import { ROLE_LABELS } from "@/lib/constants";
 import type { UpdateMePayload, UserProfile } from "@/api/types";
 
 const basicSchema = z.object({
@@ -165,6 +167,46 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
+      {/* Role information card — shows the user's role and account status */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Account overview</CardTitle>
+          <CardDescription>Your role and account status in CareerJudge.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Role</dt>
+              <dd className="mt-1">
+                {me?.role ? (
+                  <Badge variant="primary">{ROLE_LABELS[me.role] ?? me.role}</Badge>
+                ) : (
+                  <Badge variant="outline">No role assigned</Badge>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Account status</dt>
+              <dd className="mt-1 flex flex-wrap gap-1">
+                {me?.is_active ? (
+                  <Badge variant="success">Active</Badge>
+                ) : (
+                  <Badge variant="warning">Inactive</Badge>
+                )}
+                {me?.is_email_verified && <Badge variant="default">Email verified</Badge>}
+                {me?.is_trial_user && <Badge variant="outline">Trial</Badge>}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Member since</dt>
+              <dd className="mt-1 text-sm text-slate-900">
+                {me?.created_at ? new Date(me.created_at).toLocaleDateString() : "—"}
+              </dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Profile</CardTitle>

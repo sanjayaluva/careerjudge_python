@@ -100,12 +100,22 @@ export default function RolesPage() {
                 {roles.length === 0 ? (
                   <TableEmpty colSpan={6}>No roles found.</TableEmpty>
                 ) : (
-                  roles.map((r) => (
+                  roles.map((r) => {
+                    // Human-readable name: system roles use ROLE_LABELS, custom roles use name
+                    const displayName =
+                      r.is_system && r.name in ROLE_LABELS
+                        ? ROLE_LABELS[r.name as keyof typeof ROLE_LABELS]
+                        : r.name;
+                    // Base role: system roles ARE the base, so show "—"
+                    const baseRoleDisplay = r.is_system
+                      ? "—"
+                      : r.base_role_name
+                        ? (ROLE_LABELS[r.base_role_name as keyof typeof ROLE_LABELS] ?? r.base_role_name)
+                        : "None (fully custom)";
+                    return (
                     <TableRow key={r.id}>
                       <TableCell className="font-medium text-slate-900">
-                        {r.is_system && r.name in ROLE_LABELS
-                          ? ROLE_LABELS[r.name as keyof typeof ROLE_LABELS]
-                          : r.name}
+                        {displayName}
                       </TableCell>
                       <TableCell>
                         {r.is_system ? (
@@ -114,12 +124,7 @@ export default function RolesPage() {
                           <Badge variant="primary">Custom</Badge>
                         )}
                       </TableCell>
-                      <TableCell className="text-slate-500">
-                        {r.base_role_name
-                          ? ROLE_LABELS[r.base_role_name as keyof typeof ROLE_LABELS] ??
-                            r.base_role_name
-                          : "—"}
-                      </TableCell>
+                      <TableCell className="text-slate-500">{baseRoleDisplay}</TableCell>
                       <TableCell className="text-slate-500">
                         {r.effective_rights?.length ?? r.rights?.length ?? 0} permission
                         {(r.effective_rights?.length ?? r.rights?.length ?? 0) === 1 ? "" : "s"}
@@ -127,15 +132,19 @@ export default function RolesPage() {
                       <TableCell className="text-slate-500">{r.user_count}</TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setPermissionsRole(r)}
-                            disabled={r.is_system}
-                            title={r.is_system ? "System roles cannot be modified" : "Manage permissions"}
-                          >
-                            Permissions
-                          </Button>
+                          {r.is_system ? (
+                            <span className="inline-flex items-center px-3 py-1.5 text-xs text-slate-400">
+                              Immutable
+                            </span>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setPermissionsRole(r)}
+                            >
+                              Permissions
+                            </Button>
+                          )}
                           {!r.is_system && (
                             <Button
                               variant="ghost"
@@ -154,7 +163,8 @@ export default function RolesPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

@@ -348,12 +348,20 @@ class CreateCustomRoleSerializer(serializers.ModelSerializer):
         and cannot be removed from this custom role.
     """
 
+    # Explicit CharField — prevents DRF from auto-detecting choices from the model
+    # (Role.name used to have choices=ROLE_CHOICES; even though it's removed now,
+    # being explicit avoids any ambiguity).
+    name = serializers.CharField(max_length=100, required=True)
+    description = serializers.CharField(required=False, allow_blank=True)
+    base_role = serializers.PrimaryKeyRelatedField(
+        queryset=Role.objects.filter(is_system=True),
+        required=False,
+        allow_null=True,
+    )
+
     class Meta:
         model = Role
         fields = ["name", "description", "base_role"]
-        extra_kwargs = {
-            "name": {"required": True},
-        }
 
     def validate_name(self, value: str) -> str:
         """Custom role name must be unique and not clash with system role names."""

@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Bell, ChevronDown, LogOut, Settings, UserCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -28,6 +29,7 @@ export interface TopbarProps {
 
 export function Topbar({ onOpenSidebar, title, subtitle }: TopbarProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const accessToken = useAuthStore((s) => s.accessToken);
   const refreshToken = useAuthStore((s) => s.refreshToken);
@@ -42,6 +44,8 @@ export function Topbar({ onOpenSidebar, title, subtitle }: TopbarProps) {
       // Even if the network call fails, we still clear local state.
       console.warn("Logout API call failed:", extractApiError(err));
     } finally {
+      // Clear ALL cached queries so the next login starts fresh.
+      queryClient.clear();
       clear();
       navigate("/login", { replace: true });
     }
