@@ -19,6 +19,8 @@ import PermissionsPage from "@/pages/admin/PermissionsPage";
 import RolesPage from "@/pages/admin/RolesPage";
 import UsersPage from "@/pages/admin/UsersPage";
 import UserViewPage from "@/pages/admin/UserViewPage";
+import OrganizationsPage from "@/pages/organizations/OrganizationsPage";
+import OrganizationDetailPage from "@/pages/organizations/OrganizationDetailPage";
 import { useAuthStore } from "@/stores/auth";
 
 const queryClient = new QueryClient({
@@ -119,7 +121,8 @@ export default function App() {
                 }
               />
               {/* Placeholder routes for Phase 2+ modules */}
-              <Route path="organizations" element={<PlaceholderPage title="Organizations" />} />
+              <Route path="organizations" element={<OrganizationsPage />} />
+              <Route path="organizations/:id" element={<OrganizationDetailPage />} />
               <Route path="question-bank" element={<PlaceholderPage title="Question Bank" />} />
               <Route path="assessments" element={<PlaceholderPage title="Assessments" />} />
               <Route
