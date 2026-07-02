@@ -81,7 +81,7 @@ export interface ListParams {
   search?: string;
 }
 
-const BASE = "/organizations";
+const BASE = "/organizations/";
 
 export function listOrganizations(params: ListParams = {}): Promise<{
   count: number;
@@ -118,30 +118,30 @@ export function deleteOrganization(id: number): Promise<void> {
 
 // Groups
 export function listGroups(orgId: number): Promise<Group[]> {
-  return apiGetPaged<Group>(`${BASE}/${orgId}/groups`).then((r) => r.results);
+  return apiGetPaged<Group>(`${BASE}/${orgId}/groups/`).then((r) => r.results);
 }
 
 export function createGroup(
   orgId: number,
   payload: { name: string; description?: string },
 ): Promise<Group> {
-  return apiPost<Group>(`${BASE}/${orgId}/groups`, payload);
+  return apiPost<Group>(`${BASE}/${orgId}/groups/`, payload);
 }
 
 export function deleteGroup(orgId: number, groupId: number): Promise<void> {
-  return apiDelete(`${BASE}/${orgId}/groups/${groupId}`);
+  return apiDelete(`${BASE}/${orgId}/groups/${groupId}/`);
 }
 
 // Members
 export function listMembers(orgId: number): Promise<OrganizationMember[]> {
-  return apiGetPaged<OrganizationMember>(`${BASE}/${orgId}/members`).then((r) => r.results);
+  return apiGetPaged<OrganizationMember>(`${BASE}/${orgId}/members/`).then((r) => r.results);
 }
 
 export function addMember(
   orgId: number,
   payload: { user_email: string; group_id?: number | null },
 ): Promise<OrganizationMember> {
-  return apiPost<OrganizationMember>(`${BASE}/${orgId}/members`, payload);
+  return apiPost<OrganizationMember>(`${BASE}/${orgId}/members/`, payload);
 }
 
 export function updateMember(
@@ -149,9 +149,9 @@ export function updateMember(
   memberId: number,
   payload: { group_id?: number | null; is_admin?: boolean },
 ): Promise<OrganizationMember> {
-  return apiPatch<OrganizationMember>(`${BASE}/${orgId}/members/${memberId}`, payload);
+  return apiPatch<OrganizationMember>(`${BASE}/${orgId}/members/${memberId}/`, payload);
 }
 
 export function removeMember(orgId: number, memberId: number): Promise<void> {
-  return apiDelete(`${BASE}/${orgId}/members/${memberId}`);
+  return apiDelete(`${BASE}/${orgId}/members/${memberId}/`);
 }

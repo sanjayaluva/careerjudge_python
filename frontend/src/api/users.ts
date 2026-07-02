@@ -42,5 +42,5 @@ export function deleteUser(id: number): Promise<void> {
 }
 
 export function assignRole(id: number, payload: AssignRolePayload): Promise<User> {
-  return apiPost<User>(`/accounts/users/${id}/assign-role`, payload);
+  return apiPost<User>(`/accounts/users/${id}/assign-role/`, payload);
 }

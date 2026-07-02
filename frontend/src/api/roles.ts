@@ -37,11 +37,11 @@ export function assignPermission(
   id: number,
   payload: AssignPermissionPayload,
 ): Promise<{ id: number; module: string; action: string; is_inherited: boolean }> {
-  return apiPost(`/accounts/roles/${id}/assign-permission`, payload);
+  return apiPost(`/accounts/roles/${id}/assign-permission/`, payload);
 }
 
 export function removePermission(id: number, payload: RemovePermissionPayload): Promise<void> {
-  return apiPost(`/accounts/roles/${id}/remove-permission`, payload);
+  return apiPost(`/accounts/roles/${id}/remove-permission/`, payload);
 }
 
 /**

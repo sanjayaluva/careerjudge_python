@@ -13,5 +13,5 @@ export function updateMe(payload: UpdateMePayload): Promise<User> {
 }
 
 export function changePassword(payload: ChangePasswordPayload): Promise<void> {
-  return apiPost<void>("/me/change-password", payload);
+  return apiPost<void>("/me/change-password/", payload);
 }
