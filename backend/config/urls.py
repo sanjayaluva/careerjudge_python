@@ -14,6 +14,10 @@ urlpatterns = [
     path("api/auth/", include("apps.accounts.urls_auth", namespace="auth")),
     path("api/me/", include("apps.accounts.urls_me", namespace="me")),
     path("api/accounts/", include("apps.accounts.urls_admin", namespace="accounts")),
+    path(
+        "api/organizations/",
+        include("apps.organizations.urls", namespace="organizations"),
+    ),
     path("api/notifications/", include("apps.notifications.urls", namespace="notifications")),
     # Schema
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

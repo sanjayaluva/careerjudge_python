@@ -74,7 +74,6 @@ omit = [
     "*/serializers.py",  # stub serializers for unfrozen modules
     "*/views.py",   # stub views for unfrozen modules
     "*/urls.py",    # stub urls for unfrozen modules
-    "apps/organizations/*",
     "apps/question_bank/*",
     "apps/assessment/*",
     "apps/career_profiling/*",
