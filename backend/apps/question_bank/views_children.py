@@ -120,9 +120,21 @@ class BulkOptionsView(APIView):
     Request body: { "options": [ { ... }, { ... } ] }
     """
 
-    permission_classes = [IsAuthenticated, HasQBPermission]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, question_id):
+        if not request.user.has_module_right("question_bank", "add"):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "You do not have permission to manage question options.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         question = get_object_or_404(Question, id=question_id)
         submitted = request.data.get("options", [])
         submitted_ids = set()
