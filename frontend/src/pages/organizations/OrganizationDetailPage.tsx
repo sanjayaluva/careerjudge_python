@@ -29,6 +29,7 @@ import {
   listMembers,
   removeMember,
   retrieveOrganization,
+  updateMember,
 } from "@/api/organizations";
 import { extractApiError } from "@/api/client";
 import { ROLE_LABELS } from "@/lib/constants";
@@ -143,6 +144,7 @@ export default function OrganizationDetailPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Group</TableHead>
                   <TableHead>Admin</TableHead>
                   <TableHead>Joined</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -150,7 +152,7 @@ export default function OrganizationDetailPage() {
               </TableHeader>
               <TableBody>
                 {members.map((m) => (
-                  <MemberRow key={m.id} orgId={orgId} member={m} />
+                  <MemberRow key={m.id} orgId={orgId} member={m} groups={org.groups} />
                 ))}
               </TableBody>
             </Table>
@@ -226,14 +228,17 @@ function GroupRow({
 function MemberRow({
   orgId,
   member,
+  groups,
 }: {
   orgId: number;
   member: {
     id: number;
     user: { id: number; email: string; full_name: string; role: string | null };
+    group: number | null;
     is_admin: boolean;
     joined_at: string;
   };
+  groups: { id: number; name: string }[];
 }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -242,6 +247,16 @@ function MemberRow({
     mutationFn: () => removeMember(orgId, member.id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: [...ORG_KEY(orgId), "members"] });
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (payload: { group_id?: number | null; is_admin?: boolean }) =>
+      updateMember(orgId, member.id, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [...ORG_KEY(orgId), "members"] });
+      void queryClient.invalidateQueries({ queryKey: ORG_KEY(orgId) });
     },
     onError: (err) => setError(extractApiError(err)),
   });
@@ -259,7 +274,38 @@ function MemberRow({
           <Badge variant="outline">No role</Badge>
         )}
       </TableCell>
-      <TableCell>{member.is_admin ? <Badge variant="success">Admin</Badge> : "—"}</TableCell>
+      <TableCell>
+        <select
+          className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-600"
+          value={member.group ?? ""}
+          onChange={(e) => {
+            setError(null);
+            updateMutation.mutate({
+              group_id: e.target.value ? Number(e.target.value) : null,
+            });
+          }}
+          disabled={updateMutation.isPending}
+        >
+          <option value="">No group</option>
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+      </TableCell>
+      <TableCell>
+        <input
+          type="checkbox"
+          checked={member.is_admin}
+          onChange={(e) => {
+            setError(null);
+            updateMutation.mutate({ is_admin: e.target.checked });
+          }}
+          disabled={updateMutation.isPending}
+          className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+        />
+      </TableCell>
       <TableCell className="text-slate-500">
         {new Date(member.joined_at).toLocaleDateString()}
       </TableCell>
