@@ -25,29 +25,244 @@ import { updateMe } from "@/api/me";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthStore } from "@/stores/auth";
-import { ROLE_LABELS } from "@/lib/constants";
+import { ROLE_LABELS, type RoleName } from "@/lib/constants";
 import type { UpdateMePayload, UserProfile } from "@/api/types";
+
+// ---------------------------------------------------------------------------
+// Role-specific profile field configuration (per SRS pages 8-22)
+// ---------------------------------------------------------------------------
+
+type FieldType = "text" | "select" | "textarea" | "date";
+
+interface ProfileFieldConfig {
+  name: keyof UserProfile;
+  label: string;
+  type: FieldType;
+  required?: boolean;
+  options?: { value: string; label: string }[];
+  max_length?: number;
+}
+
+// Common fields shown for ALL roles
+const COMMON_FIELDS: ProfileFieldConfig[] = [
+  { name: "first_name", label: "First name", type: "text", max_length: 50 },
+  { name: "middle_name", label: "Middle name", type: "text", max_length: 50 },
+  { name: "last_name", label: "Last name", type: "text", max_length: 50 },
+  {
+    name: "gender",
+    label: "Gender",
+    type: "select",
+    options: [
+      { value: "", label: "Prefer not to say" },
+      { value: "male", label: "Male" },
+      { value: "female", label: "Female" },
+      { value: "other", label: "Other" },
+    ],
+  },
+  { name: "date_of_birth", label: "Date of birth", type: "date" },
+  { name: "mobile", label: "Mobile number", type: "text", max_length: 15 },
+  {
+    name: "country_of_origin",
+    label: "Country of origin",
+    type: "text",
+    max_length: 50,
+    required: true,
+  },
+  { name: "state_province", label: "State / Province", type: "text", max_length: 50 },
+  { name: "city", label: "City", type: "text", max_length: 100 },
+  { name: "postal_code", label: "Postal code", type: "text", max_length: 20 },
+  { name: "address_line1", label: "Address line 1", type: "text", max_length: 255 },
+  { name: "address_line2", label: "Address line 2", type: "text", max_length: 255 },
+];
+
+// Individual user specific fields (SRS page 9-10)
+const INDIVIDUAL_FIELDS: ProfileFieldConfig[] = [
+  {
+    name: "occupation",
+    label: "Occupation",
+    type: "select",
+    required: true,
+    options: [
+      { value: "", label: "Select..." },
+      { value: "employed", label: "Employed" },
+      { value: "self_employed", label: "Self Employed" },
+      { value: "job_seeking_fresher", label: "Job seeking - Fresher" },
+      { value: "job_seeking_non_fresher", label: "Job seeking - Non Fresher" },
+      { value: "college_student", label: "College Student" },
+      { value: "school_student", label: "School Student" },
+    ],
+  },
+  { name: "current_position", label: "Current position", type: "text", max_length: 50 },
+  {
+    name: "highest_education",
+    label: "Highest education",
+    type: "text",
+    max_length: 50,
+    required: true,
+  },
+  { name: "work_experience", label: "Work experience (years)", type: "text", max_length: 2 },
+  {
+    name: "education_level",
+    label: "Education level",
+    type: "select",
+    required: true,
+    options: [
+      { value: "", label: "Select..." },
+      { value: "5-12", label: "5-12" },
+      { value: "undergraduate", label: "Undergraduate" },
+      { value: "post_graduate", label: "Post Graduate" },
+      { value: "m_phil", label: "M-Phil" },
+      { value: "phd", label: "PhD" },
+    ],
+  },
+  { name: "institution_name", label: "Institution name", type: "text", max_length: 50 },
+  { name: "place_of_institution", label: "Place of institution", type: "text", max_length: 50 },
+  { name: "location", label: "Location", type: "text", max_length: 50 },
+];
+
+// Professional fields (Psychometrician/SME/Reviewer/Trainer/Counsellor, SRS pages 10-13)
+const PROFESSIONAL_FIELDS: ProfileFieldConfig[] = [
+  {
+    name: "occupation",
+    label: "Occupation",
+    type: "select",
+    required: true,
+    options: [
+      { value: "", label: "Select..." },
+      { value: "employed", label: "Employed" },
+      { value: "self_employed", label: "Self Employed" },
+      { value: "retired", label: "Retired" },
+    ],
+  },
+  { name: "current_position", label: "Current position", type: "text", max_length: 50 },
+  {
+    name: "highest_education",
+    label: "Highest education qualification",
+    type: "text",
+    max_length: 50,
+    required: true,
+  },
+  {
+    name: "work_experience",
+    label: "Work experience (years)",
+    type: "text",
+    max_length: 2,
+    required: true,
+  },
+  { name: "domain_experience", label: "Domain experience (years)", type: "text", max_length: 2 },
+  { name: "pan_number", label: "PAN number", type: "text", max_length: 15, required: true },
+  {
+    name: "bank_account_number",
+    label: "Bank account number",
+    type: "text",
+    max_length: 15,
+    required: true,
+  },
+  { name: "bank_name", label: "Bank name", type: "text", max_length: 20, required: true },
+  { name: "branch_name", label: "Branch name", type: "text", max_length: 25, required: true },
+  { name: "ifsc_code", label: "IFSC code", type: "text", max_length: 15, required: true },
+  {
+    name: "contact_address",
+    label: "Contact address",
+    type: "textarea",
+    max_length: 100,
+    required: true,
+  },
+  {
+    name: "permanent_address",
+    label: "Permanent address",
+    type: "textarea",
+    max_length: 100,
+    required: true,
+  },
+  { name: "bio", label: "User Bio", type: "textarea", max_length: 1000 },
+];
+
+// Channel Partner fields (SRS page 13)
+const CHANNEL_PARTNER_FIELDS: ProfileFieldConfig[] = [
+  { name: "current_position", label: "Current position", type: "text", max_length: 50 },
+  { name: "pan_number", label: "PAN number", type: "text", max_length: 15, required: true },
+  {
+    name: "bank_account_number",
+    label: "Bank account number",
+    type: "text",
+    max_length: 15,
+    required: true,
+  },
+  { name: "bank_name", label: "Bank name", type: "text", max_length: 20, required: true },
+  { name: "branch_name", label: "Branch name", type: "text", max_length: 25, required: true },
+  { name: "ifsc_code", label: "IFSC code", type: "text", max_length: 15, required: true },
+  {
+    name: "channel_partner_agreement_id",
+    label: "Channel Partner Agreement ID",
+    type: "text",
+    max_length: 50,
+  },
+  {
+    name: "contract_period",
+    label: "Contract period (years)",
+    type: "text",
+    max_length: 2,
+    required: true,
+  },
+];
+
+/** Returns the role-specific fields to show based on the user's role. */
+function getRoleSpecificFields(role: RoleName | null): ProfileFieldConfig[] {
+  switch (role) {
+    case "individual":
+      return INDIVIDUAL_FIELDS;
+    case "psychometrician":
+    case "sme":
+    case "reviewer":
+    case "trainer":
+    case "counsellor":
+      return PROFESSIONAL_FIELDS;
+    // channel_partner role is not in the 10 system roles yet.
+    // When added, use: return CHANNEL_PARTNER_FIELDS;
+    // Keeping the reference to avoid unused variable:
+    default:
+      return role === null ? CHANNEL_PARTNER_FIELDS : [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Schema
+// ---------------------------------------------------------------------------
 
 const basicSchema = z.object({
   full_name: z.string().min(1, "Full name is required").max(255),
   phone: z.string().max(20).optional().or(z.literal("")),
 });
 
-const profileSchema = z.object({
-  gender: z.enum(["", "male", "female", "other", "prefer_not_to_say"]).optional(),
-  mobile: z.string().max(20).optional().or(z.literal("")),
-  date_of_birth: z.string().optional().or(z.literal("")),
-  address_line1: z.string().max(255).optional().or(z.literal("")),
-  address_line2: z.string().max(255).optional().or(z.literal("")),
-  city: z.string().max(100).optional().or(z.literal("")),
-  state: z.string().max(100).optional().or(z.literal("")),
-  country: z.string().max(100).optional().or(z.literal("")),
-  postal_code: z.string().max(20).optional().or(z.literal("")),
-  bio: z.string().max(1000).optional().or(z.literal("")),
-});
+// Build a dynamic schema from the field configs
+function buildProfileSchema(fields: ProfileFieldConfig[]) {
+  const shape: Record<string, z.ZodTypeAny> = {};
+  for (const f of fields) {
+    if (f.type === "textarea") {
+      shape[f.name] = z
+        .string()
+        .max(f.max_length ?? 1000)
+        .optional()
+        .or(z.literal(""));
+    } else {
+      shape[f.name] = z
+        .string()
+        .max(f.max_length ?? 255)
+        .optional()
+        .or(z.literal(""));
+    }
+  }
+  return z.object(shape);
+}
 
 type BasicValues = z.infer<typeof basicSchema>;
-type ProfileValues = z.infer<typeof profileSchema>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ProfileValues = Record<string, any>;
+
+// ---------------------------------------------------------------------------
+// Profile Page
+// ---------------------------------------------------------------------------
 
 export default function ProfilePage() {
   const { me, isLoadingMe, meError, refresh } = useAuth();
@@ -61,6 +276,8 @@ export default function ProfilePage() {
     defaultValues: { full_name: "", phone: "" },
   });
 
+  const roleFields = getRoleSpecificFields(me?.role ?? null);
+  const profileSchema = buildProfileSchema([...COMMON_FIELDS, ...roleFields]);
   const profileForm = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {},
@@ -73,32 +290,15 @@ export default function ProfilePage() {
       full_name: me.full_name,
       phone: me.phone,
     });
-    const p: UserProfile = me.profile ?? {
-      gender: "",
-      date_of_birth: null,
-      mobile: "",
-      avatar: null,
-      address_line1: "",
-      address_line2: "",
-      city: "",
-      state: "",
-      country: "",
-      postal_code: "",
-      bio: "",
-    };
-    profileForm.reset({
-      gender: p.gender || "",
-      mobile: p.mobile,
-      date_of_birth: p.date_of_birth ?? "",
-      address_line1: p.address_line1,
-      address_line2: p.address_line2,
-      city: p.city,
-      state: p.state,
-      country: p.country,
-      postal_code: p.postal_code,
-      bio: p.bio,
-    });
-  }, [me, basicForm, profileForm]);
+
+    const p = me.profile;
+    const defaults: Record<string, string> = {};
+    for (const f of [...COMMON_FIELDS, ...roleFields]) {
+      const val = p?.[f.name];
+      defaults[f.name] = val === null || val === undefined ? "" : String(val);
+    }
+    profileForm.reset(defaults);
+  }, [me, roleFields, basicForm, profileForm]);
 
   const onBasicSubmit = async (values: BasicValues) => {
     setServerError(null);
@@ -126,18 +326,7 @@ export default function ProfilePage() {
     setServerError(null);
     try {
       const payload: UpdateMePayload = {
-        profile: {
-          gender: (values.gender as UserProfile["gender"]) || "",
-          mobile: values.mobile ?? "",
-          date_of_birth: values.date_of_birth || null,
-          address_line1: values.address_line1 ?? "",
-          address_line2: values.address_line2 ?? "",
-          city: values.city ?? "",
-          state: values.state ?? "",
-          country: values.country ?? "",
-          postal_code: values.postal_code ?? "",
-          bio: values.bio ?? "",
-        },
+        profile: values as Record<string, string>,
       };
       await updateMe(payload);
       setSavedAt(new Date().toLocaleTimeString());
@@ -163,9 +352,11 @@ export default function ProfilePage() {
     );
   }
 
+  const allProfileFields = [...COMMON_FIELDS, ...roleFields];
+
   return (
     <div className="space-y-6">
-      {/* Role information card — shows the user's role and account status */}
+      {/* Role information card */}
       <Card>
         <CardHeader>
           <CardTitle>Account overview</CardTitle>
@@ -212,7 +403,14 @@ export default function ProfilePage() {
       <Card>
         <CardHeader>
           <CardTitle>Profile</CardTitle>
-          <CardDescription>Update your personal information and contact details.</CardDescription>
+          <CardDescription>
+            Update your personal information and contact details.
+            {roleFields.length > 0 && (
+              <span className="ml-1 text-primary-600">
+                Fields shown are specific to your role ({ROLE_LABELS[me?.role ?? "individual"]}).
+              </span>
+            )}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {serverError && (
@@ -281,65 +479,42 @@ export default function ProfilePage() {
                 noValidate
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label htmlFor="gender">Gender</Label>
-                    <select
-                      id="gender"
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-                      {...profileForm.register("gender")}
+                  {allProfileFields.map((field) => (
+                    <div
+                      key={field.name}
+                      className={field.type === "textarea" ? "sm:col-span-2" : ""}
                     >
-                      <option value="">Prefer not to say</option>
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                      <option value="other">Other</option>
-                      <option value="prefer_not_to_say">Prefer not to say</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label htmlFor="mobile">Mobile</Label>
-                    <Input id="mobile" type="tel" {...profileForm.register("mobile")} />
-                  </div>
-                  <div>
-                    <Label htmlFor="date_of_birth">Date of birth</Label>
-                    <Input
-                      id="date_of_birth"
-                      type="date"
-                      {...profileForm.register("date_of_birth")}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="city">City</Label>
-                    <Input id="city" {...profileForm.register("city")} />
-                  </div>
-                  <div>
-                    <Label htmlFor="state">State / Province</Label>
-                    <Input id="state" {...profileForm.register("state")} />
-                  </div>
-                  <div>
-                    <Label htmlFor="country">Country</Label>
-                    <Input id="country" {...profileForm.register("country")} />
-                  </div>
-                  <div>
-                    <Label htmlFor="postal_code">Postal code</Label>
-                    <Input id="postal_code" {...profileForm.register("postal_code")} />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <Label htmlFor="address_line1">Address line 1</Label>
-                    <Input id="address_line1" {...profileForm.register("address_line1")} />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <Label htmlFor="address_line2">Address line 2</Label>
-                    <Input id="address_line2" {...profileForm.register("address_line2")} />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <Label htmlFor="bio">Bio</Label>
-                    <textarea
-                      id="bio"
-                      rows={4}
-                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-                      {...profileForm.register("bio")}
-                    />
-                  </div>
+                      <Label htmlFor={`pf-${field.name}`} required={field.required}>
+                        {field.label}
+                      </Label>
+                      {field.type === "select" ? (
+                        <select
+                          id={`pf-${field.name}`}
+                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                          {...profileForm.register(field.name)}
+                        >
+                          {field.options?.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : field.type === "textarea" ? (
+                        <textarea
+                          id={`pf-${field.name}`}
+                          rows={3}
+                          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                          {...profileForm.register(field.name)}
+                        />
+                      ) : (
+                        <Input
+                          id={`pf-${field.name}`}
+                          type={field.type === "date" ? "date" : "text"}
+                          {...profileForm.register(field.name)}
+                        />
+                      )}
+                    </div>
+                  ))}
                 </div>
                 <div className="flex justify-end">
                   <Button type="submit" loading={profileForm.formState.isSubmitting}>

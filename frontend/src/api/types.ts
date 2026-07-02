@@ -70,17 +70,45 @@ export interface TokenRefreshResponse {
 export type Gender = "" | "male" | "female" | "other" | "prefer_not_to_say";
 
 export interface UserProfile {
+  // Common
   gender: Gender;
   date_of_birth: string | null;
   mobile: string;
   avatar: string | null;
+  bio: string;
+  // Name fields
+  first_name: string;
+  middle_name: string;
+  last_name: string;
+  // Location
+  country_of_origin: string;
+  state_province: string;
+  city: string;
+  postal_code: string;
   address_line1: string;
   address_line2: string;
-  city: string;
-  state: string;
-  country: string;
-  postal_code: string;
-  bio: string;
+  // Individual user fields
+  occupation: string;
+  current_position: string;
+  highest_education: string;
+  work_experience: string;
+  education_level: string;
+  institution_name: string;
+  place_of_institution: string;
+  location: string;
+  assessment_package_allocated: string;
+  // Professional fields
+  domain_experience: string;
+  pan_number: string;
+  bank_account_number: string;
+  bank_name: string;
+  branch_name: string;
+  ifsc_code: string;
+  contact_address: string;
+  permanent_address: string;
+  // Channel Partner fields
+  channel_partner_agreement_id: string;
+  contract_period: string;
 }
 
 export interface User {

@@ -147,13 +147,17 @@ export default function UserViewPage() {
                 <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
                   State
                 </dt>
-                <dd className="mt-1 text-sm text-slate-900">{user.profile.state || "—"}</dd>
+                <dd className="mt-1 text-sm text-slate-900">
+                  {user.profile.state_province || "—"}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
                   Country
                 </dt>
-                <dd className="mt-1 text-sm text-slate-900">{user.profile.country || "—"}</dd>
+                <dd className="mt-1 text-sm text-slate-900">
+                  {user.profile.country_of_origin || "—"}
+                </dd>
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
