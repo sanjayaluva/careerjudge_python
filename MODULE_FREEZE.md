@@ -4,7 +4,7 @@ This document tracks which modules are frozen (additive-only) and their current 
 
 | Module | Frozen Since | Current Version | Notes |
 |---|---|---|---|
-| accounts | — | (not frozen) | Phase 1 in progress |
+| accounts | 2026-07-01 | v1.0.0 | Phase 1 complete — auth, RBAC, profile, demo seeder |
 | organizations | — | (not frozen) | Phase 2 |
 | question_bank | — | (not frozen) | Phase 2 |
 | assessment | — | (not frozen) | Phase 2 |
@@ -37,13 +37,6 @@ Once frozen, the module accepts **additive changes only**:
 - ❌ Changing permission semantics
 
 Breaking changes require a **new versioned module** (e.g. `assessment_v2/`) and a documented deprecation path.
-
-## How to mark a module as frozen
-
-1. Tag the commit: `git tag -a vX.Y.0 -m "Freeze <module> v1.0.0"`
-2. Push the tag: `git push origin vX.Y.0`
-3. Update this file: move the module row from "not frozen" to the frozen list with the version.
-4. Add a section to `docs/modules/<name>.md` documenting the public API surface that is now contractually stable.
 
 ## Commit footer
 
