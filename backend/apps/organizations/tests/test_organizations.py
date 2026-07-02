@@ -223,7 +223,7 @@ class TestGroupCRUD:
         org_id = org_resp.json()["data"]["id"]
 
         resp = authed_client.post(
-            f"/api/organizations/{org_id}/groups",
+            f"/api/organizations/{org_id}/groups/",
             {"name": "Engineering", "description": "Engineering team"},
             format="json",
         )
@@ -238,11 +238,11 @@ class TestGroupCRUD:
         )
         org_id = org_resp.json()["data"]["id"]
         authed_client.post(
-            f"/api/organizations/{org_id}/groups",
+            f"/api/organizations/{org_id}/groups/",
             {"name": "Sales"},
             format="json",
         )
-        resp = authed_client.get(f"/api/organizations/{org_id}/groups")
+        resp = authed_client.get(f"/api/organizations/{org_id}/groups/")
         assert resp.status_code == 200
 
     def test_delete_group(self, authed_client):
@@ -253,12 +253,12 @@ class TestGroupCRUD:
         )
         org_id = org_resp.json()["data"]["id"]
         group_resp = authed_client.post(
-            f"/api/organizations/{org_id}/groups",
+            f"/api/organizations/{org_id}/groups/",
             {"name": "Marketing"},
             format="json",
         )
         group_id = group_resp.json()["data"]["id"]
-        resp = authed_client.delete(f"/api/organizations/{org_id}/groups/{group_id}")
+        resp = authed_client.delete(f"/api/organizations/{org_id}/groups/{group_id}/")
         assert resp.status_code == 200
 
 
@@ -278,7 +278,7 @@ class TestOrganizationMembers:
         org_id = org_resp.json()["data"]["id"]
 
         resp = authed_client.post(
-            f"/api/organizations/{org_id}/members",
+            f"/api/organizations/{org_id}/members/",
             {"user_email": individual_user.email},
             format="json",
         )
@@ -294,7 +294,7 @@ class TestOrganizationMembers:
         org_id = org_resp.json()["data"]["id"]
 
         resp = authed_client.post(
-            f"/api/organizations/{org_id}/members",
+            f"/api/organizations/{org_id}/members/",
             {"user_email": "nonexistent@test.com"},
             format="json",
         )
@@ -309,12 +309,12 @@ class TestOrganizationMembers:
         org_id = org_resp.json()["data"]["id"]
 
         authed_client.post(
-            f"/api/organizations/{org_id}/members",
+            f"/api/organizations/{org_id}/members/",
             {"user_email": individual_user.email},
             format="json",
         )
         resp = authed_client.post(
-            f"/api/organizations/{org_id}/members",
+            f"/api/organizations/{org_id}/members/",
             {"user_email": individual_user.email},
             format="json",
         )
@@ -328,11 +328,11 @@ class TestOrganizationMembers:
         )
         org_id = org_resp.json()["data"]["id"]
         authed_client.post(
-            f"/api/organizations/{org_id}/members",
+            f"/api/organizations/{org_id}/members/",
             {"user_email": individual_user.email},
             format="json",
         )
-        resp = authed_client.get(f"/api/organizations/{org_id}/members")
+        resp = authed_client.get(f"/api/organizations/{org_id}/members/")
         assert resp.status_code == 200
 
     def test_remove_member(self, authed_client, individual_user):
@@ -343,10 +343,10 @@ class TestOrganizationMembers:
         )
         org_id = org_resp.json()["data"]["id"]
         member_resp = authed_client.post(
-            f"/api/organizations/{org_id}/members",
+            f"/api/organizations/{org_id}/members/",
             {"user_email": individual_user.email},
             format="json",
         )
         member_id = member_resp.json()["data"]["id"]
-        resp = authed_client.delete(f"/api/organizations/{org_id}/members/{member_id}")
+        resp = authed_client.delete(f"/api/organizations/{org_id}/members/{member_id}/")
         assert resp.status_code == 200
