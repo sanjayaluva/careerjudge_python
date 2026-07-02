@@ -493,12 +493,31 @@ class BulkUserUploadView(APIView):
             phone = (row.get("phone") or "").strip()
             role_name = (row.get("role_name") or "").strip().lower()
 
+            # Skip comment rows (lines starting with #)
+            if full_name.startswith("#"):
+                continue
+
+            # Skip rows that don't look like valid data (no email AND no name)
+            if not email and not full_name:
+                continue
+
             if not email:
                 errors.append({"row": row_num, "email": "", "error": "Email is empty"})
                 continue
 
             if not full_name:
                 errors.append({"row": row_num, "email": email, "error": "Full name is empty"})
+                continue
+
+            # Skip if email doesn't look like an email (must contain @)
+            if "@" not in email:
+                errors.append(
+                    {
+                        "row": row_num,
+                        "email": email,
+                        "error": "Invalid email format (missing @)",
+                    }
+                )
                 continue
 
             # Check duplicate
@@ -579,9 +598,5 @@ class BulkUserTemplateView(APIView):
         writer.writerow(["full_name", "email", "phone", "role_name"])
         writer.writerow(["John Doe", "john.doe@example.com", "+1234567890", "individual"])
         writer.writerow(["Jane Smith", "jane.smith@example.com", "", ""])
-        # Add a comment row explaining role_name
-        writer.writerow(
-            ["# role_name options:", "individual, corp_admin, sme, reviewer, etc.", "", ""]
-        )
 
         return response

@@ -771,7 +771,8 @@ function BulkUploadModal({ open, onClose }: { open: boolean; onClose: () => void
                 {result.created.map((c, i) => (
                   <div key={i} className="border-b border-slate-100 px-3 py-1.5 text-xs">
                     <span className="font-medium text-slate-900">{c.full_name}</span>
-                    <span className="ml-2 text-slate-500">{c.email}</span>
+                    <span className="mx-2 text-slate-400">—</span>
+                    <span className="text-slate-500">{c.email}</span>
                   </div>
                 ))}
               </div>
