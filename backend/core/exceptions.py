@@ -14,6 +14,24 @@ from rest_framework.views import exception_handler as drf_default_handler
 logger = logging.getLogger(__name__)
 
 
+def _format_details(data) -> str:
+    """Extract a human-readable message from DRF error details."""
+    parts: list[str] = []
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if isinstance(value, list):
+                msgs = [str(v) for v in value]
+                parts.append(f"{key}: {', '.join(msgs)}")
+            elif isinstance(value, str):
+                parts.append(f"{key}: {value}")
+            else:
+                parts.append(f"{key}: {value}")
+    elif isinstance(data, list):
+        for item in data:
+            parts.append(str(item))
+    return "; ".join(parts) if parts else ""
+
+
 def exception_handler(exc, context):
     response = drf_default_handler(exc, context)
     if response is None:
@@ -44,12 +62,21 @@ def exception_handler(exc, context):
         return response  # already normalized
 
     if isinstance(data, dict):
-        # Field validation errors: { "email": ["This field is required."] }
-        if any(isinstance(v, list) for v in data.values()):
+        # Check if it's a DRF ValidationError detail dict
+        # (field → list of ErrorDetail, or field → ErrorDetail string)
+        has_list_values = any(isinstance(v, (list, tuple)) for v in data.values())
+
+        if (
+            has_list_values
+            or any(isinstance(v, str) for v in data.values() if not isinstance(v, (list, tuple)))
+            and "detail" not in data
+        ):
+            # Field validation errors: { "email": ["This field is required."] }
+            msg = _format_details(data) or "Validation failed."
             response.data = {
                 "error": {
                     "code": "validation_error",
-                    "message": "Validation failed.",
+                    "message": msg,
                     "details": data,
                 }
             }
@@ -65,20 +92,21 @@ def exception_handler(exc, context):
                 }
             }
         else:
-            # Unknown dict structure — include the raw data in details for debugging
-            logger.warning("Unhandled error response structure: %s", data)
+            # Unknown dict structure — try to extract a readable message
+            msg = _format_details(data) or str(data) or "Error."
             response.data = {
                 "error": {
                     "code": code,
-                    "message": str(data) if data else "Error.",
+                    "message": msg,
                     "details": data,
                 }
             }
     elif isinstance(data, list):
+        msg = _format_details(data) or "Validation failed."
         response.data = {
             "error": {
                 "code": "validation_error",
-                "message": "Validation failed.",
+                "message": msg,
                 "details": {"non_field_errors": data},
             }
         }

@@ -120,7 +120,7 @@ class TestUserDelete:
 class TestAssignRole:
     def test_happy_path(self, authed_client, individual_user, cj_admin_role):
         resp = authed_client.post(
-            f"/api/accounts/users/{individual_user.id}/assign-role",
+            f"/api/accounts/users/{individual_user.id}/assign-role/",
             {"role_name": "cj_admin"},
             format="json",
         )
@@ -130,7 +130,7 @@ class TestAssignRole:
 
     def test_invalid_role(self, authed_client, individual_user):
         resp = authed_client.post(
-            f"/api/accounts/users/{individual_user.id}/assign-role",
+            f"/api/accounts/users/{individual_user.id}/assign-role/",
             {"role_name": "nonexistent_role"},
             format="json",
         )
@@ -219,7 +219,7 @@ class TestAssignPermission:
 
         # Now assign a permission to the custom role
         resp = authed_client.post(
-            f"/api/accounts/roles/{custom_role_id}/assign-permission",
+            f"/api/accounts/roles/{custom_role_id}/assign-permission/",
             {"module": "accounts", "action": "view"},
             format="json",
         )
@@ -232,7 +232,7 @@ class TestAssignPermission:
     def test_cannot_assign_permission_to_system_role(self, authed_client, individual_role):
         """Cannot add a permission to a SYSTEM (frozen) role."""
         resp = authed_client.post(
-            f"/api/accounts/roles/{individual_role.id}/assign-permission",
+            f"/api/accounts/roles/{individual_role.id}/assign-permission/",
             {"module": "accounts", "action": "view"},
             format="json",
         )
@@ -251,7 +251,7 @@ class TestAssignPermission:
 
         for _ in range(2):
             resp = authed_client.post(
-                f"/api/accounts/roles/{custom_role_id}/assign-permission",
+                f"/api/accounts/roles/{custom_role_id}/assign-permission/",
                 {"module": "accounts", "action": "view"},
                 format="json",
             )

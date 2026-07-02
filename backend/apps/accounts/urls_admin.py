@@ -19,14 +19,14 @@ router.register("roles", RoleViewSet, basename="role")
 
 urlpatterns = [
     path("", include(router.urls)),
-    path("users/<int:user_id>/assign-role", AssignRoleView.as_view(), name="user-assign-role"),
+    path("users/<int:user_id>/assign-role/", AssignRoleView.as_view(), name="user-assign-role"),
     path(
-        "roles/<int:role_id>/assign-permission",
+        "roles/<int:role_id>/assign-permission/",
         AssignPermissionView.as_view(),
         name="role-assign-permission",
     ),
     path(
-        "roles/<int:role_id>/remove-permission",
+        "roles/<int:role_id>/remove-permission/",
         RemovePermissionView.as_view(),
         name="role-remove-permission",
     ),
