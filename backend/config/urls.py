@@ -18,6 +18,10 @@ urlpatterns = [
         "api/organizations/",
         include("apps.organizations.urls", namespace="organizations"),
     ),
+    path(
+        "api/question-bank/",
+        include("apps.question_bank.urls", namespace="question_bank"),
+    ),
     path("api/notifications/", include("apps.notifications.urls", namespace="notifications")),
     # Schema
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
