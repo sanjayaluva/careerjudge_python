@@ -234,8 +234,73 @@ export function listReviews(questionId: number): Promise<QuestionReview[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Constants
+// Child resource APIs (options, media, flash items, hotspots)
 // ---------------------------------------------------------------------------
+
+export function listOptions(questionId: number): Promise<ResponseOption[]> {
+  return apiGetPaged<ResponseOption>(`${BASE}/questions/${questionId}/options/`).then(
+    (r) => r.results,
+  );
+}
+
+export function bulkSaveOptions(
+  questionId: number,
+  options: Record<string, unknown>[],
+): Promise<ResponseOption[]> {
+  return apiPost<ResponseOption[]>(`${BASE}/questions/${questionId}/options/bulk/`, { options });
+}
+
+export function createOption(
+  questionId: number,
+  payload: Partial<ResponseOption>,
+): Promise<ResponseOption> {
+  return apiPost<ResponseOption>(`${BASE}/questions/${questionId}/options/`, payload);
+}
+
+export function updateOption(
+  questionId: number,
+  optionId: number,
+  payload: Partial<ResponseOption>,
+): Promise<ResponseOption> {
+  return apiPatch<ResponseOption>(`${BASE}/questions/${questionId}/options/${optionId}/`, payload);
+}
+
+export function deleteOption(questionId: number, optionId: number): Promise<void> {
+  return apiDelete(`${BASE}/questions/${questionId}/options/${optionId}/`);
+}
+
+export function createMediaFile(
+  questionId: number,
+  payload: { media_type: string; file: string },
+): Promise<unknown> {
+  return apiPost(`${BASE}/questions/${questionId}/media/`, payload);
+}
+
+export function deleteMediaFile(questionId: number, mediaId: number): Promise<void> {
+  return apiDelete(`${BASE}/questions/${questionId}/media/${mediaId}/`);
+}
+
+export function createFlashItem(
+  questionId: number,
+  payload: Record<string, unknown>,
+): Promise<unknown> {
+  return apiPost(`${BASE}/questions/${questionId}/flash-items/`, payload);
+}
+
+export function deleteFlashItem(questionId: number, itemId: number): Promise<void> {
+  return apiDelete(`${BASE}/questions/${questionId}/flash-items/${itemId}/`);
+}
+
+export function createHotspot(
+  questionId: number,
+  payload: Record<string, unknown>,
+): Promise<unknown> {
+  return apiPost(`${BASE}/questions/${questionId}/hotspots/`, payload);
+}
+
+export function deleteHotspot(questionId: number, hotspotId: number): Promise<void> {
+  return apiDelete(`${BASE}/questions/${questionId}/hotspots/${hotspotId}/`);
+}
 
 export const QUESTION_TYPES = [
   { value: "MCQ_TEXT_IMAGE", label: "1a: MCQ – Text/Image" },

@@ -7,7 +7,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Alert, AlertDescription, Button, Label, Modal } from "@/components/ui";
-import { createQuestion, DIFFICULTY_LEVELS, QUESTION_TYPES } from "@/api/questionBank";
+import {
+  bulkSaveOptions,
+  createQuestion,
+  DIFFICULTY_LEVELS,
+  QUESTION_TYPES,
+} from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
 import type { OptionData, MatchPairData } from "./editors/shared";
 import { MCQEditor } from "./editors/MCQEditor";
@@ -94,7 +99,50 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
   };
 
   const mutation = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => createQuestion(payload),
+    mutationFn: async (payload: Record<string, unknown>) => {
+      // 1. Create the question
+      const question = await createQuestion(payload);
+      // 2. If there are options, save them via bulk endpoint
+      if (options.length > 0) {
+        const optionsPayload = options.map((opt, i) => ({
+          sub_question_index: opt.sub_question_index,
+          option_type: opt.option_type,
+          label: opt.label,
+          text_value: opt.text_value,
+          is_correct: opt.is_correct,
+          match_pair_id: opt.match_pair_id,
+          predefined_score: opt.predefined_score,
+          order: i,
+        }));
+        await bulkSaveOptions(question.id, optionsPayload);
+      }
+      // 3. If there are match pairs, save those options too
+      if (pairs.length > 0) {
+        const pairOptions: Record<string, unknown>[] = [];
+        pairs.forEach((pair, i) => {
+          pairOptions.push({
+            sub_question_index: 0,
+            option_type: "MATCH_A",
+            text_value: pair.groupA.text_value,
+            match_pair_id: pair.pairId,
+            is_correct: false,
+            predefined_score: 1.0,
+            order: i * 2,
+          });
+          pairOptions.push({
+            sub_question_index: 0,
+            option_type: "MATCH_B",
+            text_value: pair.groupB.text_value,
+            match_pair_id: pair.pairId,
+            is_correct: false,
+            predefined_score: 1.0,
+            order: i * 2 + 1,
+          });
+        });
+        await bulkSaveOptions(question.id, pairOptions);
+      }
+      return question;
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QB_KEY });
       resetForm();
