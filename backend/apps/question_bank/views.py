@@ -31,6 +31,8 @@ class HasQuestionBankPermission(HasModulePermission):
         "update": "change",
         "partial_update": "change",
         "destroy": "delete",
+        "tree": "view",
+        "submit_for_review": "change",
     }
 
 
@@ -353,6 +355,9 @@ class QuestionReviewView(APIView):
         serializer.is_valid(raise_exception=True)
         review = serializer.save()
 
+        # Refresh question from DB to get the updated status
+        question.refresh_from_db()
+
         # If content review approved, move to psychometric review
         if review.action == "approve" and review_type == "content":
             question.status = "pending_psychometric_review"
@@ -363,9 +368,8 @@ class QuestionReviewView(APIView):
             exposure_limit = request.data.get("exposure_limit")
             if exposure_limit:
                 question.exposure_limit = int(exposure_limit)
-            question.status = "confirmed"
-            question.is_active = True
-            question.save(update_fields=["status", "is_active", "exposure_limit", "updated_at"])
+                question.save(update_fields=["exposure_limit", "updated_at"])
+            question.refresh_from_db()
 
         return Response(
             {

@@ -295,6 +295,8 @@ class QuestionReviewSerializer(serializers.ModelSerializer):
 class QuestionReviewCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating a review action (approve/send_back/reject)."""
 
+    question = serializers.PrimaryKeyRelatedField(queryset=Question.objects.all())
+
     class Meta:
         model = QuestionReview
         fields = ["question", "review_type", "action", "comment", "rating"]
@@ -307,7 +309,7 @@ class QuestionReviewCreateSerializer(serializers.ModelSerializer):
         review = super().create(validated_data)
 
         # Update question status based on review action
-        question = validated_data["question"]
+        question = validated_data["question"]  # This is now a Question object
         action = validated_data["action"]
         review_type = validated_data["review_type"]
 
