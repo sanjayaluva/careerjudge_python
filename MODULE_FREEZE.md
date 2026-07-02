@@ -4,16 +4,27 @@ This document tracks which modules are frozen (additive-only) and their current 
 
 | Module | Frozen Since | Current Version | Notes |
 |---|---|---|---|
-| accounts | 2026-07-01 | v1.0.0 | Phase 1 complete — auth, RBAC, profile, demo seeder |
-| organizations | — | (not frozen) | Phase 2 |
-| question_bank | — | (not frozen) | Phase 2 |
-| assessment | — | (not frozen) | Phase 2 |
+| accounts | 2026-07-01 | v1.1.0 | Phase 1 complete + additive updates (bulk upload, channel_partner, profile fields, scoped deletion) |
+| organizations | — | (not frozen) | Phase 2 — backend + frontend complete, pending tests freeze |
+| question_bank | — | (not frozen) | Phase 2 — pending |
+| assessment | — | (not frozen) | Phase 2 — pending |
 | career_profiling | — | (not frozen) | Phase 3 |
 | reporting | — | (not frozen) | Phase 3 |
 | training | — | (not frozen) | Phase 4 |
 | counseling | — | (not frozen) | Phase 4 |
 | cms | — | (not frozen) | Phase 4 |
 | notifications | — | (not frozen) | Phase 1 (minimal) → Phase 4 (full) |
+
+## v1.1.0 Additive Changes (on top of v1.0.0)
+
+- Role-specific profile fields per SRS pages 8-22 (individual, professional, channel partner)
+- Bulk user upload (CSV) per SRS page 18 + admin spec 2.3
+- Channel Partner as 11th system role per admin spec 2.1
+- Scoped individual user deletion (CJ Admin: any; org admins: within org only)
+- Improved error messages with field-specific details
+- Trailing slash fixes on all API endpoints
+- JWT sliding session (60 min access, 30 day refresh)
+- Organizations module (multi-tenancy foundation)
 
 ## Freeze policy
 
