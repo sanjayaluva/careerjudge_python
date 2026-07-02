@@ -105,18 +105,59 @@ class UserViewSet(ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        # Per UC004: CJ Admin cannot delete individual/corporate-individual users
+
+        # Individual user deletion rules (per client clarification):
+        # - CJ Admin (superuser or has accounts.delete) → can delete ANY individual user
+        # - Corp Admin / Corp Exclusive → can delete individual users WITHIN their org only
+        # - Group Admin → can delete individual users within their org's groups
+        # - Other roles → cannot delete individual users (403)
         if instance.role and instance.role.name == "individual":
-            return Response(
-                {
-                    "error": {
-                        "code": "forbidden",
-                        "message": "Cannot delete individual users.",
-                        "details": {},
-                    }
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            requester = request.user
+
+            # CJ Admin or superuser → full access
+            if requester.is_superuser:
+                pass  # allowed
+            elif requester.role and requester.role.name == "cj_admin":
+                pass  # allowed — CJ Admin can delete any individual user
+            elif requester.role and requester.role.name in (
+                "corp_admin",
+                "corp_exclusive",
+                "group_admin",
+            ):
+                # Org-scoped: can only delete individual users within their organization
+                from apps.organizations.models import OrganizationMember
+
+                requester_orgs = OrganizationMember.objects.filter(
+                    user=requester
+                ).values_list("organization_id", flat=True)
+                target_orgs = OrganizationMember.objects.filter(
+                    user=instance
+                ).values_list("organization_id", flat=True)
+
+                # Check if the target user shares at least one org with the requester
+                if not set(requester_orgs).intersection(set(target_orgs)):
+                    return Response(
+                        {
+                            "error": {
+                                "code": "forbidden",
+                                "message": "Cannot delete individual users from other organizations.",
+                                "details": {},
+                            }
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            else:
+                return Response(
+                    {
+                        "error": {
+                            "code": "forbidden",
+                            "message": "You do not have permission to delete individual users.",
+                            "details": {},
+                        }
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         instance.delete()
         return Response(
             {"message": "User deleted.", "data": {}},

@@ -109,11 +109,19 @@ class TestUserDelete:
         assert resp.status_code == 200
         assert not User.objects.filter(id=user.id).exists()
 
-    def test_admin_cannot_delete_individual(self, authed_client, individual_user):
-        """Per UC004: CJ Admin cannot delete individual users."""
+    def test_cj_admin_can_delete_individual(self, authed_client, individual_user):
+        """CJ Admin CAN delete individual users (for bulk upload cleanup)."""
         resp = authed_client.delete(f"/api/accounts/users/{individual_user.id}/")
+        assert resp.status_code == 200
+        assert not User.objects.filter(id=individual_user.id).exists()
+
+    def test_individual_cannot_delete_individual(self, individual_client, individual_user, db):
+        """Individual users cannot delete other individual users."""
+        from .factories import UserFactory
+
+        other = UserFactory(role=individual_user.role, email="other@test.com")
+        resp = individual_client.delete(f"/api/accounts/users/{other.id}/")
         assert resp.status_code == 403
-        assert User.objects.filter(id=individual_user.id).exists()
 
 
 @pytest.mark.django_db
