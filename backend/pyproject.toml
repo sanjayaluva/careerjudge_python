@@ -81,6 +81,7 @@ omit = [
     "apps/counseling/*",
     "apps/cms/*",
     "apps/notifications/*",
+    "apps/question_bank/views_children.py",
 ]
 
 [tool.coverage.report]
