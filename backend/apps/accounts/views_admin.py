@@ -1,5 +1,9 @@
 """Views for /api/accounts/ endpoints (admin user/role management)."""
 
+import csv
+import io
+
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import filters, status
 from rest_framework.permissions import IsAuthenticated
@@ -377,3 +381,207 @@ class RemovePermissionView(APIView):
             {"message": f"Permission {module}.{action} removed.", "data": {}},
             status=status.HTTP_200_OK,
         )
+
+
+# ---------------------------------------------------------------------------
+# Bulk user upload + CSV template download (SRS page 18, admin spec 2.3)
+# ---------------------------------------------------------------------------
+
+
+class BulkUserUploadView(APIView):
+    """POST /api/accounts/users/bulk-upload/ — upload CSV of users.
+
+    Per SRS page 18 + admin spec section 2.3:
+    - Corporate Admin, Corporate Exclusive Admin, Group Admin can bulk upload
+    - CSV format: full_name, email, (optional) phone, (optional) role_name
+    - System creates users, sends signup emails, returns summary
+
+    Actors with permission: anyone with accounts.add right
+    (cj_admin, corp_admin, corp_exclusive)
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not request.user.has_module_right("accounts", "add"):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "You do not have permission to add users.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "No file uploaded. Please upload a CSV file.",
+                        "details": {"file": ["This field is required."]},
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not file.name.endswith(".csv"):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "File must be a CSV (.csv extension).",
+                        "details": {"file": ["Only CSV files are accepted."]},
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Decode and parse CSV
+        try:
+            decoded = file.read().decode("utf-8-sig")  # handle BOM
+        except UnicodeDecodeError:
+            try:
+                decoded = file.read().decode("latin-1")
+            except Exception as exc:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": f"Could not decode file: {exc}",
+                            "details": {},
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        reader = csv.DictReader(io.StringIO(decoded))
+
+        # Validate required columns
+        required_cols = {"full_name", "email"}
+        actual_cols = {col.strip().lower() for col in (reader.fieldnames or [])}
+        if not required_cols.issubset(actual_cols):
+            missing = required_cols - actual_cols
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": f"Missing required CSV columns: {', '.join(missing)}. "
+                        f"Required: full_name, email. Optional: phone, role_name.",
+                        "details": {"columns": list(missing)},
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Get default role (individual)
+        try:
+            default_role = Role.objects.get(name="individual")
+        except Role.DoesNotExist:
+            default_role = None
+
+        created = []
+        skipped = []
+        errors = []
+
+        for row_num, row in enumerate(reader, start=2):  # start=2 (1=header)
+            full_name = (row.get("full_name") or "").strip()
+            email = (row.get("email") or "").strip().lower()
+            phone = (row.get("phone") or "").strip()
+            role_name = (row.get("role_name") or "").strip().lower()
+
+            if not email:
+                errors.append({"row": row_num, "email": "", "error": "Email is empty"})
+                continue
+
+            if not full_name:
+                errors.append({"row": row_num, "email": email, "error": "Full name is empty"})
+                continue
+
+            # Check duplicate
+            if User.objects.filter(email__iexact=email).exists():
+                skipped.append({"row": row_num, "email": email, "reason": "Email already exists"})
+                continue
+
+            # Resolve role
+            role = default_role
+            if role_name:
+                try:
+                    role = Role.objects.get(name=role_name)
+                except Role.DoesNotExist:
+                    errors.append(
+                        {
+                            "row": row_num,
+                            "email": email,
+                            "error": f"Role '{role_name}' not found",
+                        }
+                    )
+                    continue
+
+            # Create user
+            try:
+                from django.utils.crypto import get_random_string
+
+                random_pw = get_random_string(length=12)
+                user = User.objects.create_user(
+                    email=email,
+                    password=random_pw,
+                    full_name=full_name,
+                    is_active=False,  # requires email verification
+                    is_email_verified=False,
+                    role=role,
+                )
+                if phone:
+                    user.phone = phone
+                    user.save(update_fields=["phone"])
+                from apps.accounts.models import UserProfile
+
+                UserProfile.objects.get_or_create(user=user)
+                created.append({"row": row_num, "email": email, "full_name": full_name})
+            except Exception as exc:
+                errors.append({"row": row_num, "email": email, "error": str(exc)})
+
+        return Response(
+            {
+                "message": f"Bulk upload complete: {len(created)} created, "
+                f"{len(skipped)} skipped, {len(errors)} errors.",
+                "data": {
+                    "created_count": len(created),
+                    "skipped_count": len(skipped),
+                    "error_count": len(errors),
+                    "created": created,
+                    "skipped": skipped,
+                    "errors": errors,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class BulkUserTemplateView(APIView):
+    """GET /api/accounts/users/bulk-upload/template/ — download CSV template.
+
+    Returns a CSV file with the correct column headers + a sample row.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = (
+            'attachment; filename="careerjudge_bulk_users_template.csv"'
+        )
+
+        writer = csv.writer(response)
+        writer.writerow(["full_name", "email", "phone", "role_name"])
+        writer.writerow(["John Doe", "john.doe@example.com", "+1234567890", "individual"])
+        writer.writerow(["Jane Smith", "jane.smith@example.com", "", ""])
+        # Add a comment row explaining role_name
+        writer.writerow(
+            ["# role_name options:", "individual, corp_admin, sme, reviewer, etc.", "", ""]
+        )
+
+        return response

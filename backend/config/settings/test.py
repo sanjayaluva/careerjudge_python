@@ -8,6 +8,9 @@ import os
 
 from .dev import *  # noqa: F403
 
+# Override ALLOWED_HOSTS — env var might override the dev default
+ALLOWED_HOSTS = ["*"]
+
 # Force SQLite for tests unless explicitly overridden
 _db_url = os.environ.get("DATABASE_URL", "")
 if not _db_url or "postgres" not in _db_url:
