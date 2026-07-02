@@ -155,17 +155,45 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = [
+            # Common
             "gender",
             "date_of_birth",
             "mobile",
             "avatar",
+            "bio",
+            # Name fields
+            "first_name",
+            "middle_name",
+            "last_name",
+            # Location
+            "country_of_origin",
+            "state_province",
+            "city",
+            "postal_code",
             "address_line1",
             "address_line2",
-            "city",
-            "state",
-            "country",
-            "postal_code",
-            "bio",
+            # Individual user fields
+            "occupation",
+            "current_position",
+            "highest_education",
+            "work_experience",
+            "education_level",
+            "institution_name",
+            "place_of_institution",
+            "location",
+            "assessment_package_allocated",
+            # Professional fields
+            "domain_experience",
+            "pan_number",
+            "bank_account_number",
+            "bank_name",
+            "branch_name",
+            "ifsc_code",
+            "contact_address",
+            "permanent_address",
+            # Channel Partner fields
+            "channel_partner_agreement_id",
+            "contract_period",
         ]
         read_only_fields = ["avatar"]  # avatar handled via separate upload endpoint
 

@@ -310,7 +310,16 @@ class User(AbstractUser):
 class UserProfile(models.Model):
     """Extended profile fields per UC005 (Manage Profile).
 
-    Fields beyond the User model that are personal/biographical.
+    Role-specific fields from SRS pages 8-22:
+      - Individual: occupation, current_position, highest_education, work_experience,
+        education_level, institution_name, place_of_institution, location, assessment_package
+      - Psychometrician/SME/Reviewer/Trainer/Counsellor: occupation, current_position,
+        highest_education, work_experience, domain_experience, pan_number, bank details,
+        contact_address, permanent_address, bio
+      - Channel Partner: current_position, pan_number, bank details,
+        channel_partner_agreement_id, contract_period
+
+    All fields are nullable/blank — only show relevant ones per role in the UI.
     """
 
     GENDER_CHOICES = [
@@ -320,20 +329,82 @@ class UserProfile(models.Model):
         ("prefer_not_to_say", "Prefer not to say"),
     ]
 
+    OCCUPATION_INDIVIDUAL_CHOICES = [
+        ("employed", "Employed"),
+        ("self_employed", "Self Employed"),
+        ("job_seeking_fresher", "Job seeking - Fresher"),
+        ("job_seeking_non_fresher", "Job seeking - Non Fresher"),
+        ("college_student", "College Student"),
+        ("school_student", "School Student"),
+    ]
+
+    OCCUPATION_PROFESSIONAL_CHOICES = [
+        ("employed", "Employed"),
+        ("self_employed", "Self Employed"),
+        ("retired", "Retired"),
+    ]
+
+    EDUCATION_LEVEL_CHOICES = [
+        ("5-12", "5-12"),
+        ("undergraduate", "Undergraduate"),
+        ("post_graduate", "Post Graduate"),
+        ("m_phil", "M-Phil"),
+        ("phd", "PhD"),
+    ]
+
+    # --- Common fields (all roles) ---
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     gender = models.CharField(_("gender"), max_length=20, choices=GENDER_CHOICES, blank=True)
     date_of_birth = models.DateField(_("date of birth"), null=True, blank=True)
     mobile = models.CharField(_("mobile"), max_length=15, blank=True)
     avatar = models.ImageField(_("avatar"), upload_to="avatars/", null=True, blank=True)
-    address_line1 = models.CharField(_("address line 1"), max_length=255, blank=True)
-    address_line2 = models.CharField(_("address line 2"), max_length=255, blank=True)
-    city = models.CharField(_("city"), max_length=100, blank=True)
-    state = models.CharField(_("state"), max_length=100, blank=True)
-    country = models.CharField(_("country"), max_length=100, blank=True)
-    postal_code = models.CharField(_("postal code"), max_length=20, blank=True)
-    bio = models.TextField(_("bio"), blank=True)
+    bio = models.TextField(_("bio"), max_length=1000, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # --- Name fields (SRS: first/middle/last, not editable after creation) ---
+    first_name = models.CharField(_("first name"), max_length=50, blank=True)
+    middle_name = models.CharField(_("middle name"), max_length=50, blank=True)
+    last_name = models.CharField(_("last name"), max_length=50, blank=True)
+
+    # --- Location fields (common) ---
+    country_of_origin = models.CharField(_("country of origin"), max_length=50, blank=True)
+    state_province = models.CharField(_("state/province"), max_length=50, blank=True)
+    city = models.CharField(_("city"), max_length=100, blank=True)
+    postal_code = models.CharField(_("postal code"), max_length=20, blank=True)
+    address_line1 = models.CharField(_("address line 1"), max_length=255, blank=True)
+    address_line2 = models.CharField(_("address line 2"), max_length=255, blank=True)
+
+    # --- Individual user fields (SRS page 9-10) ---
+    occupation = models.CharField(_("occupation"), max_length=50, blank=True)
+    current_position = models.CharField(_("current position"), max_length=50, blank=True)
+    highest_education = models.CharField(_("highest education"), max_length=50, blank=True)
+    work_experience = models.CharField(_("work experience"), max_length=2, blank=True)
+    education_level = models.CharField(
+        _("education level"), max_length=20, choices=EDUCATION_LEVEL_CHOICES, blank=True
+    )
+    institution_name = models.CharField(_("institution name"), max_length=50, blank=True)
+    place_of_institution = models.CharField(_("place of institution"), max_length=50, blank=True)
+    location = models.CharField(_("location"), max_length=50, blank=True)
+    assessment_package_allocated = models.CharField(
+        _("assessment package allocated"), max_length=100, blank=True
+    )
+
+    # --- Professional fields (Psychometrician/SME/Reviewer/Trainer/Counsellor, SRS pages 10-13) ---
+    domain_experience = models.CharField(_("domain experience"), max_length=2, blank=True)
+    pan_number = models.CharField(_("PAN number"), max_length=15, blank=True)
+    bank_account_number = models.CharField(_("bank account number"), max_length=15, blank=True)
+    bank_name = models.CharField(_("bank name"), max_length=20, blank=True)
+    branch_name = models.CharField(_("branch name"), max_length=25, blank=True)
+    ifsc_code = models.CharField(_("IFSC code"), max_length=15, blank=True)
+    contact_address = models.TextField(_("contact address"), max_length=100, blank=True)
+    permanent_address = models.TextField(_("permanent address"), max_length=100, blank=True)
+
+    # --- Channel Partner fields (SRS page 13) ---
+    channel_partner_agreement_id = models.CharField(
+        _("channel partner agreement ID"), max_length=50, blank=True
+    )
+    contract_period = models.CharField(_("contract period"), max_length=2, blank=True)
 
     class Meta:
         verbose_name = _("user profile")
