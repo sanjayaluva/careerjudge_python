@@ -702,10 +702,23 @@ function BulkUploadModal({ open, onClose }: { open: boolean; onClose: () => void
     onError: (err) => setError(extractApiError(err)),
   });
 
-  const handleDownloadTemplate = () => {
-    // Use the API client to download the template
-    const baseUrl = (import.meta.env.VITE_API_BASE_URL as string) || "/api";
-    window.open(`${baseUrl}/accounts/users/bulk-upload/template/`, "_blank");
+  const handleDownloadTemplate = async () => {
+    try {
+      const resp = await apiClient.get("/accounts/users/bulk-upload/template/", {
+        responseType: "blob",
+      });
+      // Create a download link from the blob
+      const url = window.URL.createObjectURL(new Blob([resp.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "careerjudge_bulk_users_template.csv");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(extractApiError(err));
+    }
   };
 
   const onSubmit = (e: React.FormEvent) => {
