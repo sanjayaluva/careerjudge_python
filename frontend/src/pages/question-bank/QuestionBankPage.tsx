@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -13,7 +13,6 @@ import {
   CardHeader,
   CardTitle,
   Input,
-  Label,
   Modal,
   Spinner,
   Table,
@@ -25,17 +24,15 @@ import {
   TableRow,
 } from "@/components/ui";
 import {
-  createQuestion,
   deleteQuestion,
-  DIFFICULTY_LEVELS,
   listQuestions,
   QUESTION_STATUSES,
   QUESTION_TYPES,
-  SCORING_TYPES,
   submitForReview,
 } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
+import { QuestionEditorModal } from "./QuestionEditorModal";
 
 const QB_KEY = ["question-bank", "questions"];
 
@@ -59,15 +56,14 @@ export default function QuestionBankPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [deleteQ, setDeleteQ] = useState<{ id: number; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Debounce search
-  useState(() => {
+  useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
     return () => clearTimeout(t);
-  });
+  }, [search]);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [...QB_KEY, page, debouncedSearch, typeFilter, statusFilter, mineOnly],
@@ -92,9 +88,7 @@ export default function QuestionBankPage() {
 
   const submitMutation = useMutation({
     mutationFn: (id: number) => submitForReview(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: QB_KEY });
-    },
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: QB_KEY }),
     onError: (err) => setError(extractApiError(err)),
   });
 
@@ -103,9 +97,8 @@ export default function QuestionBankPage() {
   const hasNext = Boolean(data?.next);
   const hasPrev = Boolean(data?.previous);
 
-  const canCreate =
-    user?.role === "sme" || user?.role === "psychometrician" || user?.role === "cj_admin";
-  const canDelete = user?.role === "sme" || user?.role === "cj_admin";
+  const canCreate = ["sme", "psychometrician", "cj_admin"].includes(user?.role ?? "");
+  const canDelete = ["sme", "cj_admin"].includes(user?.role ?? "");
 
   return (
     <div className="space-y-6">
@@ -120,7 +113,7 @@ export default function QuestionBankPage() {
                   : "Manage assessment questions"}
               </CardDescription>
             </div>
-            {canCreate && <Button onClick={() => setCreateOpen(true)}>Create question</Button>}
+            {canCreate && <Button onClick={() => setEditorOpen(true)}>Create question</Button>}
           </div>
         </CardHeader>
         <CardContent>
@@ -240,7 +233,7 @@ export default function QuestionBankPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
-                          {q.status === "draft" || q.status === "sent_back" ? (
+                          {(q.status === "draft" || q.status === "sent_back") && canCreate && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -249,8 +242,8 @@ export default function QuestionBankPage() {
                             >
                               Submit
                             </Button>
-                          ) : null}
-                          {canDelete && (q.status === "draft" || q.status === "sent_back") ? (
+                          )}
+                          {(q.status === "draft" || q.status === "sent_back") && canDelete && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -259,7 +252,7 @@ export default function QuestionBankPage() {
                             >
                               Delete
                             </Button>
-                          ) : null}
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -295,7 +288,7 @@ export default function QuestionBankPage() {
         </CardContent>
       </Card>
 
-      <CreateQuestionModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <QuestionEditorModal open={editorOpen} onClose={() => setEditorOpen(false)} />
       <DeleteQuestionModal
         question={deleteQ}
         loading={deleteMutation.isPending}
@@ -303,136 +296,6 @@ export default function QuestionBankPage() {
         onConfirm={() => deleteQ && deleteMutation.mutate(deleteQ.id)}
       />
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Create Question Modal
-// ---------------------------------------------------------------------------
-
-function CreateQuestionModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const queryClient = useQueryClient();
-  const [questionType, setQuestionType] = useState("MCQ_TEXT_IMAGE");
-  const [questionText, setQuestionText] = useState("");
-  const [scoringType, setScoringType] = useState("BINARY");
-  const [difficulty, setDifficulty] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      createQuestion({
-        question_type: questionType,
-        question_text_1: questionText,
-        scoring_type: scoringType,
-        difficulty_level: difficulty,
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: QB_KEY });
-      setQuestionText("");
-      setError(null);
-      onClose();
-    },
-    onError: (err) => setError(extractApiError(err)),
-  });
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Create question"
-      description="Create a new question (draft status)."
-      size="lg"
-    >
-      {error && (
-        <Alert variant="error" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          setError(null);
-          if (!questionText.trim()) {
-            setError("Question text is required.");
-            return;
-          }
-          mutation.mutate();
-        }}
-        className="space-y-4"
-      >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="qtype" required>
-              Question type
-            </Label>
-            <select
-              id="qtype"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={questionType}
-              onChange={(e) => setQuestionType(e.target.value)}
-            >
-              {QUESTION_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="stype">Scoring type</Label>
-            <select
-              id="stype"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={scoringType}
-              onChange={(e) => setScoringType(e.target.value)}
-            >
-              {SCORING_TYPES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="diff">Difficulty</Label>
-            <select
-              id="diff"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={difficulty}
-              onChange={(e) => setDifficulty(e.target.value)}
-            >
-              <option value="">Select...</option>
-              {DIFFICULTY_LEVELS.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div>
-          <Label htmlFor="qtext" required>
-            Question text
-          </Label>
-          <textarea
-            id="qtext"
-            rows={3}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={questionText}
-            onChange={(e) => setQuestionText(e.target.value)}
-            placeholder="Enter the question..."
-          />
-        </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" loading={mutation.isPending}>
-            Create question
-          </Button>
-        </div>
-      </form>
-    </Modal>
   );
 }
 
