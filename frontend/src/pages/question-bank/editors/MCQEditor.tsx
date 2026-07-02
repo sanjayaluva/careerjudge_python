@@ -102,7 +102,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
         <MediaManager
           label="Question image (optional)"
           accept="image/*"
-          modes={["upload", "url"]}
+          modes={["upload", "url", "gallery"]}
           value={data.imageUrl}
           onChange={(url) => onChange({ ...data, imageUrl: url })}
           previewType="image"
@@ -115,7 +115,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
         <MediaManager
           label="Audio file"
           accept="audio/*"
-          modes={["upload", "url"]}
+          modes={["upload", "url", "gallery"]}
           value={data.audioUrl}
           onChange={(url) => onChange({ ...data, audioUrl: url })}
           previewType="audio"
@@ -128,7 +128,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
         <MediaManager
           label="Video file"
           accept="video/*"
-          modes={["upload", "url"]}
+          modes={["upload", "url", "gallery"]}
           value={data.videoUrl}
           onChange={(url) => onChange({ ...data, videoUrl: url })}
           previewType="video"
@@ -270,7 +270,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
                 <MediaManager
                   label={`Option ${i + 1} image`}
                   accept="image/*"
-                  modes={["upload", "url"]}
+                  modes={["upload", "url", "gallery"]}
                   value={opt.image_file || ""}
                   onChange={(url) => updateOption(i, { ...opt, image_file: url })}
                   previewType="image"
