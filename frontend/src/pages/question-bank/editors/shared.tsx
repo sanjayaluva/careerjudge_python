@@ -14,6 +14,7 @@ export interface OptionData {
   option_type: string;
   label: string;
   text_value: string;
+  image_file: string | null;
   is_correct: boolean;
   match_pair_id: number | null;
   predefined_score: number;
@@ -292,6 +293,7 @@ export function createEmptyOption(order: number, type = "TEXT"): OptionData {
     option_type: type,
     label: "",
     text_value: "",
+    image_file: null,
     is_correct: false,
     match_pair_id: null,
     predefined_score: 1.0,

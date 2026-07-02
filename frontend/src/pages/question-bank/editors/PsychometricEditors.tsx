@@ -1,15 +1,166 @@
 /**
- * Psychometric Editors — for types 6a (Rank), 6b (Rank-then-Rate),
- * 7 (Rating Scale), 8a (Forced-Choice Single), 8b (Forced-Choice Two-Level)
+ * Rating Scale Editor (7) — single row of rating scale points with labels.
+ *
+ * The rating question is ONE statement with N scale points (columns).
+ * Each column has a label (e.g. "Very True", "Not at all True") and a value.
+ * The candidate selects one point on the scale.
+ *
+ * NOT multiple rows of statements — that's a different pattern.
+ * This is a single-row rating field.
  */
-import { Input, Label, Button } from "@/components/ui";
-import {
-  AddOptionButton,
-  RankOptionRow,
-  RatingRow,
-  createEmptyOption,
-  type OptionData,
-} from "./shared";
+import { Input, Label } from "@/components/ui";
+import { createEmptyOption, type OptionData } from "./shared";
+
+interface RatingScaleEditorProps {
+  data: {
+    question_text_1: string;
+    rating_scale_points: string;
+    rating_direction: string;
+    scaleLabels: string[];
+  };
+  onChange: (data: RatingScaleEditorProps["data"]) => void;
+}
+
+export function RatingEditor({ data, onChange }: RatingScaleEditorProps) {
+  const scalePoints = parseInt(data.rating_scale_points) || 5;
+
+  const updateScaleLabels = () => {
+    const n = parseInt(data.rating_scale_points) || 5;
+    const newLabels = Array(n)
+      .fill("")
+      .map((_, i) => data.scaleLabels[i] || defaultLabels(i, n));
+    onChange({ ...data, scaleLabels: newLabels });
+  };
+
+  const defaultLabels = (index: number, total: number): string => {
+    const labels = [
+      "Not at all True",
+      "Slightly True",
+      "Moderately True",
+      "Quite True",
+      "Very True",
+      "Extremely True",
+      "Absolutely True",
+      "Completely True",
+      "Mostly True",
+      "Somewhat True",
+    ];
+    if (data.rating_direction === "REVERSE") {
+      return labels[total - 1 - index] || `Point ${index + 1}`;
+    }
+    return labels[index] || `Point ${index + 1}`;
+  };
+
+  const updateLabel = (i: number, val: string) => {
+    const newLabels = [...data.scaleLabels];
+    newLabels[i] = val;
+    onChange({ ...data, scaleLabels: newLabels });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label htmlFor="qtext1" required>
+          Statement / Question
+        </Label>
+        <textarea
+          id="qtext1"
+          rows={3}
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+          value={data.question_text_1}
+          onChange={(e) => onChange({ ...data, question_text_1: e.target.value })}
+          placeholder="Enter the statement to rate..."
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label htmlFor="rsp">Scale points</Label>
+          <Input
+            id="rsp"
+            type="number"
+            min="2"
+            max="10"
+            value={data.rating_scale_points}
+            onChange={(e) => onChange({ ...data, rating_scale_points: e.target.value })}
+            onBlur={updateScaleLabels}
+          />
+        </div>
+        <div>
+          <Label htmlFor="rdir">Scoring direction</Label>
+          <select
+            id="rdir"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={data.rating_direction}
+            onChange={(e) => onChange({ ...data, rating_direction: e.target.value })}
+          >
+            <option value="FORWARD">Forward (leftmost = highest score)</option>
+            <option value="REVERSE">Reverse (rightmost = highest score)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Scale labels */}
+      <div className="space-y-2">
+        <Label>Scale Point Labels (left to right)</Label>
+        <p className="text-xs text-slate-500">
+          Each column in the rating scale. Candidate selects one point.
+          {data.rating_direction === "REVERSE"
+            ? " Reverse: rightmost point = highest score."
+            : " Forward: leftmost point = highest score."}
+        </p>
+        <div
+          className="grid gap-2"
+          style={{ gridTemplateColumns: `repeat(${Math.min(scalePoints, 5)}, 1fr)` }}
+        >
+          {Array.from({ length: scalePoints }).map((_, i) => (
+            <div key={i} className="space-y-1">
+              <span className="text-xs text-slate-400">
+                Point {i + 1} = {data.rating_direction === "REVERSE" ? i + 1 : scalePoints - i} pts
+              </span>
+              <Input
+                value={data.scaleLabels[i] || ""}
+                onChange={(e) => updateLabel(i, e.target.value)}
+                placeholder={`Label ${i + 1}`}
+                className="text-xs"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Preview */}
+      <div className="rounded-md border border-primary-200 bg-primary-50/50 p-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
+          Preview
+        </p>
+        <p className="mb-3 text-sm font-medium text-slate-900">
+          {data.question_text_1 || "(no statement)"}
+        </p>
+        <div className="flex items-center gap-2">
+          {Array.from({ length: scalePoints }).map((_, i) => (
+            <div key={i} className="flex flex-col items-center gap-1">
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-300 text-xs font-medium text-slate-500 hover:border-primary-600 hover:text-primary-600"
+              >
+                {i + 1}
+              </button>
+              <span className="max-w-20 text-center text-xs text-slate-500">
+                {data.scaleLabels[i] || `Point ${i + 1}`}
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          {data.rating_direction === "REVERSE"
+            ? `Scoring: Point 1 = 1, Point ${scalePoints} = ${scalePoints}`
+            : `Scoring: Point 1 = ${scalePoints}, Point ${scalePoints} = 1`}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Rank Editor (6a)
@@ -29,18 +180,15 @@ export function RankEditor({ data, onChange }: RankEditorProps) {
     newOptions[index] = option;
     onChange({ ...data, options: newOptions });
   };
-
   const addOption = () => {
     onChange({
       ...data,
       options: [...data.options, createEmptyOption(data.options.length, "RANK")],
     });
   };
-
   const removeOption = (index: number) => {
     onChange({ ...data, options: data.options.filter((_, i) => i !== index) });
   };
-
   return (
     <div className="space-y-4">
       <div>
@@ -56,21 +204,36 @@ export function RankEditor({ data, onChange }: RankEditorProps) {
           placeholder="Rank the following items from highest (1) to lowest..."
         />
       </div>
-
       <div className="space-y-2">
-        <Label>Items to Rank (candidate assigns rank 1 = highest)</Label>
+        <Label>Items to Rank</Label>
         {data.options.map((opt, i) => (
-          <RankOptionRow
-            key={i}
-            option={opt}
-            index={i}
-            onChange={updateOption}
-            onRemove={removeOption}
-          />
+          <div key={i} className="flex items-center gap-3 rounded-md border border-slate-200 p-3">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-600">
+              {i + 1}
+            </span>
+            <Input
+              value={opt.text_value}
+              onChange={(e) => updateOption(i, { ...opt, text_value: e.target.value })}
+              placeholder="Enter item to rank..."
+              className="flex-1 text-sm"
+            />
+            <button
+              type="button"
+              className="rounded px-2 py-1 text-xs text-danger hover:bg-danger-50"
+              onClick={() => removeOption(i)}
+            >
+              Remove
+            </button>
+          </div>
         ))}
-        <AddOptionButton onClick={addOption} label="Add item" />
+        <button
+          type="button"
+          onClick={addOption}
+          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+        >
+          + Add item
+        </button>
       </div>
-
       <div className="rounded-md border border-primary-200 bg-primary-50/50 p-4">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
           Preview
@@ -123,7 +286,6 @@ export function RankRateEditor({ data, onChange }: RankRateEditorProps) {
     onChange({ ...data, options: data.options.filter((_, i) => i !== index) });
   };
   const scalePoints = parseInt(data.rating_scale_points) || 7;
-
   return (
     <div className="space-y-4">
       <div>
@@ -149,22 +311,36 @@ export function RankRateEditor({ data, onChange }: RankRateEditorProps) {
           value={data.rating_scale_points}
           onChange={(e) => onChange({ ...data, rating_scale_points: e.target.value })}
         />
-        <p className="mt-1 text-xs text-slate-500">
-          e.g. 7 = 7-point rating scale (1=lowest, 7=highest)
-        </p>
       </div>
       <div className="space-y-2">
         <Label>Items (candidate ranks 1-N, then rates each on {scalePoints}-point scale)</Label>
         {data.options.map((opt, i) => (
-          <RankOptionRow
-            key={i}
-            option={opt}
-            index={i}
-            onChange={updateOption}
-            onRemove={removeOption}
-          />
+          <div key={i} className="flex items-center gap-3 rounded-md border border-slate-200 p-3">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-600">
+              {i + 1}
+            </span>
+            <Input
+              value={opt.text_value}
+              onChange={(e) => updateOption(i, { ...opt, text_value: e.target.value })}
+              placeholder="Enter item..."
+              className="flex-1 text-sm"
+            />
+            <button
+              type="button"
+              className="rounded px-2 py-1 text-xs text-danger hover:bg-danger-50"
+              onClick={() => removeOption(i)}
+            >
+              Remove
+            </button>
+          </div>
         ))}
-        <AddOptionButton onClick={addOption} label="Add item" />
+        <button
+          type="button"
+          onClick={addOption}
+          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+        >
+          + Add item
+        </button>
       </div>
       <div className="rounded-md border border-primary-200 bg-primary-50/50 p-4">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
@@ -187,123 +363,8 @@ export function RankRateEditor({ data, onChange }: RankRateEditorProps) {
           ))}
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          Score per item = (total_items - rank + 1) × rating. Max = {data.options.length} ×{" "}
-          {scalePoints} = {data.options.length * scalePoints}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Rating Scale Editor (7)
-// ---------------------------------------------------------------------------
-
-interface RatingEditorProps {
-  data: {
-    question_text_1: string;
-    rating_scale_points: string;
-    rating_direction: string;
-    options: OptionData[];
-  };
-  onChange: (data: RatingEditorProps["data"]) => void;
-}
-
-export function RatingEditor({ data, onChange }: RatingEditorProps) {
-  const updateOption = (index: number, option: OptionData) => {
-    const newOptions = [...data.options];
-    newOptions[index] = option;
-    onChange({ ...data, options: newOptions });
-  };
-  const addOption = () => {
-    onChange({ ...data, options: [...data.options, createEmptyOption(data.options.length)] });
-  };
-  const removeOption = (index: number) => {
-    onChange({ ...data, options: data.options.filter((_, i) => i !== index) });
-  };
-  const scalePoints = parseInt(data.rating_scale_points) || 5;
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <Label htmlFor="qtext1" required>
-          Instructions
-        </Label>
-        <textarea
-          id="qtext1"
-          rows={3}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-          value={data.question_text_1}
-          onChange={(e) => onChange({ ...data, question_text_1: e.target.value })}
-          placeholder="Rate each statement on the scale..."
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label htmlFor="rsp">Scale points</Label>
-          <Input
-            id="rsp"
-            type="number"
-            min="2"
-            max="10"
-            value={data.rating_scale_points}
-            onChange={(e) => onChange({ ...data, rating_scale_points: e.target.value })}
-          />
-        </div>
-        <div>
-          <Label htmlFor="rdir">Scoring direction</Label>
-          <select
-            id="rdir"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={data.rating_direction}
-            onChange={(e) => onChange({ ...data, rating_direction: e.target.value })}
-          >
-            <option value="FORWARD">Forward (leftmost = highest score)</option>
-            <option value="REVERSE">Reverse (rightmost = highest score)</option>
-          </select>
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label>Statements to Rate</Label>
-        {data.options.map((opt, i) => (
-          <RatingRow
-            key={i}
-            option={opt}
-            index={i}
-            onChange={updateOption}
-            onRemove={removeOption}
-          />
-        ))}
-        <AddOptionButton onClick={addOption} label="Add statement" />
-      </div>
-      <div className="rounded-md border border-primary-200 bg-primary-50/50 p-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
-          Preview
-        </p>
-        <p className="mb-2 text-sm text-slate-900">{data.question_text_1}</p>
-        <div className="space-y-1">
-          {data.options.map((opt, i) => (
-            <div key={i} className="flex items-center gap-3 text-sm">
-              <span className="flex-1 text-slate-700">
-                {opt.text_value || `(statement ${i + 1})`}
-              </span>
-              <div className="flex gap-1">
-                {Array.from({ length: scalePoints }).map((_, p) => (
-                  <span
-                    key={p}
-                    className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-xs text-slate-400"
-                  >
-                    {p + 1}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-slate-500">
-          {data.rating_direction === "REVERSE"
-            ? "Reverse: rightmost = highest"
-            : "Forward: leftmost = highest"}
+          Score per item = (total - rank + 1) × rating. Max = {data.options.length} × {scalePoints}{" "}
+          = {data.options.length * scalePoints}
         </p>
       </div>
     </div>
@@ -345,7 +406,6 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
   const removeOption = (index: number) => {
     onChange({ ...data, options: data.options.filter((_, i) => i !== index) });
   };
-
   return (
     <div className="space-y-4">
       <div>
@@ -361,7 +421,6 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
           placeholder={isTwoLevel ? "Select one option and rate it..." : "Select one option..."}
         />
       </div>
-
       {isTwoLevel && (
         <div>
           <Label htmlFor="rsp">Rating scale points (Level 2)</Label>
@@ -375,7 +434,6 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
           />
         </div>
       )}
-
       <div className="space-y-3">
         <Label>Option Pairs (exactly 2 options per question)</Label>
         <p className="text-xs text-slate-500">
@@ -383,23 +441,48 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
           {isTwoLevel && " Candidate selects one, then rates it."}
         </p>
         {data.options.map((opt, i) => (
-          <RatingRow
-            key={i}
-            option={opt}
-            index={i}
-            onChange={updateOption}
-            onRemove={removeOption}
-            showScore
-            scoreLabel="Predefined score"
-          />
+          <div key={i} className="rounded-md border border-slate-200 p-3">
+            <div className="flex items-start gap-3">
+              <div className="flex-1">
+                <Input
+                  value={opt.text_value}
+                  onChange={(e) => updateOption(i, { ...opt, text_value: e.target.value })}
+                  placeholder="Enter option text..."
+                  className="text-sm"
+                />
+              </div>
+              <div className="w-28">
+                <Label className="text-xs text-slate-500">Predefined score</Label>
+                <Input
+                  type="number"
+                  value={opt.predefined_score}
+                  onChange={(e) =>
+                    updateOption(i, { ...opt, predefined_score: Number(e.target.value) })
+                  }
+                  className="text-sm"
+                  step="0.5"
+                />
+              </div>
+              <button
+                type="button"
+                className="rounded px-2 py-1 text-xs text-danger hover:bg-danger-50"
+                onClick={() => removeOption(i)}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
         ))}
         {data.options.length < 2 && (
-          <Button type="button" variant="outline" size="sm" onClick={addPair}>
+          <button
+            type="button"
+            onClick={addPair}
+            className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          >
             + Add option pair
-          </Button>
+          </button>
         )}
       </div>
-
       <div className="rounded-md border border-primary-200 bg-primary-50/50 p-4">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
           Preview
@@ -417,7 +500,7 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
         {isTwoLevel && (
           <p className="mt-2 text-xs text-slate-500">
             After selecting, candidate rates on {data.rating_scale_points || "N"}-point scale. Final
-            score = predefined × rating.
+            = predefined × rating.
           </p>
         )}
       </div>

@@ -52,11 +52,15 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
   const [ratingScalePoints, setRatingScalePoints] = useState("5");
   const [ratingDirection, setRatingDirection] = useState("FORWARD");
   const [imageUrl, setImageUrl] = useState("");
+  const [audioUrl, setAudioUrl] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
   const [options, setOptions] = useState<OptionData[]>([]);
   const [pairs, setPairs] = useState<MatchPairData[]>([]);
   const [rowLabels, setRowLabels] = useState<string[]>([]);
   const [colLabels, setColLabels] = useState<string[]>([]);
   const [correctCells, setCorrectCells] = useState<boolean[][]>([]);
+  const [isMultipleAnswer, setIsMultipleAnswer] = useState(false);
+  const [scaleLabels, setScaleLabels] = useState<string[]>([]);
 
   const resetForm = () => {
     setQuestionType("MCQ_TEXT_IMAGE");
@@ -77,11 +81,15 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
     setRatingScalePoints("5");
     setRatingDirection("FORWARD");
     setImageUrl("");
+    setAudioUrl("");
+    setVideoUrl("");
     setOptions([]);
     setPairs([]);
     setRowLabels([]);
     setColLabels([]);
     setCorrectCells([]);
+    setIsMultipleAnswer(false);
+    setScaleLabels([]);
     setError(null);
   };
 
@@ -145,7 +153,11 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
     passage_title: passageTitle,
     passage_body: passageBody,
     display_duration_seconds: displayDuration,
+    imageUrl,
+    audioUrl,
+    videoUrl,
     options,
+    isMultipleAnswer,
   };
 
   const fitbData = {
@@ -186,7 +198,7 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
     question_text_1: questionText1,
     rating_scale_points: ratingScalePoints,
     rating_direction: ratingDirection,
-    options,
+    scaleLabels,
   };
   const forcedChoiceData = {
     question_text_1: questionText1,
@@ -283,7 +295,11 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
                 setPassageTitle(d.passage_title);
                 setPassageBody(d.passage_body);
                 setDisplayDuration(d.display_duration_seconds);
+                setImageUrl(d.imageUrl);
+                setAudioUrl(d.audioUrl);
+                setVideoUrl(d.videoUrl);
                 setOptions(d.options);
+                setIsMultipleAnswer(d.isMultipleAnswer);
               }}
             />
           )}
@@ -361,7 +377,7 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
                 setQuestionText1(d.question_text_1);
                 setRatingScalePoints(d.rating_scale_points);
                 setRatingDirection(d.rating_direction);
-                setOptions(d.options);
+                setScaleLabels(d.scaleLabels);
               }}
             />
           )}

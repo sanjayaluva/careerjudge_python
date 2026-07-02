@@ -17,6 +17,7 @@ export {
 } from "./DropdownMenu";
 export { Input, type InputProps } from "./Input";
 export { Label, type LabelProps } from "./Label";
+export { MediaManager, type MediaManagerProps } from "./MediaManager";
 export { Modal, type ModalProps } from "./Modal";
 export { Spinner, type SpinnerProps } from "./Spinner";
 export { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "./Table";
