@@ -81,7 +81,7 @@ export interface ListParams {
   search?: string;
 }
 
-const BASE = "/organizations/";
+const BASE = "/organizations";
 
 export function listOrganizations(params: ListParams = {}): Promise<{
   count: number;
@@ -89,7 +89,7 @@ export function listOrganizations(params: ListParams = {}): Promise<{
   previous: string | null;
   results: OrganizationListItem[];
 }> {
-  return apiGetPaged<OrganizationListItem>(BASE, {
+  return apiGetPaged<OrganizationListItem>(`${BASE}/`, {
     params: {
       page: params.page ?? 1,
       ...(params.search ? { search: params.search } : {}),
@@ -102,7 +102,7 @@ export function retrieveOrganization(id: number): Promise<Organization> {
 }
 
 export function createOrganization(payload: CreateOrganizationPayload): Promise<Organization> {
-  return apiPost<Organization>(BASE, payload);
+  return apiPost<Organization>(`${BASE}/`, payload);
 }
 
 export function updateOrganization(
