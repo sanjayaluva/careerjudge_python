@@ -96,6 +96,7 @@ class Role(models.Model):
         ("trainer", "Trainer"),
         ("group_admin", "Group Admin"),
         ("counsellor", "Counsellor"),
+        ("channel_partner", "Channel Partner"),
         ("individual", "Individual"),
     ]
 

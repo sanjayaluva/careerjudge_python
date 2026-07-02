@@ -150,7 +150,7 @@ class TestRoleList:
     def test_admin_can_list_roles(self, authed_client):
         resp = authed_client.get("/api/accounts/roles/")
         assert resp.status_code == 200
-        assert resp.json()["data"]["count"] == 10  # 10 default roles
+        assert resp.json()["data"]["count"] == 11  # 11 default roles
 
 
 @pytest.mark.django_db

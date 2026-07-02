@@ -20,6 +20,7 @@ export type RoleName =
   | "trainer"
   | "group_admin"
   | "counsellor"
+  | "channel_partner"
   | "individual";
 
 export type ModuleKey =
@@ -46,6 +47,7 @@ export const ROLE_LABELS: Record<RoleName, string> = {
   trainer: "Trainer",
   group_admin: "Group Admin",
   counsellor: "Counsellor",
+  channel_partner: "Channel Partner",
   individual: "Individual",
 };
 
@@ -60,6 +62,7 @@ export const ROLE_NAME_CHOICES: RoleName[] = [
   "trainer",
   "group_admin",
   "counsellor",
+  "channel_partner",
   "individual",
 ];
 
@@ -108,6 +111,7 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
   trainer: ["dashboard", "profile", "assessments", "training"],
   group_admin: ["dashboard", "profile", "organizations", "assessments"],
   counsellor: ["dashboard", "profile", "assessments", "career_profiling", "reports", "counseling"],
+  channel_partner: ["dashboard", "profile", "users", "organizations", "assessments", "reports"],
   individual: [
     "dashboard",
     "profile",

@@ -123,16 +123,17 @@ class UserViewSet(ModelViewSet):
                 "corp_admin",
                 "corp_exclusive",
                 "group_admin",
+                "channel_partner",
             ):
                 # Org-scoped: can only delete individual users within their organization
                 from apps.organizations.models import OrganizationMember
 
-                requester_orgs = OrganizationMember.objects.filter(
-                    user=requester
-                ).values_list("organization_id", flat=True)
-                target_orgs = OrganizationMember.objects.filter(
-                    user=instance
-                ).values_list("organization_id", flat=True)
+                requester_orgs = OrganizationMember.objects.filter(user=requester).values_list(
+                    "organization_id", flat=True
+                )
+                target_orgs = OrganizationMember.objects.filter(user=instance).values_list(
+                    "organization_id", flat=True
+                )
 
                 # Check if the target user shares at least one org with the requester
                 if not set(requester_orgs).intersection(set(target_orgs)):

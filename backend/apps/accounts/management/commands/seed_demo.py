@@ -42,6 +42,7 @@ DEMO_USERS = [
     ("trainer", "trainer@demo.careerjudge.pp.ua", "Trainer", "Demo@1234"),
     ("group_admin", "group.admin@demo.careerjudge.pp.ua", "Group Admin", "Demo@1234"),
     ("counsellor", "counsellor@demo.careerjudge.pp.ua", "Counsellor", "Demo@1234"),
+    ("channel_partner", "channel.partner@demo.careerjudge.pp.ua", "Channel Partner", "Demo@1234"),
     ("individual", "individual@demo.careerjudge.pp.ua", "Individual User", "Demo@1234"),
 ]
 
@@ -155,6 +156,18 @@ ROLE_PERMISSIONS = {
         ("accounts", "view"),
         ("assessment", "view"),
         ("reporting", "view"),
+    ],
+    "channel_partner": [
+        # Channel Partner: manages their own individual users + assessments
+        ("accounts", "view"),
+        ("accounts", "add"),
+        ("accounts", "change"),
+        ("organizations", "view"),
+        ("organizations", "change"),
+        ("assessment", "view"),
+        ("assessment", "add"),
+        ("reporting", "view"),
+        ("reporting", "generate_report"),
     ],
     "individual": [
         ("assessment", "view"),  # can take assessments

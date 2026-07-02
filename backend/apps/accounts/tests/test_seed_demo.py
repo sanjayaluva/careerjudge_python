@@ -13,7 +13,7 @@ class TestSeedDemoCommand:
     def test_creates_all_roles(self):
         out = StringIO()
         call_command("seed_demo", stdout=out)
-        assert Role.objects.count() == 10
+        assert Role.objects.count() == 11
         for code, _ in Role.ROLE_CHOICES:
             assert Role.objects.filter(name=code).exists()
 
@@ -21,7 +21,7 @@ class TestSeedDemoCommand:
         out = StringIO()
         call_command("seed_demo", stdout=out)
         # 10 demo users + 1 superuser
-        assert User.objects.count() == 11
+        assert User.objects.count() == 12
         assert User.objects.filter(email="cj.admin@demo.careerjudge.pp.ua").exists()
         assert User.objects.filter(email="sme@demo.careerjudge.pp.ua").exists()
         assert User.objects.filter(email="reviewer@demo.careerjudge.pp.ua").exists()
@@ -39,8 +39,8 @@ class TestSeedDemoCommand:
         call_command("seed_demo", stdout=out)
         # Run again — should not duplicate
         call_command("seed_demo", stdout=out)
-        assert Role.objects.count() == 10
-        assert User.objects.count() == 11
+        assert Role.objects.count() == 11
+        assert User.objects.count() == 12
 
     def test_demo_user_can_login(self):
         out = StringIO()

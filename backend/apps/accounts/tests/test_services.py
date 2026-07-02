@@ -76,14 +76,14 @@ class TestPasswordReset:
 class TestGetOrCreateDefaultRoles:
     def test_creates_all_9_roles(self):
         roles = get_or_create_default_roles()
-        assert len(roles) == 10
+        assert len(roles) == 11
         for code, _ in [("cj_admin", ""), ("individual", "")]:
             assert code in roles
 
     def test_idempotent(self):
         get_or_create_default_roles()
         roles = get_or_create_default_roles()
-        assert len(roles) == 10
+        assert len(roles) == 11
 
 
 @pytest.mark.django_db

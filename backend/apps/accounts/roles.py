@@ -98,3 +98,19 @@ class CorpExclusive(AbstractUserRole):
         "add_user",
         "view_organization",
     ]
+
+
+class ChannelPartner(AbstractUserRole):
+    """Channel Partner — manages own individual users + assessments."""
+
+    available_permissions = [
+        "view_user",
+        "add_user",
+        "change_user",
+        "view_organization",
+        "change_organization",
+        "view_assessment",
+        "add_assessment",
+        "view_report",
+        "generate_report",
+    ]

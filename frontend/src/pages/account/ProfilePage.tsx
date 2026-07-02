@@ -218,11 +218,10 @@ function getRoleSpecificFields(role: RoleName | null): ProfileFieldConfig[] {
     case "trainer":
     case "counsellor":
       return PROFESSIONAL_FIELDS;
-    // channel_partner role is not in the 10 system roles yet.
-    // When added, use: return CHANNEL_PARTNER_FIELDS;
-    // Keeping the reference to avoid unused variable:
+    case "channel_partner":
+      return CHANNEL_PARTNER_FIELDS;
     default:
-      return role === null ? CHANNEL_PARTNER_FIELDS : [];
+      return [];
   }
 }
 
