@@ -22,7 +22,12 @@ if [ ! -f "$DEPLOY_DIR/.env.dev" ]; then
   echo "  ✓ .env.dev created with generated SECRET_KEY"
   echo "  ⚠️  Review DATABASE_URL and other settings in .env.dev if needed"
 else
-  echo "  .env.dev exists — keeping current configuration"
+  echo "  .env.dev exists — updating JWT TTLs to prevent mid-session expiry"
+  # Force-update JWT TTLs to the latest values (60 min access, 30 day refresh).
+  # Previous deploys used 15 min / 7 days which caused session_expired redirects
+  # during active question editing. This sed is idempotent — safe to run every deploy.
+  sed -i 's|^JWT_ACCESS_TTL_MINUTES=.*|JWT_ACCESS_TTL_MINUTES=60|' "$DEPLOY_DIR/.env.dev"
+  sed -i 's|^JWT_REFRESH_TTL_DAYS=.*|JWT_REFRESH_TTL_DAYS=30|' "$DEPLOY_DIR/.env.dev"
 fi
 
 echo "→ Building images…"

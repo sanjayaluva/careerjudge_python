@@ -46,7 +46,10 @@ async function getStore() {
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30_000,
+  // 120s timeout — matches the Caddy reverse_proxy transport timeout.
+  // The previous 30s was too short for question saves with large base64
+  // images in the JSON payload (bulk options save can take 30-60s).
+  timeout: 120_000,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -54,23 +57,7 @@ export const apiClient: AxiosInstance = axios.create({
 });
 
 // ---------------------------------------------------------------------------
-// Request: attach Authorization header
-// ---------------------------------------------------------------------------
-
-apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const stored = readStoredAuth();
-    const token = stored?.accessToken;
-    if (token && !config.headers.Authorization) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error),
-);
-
-// ---------------------------------------------------------------------------
-// Response: envelope-aware error + 401 auto-refresh
+// Shared refresh state (used by both request + response interceptors)
 // ---------------------------------------------------------------------------
 
 let isRefreshing = false;
@@ -84,6 +71,111 @@ function onRefreshed(token: string | null) {
   refreshSubscribers.forEach((cb) => cb(token));
   refreshSubscribers = [];
 }
+
+// ---------------------------------------------------------------------------
+// Request: attach Authorization header + proactive token refresh
+// ---------------------------------------------------------------------------
+
+/**
+ * Decode a JWT payload (without verification — verification happens server-side).
+ * Returns null if the token is malformed.
+ */
+function decodeJwtPayload(token: string): { exp?: number } | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(payload) as { exp?: number };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if the current access token will expire within the next 5 minutes.
+ * If so, proactively refresh it BEFORE the request goes out — this avoids
+ * the 401 → refresh → retry cycle that can cause mid-activity session expiry
+ * during long operations like question editing.
+ */
+const REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes before expiry
+
+async function ensureFreshAccessToken(): Promise<string | null> {
+  const stored = readStoredAuth();
+  if (!stored?.accessToken || !stored?.refreshToken) return null;
+
+  const payload = decodeJwtPayload(stored.accessToken);
+  if (!payload?.exp) return stored.accessToken; // can't decode — let the request try
+
+  const expiresAt = payload.exp * 1000;
+  const now = Date.now();
+  const willExpireSoon = expiresAt - now < REFRESH_BUFFER_MS;
+
+  if (!willExpireSoon) return stored.accessToken;
+
+  // Token will expire soon — proactively refresh it.
+  // Guard against concurrent refreshes with the same isRefreshing flag
+  // used by the response interceptor.
+  if (isRefreshing) {
+    // Wait for the in-flight refresh to complete, then return the new token.
+    return new Promise((resolve) => {
+      subscribeTokenRefresh((newToken) => resolve(newToken));
+    });
+  }
+
+  isRefreshing = true;
+  try {
+    const refreshRes = await axios.post<TokenRefreshResponse>(
+      `${API_BASE_URL}/auth/token/refresh`,
+      { refresh: stored.refreshToken },
+      { headers: { "Content-Type": "application/json" } },
+    );
+    const { access, refresh } = refreshRes.data;
+    // Update store + localStorage
+    try {
+      const store = await getStore();
+      store.setTokens(access, refresh);
+    } catch {
+      const cur = readStoredAuth();
+      if (cur) {
+        cur.accessToken = access;
+        cur.refreshToken = refresh;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cur));
+      }
+    }
+    onRefreshed(access);
+    return access;
+  } catch {
+    onRefreshed(null);
+    return stored.accessToken; // let the request try with the old token; 401 handler will redirect
+  } finally {
+    isRefreshing = false;
+  }
+}
+
+apiClient.interceptors.request.use(
+  async (config: InternalAxiosRequestConfig) => {
+    // Skip proactive refresh for auth endpoints (login, refresh, signup)
+    if (!config.url?.includes("/auth/")) {
+      const freshToken = await ensureFreshAccessToken();
+      if (freshToken && !config.headers.Authorization) {
+        config.headers.Authorization = `Bearer ${freshToken}`;
+      }
+    } else {
+      // For auth endpoints, just attach the stored token if present
+      const stored = readStoredAuth();
+      const token = stored?.accessToken;
+      if (token && !config.headers.Authorization) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
+
+// ---------------------------------------------------------------------------
+// Response: envelope-aware error + 401 auto-refresh (reactive fallback)
+// ---------------------------------------------------------------------------
 
 function isApiErrorEnvelope(payload: unknown): payload is ApiErrorEnvelope {
   return (
