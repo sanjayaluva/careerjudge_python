@@ -99,11 +99,14 @@ const TYPE_SPECIFIC_FIELDS: FieldConfig[] = [
 ];
 
 const COMMON_FIELDS: FieldConfig[] = [
-  { key: "question_id_label", label: "Question ID Label" },
+  { key: "question_type_label", label: "Question Type" },
   { key: "scoring_type_label", label: "Scoring Type" },
   { key: "difficulty_level", label: "Difficulty Level" },
   { key: "cognitive_level", label: "Cognitive Level" },
-  { key: "exposure_limit", label: "Exposure Limit" },
+  { key: "category_name", label: "Category" },
+  // Exposure Limit is intentionally NOT in this list — it's only set by the
+  // Psychometrician during psychometric review (not at creation time), so it
+  // is rendered separately with explanatory text when empty.
   { key: "exposure_count", label: "Exposure Count" },
 ];
 
@@ -230,24 +233,60 @@ export default function QuestionDetailPage() {
                     {q.question_text_1}
                   </dd>
                 </div>
-                {q.question_text_2 && (
-                  <div className="py-1 sm:col-span-2">
+                {/* Additional Text — always shown; "(not provided)" when empty */}
+                <div className="py-1 sm:col-span-2">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Additional Text (optional)
+                  </dt>
+                  <dd className="mt-1 text-sm text-slate-900">
+                    {q.question_text_2 ? (
+                      q.question_text_2
+                    ) : (
+                      <span className="italic text-slate-400">(not provided)</span>
+                    )}
+                  </dd>
+                </div>
+
+                {/* Common fields — skip empty values to avoid a wall of "—" */}
+                {COMMON_FIELDS.map((f) => {
+                  const val = q[f.key];
+                  if (val === null || val === undefined || val === "" || val === false) return null;
+                  return (
+                    <div key={f.key} className="py-1">
+                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        {f.label}
+                      </dt>
+                      <dd className="text-sm text-slate-900">{formatValue(val)}</dd>
+                    </div>
+                  );
+                })}
+
+                {/* Question ID Label — only shown if SME set a custom display ID */}
+                {q.question_id_label && (
+                  <div className="py-1">
                     <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                      Additional Text
+                      Question ID Label
                     </dt>
-                    <dd className="mt-1 text-sm text-slate-900">{q.question_text_2}</dd>
+                    <dd className="text-sm text-slate-900">{q.question_id_label}</dd>
                   </div>
                 )}
 
-                {/* Common fields */}
-                {COMMON_FIELDS.map((f) => (
-                  <div key={f.key} className="py-1">
-                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                      {f.label}
-                    </dt>
-                    <dd className="text-sm text-slate-900">{formatValue(q[f.key])}</dd>
-                  </div>
-                ))}
+                {/* Exposure Limit — set by Psychometrician during psychometric review.
+                    Show explanatory text when empty so users understand why. */}
+                <div className="py-1">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Exposure Limit
+                  </dt>
+                  <dd className="text-sm text-slate-900">
+                    {q.exposure_limit != null ? (
+                      `${q.exposure_limit} uses`
+                    ) : (
+                      <span className="italic text-slate-400">
+                        Not set — set by Psychometrician during psychometric review
+                      </span>
+                    )}
+                  </dd>
+                </div>
 
                 {/* Type-specific fields — only show relevant ones */}
                 {visibleTypeFields.map((f) => {

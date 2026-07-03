@@ -24,8 +24,10 @@ import {
   deleteHotspot,
   deleteMediaFile,
   DIFFICULTY_LEVELS,
+  listCategories,
   QUESTION_TYPES,
   retrieveQuestion,
+  SCORING_TYPES,
   updateQuestion,
   type QuestionDetail,
 } from "@/api/questionBank";
@@ -58,7 +60,17 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
   const [questionType, setQuestionType] = useState("MCQ_TEXT_IMAGE");
   const [difficulty, setDifficulty] = useState("");
   const [cognitiveLevel, setCognitiveLevel] = useState("");
+  const [categoryId, setCategoryId] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch categories for the category dropdown (only when modal is open).
+  // Categories are managed separately on the Question Bank page.
+  const { data: categories } = useQuery({
+    queryKey: ["question-bank", "categories"],
+    queryFn: () => listCategories(),
+    enabled: open,
+    staleTime: 60_000, // cache for 1 minute — categories don't change often
+  });
 
   // Shared question data
   const [questionText1, setQuestionText1] = useState("");
@@ -100,6 +112,7 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
     setQuestionType("MCQ_TEXT_IMAGE");
     setDifficulty("");
     setCognitiveLevel("");
+    setCategoryId("");
     setQuestionText1("");
     setQuestionText2("");
     setScoringType("BINARY");
@@ -135,6 +148,7 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
     setQuestionType(q.question_type);
     setDifficulty(q.difficulty_level ?? "");
     setCognitiveLevel(q.cognitive_level ?? "");
+    setCategoryId(q.category ?? "");
     setQuestionText1(q.question_text_1 ?? "");
     setQuestionText2(q.question_text_2 ?? "");
     setScoringType(q.scoring_type ?? "BINARY");
@@ -439,6 +453,10 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
       cognitive_level: cognitiveLevel,
     };
 
+    // Category — send null if empty so backend clears it; send the ID if set.
+    if (categoryId) payload.category = categoryId;
+    else payload.category = null;
+
     // Type-specific fields
     if (passageTitle) payload.passage_title = passageTitle;
     if (passageBody) payload.passage_body = passageBody;
@@ -584,8 +602,8 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
           )}
 
           <div className="space-y-4">
-            {/* Type + difficulty + cognitive level */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {/* Type + difficulty + cognitive level + category */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <Label htmlFor="qtype" required>
                   Question type
@@ -606,6 +624,25 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <Label htmlFor="cat">Category</Label>
+                <select
+                  id="cat"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : "")}
+                >
+                  <option value="">No category</option>
+                  {(categories ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.full_path || c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-500">
+                  Categories are managed on the Question Bank page.
+                </p>
               </div>
               <div>
                 <Label htmlFor="diff">Difficulty</Label>
@@ -640,6 +677,35 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
                   <option value="Synthesis">Synthesis</option>
                 </select>
               </div>
+            </div>
+
+            {/* Scoring type — global selector with description.
+                Some type-specific editors (MCQ) also have their own scoring type
+                selector for convenience; both stay in sync via the shared
+                scoringType state. */}
+            <div className="rounded-md border border-slate-200 p-3">
+              <Label htmlFor="stype">Scoring type</Label>
+              <select
+                id="stype"
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                value={scoringType}
+                onChange={(e) => setScoringType(e.target.value)}
+              >
+                {SCORING_TYPES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              {(() => {
+                const selected = SCORING_TYPES.find((s) => s.value === scoringType);
+                return selected?.description ? (
+                  <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                    <span className="font-medium text-slate-700">How it works: </span>
+                    {selected.description}
+                  </p>
+                ) : null;
+              })()}
             </div>
 
             {/* Type-specific editor */}

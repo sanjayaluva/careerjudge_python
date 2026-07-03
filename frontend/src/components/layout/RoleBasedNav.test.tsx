@@ -45,14 +45,15 @@ describe("<RoleBasedNav />", () => {
     setUser("cj_admin");
     renderNav();
 
-    // cj_admin sees every nav item (12 total: dashboard, profile, users,
-    // roles, organizations, question_bank, assessments, career_profiling,
-    // reports, training, counseling, cms).
+    // cj_admin sees every nav item (13 total: dashboard, profile, users,
+    // roles, organizations, question_bank, question_categories, assessments,
+    // career_profiling, reports, training, counseling, cms).
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(12);
+    expect(links).toHaveLength(13);
     expect(screen.getByText("CMS")).toBeInTheDocument();
     expect(screen.getByText("Roles & Permissions")).toBeInTheDocument();
     expect(screen.getByText("Users")).toBeInTheDocument();
+    expect(screen.getByText("Categories")).toBeInTheDocument();
   });
 
   it("shows only the allowed subset for individual", () => {
@@ -81,6 +82,7 @@ describe("<RoleBasedNav />", () => {
     expect(labels).not.toContain("CMS");
     expect(labels).not.toContain("Organizations");
     expect(labels).not.toContain("Question Bank");
+    expect(labels).not.toContain("Categories");
 
     // Exact count check: 7 modules for individual.
     expect(within(list).getAllByRole("link")).toHaveLength(7);
@@ -100,9 +102,10 @@ describe("<RoleBasedNav />", () => {
     expect(labels).not.toContain("Roles & Permissions");
     expect(labels).not.toContain("CMS");
     expect(labels).not.toContain("Question Bank");
+    expect(labels).not.toContain("Categories");
   });
 
-  it("shows the sme subset (Dashboard, Profile, Question Bank, Assessments only)", () => {
+  it("shows the sme subset (Dashboard, Profile, Question Bank, Categories, Assessments)", () => {
     setUser("sme");
     renderNav();
 
@@ -112,12 +115,18 @@ describe("<RoleBasedNav />", () => {
       .map((a) => a.textContent?.trim() ?? "");
 
     expect(labels).toEqual(
-      expect.arrayContaining(["Dashboard", "Profile", "Question Bank", "Assessments"]),
+      expect.arrayContaining([
+        "Dashboard",
+        "Profile",
+        "Question Bank",
+        "Categories",
+        "Assessments",
+      ]),
     );
-    expect(within(list).getAllByRole("link")).toHaveLength(4);
+    expect(within(list).getAllByRole("link")).toHaveLength(5);
   });
 
-  it("shows the reviewer subset (Dashboard, Profile, Question Bank, Assessments only)", () => {
+  it("shows the reviewer subset (Dashboard, Profile, Question Bank, Categories, Assessments)", () => {
     setUser("reviewer");
     renderNav();
 
@@ -127,8 +136,14 @@ describe("<RoleBasedNav />", () => {
       .map((a) => a.textContent?.trim() ?? "");
 
     expect(labels).toEqual(
-      expect.arrayContaining(["Dashboard", "Profile", "Question Bank", "Assessments"]),
+      expect.arrayContaining([
+        "Dashboard",
+        "Profile",
+        "Question Bank",
+        "Categories",
+        "Assessments",
+      ]),
     );
-    expect(within(list).getAllByRole("link")).toHaveLength(4);
+    expect(within(list).getAllByRole("link")).toHaveLength(5);
   });
 });

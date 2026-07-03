@@ -327,15 +327,60 @@ export const QUESTION_TYPES = [
 ];
 
 export const SCORING_TYPES = [
-  { value: "BINARY", label: "Binary (0 or 1)" },
-  { value: "BINARY_FUZZY", label: "Binary with Fuzzy Match" },
-  { value: "PARTIAL", label: "Partial Credit" },
-  { value: "NEGATIVE", label: "Negative Marking" },
-  { value: "RANK", label: "Rank Scoring" },
-  { value: "RANK_RATE", label: "Rank-then-Rate" },
-  { value: "RATING", label: "Rating Scale" },
-  { value: "FORCED_CHOICE", label: "Forced-Choice" },
-  { value: "FORCED_CHOICE_RATED", label: "Forced-Choice Two-Level" },
+  {
+    value: "BINARY",
+    label: "Binary (0 or 1)",
+    description:
+      "The candidate gets 1 point if the answer is exactly correct, 0 otherwise. Used for MCQ with a single correct answer, FITB single-field with exact match, and Hotspot single-answer.",
+  },
+  {
+    value: "BINARY_FUZZY",
+    label: "Binary with Fuzzy Match",
+    description:
+      "Same as Binary (0 or 1) but allows a percentage match threshold (e.g. 80%) for FITB answers — partial spelling differences are accepted. Set the match threshold in the FITB options.",
+  },
+  {
+    value: "PARTIAL",
+    label: "Partial Credit",
+    description:
+      "The candidate gets partial credit for each correct option selected (e.g. 0.25 per correct option in a 4-option MCQ). Used for MCQ with multiple correct answers and Match-the-Following.",
+  },
+  {
+    value: "NEGATIVE",
+    label: "Negative Marking",
+    description:
+      "Correct answer = +1, wrong answer = negative fraction (e.g. -0.25). Discourages guessing. Used in competitive exams. The negative fraction is configured per-question.",
+  },
+  {
+    value: "RANK",
+    label: "Rank Scoring",
+    description:
+      "Candidate ranks items; score = (number of items in correct relative order) / total items. Used for Rank-Simple (6a) questions.",
+  },
+  {
+    value: "RANK_RATE",
+    label: "Rank-then-Rate",
+    description:
+      "Two-stage: candidate ranks items first, then rates each. Final score combines rank order + rating values. Used for Rank-then-Rate (6b) questions.",
+  },
+  {
+    value: "RATING",
+    label: "Rating Scale",
+    description:
+      "Candidate picks a point on a scale (e.g. 1-5 Likert). Score = the rating value itself (no right/wrong answer). Used for Standard Rating Scale (7) questions.",
+  },
+  {
+    value: "FORCED_CHOICE",
+    label: "Forced-Choice",
+    description:
+      "Candidate must choose between two statements (no neutral option). Each statement has a predefined score. Used for Forced-Choice Single-Level (8a) questions.",
+  },
+  {
+    value: "FORCED_CHOICE_RATED",
+    label: "Forced-Choice Two-Level",
+    description:
+      "Two-stage: candidate picks a statement, then rates it. Score = statement's predefined score × rating. Used for Forced-Choice Two-Level (8b) questions.",
+  },
 ];
 
 export const QUESTION_STATUSES = [
