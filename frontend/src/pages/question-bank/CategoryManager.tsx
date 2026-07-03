@@ -1,23 +1,25 @@
 /**
- * Question Bank Categories page — tree view + CRUD for question categories.
+ * CategoryManager — embeddable question category tree with CRUD.
  *
- * Categories support unlimited nesting via parent FK. Created by Psychometrician,
- * deleted by CJ Admin (with permission). Each category shows question count and
- * subcategory count.
+ * Used inside the QuestionBankPage (left panel) so category management lives
+ * inside the main Question Bank page instead of a separate sidebar entry.
+ *
+ * Features:
+ *   - Collapsible tree (click chevron to expand/collapse)
+ *   - Create / Edit / Delete with parent nesting
+ *   - Edit modal pre-fills ALL fields including description
+ *   - Delete confirmation warns about cascade to subcategories
+ *   - Only visible to psychometrician + cj_admin (canManage)
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { ChevronDown, ChevronRight, FolderPlus, Pencil, Trash2 } from "lucide-react";
 
 import {
   Alert,
   AlertDescription,
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Input,
   Label,
   Modal,
@@ -31,30 +33,38 @@ import {
   type Category,
 } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
-import { useAuth } from "@/hooks/useAuth";
 
-const CAT_KEY = ["question-bank", "categories"];
 const TREE_KEY = ["question-bank", "categories", "tree"];
+const CAT_KEY = ["question-bank", "categories"];
 
 interface CategoryNode extends Category {
   subcategories?: CategoryNode[];
 }
 
-export default function CategoriesPage() {
-  const { user } = useAuth();
+export interface CategoryManagerProps {
+  /** When true, show the Create/Edit/Delete action buttons. */
+  canManage: boolean;
+  /** Optional callback invoked when a category is clicked (e.g. to filter questions). */
+  onSelectCategory?: (categoryId: number | null) => void;
+  /** Currently selected category ID (for highlighting). */
+  selectedCategoryId?: number | null;
+}
+
+export function CategoryManager({
+  canManage,
+  onSelectCategory,
+  selectedCategoryId,
+}: CategoryManagerProps) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Category | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
 
-  // Fetch the tree view (nested categories)
   const { data: tree, isLoading } = useQuery({
     queryKey: TREE_KEY,
     queryFn: () => getCategoryTree() as Promise<CategoryNode[]>,
   });
-
-  const canManage = ["psychometrician", "cj_admin"].includes(user?.role ?? "");
 
   const createMutation = useMutation({
     mutationFn: (payload: { name: string; parent?: number | null; description?: string }) =>
@@ -94,51 +104,62 @@ export default function CategoriesPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>Question Categories</CardTitle>
-              <CardDescription>
-                Organize questions into hierarchical categories. Categories help filter and group
-                questions when building assessments.
-              </CardDescription>
-            </div>
-            {canManage && <Button onClick={() => setCreateOpen(true)}>Create category</Button>}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <Alert variant="error" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+    <div className="flex h-full flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">Categories</h3>
+          <p className="text-xs text-slate-500">Organize questions hierarchically</p>
+        </div>
+        {canManage && (
+          <Button variant="ghost" size="sm" onClick={() => setCreateOpen(true)}>
+            <FolderPlus className="mr-1 h-4 w-4" />
+            New
+          </Button>
+        )}
+      </div>
 
-          {isLoading ? (
-            <div className="flex justify-center py-12">
-              <Spinner size="lg" />
-            </div>
-          ) : !tree || tree.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-500">
-              No categories yet. Create one to get started.
-            </p>
-          ) : (
-            <div className="space-y-1">
-              {tree.map((node) => (
-                <CategoryTreeRow
-                  key={node.id}
-                  node={node}
-                  depth={0}
-                  canManage={canManage}
-                  onEdit={(c) => setEditTarget(c)}
-                  onDelete={(c) => setDeleteTarget(c)}
-                />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-2">
+        {error && (
+          <Alert variant="error" className="mb-2">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {isLoading ? (
+          <div className="flex justify-center py-8">
+            <Spinner size="sm" />
+          </div>
+        ) : !tree || tree.length === 0 ? (
+          <p className="py-6 text-center text-xs text-slate-500">
+            No categories yet.
+            {canManage && " Click 'New' to create one."}
+          </p>
+        ) : (
+          <div className="space-y-0.5">
+            {/* "All questions" pseudo-node */}
+            <CategoryRow
+              label="All questions"
+              depth={0}
+              isSelected={selectedCategoryId == null}
+              onClick={() => onSelectCategory?.(null)}
+            />
+            {tree.map((node) => (
+              <CategoryTreeRow
+                key={node.id}
+                node={node}
+                depth={0}
+                canManage={canManage}
+                selectedCategoryId={selectedCategoryId}
+                onSelect={onSelectCategory}
+                onEdit={(c) => setEditTarget(c)}
+                onDelete={(c) => setDeleteTarget(c)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Create modal */}
       <CategoryFormModal
@@ -176,67 +197,141 @@ export default function CategoriesPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Recursive tree row
+// Collapsible tree row
 // ---------------------------------------------------------------------------
 
 function CategoryTreeRow({
   node,
   depth,
   canManage,
+  selectedCategoryId,
+  onSelect,
   onEdit,
   onDelete,
 }: {
   node: CategoryNode;
   depth: number;
   canManage: boolean;
+  selectedCategoryId?: number | null;
+  onSelect?: (id: number | null) => void;
   onEdit: (c: Category) => void;
   onDelete: (c: Category) => void;
 }) {
+  const [expanded, setExpanded] = useState(true);
+  const hasChildren = Boolean(node.subcategories && node.subcategories.length > 0);
+  const isSelected = selectedCategoryId === node.id;
+
   return (
     <>
       <div
-        className="flex items-center justify-between rounded-md py-2 pr-2 hover:bg-slate-50"
-        style={{ paddingLeft: `${depth * 1.5 + 0.5}rem` }}
+        className="group flex items-center justify-between rounded-md py-1.5 pr-1 hover:bg-slate-100"
+        style={{ paddingLeft: `${depth * 14 + 4}px` }}
       >
-        <div className="flex items-center gap-2">
-          {node.subcategories && node.subcategories.length > 0 ? (
-            <span className="text-slate-400">▾</span>
-          ) : (
-            <span className="w-4 text-slate-300">•</span>
-          )}
-          <span className="text-sm font-medium text-slate-900">{node.name}</span>
-          {!node.is_active && <Badge variant="default">Inactive</Badge>}
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          {/* Expand/collapse chevron — only shown if has children */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (hasChildren) setExpanded((v) => !v);
+            }}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-200 hover:text-slate-700 disabled:opacity-0"
+            disabled={!hasChildren}
+            aria-label={expanded ? "Collapse" : "Expand"}
+          >
+            {hasChildren ? (
+              expanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )
+            ) : (
+              <span className="h-1 w-1 rounded-full bg-slate-300" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelect?.(node.id)}
+            className={`flex min-w-0 flex-1 items-center gap-1.5 truncate text-left text-sm ${
+              isSelected ? "font-medium text-primary-700" : "text-slate-700"
+            }`}
+          >
+            <span className="truncate">{node.name}</span>
+            {!node.is_active && <Badge variant="default">Inactive</Badge>}
+          </button>
         </div>
-        <div className="flex items-center gap-1">
-          {canManage && (
-            <>
-              <Button variant="ghost" size="sm" onClick={() => onEdit(node)}>
-                Edit
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-danger hover:bg-danger-50"
-                onClick={() => onDelete(node)}
-              >
-                Delete
-              </Button>
-            </>
-          )}
-        </div>
+        {canManage && (
+          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={() => onEdit(node)}
+              className="flex h-6 w-6 items-center justify-center rounded text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+              aria-label="Edit category"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(node)}
+              className="flex h-6 w-6 items-center justify-center rounded text-danger hover:bg-danger-50"
+              aria-label="Delete category"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
-      {node.subcategories &&
-        node.subcategories.map((child) => (
+      {expanded &&
+        hasChildren &&
+        node.subcategories!.map((child) => (
           <CategoryTreeRow
             key={child.id}
             node={child}
             depth={depth + 1}
             canManage={canManage}
+            selectedCategoryId={selectedCategoryId}
+            onSelect={onSelect}
             onEdit={onEdit}
             onDelete={onDelete}
           />
         ))}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Plain (non-collapsible) row — used for the "All questions" pseudo-node
+// ---------------------------------------------------------------------------
+
+function CategoryRow({
+  label,
+  depth,
+  isSelected,
+  onClick,
+}: {
+  label: string;
+  depth: number;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div
+      className="flex items-center rounded-md py-1.5 pr-1 hover:bg-slate-100"
+      style={{ paddingLeft: `${depth * 14 + 4}px` }}
+    >
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+        <span className="h-1 w-1 rounded-full bg-slate-300" />
+      </span>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`flex-1 truncate text-left text-sm ${
+          isSelected ? "font-medium text-primary-700" : "text-slate-700"
+        }`}
+      >
+        {label}
+      </button>
+    </div>
   );
 }
 
@@ -274,7 +369,9 @@ function CategoryFormModal({
   const [parent, setParent] = useState<number | "">(initial?.parent ?? "");
   const [desc, setDesc] = useState(initial?.description ?? "");
 
-  // Reset when initial changes (e.g. opening edit on a different row)
+  // Reset ALL fields when the target changes (e.g. opening edit on a different row).
+  // Using a key based on initial?.id ensures every field — including description —
+  // is reset to the new initial values.
   const initialKey = initial?.id != null ? String(initial.id) : "new";
   const [lastKey, setLastKey] = useState<string>(initialKey);
   if (lastKey !== initialKey) {

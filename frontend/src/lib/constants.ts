@@ -171,13 +171,6 @@ export const NAV_ITEMS: NavItem[] = [
     roles: roleListFor("question_bank"),
   },
   {
-    key: "question_bank",
-    label: "Categories",
-    to: "/question-bank/categories",
-    icon: "FolderTree",
-    roles: roleListFor("question_bank"),
-  },
-  {
     key: "assessments",
     label: "Assessments",
     to: "/assessments",

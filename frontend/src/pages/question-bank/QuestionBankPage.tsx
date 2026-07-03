@@ -32,6 +32,7 @@ import {
 } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
+import { CategoryManager } from "./CategoryManager";
 import { QuestionEditorModal } from "./QuestionEditorModal";
 
 const QB_KEY = ["question-bank", "questions"];
@@ -56,6 +57,7 @@ export default function QuestionBankPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editQuestionId, setEditQuestionId] = useState<number | null>(null);
   const [deleteQ, setDeleteQ] = useState<{ id: number; text: string } | null>(null);
@@ -67,7 +69,15 @@ export default function QuestionBankPage() {
   }, [search]);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: [...QB_KEY, page, debouncedSearch, typeFilter, statusFilter, mineOnly],
+    queryKey: [
+      ...QB_KEY,
+      page,
+      debouncedSearch,
+      typeFilter,
+      statusFilter,
+      mineOnly,
+      categoryFilter,
+    ],
     queryFn: () =>
       listQuestions({
         page,
@@ -75,6 +85,7 @@ export default function QuestionBankPage() {
         ...(typeFilter ? { question_type: typeFilter } : {}),
         ...(statusFilter ? { status: statusFilter } : {}),
         ...(mineOnly ? { mine: true } : {}),
+        ...(categoryFilter ? { category: categoryFilter } : {}),
       }),
   });
 
@@ -101,6 +112,7 @@ export default function QuestionBankPage() {
   const canCreate = ["sme", "psychometrician", "cj_admin"].includes(user?.role ?? "");
   const canDelete = ["sme", "cj_admin"].includes(user?.role ?? "");
   const isAdmin = user?.role === "cj_admin";
+  const canManageCategories = ["psychometrician", "cj_admin"].includes(user?.role ?? "");
 
   // Can the current user edit a specific question?
   // - cj_admin: can edit ANY question regardless of status
@@ -120,196 +132,230 @@ export default function QuestionBankPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>Question Bank</CardTitle>
-              <CardDescription>
-                {count > 0
-                  ? `${count} question${count === 1 ? "" : "s"}`
-                  : "Manage assessment questions"}
-              </CardDescription>
-            </div>
-            {canCreate && <Button onClick={openCreateEditor}>Create question</Button>}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <Alert variant="error" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_1fr]">
+        {/* Left panel: Category manager */}
+        <Card className="h-[calc(100vh-12rem)] overflow-hidden lg:sticky lg:top-6 lg:self-start">
+          <CategoryManager
+            canManage={canManageCategories}
+            selectedCategoryId={categoryFilter}
+            onSelectCategory={(id) => {
+              setCategoryFilter(id);
+              setPage(1);
+            }}
+          />
+        </Card>
 
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <Input
-              type="search"
-              placeholder="Search questions..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="max-w-sm"
-              aria-label="Search questions"
-            />
-            <select
-              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={typeFilter}
-              onChange={(e) => {
-                setTypeFilter(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">All types</option>
-              {QUESTION_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">All statuses</option>
-              {QUESTION_STATUSES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={mineOnly}
+        {/* Right panel: Questions table + filters */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle>Question Bank</CardTitle>
+                <CardDescription>
+                  {count > 0
+                    ? `${count} question${count === 1 ? "" : "s"}`
+                    : "Manage assessment questions"}
+                </CardDescription>
+              </div>
+              {canCreate && <Button onClick={openCreateEditor}>Create question</Button>}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {error && (
+              <Alert variant="error" className="mb-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <Input
+                type="search"
+                placeholder="Search questions..."
+                value={search}
                 onChange={(e) => {
-                  setMineOnly(e.target.checked);
+                  setSearch(e.target.value);
                   setPage(1);
                 }}
-                className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+                className="max-w-sm"
+                aria-label="Search questions"
               />
-              My questions
-            </label>
-          </div>
-
-          {isLoading ? (
-            <div className="flex justify-center py-12">
-              <Spinner size="lg" />
+              <select
+                className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                value={typeFilter}
+                onChange={(e) => {
+                  setTypeFilter(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All types</option>
+                {QUESTION_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All statuses</option>
+                {QUESTION_STATUSES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={mineOnly}
+                  onChange={(e) => {
+                    setMineOnly(e.target.checked);
+                    setPage(1);
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+                />
+                My questions
+              </label>
+              {categoryFilter && (
+                <Badge variant="primary" className="gap-1">
+                  Filtered by category
+                  <button
+                    type="button"
+                    onClick={() => setCategoryFilter(null)}
+                    className="ml-1 rounded-full px-1 hover:bg-primary-100"
+                    aria-label="Clear category filter"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
             </div>
-          ) : isError ? (
-            <Alert variant="error">
-              <AlertDescription>Failed to load questions.</AlertDescription>
-            </Alert>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Question</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Difficulty</TableHead>
-                  <TableHead>Created by</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {questions.length === 0 ? (
-                  <TableEmpty colSpan={7}>
-                    {debouncedSearch || typeFilter || statusFilter
-                      ? "No questions match your filters."
-                      : "No questions yet. Create one to get started."}
-                  </TableEmpty>
-                ) : (
-                  questions.map((q) => (
-                    <TableRow key={q.id}>
-                      <TableCell className="max-w-xs truncate font-medium text-slate-900">
-                        <Link
-                          to={`/question-bank/${q.id}`}
-                          className="text-primary-600 hover:underline"
-                        >
-                          {q.question_text_1}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="default">{q.question_type_label}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={STATUS_VARIANTS[q.status] ?? "default"}>
-                          {q.status_label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-slate-500">{q.difficulty_level || "—"}</TableCell>
-                      <TableCell className="text-slate-500">{q.created_by_name || "—"}</TableCell>
-                      <TableCell className="text-slate-500">
-                        {new Date(q.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          {canEditQuestion(q.status) && (
-                            <Button variant="ghost" size="sm" onClick={() => openEditEditor(q.id)}>
-                              Edit
-                            </Button>
-                          )}
-                          {(q.status === "draft" || q.status === "sent_back") && canCreate && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              loading={submitMutation.isPending}
-                              onClick={() => submitMutation.mutate(q.id)}
-                            >
-                              Submit
-                            </Button>
-                          )}
-                          {canEditQuestion(q.status) && canDelete && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-danger hover:bg-danger-50"
-                              onClick={() => setDeleteQ({ id: q.id, text: q.question_text_1 })}
-                            >
-                              Delete
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
 
-          {(hasPrev || hasNext) && (
-            <div className="mt-4 flex items-center justify-between">
-              <p className="text-sm text-slate-500">Page {page}</p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!hasPrev}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!hasNext}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next
-                </Button>
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <Spinner size="lg" />
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            ) : isError ? (
+              <Alert variant="error">
+                <AlertDescription>Failed to load questions.</AlertDescription>
+              </Alert>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Question</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Difficulty</TableHead>
+                    <TableHead>Created by</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {questions.length === 0 ? (
+                    <TableEmpty colSpan={7}>
+                      {debouncedSearch || typeFilter || statusFilter
+                        ? "No questions match your filters."
+                        : "No questions yet. Create one to get started."}
+                    </TableEmpty>
+                  ) : (
+                    questions.map((q) => (
+                      <TableRow key={q.id}>
+                        <TableCell className="max-w-xs truncate font-medium text-slate-900">
+                          <Link
+                            to={`/question-bank/${q.id}`}
+                            className="text-primary-600 hover:underline"
+                          >
+                            {q.question_text_1}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="default">{q.question_type_label}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={STATUS_VARIANTS[q.status] ?? "default"}>
+                            {q.status_label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-slate-500">
+                          {q.difficulty_level || "—"}
+                        </TableCell>
+                        <TableCell className="text-slate-500">{q.created_by_name || "—"}</TableCell>
+                        <TableCell className="text-slate-500">
+                          {new Date(q.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            {canEditQuestion(q.status) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEditEditor(q.id)}
+                              >
+                                Edit
+                              </Button>
+                            )}
+                            {(q.status === "draft" || q.status === "sent_back") && canCreate && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                loading={submitMutation.isPending}
+                                onClick={() => submitMutation.mutate(q.id)}
+                              >
+                                Submit
+                              </Button>
+                            )}
+                            {canEditQuestion(q.status) && canDelete && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-danger hover:bg-danger-50"
+                                onClick={() => setDeleteQ({ id: q.id, text: q.question_text_1 })}
+                              >
+                                Delete
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            )}
+
+            {(hasPrev || hasNext) && (
+              <div className="mt-4 flex items-center justify-between">
+                <p className="text-sm text-slate-500">Page {page}</p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!hasPrev}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!hasNext}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <QuestionEditorModal
         open={editorOpen}

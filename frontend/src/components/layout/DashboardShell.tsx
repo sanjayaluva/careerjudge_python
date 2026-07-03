@@ -14,12 +14,6 @@ function titleFromPath(pathname: string): { title: string; subtitle?: string } {
   if (pathname === "/" || pathname === "/dashboard") {
     return { title: "Dashboard", subtitle: "Your personalized overview" };
   }
-  if (pathname.startsWith("/question-bank/categories")) {
-    return {
-      title: "Question Categories",
-      subtitle: "Organize questions into hierarchical categories",
-    };
-  }
   if (pathname.startsWith("/admin/users")) return { title: "Users", subtitle: "Manage accounts" };
   if (pathname.startsWith("/admin/roles")) return { title: "Roles & Permissions" };
   if (pathname.startsWith("/admin/permissions")) return { title: "Permissions Catalog" };

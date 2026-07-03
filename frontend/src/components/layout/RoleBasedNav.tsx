@@ -12,7 +12,6 @@ import {
   ClipboardList,
   Compass,
   FileText,
-  FolderTree,
   GraduationCap,
   LayoutDashboard,
   MessageSquare,
@@ -40,7 +39,6 @@ const ICONS: Record<string, LucideIcon> = {
   GraduationCap,
   MessageSquare,
   FileText,
-  FolderTree,
 };
 
 export interface RoleBasedNavProps {
