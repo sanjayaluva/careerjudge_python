@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Alert, AlertDescription, Button, Label, Modal } from "@/components/ui";
 import {
   bulkSaveOptions,
+  createHotspot,
   createMediaFile,
   createQuestion,
   DIFFICULTY_LEVELS,
@@ -67,6 +68,16 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
   const [correctCells, setCorrectCells] = useState<boolean[][]>([]);
   const [isMultipleAnswer, setIsMultipleAnswer] = useState(false);
   const [scaleLabels, setScaleLabels] = useState<string[]>([]);
+  const [hotspotAreas, setHotspotAreas] = useState<
+    {
+      x: number;
+      y: number;
+      width_px: number;
+      height_px: number;
+      area_size_code: string;
+      sub_question_index?: number;
+    }[]
+  >([]);
 
   const resetForm = () => {
     setQuestionType("MCQ_TEXT_IMAGE");
@@ -96,6 +107,7 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
     setCorrectCells([]);
     setIsMultipleAnswer(false);
     setScaleLabels([]);
+    setHotspotAreas([]);
     setError(null);
   };
 
@@ -107,22 +119,28 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
       img?: string;
       aud?: string;
       vid?: string;
+      hotspots?: {
+        x: number;
+        y: number;
+        width_px: number;
+        height_px: number;
+        area_size_code?: string;
+        sub_question_index?: number;
+      }[];
+      gridCorrectCells?: { row: number; col: number; rowLabel: string; colLabel: string }[];
+      scaleLabels?: string[];
     }) => {
-      const { payload, opts, prs, img, aud, vid } = params;
+      const { payload, opts, prs, img, aud, vid, hotspots, gridCorrectCells, scaleLabels } = params;
 
       // 1. Create the question (with image URL if set)
       if (img) payload.image = img;
       const question = await createQuestion(payload);
 
       // 2. Save audio/video as MediaFile records
-      if (aud) {
-        await createMediaFile(question.id, { media_type: "AUDIO", file: aud });
-      }
-      if (vid) {
-        await createMediaFile(question.id, { media_type: "VIDEO", file: vid });
-      }
+      if (aud) await createMediaFile(question.id, { media_type: "AUDIO", file: aud });
+      if (vid) await createMediaFile(question.id, { media_type: "VIDEO", file: vid });
 
-      // 3. If there are options, save them via bulk endpoint
+      // 3. Save options (includes correct_answers for FITB)
       if (opts.length > 0) {
         const optionsPayload = opts.map((opt, i) => ({
           sub_question_index: opt.sub_question_index,
@@ -134,10 +152,15 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
           match_pair_id: opt.match_pair_id,
           predefined_score: opt.predefined_score,
           order: i,
+          correct_answers: opt.correct_answers?.map((ca) => ({
+            answer_text: ca.answer_text,
+            order: ca.order,
+          })),
         }));
         await bulkSaveOptions(question.id, optionsPayload);
       }
-      // 4. If there are match pairs, save those options too
+
+      // 4. Save match pairs
       if (prs.length > 0) {
         const pairOptions: Record<string, unknown>[] = [];
         prs.forEach((pair, i) => {
@@ -162,6 +185,42 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
         });
         await bulkSaveOptions(question.id, pairOptions);
       }
+
+      // 5. Save grid correct cells as options
+      if (gridCorrectCells && gridCorrectCells.length > 0) {
+        const gridOptions = gridCorrectCells.map((cell, i) => ({
+          sub_question_index: 0,
+          option_type: "DRAG_POOL",
+          label: `${cell.rowLabel} → ${cell.colLabel}`,
+          text_value: `${cell.rowLabel} → ${cell.colLabel}`,
+          is_correct: true,
+          predefined_score: 1.0,
+          order: i,
+        }));
+        await bulkSaveOptions(question.id, gridOptions);
+      }
+
+      // 6. Save rating scale labels as options
+      if (scaleLabels && scaleLabels.length > 0) {
+        const ratingOptions = scaleLabels.map((label, i) => ({
+          sub_question_index: 0,
+          option_type: "TEXT",
+          label: `Point ${i + 1}`,
+          text_value: label,
+          is_correct: false,
+          predefined_score: 1.0,
+          order: i,
+        }));
+        await bulkSaveOptions(question.id, ratingOptions);
+      }
+
+      // 7. Save hotspot areas
+      if (hotspots && hotspots.length > 0) {
+        for (const hs of hotspots) {
+          await createHotspot(question.id, hs);
+        }
+      }
+
       return question;
     },
     onSuccess: () => {
@@ -201,6 +260,23 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
     if (ratingScalePoints) payload.rating_scale_points = parseInt(ratingScalePoints);
     if (ratingDirection) payload.rating_direction = ratingDirection;
 
+    // Build grid correct cells from correctCells array
+    const gridCorrectCells: { row: number; col: number; rowLabel: string; colLabel: string }[] = [];
+    if (correctCells.length > 0) {
+      for (let r = 0; r < correctCells.length; r++) {
+        for (let c = 0; c < (correctCells[r]?.length ?? 0); c++) {
+          if (correctCells[r][c]) {
+            gridCorrectCells.push({
+              row: r,
+              col: c,
+              rowLabel: rowLabels[r] || `Row ${r + 1}`,
+              colLabel: colLabels[c] || `Col ${c + 1}`,
+            });
+          }
+        }
+      }
+    }
+
     mutation.mutate({
       payload,
       opts: options,
@@ -208,6 +284,9 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
       img: imageUrl || undefined,
       aud: audioUrl || undefined,
       vid: videoUrl || undefined,
+      hotspots: hotspotAreas.length > 0 ? hotspotAreas : undefined,
+      gridCorrectCells: gridCorrectCells.length > 0 ? gridCorrectCells : undefined,
+      scaleLabels: scaleLabels.length > 0 ? scaleLabels : undefined,
     });
   };
 
@@ -261,7 +340,7 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
     question_text_1: questionText1,
     image_url: imageUrl,
     scoring_type: scoringType,
-    areas: [],
+    areas: hotspotAreas,
   };
 
   const rankData = { question_text_1: questionText1, options };
@@ -424,6 +503,7 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
                 setQuestionText1(d.question_text_1);
                 setImageUrl(d.image_url);
                 setScoringType(d.scoring_type);
+                setHotspotAreas(d.areas);
               }}
             />
           )}

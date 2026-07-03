@@ -13,6 +13,7 @@ from rest_framework.viewsets import ModelViewSet
 from core.permissions import HasModulePermission
 
 from .models import (
+    CorrectAnswer,
     FlashItem,
     HotspotArea,
     MediaFile,
@@ -140,6 +141,9 @@ class BulkOptionsView(APIView):
         submitted_ids = set()
 
         for opt_data in submitted:
+            # Extract correct_answers (FITB) — handle separately
+            correct_answers_data = opt_data.pop("correct_answers", None)
+
             opt_id = opt_data.get("id")
             if opt_id:
                 # Update existing
@@ -150,17 +154,30 @@ class BulkOptionsView(APIView):
                     serializer.save()
                     submitted_ids.add(opt_id)
                 except ResponseOption.DoesNotExist:
-                    # ID not found — create new
                     serializer = ResponseOptionSerializer(data=opt_data)
                     serializer.is_valid(raise_exception=True)
                     serializer.save(question=question)
+                    opt = serializer.instance
             else:
                 # Create new
-                # Remove 'id' if present and None
                 clean_data = {k: v for k, v in opt_data.items() if k != "id"}
                 serializer = ResponseOptionSerializer(data=clean_data)
                 serializer.is_valid(raise_exception=True)
                 serializer.save(question=question)
+                opt = serializer.instance
+
+            # Save correct answers for FITB types
+            if correct_answers_data and opt:
+                # Delete existing correct answers for this option
+                opt.correct_answers.all().delete()
+                for ca in correct_answers_data:
+                    answer_text = ca.get("answer_text", "") if isinstance(ca, dict) else str(ca)
+                    if answer_text:
+                        CorrectAnswer.objects.create(
+                            response_option=opt,
+                            answer_text=answer_text,
+                            order=ca.get("order", 0) if isinstance(ca, dict) else 0,
+                        )
 
         # Delete options not in the submitted list
         ResponseOption.objects.filter(question=question).exclude(id__in=submitted_ids).delete()

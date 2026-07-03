@@ -69,6 +69,8 @@ class CorrectAnswerSerializer(serializers.ModelSerializer):
 
 class ResponseOptionSerializer(serializers.ModelSerializer):
     correct_answers = CorrectAnswerSerializer(many=True, read_only=True)
+    # Allow image_file to be passed as a URL string (not just a file upload)
+    image_file = serializers.CharField(allow_blank=True, allow_null=True, required=False)
 
     class Meta:
         model = ResponseOption
@@ -85,7 +87,7 @@ class ResponseOptionSerializer(serializers.ModelSerializer):
             "order",
             "correct_answers",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "correct_answers"]
 
 
 class MediaFileSerializer(serializers.ModelSerializer):

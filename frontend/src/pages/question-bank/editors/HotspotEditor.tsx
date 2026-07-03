@@ -11,6 +11,7 @@ interface HotspotArea {
   width_px: number;
   height_px: number;
   area_size_code: string;
+  sub_question_index?: number;
 }
 
 interface HotspotEditorProps {
