@@ -152,7 +152,11 @@ class Question(models.Model):
     )
     question_text_1 = models.TextField(_("question text 1"))
     question_text_2 = models.TextField(_("question text 2"), blank=True)
-    image = models.ImageField(_("image"), upload_to="questions/images/", null=True, blank=True)
+    image = models.TextField(
+        _("image"),
+        blank=True,
+        help_text=_("Question image as an external URL or base64 data URL."),
+    )
     order = models.PositiveIntegerField(_("order"), default=0)
     is_active = models.BooleanField(_("active"), default=True)
 
@@ -300,8 +304,10 @@ class ResponseOption(models.Model):
         _("label"), max_length=100, blank=True, help_text="e.g. Option 1, Group A item 3"
     )
     text_value = models.TextField(_("text value"), blank=True)
-    image_file = models.ImageField(
-        _("image file"), upload_to="questions/options/", null=True, blank=True
+    image_file = models.TextField(
+        _("image file"),
+        blank=True,
+        help_text=_("Option image as an external URL or base64 data URL."),
     )
     is_correct = models.BooleanField(
         _("is correct"), default=False, help_text="For MCQ, grid, hotspot etc."
@@ -361,7 +367,10 @@ class MediaFile(models.Model):
     media_type = models.CharField(
         _("media type"), max_length=10, choices=[("AUDIO", "Audio"), ("VIDEO", "Video")]
     )
-    file = models.FileField(_("file"), upload_to="questions/media/")
+    file = models.TextField(
+        _("file"),
+        help_text=_("Media file URL (audio/video) — external URL or base64 data URL."),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -389,8 +398,10 @@ class FlashItem(models.Model):
         _("item type"), max_length=10, choices=[("TEXT", "Text"), ("IMAGE", "Image")]
     )
     text_value = models.CharField(_("text value"), max_length=255, blank=True)
-    image_file = models.ImageField(
-        _("image file"), upload_to="questions/flash/", null=True, blank=True
+    image_file = models.TextField(
+        _("image file"),
+        blank=True,
+        help_text=_("Flash image as an external URL or base64 data URL."),
     )
     order = models.PositiveIntegerField(_("order"), default=0)
     is_in_display_pool = models.BooleanField(

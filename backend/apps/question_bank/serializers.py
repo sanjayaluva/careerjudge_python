@@ -69,7 +69,7 @@ class CorrectAnswerSerializer(serializers.ModelSerializer):
 
 class ResponseOptionSerializer(serializers.ModelSerializer):
     correct_answers = CorrectAnswerSerializer(many=True, read_only=True)
-    # Allow image_file to be passed as a URL string (not just a file upload)
+    # Allow image_file to be passed as a URL string or base64 data URL
     image_file = serializers.CharField(allow_blank=True, allow_null=True, required=False)
 
     class Meta:
@@ -91,8 +91,8 @@ class ResponseOptionSerializer(serializers.ModelSerializer):
 
 
 class MediaFileSerializer(serializers.ModelSerializer):
-    # Allow file to be passed as a URL string (not just a file upload)
-    file = serializers.CharField()
+    # Allow file to be passed as a URL string or base64 data URL
+    file = serializers.CharField(allow_blank=False, allow_null=False)
 
     class Meta:
         model = MediaFile
@@ -101,6 +101,9 @@ class MediaFileSerializer(serializers.ModelSerializer):
 
 
 class FlashItemSerializer(serializers.ModelSerializer):
+    # Allow image_file to be passed as a URL string or base64 data URL
+    image_file = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+
     class Meta:
         model = FlashItem
         fields = ["id", "item_type", "text_value", "image_file", "order", "is_in_display_pool"]
@@ -120,7 +123,7 @@ class HotspotAreaSerializer(serializers.ModelSerializer):
 
 
 class QuestionListSerializer(serializers.ModelSerializer):
-    """Lighter serializer for list views."""
+    """Lighter serializer for list views (no image — base64 data URLs would bloat list responses)."""
 
     category_name = serializers.CharField(source="category.name", read_only=True, default=None)
     created_by_name = serializers.CharField(
@@ -158,6 +161,9 @@ class QuestionListSerializer(serializers.ModelSerializer):
 
 class QuestionDetailSerializer(serializers.ModelSerializer):
     """Full serializer with nested children for detail/create/update views."""
+
+    # Allow image to be a URL string or base64 data URL (read-only here; created via QuestionCreateSerializer)
+    image = serializers.CharField(read_only=True)
 
     options = ResponseOptionSerializer(many=True, read_only=True)
     media_files = MediaFileSerializer(many=True, read_only=True)
@@ -235,6 +241,9 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
 
 class QuestionCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating questions (SME creates with draft status)."""
+
+    # Allow image to be passed as a URL string or base64 data URL (not a multipart file)
+    image = serializers.CharField(allow_blank=True, allow_null=True, required=False)
 
     class Meta:
         model = Question
