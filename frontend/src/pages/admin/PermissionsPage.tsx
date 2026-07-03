@@ -4,7 +4,7 @@ import { PERMISSION_CATALOG } from "@/api/roles";
 export default function PermissionsPage() {
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="border-l-0 border-t-0">
         <CardHeader>
           <CardTitle>Permissions catalog</CardTitle>
           <CardDescription>
