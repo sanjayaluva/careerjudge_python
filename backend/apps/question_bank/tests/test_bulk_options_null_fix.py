@@ -9,18 +9,18 @@ Root cause: TextField with blank=True but no null=True rejects NULL inserts
 when DRF's allow_null=True serializer field passes None through to the model.
 After the fix (adding null=True to Question.image, ResponseOption.image_file,
 FlashItem.image_file), the bulk options save should succeed.
+
+Django setup is handled by backend/conftest.py (pytest_configure hook), so
+this file does NOT need to call django.setup() itself.
 """
 
-import django
 import pytest
 from rest_framework.test import APIClient
 
-django.setup()
-
-from apps.accounts.models import ModuleRight  # noqa: E402
-from apps.accounts.services import get_or_create_default_roles  # noqa: E402
-from apps.accounts.tests.factories import UserFactory  # noqa: E402
-from apps.question_bank.models import Question, ResponseOption  # noqa: E402
+from apps.accounts.models import ModuleRight
+from apps.accounts.services import get_or_create_default_roles
+from apps.accounts.tests.factories import UserFactory
+from apps.question_bank.models import Question, ResponseOption
 
 
 @pytest.fixture

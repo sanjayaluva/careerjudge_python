@@ -7,22 +7,17 @@ Reproduces the original error:
 
 After the fix (ImageField -> TextField on Question.image, and explicit
 CharField override in QuestionCreateSerializer), the request should succeed.
-"""
 
-import os
+Django setup is handled by backend/conftest.py (pytest_configure hook), so
+this file does NOT need to call django.setup() itself.
+"""
 
 import pytest
 from rest_framework.test import APIRequestFactory
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.test")
-
-import django
-
-django.setup()
-
-from apps.accounts.tests.factories import UserFactory  # noqa: E402
-from apps.question_bank.models import Question  # noqa: E402
-from apps.question_bank.serializers import QuestionCreateSerializer  # noqa: E402
+from apps.accounts.tests.factories import UserFactory
+from apps.question_bank.models import Question
+from apps.question_bank.serializers import QuestionCreateSerializer
 
 
 @pytest.mark.django_db
