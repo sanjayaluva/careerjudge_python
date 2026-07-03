@@ -50,7 +50,7 @@ export default function UserViewPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
           <Link to="/admin/users" className="text-sm text-primary-600 hover:underline">

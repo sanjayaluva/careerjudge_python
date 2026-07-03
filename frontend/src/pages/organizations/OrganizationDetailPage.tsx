@@ -77,7 +77,7 @@ export default function OrganizationDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div>
         <Link to="/organizations" className="text-sm text-primary-600 hover:underline">
           ← Back to organizations

@@ -213,7 +213,7 @@ export default function QuestionDetailPage() {
   const hasOptions = q.options.length > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {error && (
         <Alert variant="error">
           <AlertDescription>{error}</AlertDescription>

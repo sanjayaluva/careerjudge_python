@@ -354,177 +354,173 @@ export default function ProfilePage() {
   const allProfileFields = [...COMMON_FIELDS, ...roleFields];
 
   return (
-    <div className="space-y-6">
-      {/* Role information card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Account overview</CardTitle>
-          <CardDescription>Your role and account status in CareerJudge.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Role</dt>
-              <dd className="mt-1">
-                {me?.role ? (
-                  <Badge variant="primary">{ROLE_LABELS[me.role] ?? me.role}</Badge>
-                ) : (
-                  <Badge variant="outline">No role assigned</Badge>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Account status
-              </dt>
-              <dd className="mt-1 flex flex-wrap gap-1">
-                {me?.is_active ? (
-                  <Badge variant="success">Active</Badge>
-                ) : (
-                  <Badge variant="warning">Inactive</Badge>
-                )}
-                {me?.is_email_verified && <Badge variant="default">Email verified</Badge>}
-                {me?.is_trial_user && <Badge variant="outline">Trial</Badge>}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Member since
-              </dt>
-              <dd className="mt-1 text-sm text-slate-900">
-                {me?.created_at ? new Date(me.created_at).toLocaleDateString() : "—"}
-              </dd>
-            </div>
-          </dl>
-        </CardContent>
-      </Card>
+    <Card>
+      {/* Account overview section */}
+      <CardHeader>
+        <CardTitle>Account overview</CardTitle>
+        <CardDescription>Your role and account status in CareerJudge.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Role</dt>
+            <dd className="mt-1">
+              {me?.role ? (
+                <Badge variant="primary">{ROLE_LABELS[me.role] ?? me.role}</Badge>
+              ) : (
+                <Badge variant="outline">No role assigned</Badge>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Account status
+            </dt>
+            <dd className="mt-1 flex flex-wrap gap-1">
+              {me?.is_active ? (
+                <Badge variant="success">Active</Badge>
+              ) : (
+                <Badge variant="warning">Inactive</Badge>
+              )}
+              {me?.is_email_verified && <Badge variant="default">Email verified</Badge>}
+              {me?.is_trial_user && <Badge variant="outline">Trial</Badge>}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Member since
+            </dt>
+            <dd className="mt-1 text-sm text-slate-900">
+              {me?.created_at ? new Date(me.created_at).toLocaleDateString() : "—"}
+            </dd>
+          </div>
+        </dl>
+      </CardContent>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile</CardTitle>
-          <CardDescription>
-            Update your personal information and contact details.
-            {roleFields.length > 0 && (
-              <span className="ml-1 text-primary-600">
-                Fields shown are specific to your role ({ROLE_LABELS[me?.role ?? "individual"]}).
-              </span>
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {serverError && (
-            <Alert variant="error" className="mb-4">
-              <AlertDescription>{serverError}</AlertDescription>
-            </Alert>
+      {/* Divider between account overview and profile form */}
+      <div className="border-t border-slate-200" />
+
+      {/* Profile form section */}
+      <CardHeader>
+        <CardTitle>Profile</CardTitle>
+        <CardDescription>
+          Update your personal information and contact details.
+          {roleFields.length > 0 && (
+            <span className="ml-1 text-primary-600">
+              Fields shown are specific to your role ({ROLE_LABELS[me?.role ?? "individual"]}).
+            </span>
           )}
-          {savedAt && (
-            <Alert variant="success" className="mb-4">
-              <AlertDescription>Saved at {savedAt}.</AlertDescription>
-            </Alert>
-          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {serverError && (
+          <Alert variant="error" className="mb-4">
+            <AlertDescription>{serverError}</AlertDescription>
+          </Alert>
+        )}
+        {savedAt && (
+          <Alert variant="success" className="mb-4">
+            <AlertDescription>Saved at {savedAt}.</AlertDescription>
+          </Alert>
+        )}
 
-          <Tabs defaultValue="basic">
-            <TabsList>
-              <TabsTrigger value="basic">Basic info</TabsTrigger>
-              <TabsTrigger value="details">Profile details</TabsTrigger>
-            </TabsList>
+        <Tabs defaultValue="basic">
+          <TabsList>
+            <TabsTrigger value="basic">Basic info</TabsTrigger>
+            <TabsTrigger value="details">Profile details</TabsTrigger>
+          </TabsList>
 
-            <TabsContent value="basic">
-              <form
-                onSubmit={basicForm.handleSubmit(onBasicSubmit)}
-                className="space-y-4"
-                noValidate
-              >
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label htmlFor="full_name" required>
-                      Full name
+          <TabsContent value="basic">
+            <form onSubmit={basicForm.handleSubmit(onBasicSubmit)} className="space-y-4" noValidate>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="full_name" required>
+                    Full name
+                  </Label>
+                  <Input
+                    id="full_name"
+                    hasError={Boolean(basicForm.formState.errors.full_name)}
+                    {...basicForm.register("full_name")}
+                  />
+                  {basicForm.formState.errors.full_name && (
+                    <p className="mt-1 text-xs text-danger">
+                      {basicForm.formState.errors.full_name.message}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input id="phone" type="tel" {...basicForm.register("phone")} />
+                </div>
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" value={me?.email ?? ""} disabled />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Email cannot be changed. Contact an admin if needed.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button type="submit" loading={basicForm.formState.isSubmitting}>
+                  Save changes
+                </Button>
+              </div>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="details">
+            <form
+              onSubmit={profileForm.handleSubmit(onProfileSubmit)}
+              className="space-y-4"
+              noValidate
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {allProfileFields.map((field) => (
+                  <div
+                    key={field.name}
+                    className={field.type === "textarea" ? "sm:col-span-2" : ""}
+                  >
+                    <Label htmlFor={`pf-${field.name}`} required={field.required}>
+                      {field.label}
                     </Label>
-                    <Input
-                      id="full_name"
-                      hasError={Boolean(basicForm.formState.errors.full_name)}
-                      {...basicForm.register("full_name")}
-                    />
-                    {basicForm.formState.errors.full_name && (
-                      <p className="mt-1 text-xs text-danger">
-                        {basicForm.formState.errors.full_name.message}
-                      </p>
+                    {field.type === "select" ? (
+                      <select
+                        id={`pf-${field.name}`}
+                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                        {...profileForm.register(field.name)}
+                      >
+                        {field.options?.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : field.type === "textarea" ? (
+                      <textarea
+                        id={`pf-${field.name}`}
+                        rows={3}
+                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                        {...profileForm.register(field.name)}
+                      />
+                    ) : (
+                      <Input
+                        id={`pf-${field.name}`}
+                        type={field.type === "date" ? "date" : "text"}
+                        {...profileForm.register(field.name)}
+                      />
                     )}
                   </div>
-                  <div>
-                    <Label htmlFor="phone">Phone</Label>
-                    <Input id="phone" type="tel" {...basicForm.register("phone")} />
-                  </div>
-                  <div>
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" value={me?.email ?? ""} disabled />
-                    <p className="mt-1 text-xs text-slate-500">
-                      Email cannot be changed. Contact an admin if needed.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <Button type="submit" loading={basicForm.formState.isSubmitting}>
-                    Save changes
-                  </Button>
-                </div>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="details">
-              <form
-                onSubmit={profileForm.handleSubmit(onProfileSubmit)}
-                className="space-y-4"
-                noValidate
-              >
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {allProfileFields.map((field) => (
-                    <div
-                      key={field.name}
-                      className={field.type === "textarea" ? "sm:col-span-2" : ""}
-                    >
-                      <Label htmlFor={`pf-${field.name}`} required={field.required}>
-                        {field.label}
-                      </Label>
-                      {field.type === "select" ? (
-                        <select
-                          id={`pf-${field.name}`}
-                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-                          {...profileForm.register(field.name)}
-                        >
-                          {field.options?.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : field.type === "textarea" ? (
-                        <textarea
-                          id={`pf-${field.name}`}
-                          rows={3}
-                          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-                          {...profileForm.register(field.name)}
-                        />
-                      ) : (
-                        <Input
-                          id={`pf-${field.name}`}
-                          type={field.type === "date" ? "date" : "text"}
-                          {...profileForm.register(field.name)}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-end">
-                  <Button type="submit" loading={profileForm.formState.isSubmitting}>
-                    Save profile details
-                  </Button>
-                </div>
-              </form>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
-    </div>
+                ))}
+              </div>
+              <div className="flex justify-end">
+                <Button type="submit" loading={profileForm.formState.isSubmitting}>
+                  Save profile details
+                </Button>
+              </div>
+            </form>
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
   );
 }

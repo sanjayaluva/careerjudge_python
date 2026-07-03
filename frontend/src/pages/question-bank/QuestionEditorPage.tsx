@@ -584,7 +584,7 @@ export default function QuestionEditorPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Breadcrumb + title */}
       <div>
         <Link to="/question-bank" className="text-sm text-primary-600 hover:underline">

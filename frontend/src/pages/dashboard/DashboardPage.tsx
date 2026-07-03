@@ -130,7 +130,7 @@ export default function DashboardPage() {
                 <Link
                   key={item.key as ModuleKey}
                   to={item.to}
-                  className="group block rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                  className="group block rounded-none border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
                 >
                   <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary-50 text-primary-600 group-hover:bg-primary-100">
                     <Icon className="h-5 w-5" aria-hidden="true" />
