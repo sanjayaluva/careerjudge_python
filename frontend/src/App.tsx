@@ -23,6 +23,7 @@ import OrganizationsPage from "@/pages/organizations/OrganizationsPage";
 import OrganizationDetailPage from "@/pages/organizations/OrganizationDetailPage";
 import QuestionBankPage from "@/pages/question-bank/QuestionBankPage";
 import QuestionDetailPage from "@/pages/question-bank/QuestionDetailPage";
+import QuestionEditorPage from "@/pages/question-bank/QuestionEditorPage";
 import { useAuthStore } from "@/stores/auth";
 
 const queryClient = new QueryClient({
@@ -126,6 +127,8 @@ export default function App() {
               <Route path="organizations" element={<OrganizationsPage />} />
               <Route path="organizations/:id" element={<OrganizationDetailPage />} />
               <Route path="question-bank" element={<QuestionBankPage />} />
+              <Route path="question-bank/new" element={<QuestionEditorPage />} />
+              <Route path="question-bank/:id/edit" element={<QuestionEditorPage />} />
               <Route path="question-bank/:id" element={<QuestionDetailPage />} />
               <Route path="assessments" element={<PlaceholderPage title="Assessments" />} />
               <Route

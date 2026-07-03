@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import {
   Alert,
@@ -24,7 +24,6 @@ import { retrieveQuestion, submitForReview, submitReview } from "@/api/questionB
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import type { QuestionDetail } from "@/api/questionBank";
-import { QuestionEditorModal } from "./QuestionEditorModal";
 
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning" | "primary"> = {
   draft: "default",
@@ -127,9 +126,9 @@ export default function QuestionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qid = Number(id);
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [editorOpen, setEditorOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -333,7 +332,7 @@ export default function QuestionDetailPage() {
 
               <div className="mt-6 flex gap-2 border-t border-slate-100 pt-4">
                 {canEdit && (
-                  <Button variant="outline" onClick={() => setEditorOpen(true)}>
+                  <Button variant="outline" onClick={() => navigate(`/question-bank/${qid}/edit`)}>
                     Edit question
                   </Button>
                 )}
@@ -371,10 +370,21 @@ export default function QuestionDetailPage() {
               ) : (
                 <div className="space-y-3">
                   {q.options.map((opt) => (
-                    <div key={opt.id} className="rounded-md border border-slate-200 p-3">
+                    <div
+                      key={opt.id}
+                      className={
+                        opt.is_correct
+                          ? "rounded-md border border-l-4 border-green-200 border-l-green-500 bg-green-50 p-3"
+                          : "rounded-md border border-slate-200 p-3"
+                      }
+                    >
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">{opt.option_type}</Badge>
-                        {opt.is_correct && <Badge variant="success">✓ Correct</Badge>}
+                        {opt.is_correct && (
+                          <Badge variant="success">
+                            <span className="mr-0.5">✓</span> Correct answer
+                          </Badge>
+                        )}
                         {opt.match_pair_id !== null && (
                           <Badge variant="default">Pair #{opt.match_pair_id}</Badge>
                         )}
@@ -383,7 +393,11 @@ export default function QuestionDetailPage() {
                         </span>
                       </div>
                       {opt.text_value && (
-                        <p className="mt-2 text-sm text-slate-900">{opt.text_value}</p>
+                        <p
+                          className={`mt-2 text-sm ${opt.is_correct ? "font-medium text-green-900" : "text-slate-900"}`}
+                        >
+                          {opt.text_value}
+                        </p>
                       )}
                       {opt.image_file && (
                         <img
@@ -824,12 +838,6 @@ export default function QuestionDetailPage() {
         questionId={qid}
         reviewType={canReviewPsychometric ? "psychometric" : "content"}
         canSetExposure={canReviewPsychometric}
-      />
-
-      <QuestionEditorModal
-        open={editorOpen}
-        onClose={() => setEditorOpen(false)}
-        questionId={qid}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import {
   Alert,
@@ -33,7 +33,6 @@ import {
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { CategoryManagerModal } from "./CategoryManager";
-import { QuestionEditorModal } from "./QuestionEditorModal";
 
 const QB_KEY = ["question-bank", "questions"];
 
@@ -50,6 +49,7 @@ const STATUS_VARIANTS: Record<string, "default" | "success" | "warning" | "prima
 
 export default function QuestionBankPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -58,8 +58,7 @@ export default function QuestionBankPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editQuestionId, setEditQuestionId] = useState<number | null>(null);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [deleteQ, setDeleteQ] = useState<{ id: number; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,16 +120,12 @@ export default function QuestionBankPage() {
     isAdmin || (canCreate && (status === "draft" || status === "sent_back"));
 
   const openCreateEditor = () => {
-    setEditQuestionId(null);
-    setEditorOpen(true);
+    navigate("/question-bank/new");
   };
 
   const openEditEditor = (id: number) => {
-    setEditQuestionId(id);
-    setEditorOpen(true);
+    navigate(`/question-bank/${id}/edit`);
   };
-
-  const [categoriesOpen, setCategoriesOpen] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -343,11 +338,6 @@ export default function QuestionBankPage() {
         </CardContent>
       </Card>
 
-      <QuestionEditorModal
-        open={editorOpen}
-        onClose={() => setEditorOpen(false)}
-        questionId={editQuestionId}
-      />
       <CategoryManagerModal
         open={categoriesOpen}
         onClose={() => setCategoriesOpen(false)}

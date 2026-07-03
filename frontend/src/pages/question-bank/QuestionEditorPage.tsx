@@ -1,21 +1,24 @@
 /**
- * Question Editor Modal — dynamic question creation/editing with type-specific editors.
- * Renders the correct editor (MCQ, FITB, Match, Grid, Hotspot, Rank, Rating, Forced-Choice)
- * based on the selected question type.
+ * Question Editor Page — full-page question create/edit.
  *
- * Supports both CREATE and EDIT modes:
- *   <QuestionEditorModal open={true} onClose={...} />                              // create
- *   <QuestionEditorModal open={true} onClose={...} questionId={123} />             // edit
+ * Replaces the old QuestionEditorModal. Using a full page instead of a modal
+ * gives more screen space for the type-specific editors and solves the
+ * intermittent data-loading issue (modal state wasn't always syncing with
+ * the fetched question detail).
  *
- * When `questionId` is provided, the modal fetches the full question detail (including
- * existing options, media, hotspots, flash items) and prefills the form. On submit, it
- * PATCHes the question instead of POSTing, then re-syncs child resources (options/media/
- * hotspots) via the same bulk endpoints used during create.
+ * Routes:
+ *   /question-bank/new           → create mode
+ *   /question-bank/:id/edit      → edit mode (loads existing question)
+ *
+ * On successful save, navigates back to the question detail page (edit mode)
+ * or the question bank list (create mode).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 
-import { Alert, AlertDescription, Button, Label, Modal, Spinner } from "@/components/ui";
+import { Alert, AlertDescription, Button, Label, Spinner } from "@/components/ui";
 import {
   bulkSaveOptions,
   createHotspot,
@@ -46,56 +49,52 @@ import {
 
 const QB_KEY = ["question-bank", "questions"];
 
-interface QuestionEditorModalProps {
-  open: boolean;
-  onClose: () => void;
-  /** When provided, the modal operates in EDIT mode for this question. */
-  questionId?: number | null;
-}
+// Default scoring type per question type. Used when the type-specific editor
+// doesn't expose its own scoring type selector (Match, Grid, Rank, Rating,
+// Forced-Choice). Editors that DO have a selector (MCQ, FITB, Hotspot) will
+// override this via their onChange callback.
+const DEFAULT_SCORING_BY_TYPE: Record<string, string> = {
+  MCQ_TEXT_IMAGE: "BINARY",
+  MCQ_TEXT_IMAGE_IMG_OPTIONS: "BINARY",
+  MCQ_AUDIO_MULTI: "BINARY",
+  MCQ_VIDEO_MULTI: "BINARY",
+  MCQ_WORD_FLASH_MULTI: "BINARY",
+  MCQ_IMAGE_FLASH_MULTI: "BINARY",
+  MCQ_PASSAGE_DISPLAY_MULTI: "BINARY",
+  MCQ_IMAGE_DISPLAY_MULTI: "BINARY",
+  FITB_SINGLE: "BINARY",
+  FITB_MULTI_FIELD: "PARTIAL",
+  FITB_WORD_FLASH_MULTI: "PARTIAL",
+  FITB_IMAGE_FLASH_MULTI: "PARTIAL",
+  MATCH_FOLLOWING: "PARTIAL",
+  GRID_LIST_SELECTION: "PARTIAL",
+  HOTSPOT_SINGLE: "BINARY",
+  HOTSPOT_MULTI: "NEGATIVE",
+  RANK_SIMPLE: "RANK",
+  RANK_THEN_RATE: "RANK_RATE",
+  STANDARD_RATING_SCALE: "RATING",
+  FORCED_CHOICE_SINGLE_LEVEL: "FORCED_CHOICE",
+  FORCED_CHOICE_TWO_LEVEL: "FORCED_CHOICE_RATED",
+};
 
-export function QuestionEditorModal({ open, onClose, questionId }: QuestionEditorModalProps) {
-  const queryClient = useQueryClient();
+export default function QuestionEditorPage() {
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const questionId = id ? Number(id) : null;
   const isEditMode = Boolean(questionId);
+  const queryClient = useQueryClient();
+
   const [questionType, setQuestionType] = useState("MCQ_TEXT_IMAGE");
   const [difficulty, setDifficulty] = useState("");
   const [cognitiveLevel, setCognitiveLevel] = useState("");
   const [categoryId, setCategoryId] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
 
-  // Default scoring type per question type. Used when the type-specific editor
-  // doesn't expose its own scoring type selector (Match, Grid, Rank, Rating,
-  // Forced-Choice). Editors that DO have a selector (MCQ, FITB, Hotspot) will
-  // override this via their onChange callback.
-  const DEFAULT_SCORING_BY_TYPE: Record<string, string> = {
-    MCQ_TEXT_IMAGE: "BINARY",
-    MCQ_TEXT_IMAGE_IMG_OPTIONS: "BINARY",
-    MCQ_AUDIO_MULTI: "BINARY",
-    MCQ_VIDEO_MULTI: "BINARY",
-    MCQ_WORD_FLASH_MULTI: "BINARY",
-    MCQ_IMAGE_FLASH_MULTI: "BINARY",
-    MCQ_PASSAGE_DISPLAY_MULTI: "BINARY",
-    MCQ_IMAGE_DISPLAY_MULTI: "BINARY",
-    FITB_SINGLE: "BINARY",
-    FITB_MULTI_FIELD: "PARTIAL",
-    FITB_WORD_FLASH_MULTI: "PARTIAL",
-    FITB_IMAGE_FLASH_MULTI: "PARTIAL",
-    MATCH_FOLLOWING: "PARTIAL",
-    GRID_LIST_SELECTION: "PARTIAL",
-    HOTSPOT_SINGLE: "BINARY",
-    HOTSPOT_MULTI: "NEGATIVE",
-    RANK_SIMPLE: "RANK",
-    RANK_THEN_RATE: "RANK_RATE",
-    STANDARD_RATING_SCALE: "RATING",
-    FORCED_CHOICE_SINGLE_LEVEL: "FORCED_CHOICE",
-    FORCED_CHOICE_TWO_LEVEL: "FORCED_CHOICE_RATED",
-  };
-
-  // Fetch categories for the category dropdown (only when modal is open).
+  // Fetch categories for the category dropdown.
   const { data: categories } = useQuery({
     queryKey: ["question-bank", "categories"],
     queryFn: () => listCategories(),
-    enabled: open,
-    staleTime: 60_000, // cache for 1 minute — categories don't change often
+    staleTime: 60_000,
   });
 
   // Shared question data
@@ -134,42 +133,7 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
     }[]
   >([]);
 
-  const resetForm = () => {
-    setQuestionType("MCQ_TEXT_IMAGE");
-    setDifficulty("");
-    setCognitiveLevel("");
-    setCategoryId("");
-    setQuestionText1("");
-    setQuestionText2("");
-    setScoringType("BINARY");
-    setPassageTitle("");
-    setPassageBody("");
-    setDisplayDuration("");
-    setCaseSensitive(false);
-    setPctThreshold("");
-    setFlashInterval("");
-    setFlashCount("");
-    setGridRows("3");
-    setGridCols("3");
-    setRatingScalePoints("5");
-    setRatingDirection("FORWARD");
-    setImageUrl("");
-    setAudioUrl("");
-    setVideoUrl("");
-    setOptions([]);
-    setPairs([]);
-    setRowLabels([]);
-    setColLabels([]);
-    setCorrectCells([]);
-    setIsMultipleAnswer(false);
-    setScaleLabels([]);
-    setHotspotAreas([]);
-    setError(null);
-  };
-
   // Populate the form from an existing QuestionDetail (edit mode).
-  // Maps every persisted field back into the local component state so the
-  // user sees the exact data they previously saved.
   const populateForm = (q: QuestionDetail) => {
     setQuestionType(q.question_type);
     setDifficulty(q.difficulty_level ?? "");
@@ -192,13 +156,9 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
     setRatingScalePoints(q.rating_scale_points != null ? String(q.rating_scale_points) : "5");
     setRatingDirection(q.rating_direction ?? "FORWARD");
     setImageUrl(q.image ?? "");
-    // Audio/video are stored as MediaFile records (media_type AUDIO/VIDEO).
     setAudioUrl(q.media_files.find((m) => m.media_type === "AUDIO")?.file ?? "");
     setVideoUrl(q.media_files.find((m) => m.media_type === "VIDEO")?.file ?? "");
 
-    // Restore options. The persisted options include TEXT/MATCH_A/MATCH_B/
-    // DRAG_POOL/RANK/FORCED_CHOICE — we keep TEXT and IMAGE for MCQ/FITB and
-    // rebuild match pairs from MATCH_A/MATCH_B pairs.
     const textOptions: OptionData[] = q.options
       .filter((o) => o.option_type === "TEXT" || o.option_type === "IMAGE")
       .map((o) => ({
@@ -218,7 +178,6 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
       }));
     setOptions(textOptions);
 
-    // Rebuild match pairs from MATCH_A / MATCH_B option pairs (matched by match_pair_id).
     const matchA = q.options.filter((o) => o.option_type === "MATCH_A");
     const matchB = q.options.filter((o) => o.option_type === "MATCH_B");
     if (matchA.length > 0 && matchB.length > 0) {
@@ -283,40 +242,21 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
     setError(null);
   };
 
-  // Fetch the question detail when opening in edit mode.
-  // The query is only enabled when both `open` and `questionId` are truthy.
-  // Note: TanStack Query v5 removed `onSuccess` — we use a useEffect below
-  // to call populateForm when the data arrives.
+  // Fetch the question detail in edit mode. Using a query keyed by questionId
+  // ensures the data is fresh and properly cached.
   const { data: existingQuestion, isFetching: isLoadingQuestion } = useQuery({
     queryKey: ["question-bank", "question", questionId],
     queryFn: () => retrieveQuestion(questionId as number),
-    enabled: Boolean(open && questionId),
-    staleTime: 0, // always refetch on open so we have fresh data
+    enabled: Boolean(questionId),
+    staleTime: 0,
   });
 
-  // When the fetched question data changes (e.g. on first load or refetch),
-  // populate the form fields. Using useEffect instead of onSuccess because
-  // TanStack Query v5 removed the onSuccess callback.
+  // Populate the form when the fetched data arrives.
   useEffect(() => {
     if (existingQuestion && isEditMode) {
       populateForm(existingQuestion);
     }
   }, [existingQuestion, isEditMode]);
-
-  // Reset the form when the modal closes (so the next open starts clean).
-  // For edit mode, populateForm runs via the useEffect above when data arrives.
-  useEffect(() => {
-    if (!open) {
-      // Small delay so the close animation doesn't show a half-empty form.
-      const t = setTimeout(() => resetForm(), 100);
-      return () => clearTimeout(t);
-    }
-    // When opening in CREATE mode, ensure the form is fresh.
-    // In EDIT mode, populateForm runs via the useEffect above.
-    if (open && !questionId) {
-      resetForm();
-    }
-  }, [open, questionId]);
 
   const mutation = useMutation({
     mutationFn: async (params: {
@@ -339,36 +279,25 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
     }) => {
       const { payload, opts, prs, img, aud, vid, hotspots, gridCorrectCells, scaleLabels } = params;
 
-      // 1a. CREATE or UPDATE the question (with image URL if set).
-      // For edit mode, PATCH the existing question; for create mode, POST a new one.
       if (img) payload.image = img;
       const question = isEditMode
         ? await updateQuestion(questionId as number, payload)
         : await createQuestion(payload);
 
-      // 1b. In edit mode, also delete existing media files and hotspots before
-      // recreating them (since they don't have a bulk-sync endpoint like options).
-      // The bulkSaveOptions call below handles create/update/delete for options.
+      // In edit mode, delete existing media files and hotspots before recreating.
       if (isEditMode) {
-        // Fetch current question detail to get existing media/hotspot IDs.
         const current = await retrieveQuestion(questionId as number);
-        // Delete all existing media files (audio/video) — they'll be recreated below.
         for (const m of current.media_files) {
           await deleteMediaFile(questionId as number, m.id);
         }
-        // Delete all existing hotspot areas — they'll be recreated below.
         for (const h of current.hotspot_areas) {
           await deleteHotspot(questionId as number, h.id);
         }
       }
 
-      // 2. Save audio/video as MediaFile records (create new ones)
       if (aud) await createMediaFile(question.id, { media_type: "AUDIO", file: aud });
       if (vid) await createMediaFile(question.id, { media_type: "VIDEO", file: vid });
 
-      // 3. Save options (includes correct_answers for FITB).
-      // bulkSaveOptions syncs create/update/delete in one request — works for
-      // both create and edit modes.
       if (opts.length > 0) {
         const optionsPayload = opts.map((opt, i) => ({
           sub_question_index: opt.sub_question_index,
@@ -388,7 +317,6 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
         await bulkSaveOptions(question.id, optionsPayload);
       }
 
-      // 4. Save match pairs
       if (prs.length > 0) {
         const pairOptions: Record<string, unknown>[] = [];
         prs.forEach((pair, i) => {
@@ -414,7 +342,6 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
         await bulkSaveOptions(question.id, pairOptions);
       }
 
-      // 5. Save grid correct cells as options
       if (gridCorrectCells && gridCorrectCells.length > 0) {
         const gridOptions = gridCorrectCells.map((cell, i) => ({
           sub_question_index: 0,
@@ -428,7 +355,6 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
         await bulkSaveOptions(question.id, gridOptions);
       }
 
-      // 6. Save rating scale labels as options
       if (scaleLabels && scaleLabels.length > 0) {
         const ratingOptions = scaleLabels.map((label, i) => ({
           sub_question_index: 0,
@@ -442,7 +368,6 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
         await bulkSaveOptions(question.id, ratingOptions);
       }
 
-      // 7. Save hotspot areas (create new ones — old ones already deleted above if editing)
       if (hotspots && hotspots.length > 0) {
         for (const hs of hotspots) {
           await createHotspot(question.id, hs);
@@ -451,14 +376,13 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
 
       return question;
     },
-    onSuccess: () => {
+    onSuccess: (question) => {
       void queryClient.invalidateQueries({ queryKey: QB_KEY });
-      // Also invalidate the question detail query so a re-open shows fresh data.
       void queryClient.invalidateQueries({
         queryKey: ["question-bank", "question", questionId],
       });
-      resetForm();
-      onClose();
+      // Navigate to the question detail page after save.
+      navigate(`/question-bank/${question.id}`);
     },
     onError: (err) => setError(extractApiError(err)),
   });
@@ -479,11 +403,9 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
       cognitive_level: cognitiveLevel,
     };
 
-    // Category — send null if empty so backend clears it; send the ID if set.
     if (categoryId) payload.category = categoryId;
     else payload.category = null;
 
-    // Type-specific fields
     if (passageTitle) payload.passage_title = passageTitle;
     if (passageBody) payload.passage_body = passageBody;
     if (displayDuration) payload.display_duration_seconds = parseInt(displayDuration);
@@ -496,7 +418,6 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
     if (ratingScalePoints) payload.rating_scale_points = parseInt(ratingScalePoints);
     if (ratingDirection) payload.rating_direction = ratingDirection;
 
-    // Build grid correct cells from correctCells array
     const gridCorrectCells: { row: number; col: number; rowLabel: string; colLabel: string }[] = [];
     if (correctCells.length > 0) {
       for (let r = 0; r < correctCells.length; r++) {
@@ -598,37 +519,38 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
   };
 
   return (
-    <Modal
-      open={open}
-      onClose={() => {
-        resetForm();
-        onClose();
-      }}
-      title={isEditMode ? "Edit Question" : "Question Designer"}
-      description={
-        isEditMode
-          ? "Update the question configuration. Child resources (options, media, hotspots) will be re-synced."
-          : "Create a new question with full type-specific configuration."
-      }
-      size="xl"
-    >
-      {isLoadingQuestion && isEditMode && (
-        <div className="mb-4 flex items-center justify-center py-8">
-          <Spinner size="md" />
-          <span className="ml-2 text-sm text-slate-500">Loading question…</span>
-        </div>
-      )}
+    <div className="space-y-6">
+      {/* Breadcrumb + title */}
+      <div>
+        <Link to="/question-bank" className="text-sm text-primary-600 hover:underline">
+          ← Back to Question Bank
+        </Link>
+        <h1 className="mt-2 text-xl font-bold text-slate-900">
+          {isEditMode ? "Edit Question" : "Create Question"}
+        </h1>
+        <p className="text-sm text-slate-500">
+          {isEditMode
+            ? "Update the question configuration. Child resources (options, media, hotspots) will be re-synced."
+            : "Create a new question with full type-specific configuration."}
+        </p>
+      </div>
 
-      {!isLoadingQuestion && (
+      {/* Loading state for edit mode */}
+      {isLoadingQuestion && isEditMode ? (
+        <div className="flex items-center justify-center py-16">
+          <Spinner size="lg" />
+          <span className="ml-3 text-sm text-slate-500">Loading question…</span>
+        </div>
+      ) : (
         <>
           {error && (
-            <Alert variant="error" className="mb-4">
+            <Alert variant="error">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
 
-          <div className="space-y-4">
-            {/* Type + difficulty + cognitive level + category */}
+          {/* Top form row: type + category + difficulty + cognitive level */}
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <Label htmlFor="qtype" required>
@@ -643,9 +565,6 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
                     setQuestionType(newType);
                     setOptions([]);
                     setPairs([]);
-                    // Set the default scoring type for the new question type.
-                    // Editors with their own scoring type selector (MCQ, FITB,
-                    // Hotspot) will override this via their onChange callback.
                     setScoringType(DEFAULT_SCORING_BY_TYPE[newType] ?? "BINARY");
                   }}
                 >
@@ -706,139 +625,137 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
                 </select>
               </div>
             </div>
+          </div>
 
-            {/* Type-specific editor */}
-            <div className="rounded-md border border-slate-200 p-4">
-              {isMCQ && (
-                <MCQEditor
-                  questionType={questionType}
-                  data={mcqData}
-                  onChange={(d) => {
-                    setQuestionText1(d.question_text_1);
-                    setQuestionText2(d.question_text_2);
-                    setScoringType(d.scoring_type);
-                    setPassageTitle(d.passage_title);
-                    setPassageBody(d.passage_body);
-                    setDisplayDuration(d.display_duration_seconds);
-                    setImageUrl(d.imageUrl);
-                    setAudioUrl(d.audioUrl);
-                    setVideoUrl(d.videoUrl);
-                    setOptions(d.options);
-                    setIsMultipleAnswer(d.isMultipleAnswer);
-                  }}
-                />
-              )}
-              {isFITB && (
-                <FITBEditor
-                  questionType={questionType}
-                  data={fitbData}
-                  onChange={(d) => {
-                    setQuestionText1(d.question_text_1);
-                    setScoringType(d.scoring_type);
-                    setCaseSensitive(d.case_sensitive);
-                    setPctThreshold(d.pct_match_threshold);
-                    setFlashInterval(d.flash_interval_ms);
-                    setFlashCount(d.flash_display_count);
-                    setOptions(d.options);
-                  }}
-                />
-              )}
-              {isMatch && (
-                <MatchEditor
-                  data={matchData}
-                  onChange={(d) => {
-                    setQuestionText1(d.question_text_1);
-                    setPairs(d.pairs);
-                  }}
-                />
-              )}
-              {isGrid && (
-                <GridEditor
-                  data={gridData}
-                  onChange={(d) => {
-                    setQuestionText1(d.question_text_1);
-                    setGridRows(d.grid_rows);
-                    setGridCols(d.grid_cols);
-                    setRowLabels(d.rowLabels);
-                    setColLabels(d.colLabels);
-                    setCorrectCells(d.correctCells);
-                  }}
-                />
-              )}
-              {isHotspot && (
-                <HotspotEditor
-                  questionType={questionType}
-                  data={hotspotData}
-                  onChange={(d) => {
-                    setQuestionText1(d.question_text_1);
-                    setImageUrl(d.image_url);
-                    setScoringType(d.scoring_type);
-                    setHotspotAreas(d.areas);
-                  }}
-                />
-              )}
-              {isRank && (
-                <RankEditor
-                  data={rankData}
-                  onChange={(d) => {
-                    setQuestionText1(d.question_text_1);
-                    setOptions(d.options);
-                  }}
-                />
-              )}
-              {isRankRate && (
-                <RankRateEditor
-                  data={rankRateData}
-                  onChange={(d) => {
-                    setQuestionText1(d.question_text_1);
-                    setRatingScalePoints(d.rating_scale_points);
-                    setOptions(d.options);
-                  }}
-                />
-              )}
-              {isRating && (
-                <RatingEditor
-                  data={ratingData}
-                  onChange={(d) => {
-                    setQuestionText1(d.question_text_1);
-                    setRatingScalePoints(d.rating_scale_points);
-                    setRatingDirection(d.rating_direction);
-                    setScaleLabels(d.scaleLabels);
-                  }}
-                />
-              )}
-              {isForcedChoice && (
-                <ForcedChoiceEditor
-                  questionType={questionType}
-                  data={forcedChoiceData}
-                  onChange={(d) => {
-                    setQuestionText1(d.question_text_1);
-                    setRatingScalePoints(d.rating_scale_points);
-                    setOptions(d.options);
-                  }}
-                />
-              )}
-            </div>
-
-            {/* Submit */}
-            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  resetForm();
-                  onClose();
+          {/* Type-specific editor */}
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            {isMCQ && (
+              <MCQEditor
+                questionType={questionType}
+                data={mcqData}
+                onChange={(d) => {
+                  setQuestionText1(d.question_text_1);
+                  setQuestionText2(d.question_text_2);
+                  setScoringType(d.scoring_type);
+                  setPassageTitle(d.passage_title);
+                  setPassageBody(d.passage_body);
+                  setDisplayDuration(d.display_duration_seconds);
+                  setImageUrl(d.imageUrl);
+                  setAudioUrl(d.audioUrl);
+                  setVideoUrl(d.videoUrl);
+                  setOptions(d.options);
+                  setIsMultipleAnswer(d.isMultipleAnswer);
                 }}
-              >
-                Cancel
-              </Button>
-              <Button type="button" loading={mutation.isPending} onClick={handleSubmit}>
-                {isEditMode ? "Update question" : "Create question"}
-              </Button>
-            </div>
+              />
+            )}
+            {isFITB && (
+              <FITBEditor
+                questionType={questionType}
+                data={fitbData}
+                onChange={(d) => {
+                  setQuestionText1(d.question_text_1);
+                  setScoringType(d.scoring_type);
+                  setCaseSensitive(d.case_sensitive);
+                  setPctThreshold(d.pct_match_threshold);
+                  setFlashInterval(d.flash_interval_ms);
+                  setFlashCount(d.flash_display_count);
+                  setOptions(d.options);
+                }}
+              />
+            )}
+            {isMatch && (
+              <MatchEditor
+                data={matchData}
+                onChange={(d) => {
+                  setQuestionText1(d.question_text_1);
+                  setPairs(d.pairs);
+                }}
+              />
+            )}
+            {isGrid && (
+              <GridEditor
+                data={gridData}
+                onChange={(d) => {
+                  setQuestionText1(d.question_text_1);
+                  setGridRows(d.grid_rows);
+                  setGridCols(d.grid_cols);
+                  setRowLabels(d.rowLabels);
+                  setColLabels(d.colLabels);
+                  setCorrectCells(d.correctCells);
+                }}
+              />
+            )}
+            {isHotspot && (
+              <HotspotEditor
+                questionType={questionType}
+                data={hotspotData}
+                onChange={(d) => {
+                  setQuestionText1(d.question_text_1);
+                  setImageUrl(d.image_url);
+                  setScoringType(d.scoring_type);
+                  setHotspotAreas(d.areas);
+                }}
+              />
+            )}
+            {isRank && (
+              <RankEditor
+                data={rankData}
+                onChange={(d) => {
+                  setQuestionText1(d.question_text_1);
+                  setOptions(d.options);
+                }}
+              />
+            )}
+            {isRankRate && (
+              <RankRateEditor
+                data={rankRateData}
+                onChange={(d) => {
+                  setQuestionText1(d.question_text_1);
+                  setRatingScalePoints(d.rating_scale_points);
+                  setOptions(d.options);
+                }}
+              />
+            )}
+            {isRating && (
+              <RatingEditor
+                data={ratingData}
+                onChange={(d) => {
+                  setQuestionText1(d.question_text_1);
+                  setRatingScalePoints(d.rating_scale_points);
+                  setRatingDirection(d.rating_direction);
+                  setScaleLabels(d.scaleLabels);
+                }}
+              />
+            )}
+            {isForcedChoice && (
+              <ForcedChoiceEditor
+                questionType={questionType}
+                data={forcedChoiceData}
+                onChange={(d) => {
+                  setQuestionText1(d.question_text_1);
+                  setRatingScalePoints(d.rating_scale_points);
+                  setOptions(d.options);
+                }}
+              />
+            )}
+          </div>
+
+          {/* Submit bar — sticky at bottom for easy access */}
+          <div className="sticky bottom-0 flex justify-end gap-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate(-1)}
+              disabled={mutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button type="button" loading={mutation.isPending} onClick={handleSubmit}>
+              {isEditMode ? "Update question" : "Create question"}
+            </Button>
           </div>
         </>
       )}
-    </Modal>
+    </div>
   );
 }
