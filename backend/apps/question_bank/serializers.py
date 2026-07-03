@@ -69,8 +69,20 @@ class CorrectAnswerSerializer(serializers.ModelSerializer):
 
 class ResponseOptionSerializer(serializers.ModelSerializer):
     correct_answers = CorrectAnswerSerializer(many=True, read_only=True)
-    # Allow image_file to be passed as a URL string or base64 data URL
-    image_file = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    # Allow image_file to be passed as a URL string, base64 data URL, or None.
+    # to_internal_value converts None → "" so the DB never sees NULL (avoids
+    # IntegrityError if the column is NOT NULL, and avoids needing null=True
+    # on the model field — which is the Django convention for text fields).
+    image_file = serializers.CharField(
+        allow_blank=True, allow_null=True, required=False, default=""
+    )
+
+    def to_internal_value(self, data):
+        ret = super().to_internal_value(data)
+        # Normalize None → "" for image_file (Django convention: empty string, not NULL)
+        if ret.get("image_file") is None:
+            ret["image_file"] = ""
+        return ret
 
     class Meta:
         model = ResponseOption
@@ -101,8 +113,17 @@ class MediaFileSerializer(serializers.ModelSerializer):
 
 
 class FlashItemSerializer(serializers.ModelSerializer):
-    # Allow image_file to be passed as a URL string or base64 data URL
-    image_file = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    # Allow image_file to be passed as a URL string, base64 data URL, or None.
+    # to_internal_value converts None → "" so the DB never sees NULL.
+    image_file = serializers.CharField(
+        allow_blank=True, allow_null=True, required=False, default=""
+    )
+
+    def to_internal_value(self, data):
+        ret = super().to_internal_value(data)
+        if ret.get("image_file") is None:
+            ret["image_file"] = ""
+        return ret
 
     class Meta:
         model = FlashItem
@@ -242,8 +263,15 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
 class QuestionCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating questions (SME creates with draft status)."""
 
-    # Allow image to be passed as a URL string or base64 data URL (not a multipart file)
-    image = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    # Allow image to be passed as a URL string, base64 data URL, or None.
+    # to_internal_value converts None → "" so the DB never sees NULL.
+    image = serializers.CharField(allow_blank=True, allow_null=True, required=False, default="")
+
+    def to_internal_value(self, data):
+        ret = super().to_internal_value(data)
+        if ret.get("image") is None:
+            ret["image"] = ""
+        return ret
 
     class Meta:
         model = Question
