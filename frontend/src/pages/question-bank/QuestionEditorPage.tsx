@@ -284,43 +284,55 @@ export default function QuestionEditorPage() {
         ? await updateQuestion(questionId as number, payload)
         : await createQuestion(payload);
 
-      // In edit mode, delete existing media files and hotspots before recreating.
+      // In edit mode, delete existing media files and hotspots in PARALLEL
+      // (not sequentially) to reduce total wait time. This is the main
+      // performance bottleneck — each sequential API call adds latency.
       if (isEditMode) {
         const current = await retrieveQuestion(questionId as number);
-        for (const m of current.media_files) {
-          await deleteMediaFile(questionId as number, m.id);
-        }
-        for (const h of current.hotspot_areas) {
-          await deleteHotspot(questionId as number, h.id);
+        const deletePromises: Promise<unknown>[] = [
+          ...current.media_files.map((m) => deleteMediaFile(questionId as number, m.id)),
+          ...current.hotspot_areas.map((h) => deleteHotspot(questionId as number, h.id)),
+        ];
+        if (deletePromises.length > 0) {
+          await Promise.all(deletePromises);
         }
       }
 
-      if (aud) await createMediaFile(question.id, { media_type: "AUDIO", file: aud });
-      if (vid) await createMediaFile(question.id, { media_type: "VIDEO", file: vid });
+      // Create new media files in parallel
+      const mediaPromises: Promise<unknown>[] = [];
+      if (aud) mediaPromises.push(createMediaFile(question.id, { media_type: "AUDIO", file: aud }));
+      if (vid) mediaPromises.push(createMediaFile(question.id, { media_type: "VIDEO", file: vid }));
+      if (mediaPromises.length > 0) await Promise.all(mediaPromises);
 
+      // Combine ALL options (regular + match pairs + grid cells + rating labels)
+      // into a SINGLE bulkSaveOptions call to minimize API round-trips.
+      const allOptions: Record<string, unknown>[] = [];
+
+      // Regular options (MCQ, FITB, Rank, Forced-Choice)
       if (opts.length > 0) {
-        const optionsPayload = opts.map((opt, i) => ({
-          sub_question_index: opt.sub_question_index,
-          option_type: opt.option_type,
-          label: opt.label,
-          text_value: opt.text_value,
-          image_file: opt.image_file,
-          is_correct: opt.is_correct,
-          match_pair_id: opt.match_pair_id,
-          predefined_score: opt.predefined_score,
-          order: i,
-          correct_answers: opt.correct_answers?.map((ca) => ({
-            answer_text: ca.answer_text,
-            order: ca.order,
-          })),
-        }));
-        await bulkSaveOptions(question.id, optionsPayload);
+        opts.forEach((opt, i) => {
+          allOptions.push({
+            sub_question_index: opt.sub_question_index,
+            option_type: opt.option_type,
+            label: opt.label,
+            text_value: opt.text_value,
+            image_file: opt.image_file,
+            is_correct: opt.is_correct,
+            match_pair_id: opt.match_pair_id,
+            predefined_score: opt.predefined_score,
+            order: i,
+            correct_answers: opt.correct_answers?.map((ca) => ({
+              answer_text: ca.answer_text,
+              order: ca.order,
+            })),
+          });
+        });
       }
 
+      // Match pairs
       if (prs.length > 0) {
-        const pairOptions: Record<string, unknown>[] = [];
         prs.forEach((pair, i) => {
-          pairOptions.push({
+          allOptions.push({
             sub_question_index: 0,
             option_type: "MATCH_A",
             text_value: pair.groupA.text_value,
@@ -329,7 +341,7 @@ export default function QuestionEditorPage() {
             predefined_score: 1.0,
             order: i * 2,
           });
-          pairOptions.push({
+          allOptions.push({
             sub_question_index: 0,
             option_type: "MATCH_B",
             text_value: pair.groupB.text_value,
@@ -339,39 +351,46 @@ export default function QuestionEditorPage() {
             order: i * 2 + 1,
           });
         });
-        await bulkSaveOptions(question.id, pairOptions);
       }
 
+      // Grid correct cells
       if (gridCorrectCells && gridCorrectCells.length > 0) {
-        const gridOptions = gridCorrectCells.map((cell, i) => ({
-          sub_question_index: 0,
-          option_type: "DRAG_POOL",
-          label: `${cell.rowLabel} → ${cell.colLabel}`,
-          text_value: `${cell.rowLabel} → ${cell.colLabel}`,
-          is_correct: true,
-          predefined_score: 1.0,
-          order: i,
-        }));
-        await bulkSaveOptions(question.id, gridOptions);
+        gridCorrectCells.forEach((cell, i) => {
+          allOptions.push({
+            sub_question_index: 0,
+            option_type: "DRAG_POOL",
+            label: `${cell.rowLabel} → ${cell.colLabel}`,
+            text_value: `${cell.rowLabel} → ${cell.colLabel}`,
+            is_correct: true,
+            predefined_score: 1.0,
+            order: i,
+          });
+        });
       }
 
+      // Rating scale labels
       if (scaleLabels && scaleLabels.length > 0) {
-        const ratingOptions = scaleLabels.map((label, i) => ({
-          sub_question_index: 0,
-          option_type: "TEXT",
-          label: `Point ${i + 1}`,
-          text_value: label,
-          is_correct: false,
-          predefined_score: 1.0,
-          order: i,
-        }));
-        await bulkSaveOptions(question.id, ratingOptions);
+        scaleLabels.forEach((label, i) => {
+          allOptions.push({
+            sub_question_index: 0,
+            option_type: "TEXT",
+            label: `Point ${i + 1}`,
+            text_value: label,
+            is_correct: false,
+            predefined_score: 1.0,
+            order: i,
+          });
+        });
       }
 
+      // Single bulk save for ALL options (replaces 4 separate API calls)
+      if (allOptions.length > 0) {
+        await bulkSaveOptions(question.id, allOptions);
+      }
+
+      // Create hotspot areas in parallel
       if (hotspots && hotspots.length > 0) {
-        for (const hs of hotspots) {
-          await createHotspot(question.id, hs);
-        }
+        await Promise.all(hotspots.map((hs) => createHotspot(question.id, hs)));
       }
 
       return question;

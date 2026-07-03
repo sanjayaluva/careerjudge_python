@@ -16,56 +16,65 @@
 # Run: docker compose -f infra/docker/docker-compose.dev.yml up -d backend caddy
 
 careerjudge.pp.ua {
-	encode gzip zstd
+        encode gzip zstd
 
-	# Backend API — use `handle` (not `handle_path`) to preserve the /api prefix
-	# Django's urls.py expects /api/auth/login, /api/me/, /api/accounts/, etc.
-	handle /api/* {
-		reverse_proxy backend:8000 {
-			header_up X-Forwarded-Proto {scheme}
-			header_up X-Forwarded-Host {host}
-		}
-	}
+        # Backend API — use `handle` (not `handle_path`) to preserve the /api prefix
+        # Django's urls.py expects /api/auth/login, /api/me/, /api/accounts/, etc.
+        handle /api/* {
+                reverse_proxy backend:8000 {
+                        header_up X-Forwarded-Proto {scheme}
+                        header_up X-Forwarded-Host {host}
+                        # Increase timeouts for large payloads (base64 images in JSON)
+                        # and slow DB operations (bulk options save with transaction).
+                        # Default Caddy transport timeout is 30s which is too short
+                        # for question saves with multiple base64 images.
+                        transport http {
+                                read_timeout 120s
+                                write_timeout 120s
+                                dial_timeout 10s
+                        }
+                }
+        }
 
-	# Django admin — ONLY the exact paths Django admin uses.
-	# /admin/users, /admin/roles, /admin/permissions are React routes (go to Vercel).
-	# Django admin paths: /admin/, /admin/login/, /admin/logout/,
-	# /admin/auth/, /admin/accounts/, /admin/static/admin/*, etc.
-	# We match these specific patterns to avoid catching React's /admin/* routes.
-	@djangoAdmin {
-		path /admin /admin/ /admin/login /admin/login/ /admin/logout /admin/logout/
-		path /admin/auth/* /admin/accounts/* /admin/token_blacklist/*
-		path /admin/static/admin/*
-		path /admin/jsi18n/*
-	}
-	handle @djangoAdmin {
-		reverse_proxy backend:8000
-	}
+        # Django admin — ONLY the exact paths Django admin uses.
+        # /admin/users, /admin/roles, /admin/permissions are React routes (go to Vercel).
+        # Django admin paths: /admin/, /admin/login/, /admin/logout/,
+        # /admin/auth/, /admin/accounts/, /admin/static/admin/*, etc.
+        # We match these specific patterns to avoid catching React's /admin/* routes.
+        @djangoAdmin {
+                path /admin /admin/ /admin/login /admin/login/ /admin/logout /admin/logout/
+                path /admin/auth/* /admin/accounts/* /admin/token_blacklist/*
+                path /admin/static/admin/*
+                path /admin/jsi18n/*
+        }
+        handle @djangoAdmin {
+                reverse_proxy backend:8000
+        }
 
-	# Frontend — proxy to Vercel (browser stays on careerjudge.pp.ua)
-	# This catches everything else including /admin/users, /admin/roles, etc.
-	handle {
-		reverse_proxy https://careerjudge-python.vercel.app {
-			header_up Host careerjudge-python.vercel.app
-			header_up X-Real-IP {remote_host}
-			header_up X-Forwarded-For {remote_host}
-		}
-	}
+        # Frontend — proxy to Vercel (browser stays on careerjudge.pp.ua)
+        # This catches everything else including /admin/users, /admin/roles, etc.
+        handle {
+                reverse_proxy https://careerjudge-python.vercel.app {
+                        header_up Host careerjudge-python.vercel.app
+                        header_up X-Real-IP {remote_host}
+                        header_up X-Forwarded-For {remote_host}
+                }
+        }
 
-	# Security headers
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-		X-Content-Type-Options nosniff
-		X-Frame-Options DENY
-		Referrer-Policy same-origin
-		Permissions-Policy "geolocation=(), microphone=(), camera=()"
-	}
+        # Security headers
+        header {
+                Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+                X-Content-Type-Options nosniff
+                X-Frame-Options DENY
+                Referrer-Policy same-origin
+                Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        }
 
-	log {
-		output file /data/caddy/access.log {
-			roll_size 10mb
-			roll_keep 5
-		}
-		format json
-	}
+        log {
+                output file /data/caddy/access.log {
+                        roll_size 10mb
+                        roll_keep 5
+                }
+                format json
+        }
 }

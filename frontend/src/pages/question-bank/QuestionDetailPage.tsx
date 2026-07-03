@@ -120,6 +120,34 @@ function formatValue(val: unknown): string {
   return String(val);
 }
 
+/**
+ * Returns a human-friendly label for an option's type based on its ACTUAL
+ * content (not just the raw option_type field):
+ *   - Both text + image → "TEXT & IMAGE"
+ *   - Text only         → "TEXT"
+ *   - Image only        → "IMAGE"
+ *   - Neither           → "EMPTY" (or the raw type for non-text/image types)
+ *
+ * For non-MCQ option types (MATCH_A, MATCH_B, DRAG_POOL, RANK, FORCED_CHOICE),
+ * the raw option_type is returned as-is since those have specific meanings.
+ */
+function getOptionTypeLabel(opt: {
+  option_type: string;
+  text_value: string;
+  image_file: string | null;
+}): string {
+  // For non-text/image option types, return the raw type label
+  if (!["TEXT", "IMAGE"].includes(opt.option_type)) {
+    return opt.option_type;
+  }
+  const hasText = Boolean(opt.text_value && opt.text_value.trim());
+  const hasImage = Boolean(opt.image_file);
+  if (hasText && hasImage) return "TEXT & IMAGE";
+  if (hasText) return "TEXT";
+  if (hasImage) return "IMAGE";
+  return "EMPTY";
+}
+
 // ---------------------------------------------------------------------------
 
 export default function QuestionDetailPage() {
@@ -379,7 +407,7 @@ export default function QuestionDetailPage() {
                       }
                     >
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline">{opt.option_type}</Badge>
+                        <Badge variant="outline">{getOptionTypeLabel(opt)}</Badge>
                         {opt.is_correct && (
                           <Badge variant="success">
                             <span className="mr-0.5">✓</span> Correct answer
@@ -645,7 +673,7 @@ export default function QuestionDetailPage() {
                     {q.question_type.startsWith("MCQ_") && (
                       <>
                         {q.options.filter((o) => o.is_correct).length > 1
-                          ? q.options.map((opt, i) => (
+                          ? q.options.map((opt) => (
                               <label
                                 key={opt.id}
                                 className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -654,12 +682,12 @@ export default function QuestionDetailPage() {
                                 {opt.image_file && (
                                   <img src={opt.image_file} alt="" className="h-8 w-8 rounded" />
                                 )}
-                                <span className="text-slate-700">
-                                  {opt.text_value || `(option ${i + 1})`}
-                                </span>
+                                {opt.text_value && (
+                                  <span className="text-slate-700">{opt.text_value}</span>
+                                )}
                               </label>
                             ))
-                          : q.options.map((opt, i) => (
+                          : q.options.map((opt) => (
                               <label
                                 key={opt.id}
                                 className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -673,9 +701,9 @@ export default function QuestionDetailPage() {
                                 {opt.image_file && (
                                   <img src={opt.image_file} alt="" className="h-8 w-8 rounded" />
                                 )}
-                                <span className="text-slate-700">
-                                  {opt.text_value || `(option ${i + 1})`}
-                                </span>
+                                {opt.text_value && (
+                                  <span className="text-slate-700">{opt.text_value}</span>
+                                )}
                               </label>
                             ))}
                       </>
@@ -700,12 +728,12 @@ export default function QuestionDetailPage() {
                           <p className="mb-1 text-xs font-medium text-slate-500">Group A</p>
                           {q.options
                             .filter((o) => o.option_type === "MATCH_A")
-                            .map((opt, i) => (
+                            .map((opt) => (
                               <div
                                 key={opt.id}
                                 className="mb-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm"
                               >
-                                {opt.text_value || `Item ${i + 1}`}
+                                {opt.text_value}
                               </div>
                             ))}
                         </div>
@@ -715,12 +743,12 @@ export default function QuestionDetailPage() {
                           </p>
                           {q.options
                             .filter((o) => o.option_type === "MATCH_B")
-                            .map((opt, i) => (
+                            .map((opt) => (
                               <div
                                 key={opt.id}
                                 className="mb-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm"
                               >
-                                {opt.text_value || `Match ${i + 1}`}
+                                {opt.text_value}
                               </div>
                             ))}
                         </div>
@@ -778,9 +806,7 @@ export default function QuestionDetailPage() {
                           <select disabled className="h-8 rounded border border-slate-200 text-xs">
                             <option>Rank {i + 1}</option>
                           </select>
-                          <span className="text-slate-700">
-                            {opt.text_value || `Item ${i + 1}`}
-                          </span>
+                          <span className="text-slate-700">{opt.text_value}</span>
                         </div>
                       ))}
                     {/* Rating: scale circles */}
@@ -800,12 +826,10 @@ export default function QuestionDetailPage() {
                     )}
                     {/* Forced Choice: radios */}
                     {q.question_type.startsWith("FORCED_CHOICE_") &&
-                      q.options.map((opt, i) => (
+                      q.options.map((opt) => (
                         <label key={opt.id} className="flex items-center gap-2 text-sm">
                           <input type="radio" name="preview-fc" disabled className="h-4 w-4" />
-                          <span className="text-slate-700">
-                            {opt.text_value || `Option ${i + 1}`}
-                          </span>
+                          <span className="text-slate-700">{opt.text_value}</span>
                           <span className="ml-auto text-xs text-slate-400">
                             score: {opt.predefined_score}
                           </span>

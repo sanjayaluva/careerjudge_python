@@ -3,6 +3,7 @@
 These are nested under questions: /api/question-bank/questions/<question_id>/options/ etc.
 """
 
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -138,57 +139,61 @@ class BulkOptionsView(APIView):
 
         question = get_object_or_404(Question, id=question_id)
         submitted = request.data.get("options", [])
-        # Tracks the IDs of all options that should be kept (both updated and newly created).
-        # Options not in this set at the end of the loop are deleted (line ~190).
-        kept_ids = set()
 
-        for opt_data in submitted:
-            # Extract correct_answers (FITB) — handle separately (not a model field on ResponseOption)
-            correct_answers_data = opt_data.pop("correct_answers", None)
+        # Wrap the entire sync operation in a single transaction.
+        # This dramatically improves performance by:
+        # 1. Reducing commit overhead (one commit instead of N commits)
+        # 2. Ensuring atomicity — if any option fails, all changes roll back
+        with transaction.atomic():
+            # Tracks the IDs of all options that should be kept.
+            kept_ids = set()
 
-            opt_id = opt_data.get("id")
-            if opt_id:
-                # Update existing
-                try:
-                    opt = ResponseOption.objects.get(id=opt_id, question=question)
-                    serializer = ResponseOptionSerializer(opt, data=opt_data, partial=True)
-                    serializer.is_valid(raise_exception=True)
-                    serializer.save()
-                    kept_ids.add(opt.id)
-                except ResponseOption.DoesNotExist:
-                    # ID provided but not found for this question — create new instead
+            for opt_data in submitted:
+                # Extract correct_answers (FITB) — handle separately
+                correct_answers_data = opt_data.pop("correct_answers", None)
+
+                opt_id = opt_data.get("id")
+                if opt_id:
+                    # Update existing
+                    try:
+                        opt = ResponseOption.objects.get(id=opt_id, question=question)
+                        serializer = ResponseOptionSerializer(opt, data=opt_data, partial=True)
+                        serializer.is_valid(raise_exception=True)
+                        serializer.save()
+                        kept_ids.add(opt.id)
+                    except ResponseOption.DoesNotExist:
+                        # ID provided but not found for this question — create new instead
+                        clean_data = {k: v for k, v in opt_data.items() if k != "id"}
+                        serializer = ResponseOptionSerializer(data=clean_data)
+                        serializer.is_valid(raise_exception=True)
+                        serializer.save(question=question)
+                        opt = serializer.instance
+                        kept_ids.add(opt.id)
+                else:
+                    # Create new
                     clean_data = {k: v for k, v in opt_data.items() if k != "id"}
                     serializer = ResponseOptionSerializer(data=clean_data)
                     serializer.is_valid(raise_exception=True)
                     serializer.save(question=question)
                     opt = serializer.instance
                     kept_ids.add(opt.id)
-            else:
-                # Create new
-                clean_data = {k: v for k, v in opt_data.items() if k != "id"}
-                serializer = ResponseOptionSerializer(data=clean_data)
-                serializer.is_valid(raise_exception=True)
-                serializer.save(question=question)
-                opt = serializer.instance
-                kept_ids.add(opt.id)  # CRITICAL: track newly-created option IDs too
 
-            # Save correct answers for FITB types
-            if correct_answers_data and opt:
-                # Delete existing correct answers for this option
-                opt.correct_answers.all().delete()
-                for ca in correct_answers_data:
-                    answer_text = ca.get("answer_text", "") if isinstance(ca, dict) else str(ca)
-                    if answer_text:
-                        CorrectAnswer.objects.create(
-                            response_option=opt,
-                            answer_text=answer_text,
-                            order=ca.get("order", 0) if isinstance(ca, dict) else 0,
-                        )
+                # Save correct answers for FITB types
+                if correct_answers_data and opt:
+                    opt.correct_answers.all().delete()
+                    for ca in correct_answers_data:
+                        answer_text = ca.get("answer_text", "") if isinstance(ca, dict) else str(ca)
+                        if answer_text:
+                            CorrectAnswer.objects.create(
+                                response_option=opt,
+                                answer_text=answer_text,
+                                order=ca.get("order", 0) if isinstance(ca, dict) else 0,
+                            )
 
-        # Delete options not in the submitted list (i.e. removed by the user in the editor)
-        ResponseOption.objects.filter(question=question).exclude(id__in=kept_ids).delete()
+            # Delete options not in the submitted list
+            ResponseOption.objects.filter(question=question).exclude(id__in=kept_ids).delete()
 
-        # Return all current options
+        # Return all current options (outside the transaction for read consistency)
         all_options = ResponseOption.objects.filter(question=question)
         return Response(
             {
