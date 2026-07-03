@@ -354,7 +354,7 @@ export default function ProfilePage() {
   const allProfileFields = [...COMMON_FIELDS, ...roleFields];
 
   return (
-    <Card>
+    <Card className="border-l-0 border-r-0 border-t-0">
       {/* Account overview section */}
       <CardHeader>
         <CardTitle>Account overview</CardTitle>
