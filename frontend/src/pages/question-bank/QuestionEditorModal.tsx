@@ -99,12 +99,17 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
   };
 
   const mutation = useMutation({
-    mutationFn: async (payload: Record<string, unknown>) => {
+    mutationFn: async (params: {
+      payload: Record<string, unknown>;
+      opts: typeof options;
+      prs: typeof pairs;
+    }) => {
+      const { payload, opts, prs } = params;
       // 1. Create the question
       const question = await createQuestion(payload);
       // 2. If there are options, save them via bulk endpoint
-      if (options.length > 0) {
-        const optionsPayload = options.map((opt, i) => ({
+      if (opts.length > 0) {
+        const optionsPayload = opts.map((opt, i) => ({
           sub_question_index: opt.sub_question_index,
           option_type: opt.option_type,
           label: opt.label,
@@ -117,9 +122,9 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
         await bulkSaveOptions(question.id, optionsPayload);
       }
       // 3. If there are match pairs, save those options too
-      if (pairs.length > 0) {
+      if (prs.length > 0) {
         const pairOptions: Record<string, unknown>[] = [];
-        pairs.forEach((pair, i) => {
+        prs.forEach((pair, i) => {
           pairOptions.push({
             sub_question_index: 0,
             option_type: "MATCH_A",
@@ -180,7 +185,7 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
     if (ratingScalePoints) payload.rating_scale_points = parseInt(ratingScalePoints);
     if (ratingDirection) payload.rating_direction = ratingDirection;
 
-    mutation.mutate(payload);
+    mutation.mutate({ payload, opts: options, prs: pairs });
   };
 
   // Determine which editor to render
