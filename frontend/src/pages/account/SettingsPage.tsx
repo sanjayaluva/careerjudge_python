@@ -61,7 +61,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-l-0 border-t-0">
+      <Card className="border-l-0 border-t-0 border-r-0">
         <CardHeader>
           <CardTitle>Change password</CardTitle>
           <CardDescription>Update the password used to sign in.</CardDescription>

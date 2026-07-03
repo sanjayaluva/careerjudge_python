@@ -129,7 +129,7 @@ export default function QuestionBankPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-l-0 border-t-0">
+      <Card className="border-l-0 border-t-0 border-r-0">
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
