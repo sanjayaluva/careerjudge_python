@@ -138,10 +138,12 @@ class BulkOptionsView(APIView):
 
         question = get_object_or_404(Question, id=question_id)
         submitted = request.data.get("options", [])
-        submitted_ids = set()
+        # Tracks the IDs of all options that should be kept (both updated and newly created).
+        # Options not in this set at the end of the loop are deleted (line ~190).
+        kept_ids = set()
 
         for opt_data in submitted:
-            # Extract correct_answers (FITB) — handle separately
+            # Extract correct_answers (FITB) — handle separately (not a model field on ResponseOption)
             correct_answers_data = opt_data.pop("correct_answers", None)
 
             opt_id = opt_data.get("id")
@@ -152,12 +154,15 @@ class BulkOptionsView(APIView):
                     serializer = ResponseOptionSerializer(opt, data=opt_data, partial=True)
                     serializer.is_valid(raise_exception=True)
                     serializer.save()
-                    submitted_ids.add(opt_id)
+                    kept_ids.add(opt.id)
                 except ResponseOption.DoesNotExist:
-                    serializer = ResponseOptionSerializer(data=opt_data)
+                    # ID provided but not found for this question — create new instead
+                    clean_data = {k: v for k, v in opt_data.items() if k != "id"}
+                    serializer = ResponseOptionSerializer(data=clean_data)
                     serializer.is_valid(raise_exception=True)
                     serializer.save(question=question)
                     opt = serializer.instance
+                    kept_ids.add(opt.id)
             else:
                 # Create new
                 clean_data = {k: v for k, v in opt_data.items() if k != "id"}
@@ -165,6 +170,7 @@ class BulkOptionsView(APIView):
                 serializer.is_valid(raise_exception=True)
                 serializer.save(question=question)
                 opt = serializer.instance
+                kept_ids.add(opt.id)  # CRITICAL: track newly-created option IDs too
 
             # Save correct answers for FITB types
             if correct_answers_data and opt:
@@ -179,8 +185,8 @@ class BulkOptionsView(APIView):
                             order=ca.get("order", 0) if isinstance(ca, dict) else 0,
                         )
 
-        # Delete options not in the submitted list
-        ResponseOption.objects.filter(question=question).exclude(id__in=submitted_ids).delete()
+        # Delete options not in the submitted list (i.e. removed by the user in the editor)
+        ResponseOption.objects.filter(question=question).exclude(id__in=kept_ids).delete()
 
         # Return all current options
         all_options = ResponseOption.objects.filter(question=question)

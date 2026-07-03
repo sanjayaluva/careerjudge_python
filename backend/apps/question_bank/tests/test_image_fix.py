@@ -8,6 +8,7 @@ Reproduces the original error:
 After the fix (ImageField -> TextField on Question.image, and explicit
 CharField override in QuestionCreateSerializer), the request should succeed.
 """
+
 import os
 
 import pytest
@@ -15,7 +16,7 @@ from rest_framework.test import APIRequestFactory
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.test")
 
-import django  # noqa: E402
+import django
 
 django.setup()
 
@@ -94,6 +95,6 @@ def test_existing_question_image_field_is_text():
     """The Question.image field is now a TextField — verify via the model class."""
     field = Question._meta.get_field("image")
     # Internal type for TextField is "TextField"
-    assert field.get_internal_type() == "TextField", (
-        f"Expected TextField, got {field.get_internal_type()}"
-    )
+    assert (
+        field.get_internal_type() == "TextField"
+    ), f"Expected TextField, got {field.get_internal_type()}"

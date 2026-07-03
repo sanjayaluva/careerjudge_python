@@ -155,6 +155,8 @@ class Question(models.Model):
     image = models.TextField(
         _("image"),
         blank=True,
+        null=True,
+        default="",
         help_text=_("Question image as an external URL or base64 data URL."),
     )
     order = models.PositiveIntegerField(_("order"), default=0)
@@ -307,6 +309,8 @@ class ResponseOption(models.Model):
     image_file = models.TextField(
         _("image file"),
         blank=True,
+        null=True,
+        default="",
         help_text=_("Option image as an external URL or base64 data URL."),
     )
     is_correct = models.BooleanField(
@@ -369,6 +373,8 @@ class MediaFile(models.Model):
     )
     file = models.TextField(
         _("file"),
+        blank=True,
+        default="",
         help_text=_("Media file URL (audio/video) — external URL or base64 data URL."),
     )
     created_at = models.DateTimeField(auto_now_add=True)
@@ -401,6 +407,8 @@ class FlashItem(models.Model):
     image_file = models.TextField(
         _("image file"),
         blank=True,
+        null=True,
+        default="",
         help_text=_("Flash image as an external URL or base64 data URL."),
     )
     order = models.PositiveIntegerField(_("order"), default=0)
