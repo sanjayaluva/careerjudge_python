@@ -1,10 +1,12 @@
 /**
  * MCQ Editor — for question types 1a-1h
- * Handles: text/image options, single vs multiple correct, passage/image config, media
+ * Handles: text/image options, single vs multiple correct, passage/image config, media,
+ *          flash items for 1e (word flash) and 1f (image flash)
  */
 import { Input, Label, MediaManager } from "@/components/ui";
 import { SCORING_TYPES } from "@/api/questionBank";
-import { AddOptionButton, createEmptyOption, type OptionData } from "./shared";
+import { AddOptionButton, createEmptyOption, type FlashItemData, type OptionData } from "./shared";
+import { FlashItemsEditor } from "./FlashItemsEditor";
 
 interface MCQEditorProps {
   questionType: string;
@@ -20,6 +22,9 @@ interface MCQEditorProps {
     videoUrl: string;
     options: OptionData[];
     isMultipleAnswer: boolean;
+    flashItems: FlashItemData[];
+    flashIntervalMs: string;
+    flashDisplayCount: string;
   };
   onChange: (data: MCQEditorProps["data"]) => void;
 }
@@ -29,6 +34,10 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
   const isAudioType = questionType === "MCQ_AUDIO_MULTI";
   const isVideoType = questionType === "MCQ_VIDEO_MULTI";
   const isImageOptionType = questionType === "MCQ_TEXT_IMAGE_IMG_OPTIONS";
+  const isWordFlashType = questionType === "MCQ_WORD_FLASH_MULTI";
+  const isImageFlashType = questionType === "MCQ_IMAGE_FLASH_MULTI";
+  const isFlashType = isWordFlashType || isImageFlashType;
+  const flashItemType: "TEXT" | "IMAGE" = isImageFlashType ? "IMAGE" : "TEXT";
   const isMultiSubQuestion = [
     "MCQ_AUDIO_MULTI",
     "MCQ_VIDEO_MULTI",
@@ -171,6 +180,24 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
             />
           </div>
         </div>
+      )}
+
+      {/* Flash items (types 1e, 1f) */}
+      {isFlashType && (
+        <FlashItemsEditor
+          items={data.flashItems}
+          flashIntervalMs={data.flashIntervalMs}
+          flashDisplayCount={data.flashDisplayCount}
+          itemType={flashItemType}
+          onChange={(flashData) =>
+            onChange({
+              ...data,
+              flashItems: flashData.items,
+              flashIntervalMs: flashData.flashIntervalMs,
+              flashDisplayCount: flashData.flashDisplayCount,
+            })
+          }
+        />
       )}
 
       {/* Answer type toggle */}

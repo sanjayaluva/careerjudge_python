@@ -21,9 +21,11 @@ import { Link } from "react-router-dom";
 import { Alert, AlertDescription, Button, Label, Spinner } from "@/components/ui";
 import {
   bulkSaveOptions,
+  createFlashItem,
   createHotspot,
   createMediaFile,
   createQuestion,
+  deleteFlashItem,
   deleteHotspot,
   deleteMediaFile,
   DIFFICULTY_LEVELS,
@@ -34,7 +36,7 @@ import {
   type QuestionDetail,
 } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
-import type { OptionData, MatchPairData } from "./editors/shared";
+import type { FlashItemData, OptionData, MatchPairData } from "./editors/shared";
 import { MCQEditor } from "./editors/MCQEditor";
 import { FITBEditor } from "./editors/FITBEditor";
 import { MatchEditor } from "./editors/MatchEditor";
@@ -122,6 +124,7 @@ export default function QuestionEditorPage() {
   const [correctCells, setCorrectCells] = useState<boolean[][]>([]);
   const [isMultipleAnswer, setIsMultipleAnswer] = useState(false);
   const [scaleLabels, setScaleLabels] = useState<string[]>([]);
+  const [flashItems, setFlashItems] = useState<FlashItemData[]>([]);
   const [hotspotAreas, setHotspotAreas] = useState<
     {
       x: number;
@@ -239,6 +242,17 @@ export default function QuestionEditorPage() {
         sub_question_index: h.sub_question_index,
       })),
     );
+    // Load flash items for flash question types (1e, 1f, 2c, 2d)
+    setFlashItems(
+      q.flash_items.map((f) => ({
+        id: f.id,
+        item_type: f.item_type as "TEXT" | "IMAGE",
+        text_value: f.text_value ?? "",
+        image_file: f.image_file ?? null,
+        order: f.order,
+        is_in_display_pool: f.is_in_display_pool,
+      })),
+    );
     setError(null);
   };
 
@@ -276,22 +290,34 @@ export default function QuestionEditorPage() {
       }[];
       gridCorrectCells?: { row: number; col: number; rowLabel: string; colLabel: string }[];
       scaleLabels?: string[];
+      flashItems?: FlashItemData[];
     }) => {
-      const { payload, opts, prs, img, aud, vid, hotspots, gridCorrectCells, scaleLabels } = params;
+      const {
+        payload,
+        opts,
+        prs,
+        img,
+        aud,
+        vid,
+        hotspots,
+        gridCorrectCells,
+        scaleLabels,
+        flashItems,
+      } = params;
 
       if (img) payload.image = img;
       const question = isEditMode
         ? await updateQuestion(questionId as number, payload)
         : await createQuestion(payload);
 
-      // In edit mode, delete existing media files and hotspots in PARALLEL
-      // (not sequentially) to reduce total wait time. This is the main
-      // performance bottleneck — each sequential API call adds latency.
+      // In edit mode, delete existing media files, hotspots, AND flash items
+      // in PARALLEL (not sequentially) to reduce total wait time.
       if (isEditMode) {
         const current = await retrieveQuestion(questionId as number);
         const deletePromises: Promise<unknown>[] = [
           ...current.media_files.map((m) => deleteMediaFile(questionId as number, m.id)),
           ...current.hotspot_areas.map((h) => deleteHotspot(questionId as number, h.id)),
+          ...current.flash_items.map((f) => deleteFlashItem(questionId as number, f.id)),
         ];
         if (deletePromises.length > 0) {
           await Promise.all(deletePromises);
@@ -393,6 +419,21 @@ export default function QuestionEditorPage() {
         await Promise.all(hotspots.map((hs) => createHotspot(question.id, hs)));
       }
 
+      // Create flash items in parallel (for flash question types 1e, 1f, 2c, 2d)
+      if (flashItems && flashItems.length > 0) {
+        await Promise.all(
+          flashItems.map((fi, i) =>
+            createFlashItem(question.id, {
+              item_type: fi.item_type,
+              text_value: fi.text_value,
+              image_file: fi.image_file,
+              order: i,
+              is_in_display_pool: fi.is_in_display_pool,
+            }),
+          ),
+        );
+      }
+
       return question;
     },
     onSuccess: (question) => {
@@ -463,6 +504,7 @@ export default function QuestionEditorPage() {
       hotspots: hotspotAreas.length > 0 ? hotspotAreas : undefined,
       gridCorrectCells: gridCorrectCells.length > 0 ? gridCorrectCells : undefined,
       scaleLabels: scaleLabels.length > 0 ? scaleLabels : undefined,
+      flashItems: flashItems.length > 0 ? flashItems : undefined,
     });
   };
 
@@ -489,6 +531,9 @@ export default function QuestionEditorPage() {
     videoUrl,
     options,
     isMultipleAnswer,
+    flashItems,
+    flashIntervalMs: flashInterval,
+    flashDisplayCount: flashCount,
   };
 
   const fitbData = {
@@ -499,6 +544,7 @@ export default function QuestionEditorPage() {
     flash_interval_ms: flashInterval,
     flash_display_count: flashCount,
     options,
+    flashItems,
   };
 
   const matchData = { question_text_1: questionText1, scoring_type: "PARTIAL", pairs };
@@ -664,6 +710,9 @@ export default function QuestionEditorPage() {
                   setVideoUrl(d.videoUrl);
                   setOptions(d.options);
                   setIsMultipleAnswer(d.isMultipleAnswer);
+                  setFlashItems(d.flashItems);
+                  setFlashInterval(d.flashIntervalMs);
+                  setFlashCount(d.flashDisplayCount);
                 }}
               />
             )}
@@ -679,6 +728,7 @@ export default function QuestionEditorPage() {
                   setFlashInterval(d.flash_interval_ms);
                   setFlashCount(d.flash_display_count);
                   setOptions(d.options);
+                  setFlashItems(d.flashItems);
                 }}
               />
             )}

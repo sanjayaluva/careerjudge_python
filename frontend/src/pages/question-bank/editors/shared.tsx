@@ -309,3 +309,29 @@ export function createEmptyMatchPair(pairId: number, order: number): MatchPairDa
     groupB: { ...createEmptyOption(order, "MATCH_B"), match_pair_id: pairId },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Flash Item — for flash question types 1e, 1f, 2c, 2d
+// ---------------------------------------------------------------------------
+
+export interface FlashItemData {
+  id?: number;
+  item_type: "TEXT" | "IMAGE";
+  text_value: string;
+  image_file: string | null;
+  order: number;
+  is_in_display_pool: boolean;
+}
+
+export function createEmptyFlashItem(
+  order: number,
+  type: "TEXT" | "IMAGE" = "TEXT",
+): FlashItemData {
+  return {
+    item_type: type,
+    text_value: "",
+    image_file: null,
+    order,
+    is_in_display_pool: true,
+  };
+}

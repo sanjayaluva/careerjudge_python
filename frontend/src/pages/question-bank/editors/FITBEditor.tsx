@@ -1,11 +1,18 @@
 /**
  * FITB Editor — for question types 2a-2d
  * Handles: single/multiple fields, correct answers (up to 5 per field),
- * fuzzy match config, flash config for 2c/2d
+ * fuzzy match config, flash items + flash config for 2c/2d
  */
 import { Input, Label } from "@/components/ui";
 import { SCORING_TYPES } from "@/api/questionBank";
-import { AddOptionButton, OptionRow, createEmptyOption, type OptionData } from "./shared";
+import {
+  AddOptionButton,
+  OptionRow,
+  createEmptyOption,
+  type FlashItemData,
+  type OptionData,
+} from "./shared";
+import { FlashItemsEditor } from "./FlashItemsEditor";
 
 interface FITBEditorProps {
   questionType: string;
@@ -17,14 +24,17 @@ interface FITBEditorProps {
     flash_interval_ms: string;
     flash_display_count: string;
     options: OptionData[];
+    flashItems: FlashItemData[];
   };
   onChange: (data: FITBEditorProps["data"]) => void;
 }
 
 export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
   const isMultiField = questionType === "FITB_MULTI_FIELD";
-  const isFlashType =
-    questionType === "FITB_WORD_FLASH_MULTI" || questionType === "FITB_IMAGE_FLASH_MULTI";
+  const isWordFlashType = questionType === "FITB_WORD_FLASH_MULTI";
+  const isImageFlashType = questionType === "FITB_IMAGE_FLASH_MULTI";
+  const isFlashType = isWordFlashType || isImageFlashType;
+  const flashItemType: "TEXT" | "IMAGE" = isImageFlashType ? "IMAGE" : "TEXT";
   const isFuzzy = data.scoring_type === "BINARY_FUZZY";
 
   const updateOption = (index: number, option: OptionData) => {
@@ -63,33 +73,22 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
         />
       </div>
 
-      {/* Flash config (types 2c, 2d) */}
+      {/* Flash items + config (types 2c, 2d) */}
       {isFlashType && (
-        <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-          <p className="text-sm font-medium text-slate-700">Flash Configuration</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="flashint">Flash interval (ms)</Label>
-              <Input
-                id="flashint"
-                type="number"
-                value={data.flash_interval_ms}
-                onChange={(e) => onChange({ ...data, flash_interval_ms: e.target.value })}
-                placeholder="e.g. 500"
-              />
-            </div>
-            <div>
-              <Label htmlFor="flashcount">Flash display count</Label>
-              <Input
-                id="flashcount"
-                type="number"
-                value={data.flash_display_count}
-                onChange={(e) => onChange({ ...data, flash_display_count: e.target.value })}
-                placeholder="e.g. 10"
-              />
-            </div>
-          </div>
-        </div>
+        <FlashItemsEditor
+          items={data.flashItems}
+          flashIntervalMs={data.flash_interval_ms}
+          flashDisplayCount={data.flash_display_count}
+          itemType={flashItemType}
+          onChange={(flashData) =>
+            onChange({
+              ...data,
+              flashItems: flashData.items,
+              flash_interval_ms: flashData.flashIntervalMs,
+              flash_display_count: flashData.flashDisplayCount,
+            })
+          }
+        />
       )}
 
       {/* Scoring config */}
