@@ -499,3 +499,51 @@ function DeleteCategoryModal({
     </Modal>
   );
 }
+
+// ---------------------------------------------------------------------------
+// CategoryManagerModal — wraps CategoryManager inside a Modal dialog.
+// Used by the "Categories" button on the QuestionBankPage header.
+// ---------------------------------------------------------------------------
+
+export function CategoryManagerModal({
+  open,
+  onClose,
+  canManage,
+  onSelectCategory,
+  selectedCategoryId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  canManage: boolean;
+  onSelectCategory?: (categoryId: number | null) => void;
+  selectedCategoryId?: number | null;
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Question Categories"
+      description="Organize questions into hierarchical categories. Click a category to filter the question list."
+      size="lg"
+    >
+      {/* Render the CategoryManager inside the modal with a bounded height */}
+      <div className="h-[60vh] overflow-hidden rounded-md border border-slate-200">
+        <CategoryManager
+          canManage={canManage}
+          onSelectCategory={(id) => {
+            onSelectCategory?.(id);
+            // Close the modal after selecting a category so the user sees
+            // the filtered question list immediately.
+            onClose();
+          }}
+          selectedCategoryId={selectedCategoryId}
+        />
+      </div>
+      <div className="mt-4 flex justify-end">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+    </Modal>
+  );
+}

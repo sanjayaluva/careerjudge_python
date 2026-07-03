@@ -48,7 +48,7 @@ class CategoryTreeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Category
-        fields = ["id", "name", "parent", "is_active", "subcategories"]
+        fields = ["id", "name", "parent", "description", "is_active", "subcategories"]
 
     def get_subcategories(self, obj):
         children = obj.subcategories.filter(is_active=True).order_by("name")
