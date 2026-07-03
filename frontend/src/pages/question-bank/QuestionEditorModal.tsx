@@ -583,195 +583,195 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
             </Alert>
           )}
 
-      <div className="space-y-4">
-        {/* Type + difficulty + cognitive level */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div>
-            <Label htmlFor="qtype" required>
-              Question type
-            </Label>
-            <select
-              id="qtype"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={questionType}
-              onChange={(e) => {
-                setQuestionType(e.target.value);
-                setOptions([]);
-                setPairs([]);
-              }}
-            >
-              {QUESTION_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="diff">Difficulty</Label>
-            <select
-              id="diff"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={difficulty}
-              onChange={(e) => setDifficulty(e.target.value)}
-            >
-              <option value="">Select...</option>
-              {DIFFICULTY_LEVELS.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="cog">Cognitive level</Label>
-            <select
-              id="cog"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={cognitiveLevel}
-              onChange={(e) => setCognitiveLevel(e.target.value)}
-            >
-              <option value="">Select...</option>
-              <option value="Recall">Recall</option>
-              <option value="Understanding">Understanding</option>
-              <option value="Application">Application</option>
-              <option value="Analysis">Analysis</option>
-              <option value="Evaluation">Evaluation</option>
-              <option value="Synthesis">Synthesis</option>
-            </select>
-          </div>
-        </div>
+          <div className="space-y-4">
+            {/* Type + difficulty + cognitive level */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div>
+                <Label htmlFor="qtype" required>
+                  Question type
+                </Label>
+                <select
+                  id="qtype"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  value={questionType}
+                  onChange={(e) => {
+                    setQuestionType(e.target.value);
+                    setOptions([]);
+                    setPairs([]);
+                  }}
+                >
+                  {QUESTION_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="diff">Difficulty</Label>
+                <select
+                  id="diff"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  value={difficulty}
+                  onChange={(e) => setDifficulty(e.target.value)}
+                >
+                  <option value="">Select...</option>
+                  {DIFFICULTY_LEVELS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="cog">Cognitive level</Label>
+                <select
+                  id="cog"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  value={cognitiveLevel}
+                  onChange={(e) => setCognitiveLevel(e.target.value)}
+                >
+                  <option value="">Select...</option>
+                  <option value="Recall">Recall</option>
+                  <option value="Understanding">Understanding</option>
+                  <option value="Application">Application</option>
+                  <option value="Analysis">Analysis</option>
+                  <option value="Evaluation">Evaluation</option>
+                  <option value="Synthesis">Synthesis</option>
+                </select>
+              </div>
+            </div>
 
-        {/* Type-specific editor */}
-        <div className="rounded-md border border-slate-200 p-4">
-          {isMCQ && (
-            <MCQEditor
-              questionType={questionType}
-              data={mcqData}
-              onChange={(d) => {
-                setQuestionText1(d.question_text_1);
-                setQuestionText2(d.question_text_2);
-                setScoringType(d.scoring_type);
-                setPassageTitle(d.passage_title);
-                setPassageBody(d.passage_body);
-                setDisplayDuration(d.display_duration_seconds);
-                setImageUrl(d.imageUrl);
-                setAudioUrl(d.audioUrl);
-                setVideoUrl(d.videoUrl);
-                setOptions(d.options);
-                setIsMultipleAnswer(d.isMultipleAnswer);
-              }}
-            />
-          )}
-          {isFITB && (
-            <FITBEditor
-              questionType={questionType}
-              data={fitbData}
-              onChange={(d) => {
-                setQuestionText1(d.question_text_1);
-                setScoringType(d.scoring_type);
-                setCaseSensitive(d.case_sensitive);
-                setPctThreshold(d.pct_match_threshold);
-                setFlashInterval(d.flash_interval_ms);
-                setFlashCount(d.flash_display_count);
-                setOptions(d.options);
-              }}
-            />
-          )}
-          {isMatch && (
-            <MatchEditor
-              data={matchData}
-              onChange={(d) => {
-                setQuestionText1(d.question_text_1);
-                setPairs(d.pairs);
-              }}
-            />
-          )}
-          {isGrid && (
-            <GridEditor
-              data={gridData}
-              onChange={(d) => {
-                setQuestionText1(d.question_text_1);
-                setGridRows(d.grid_rows);
-                setGridCols(d.grid_cols);
-                setRowLabels(d.rowLabels);
-                setColLabels(d.colLabels);
-                setCorrectCells(d.correctCells);
-              }}
-            />
-          )}
-          {isHotspot && (
-            <HotspotEditor
-              questionType={questionType}
-              data={hotspotData}
-              onChange={(d) => {
-                setQuestionText1(d.question_text_1);
-                setImageUrl(d.image_url);
-                setScoringType(d.scoring_type);
-                setHotspotAreas(d.areas);
-              }}
-            />
-          )}
-          {isRank && (
-            <RankEditor
-              data={rankData}
-              onChange={(d) => {
-                setQuestionText1(d.question_text_1);
-                setOptions(d.options);
-              }}
-            />
-          )}
-          {isRankRate && (
-            <RankRateEditor
-              data={rankRateData}
-              onChange={(d) => {
-                setQuestionText1(d.question_text_1);
-                setRatingScalePoints(d.rating_scale_points);
-                setOptions(d.options);
-              }}
-            />
-          )}
-          {isRating && (
-            <RatingEditor
-              data={ratingData}
-              onChange={(d) => {
-                setQuestionText1(d.question_text_1);
-                setRatingScalePoints(d.rating_scale_points);
-                setRatingDirection(d.rating_direction);
-                setScaleLabels(d.scaleLabels);
-              }}
-            />
-          )}
-          {isForcedChoice && (
-            <ForcedChoiceEditor
-              questionType={questionType}
-              data={forcedChoiceData}
-              onChange={(d) => {
-                setQuestionText1(d.question_text_1);
-                setRatingScalePoints(d.rating_scale_points);
-                setOptions(d.options);
-              }}
-            />
-          )}
-        </div>
+            {/* Type-specific editor */}
+            <div className="rounded-md border border-slate-200 p-4">
+              {isMCQ && (
+                <MCQEditor
+                  questionType={questionType}
+                  data={mcqData}
+                  onChange={(d) => {
+                    setQuestionText1(d.question_text_1);
+                    setQuestionText2(d.question_text_2);
+                    setScoringType(d.scoring_type);
+                    setPassageTitle(d.passage_title);
+                    setPassageBody(d.passage_body);
+                    setDisplayDuration(d.display_duration_seconds);
+                    setImageUrl(d.imageUrl);
+                    setAudioUrl(d.audioUrl);
+                    setVideoUrl(d.videoUrl);
+                    setOptions(d.options);
+                    setIsMultipleAnswer(d.isMultipleAnswer);
+                  }}
+                />
+              )}
+              {isFITB && (
+                <FITBEditor
+                  questionType={questionType}
+                  data={fitbData}
+                  onChange={(d) => {
+                    setQuestionText1(d.question_text_1);
+                    setScoringType(d.scoring_type);
+                    setCaseSensitive(d.case_sensitive);
+                    setPctThreshold(d.pct_match_threshold);
+                    setFlashInterval(d.flash_interval_ms);
+                    setFlashCount(d.flash_display_count);
+                    setOptions(d.options);
+                  }}
+                />
+              )}
+              {isMatch && (
+                <MatchEditor
+                  data={matchData}
+                  onChange={(d) => {
+                    setQuestionText1(d.question_text_1);
+                    setPairs(d.pairs);
+                  }}
+                />
+              )}
+              {isGrid && (
+                <GridEditor
+                  data={gridData}
+                  onChange={(d) => {
+                    setQuestionText1(d.question_text_1);
+                    setGridRows(d.grid_rows);
+                    setGridCols(d.grid_cols);
+                    setRowLabels(d.rowLabels);
+                    setColLabels(d.colLabels);
+                    setCorrectCells(d.correctCells);
+                  }}
+                />
+              )}
+              {isHotspot && (
+                <HotspotEditor
+                  questionType={questionType}
+                  data={hotspotData}
+                  onChange={(d) => {
+                    setQuestionText1(d.question_text_1);
+                    setImageUrl(d.image_url);
+                    setScoringType(d.scoring_type);
+                    setHotspotAreas(d.areas);
+                  }}
+                />
+              )}
+              {isRank && (
+                <RankEditor
+                  data={rankData}
+                  onChange={(d) => {
+                    setQuestionText1(d.question_text_1);
+                    setOptions(d.options);
+                  }}
+                />
+              )}
+              {isRankRate && (
+                <RankRateEditor
+                  data={rankRateData}
+                  onChange={(d) => {
+                    setQuestionText1(d.question_text_1);
+                    setRatingScalePoints(d.rating_scale_points);
+                    setOptions(d.options);
+                  }}
+                />
+              )}
+              {isRating && (
+                <RatingEditor
+                  data={ratingData}
+                  onChange={(d) => {
+                    setQuestionText1(d.question_text_1);
+                    setRatingScalePoints(d.rating_scale_points);
+                    setRatingDirection(d.rating_direction);
+                    setScaleLabels(d.scaleLabels);
+                  }}
+                />
+              )}
+              {isForcedChoice && (
+                <ForcedChoiceEditor
+                  questionType={questionType}
+                  data={forcedChoiceData}
+                  onChange={(d) => {
+                    setQuestionText1(d.question_text_1);
+                    setRatingScalePoints(d.rating_scale_points);
+                    setOptions(d.options);
+                  }}
+                />
+              )}
+            </div>
 
-        {/* Submit */}
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              resetForm();
-              onClose();
-            }}
-          >
-            Cancel
-          </Button>
-          <Button type="button" loading={mutation.isPending} onClick={handleSubmit}>
-            {isEditMode ? "Update question" : "Create question"}
-          </Button>
-        </div>
-      </div>
+            {/* Submit */}
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  resetForm();
+                  onClose();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="button" loading={mutation.isPending} onClick={handleSubmit}>
+                {isEditMode ? "Update question" : "Create question"}
+              </Button>
+            </div>
+          </div>
         </>
       )}
     </Modal>

@@ -252,11 +252,7 @@ export default function QuestionBankPage() {
                       <TableCell>
                         <div className="flex justify-end gap-1">
                           {canEditQuestion(q.status) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEditEditor(q.id)}
-                            >
+                            <Button variant="ghost" size="sm" onClick={() => openEditEditor(q.id)}>
                               Edit
                             </Button>
                           )}
