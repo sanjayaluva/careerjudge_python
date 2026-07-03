@@ -154,6 +154,8 @@ export function FlashItemsEditor({
                 ) : (
                   <MediaManager
                     label="Flash image"
+                    accept="image/*"
+                    modes={["upload", "url", "gallery"]}
                     value={item.image_file ?? ""}
                     onChange={(url) => updateItem(i, { image_file: url || null })}
                   />
