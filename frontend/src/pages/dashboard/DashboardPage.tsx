@@ -64,7 +64,7 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       {denied && (
         <Alert variant="warning">
           <AlertDescription>
@@ -111,7 +111,7 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      <div>
+      <div className="px-6 pb-6">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
           Your modules
         </h2>
