@@ -114,7 +114,7 @@ def get_or_create_default_roles() -> dict[str, Role]:
     """
     roles: dict[str, Role] = {}
     for code, label in Role.ROLE_CHOICES:
-        role, created = Role.objects.get_or_create(
+        role, _created = Role.objects.get_or_create(
             name=code,
             defaults={
                 "description": label,

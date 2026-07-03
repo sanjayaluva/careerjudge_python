@@ -66,9 +66,8 @@ def exception_handler(exc, context):
         # (field → list of ErrorDetail, or field → ErrorDetail string)
         has_list_values = any(isinstance(v, (list, tuple)) for v in data.values())
 
-        if (
-            has_list_values
-            or any(isinstance(v, str) for v in data.values() if not isinstance(v, (list, tuple)))
+        if has_list_values or (
+            any(isinstance(v, str) for v in data.values() if not isinstance(v, (list, tuple)))
             and "detail" not in data
         ):
             # Field validation errors: { "email": ["This field is required."] }
