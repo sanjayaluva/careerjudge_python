@@ -4,6 +4,7 @@
  */
 import { Input, Label } from "@/components/ui";
 import { Button } from "@/components/ui";
+import { SCORING_TYPES } from "@/api/questionBank";
 
 interface HotspotArea {
   x: number;
@@ -85,6 +86,15 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
           <option value="BINARY">Binary (single hotspot: 5a)</option>
           <option value="NEGATIVE">Negative marking (multi hotspot: 5b)</option>
         </select>
+        {(() => {
+          const selected = SCORING_TYPES.find((s) => s.value === data.scoring_type);
+          return selected?.description ? (
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              <span className="font-medium text-slate-700">How it works: </span>
+              {selected.description}
+            </p>
+          ) : null;
+        })()}
       </div>
 
       {/* Hotspot areas */}

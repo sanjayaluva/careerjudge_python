@@ -220,6 +220,15 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
             </option>
           ))}
         </select>
+        {(() => {
+          const selected = SCORING_TYPES.find((s) => s.value === data.scoring_type);
+          return selected?.description ? (
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              <span className="font-medium text-slate-700">How it works: </span>
+              {selected.description}
+            </p>
+          ) : null;
+        })()}
       </div>
 
       {/* Response Options */}

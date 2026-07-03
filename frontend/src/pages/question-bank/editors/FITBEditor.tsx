@@ -4,6 +4,7 @@
  * fuzzy match config, flash config for 2c/2d
  */
 import { Input, Label } from "@/components/ui";
+import { SCORING_TYPES } from "@/api/questionBank";
 import { AddOptionButton, OptionRow, createEmptyOption, type OptionData } from "./shared";
 
 interface FITBEditorProps {
@@ -93,7 +94,7 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
 
       {/* Scoring config */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div>
+        <div className="sm:col-span-3">
           <Label htmlFor="stype">Scoring type</Label>
           <select
             id="stype"
@@ -105,6 +106,15 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
             <option value="BINARY_FUZZY">Binary with Fuzzy Match</option>
             <option value="PARTIAL">Partial Credit (multi-field)</option>
           </select>
+          {(() => {
+            const selected = SCORING_TYPES.find((s) => s.value === data.scoring_type);
+            return selected?.description ? (
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                <span className="font-medium text-slate-700">How it works: </span>
+                {selected.description}
+              </p>
+            ) : null;
+          })()}
         </div>
         <div>
           <Label htmlFor="casesens">Case sensitive</Label>

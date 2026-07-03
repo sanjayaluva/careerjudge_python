@@ -27,7 +27,6 @@ import {
   listCategories,
   QUESTION_TYPES,
   retrieveQuestion,
-  SCORING_TYPES,
   updateQuestion,
   type QuestionDetail,
 } from "@/api/questionBank";
@@ -63,8 +62,35 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
   const [categoryId, setCategoryId] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
 
+  // Default scoring type per question type. Used when the type-specific editor
+  // doesn't expose its own scoring type selector (Match, Grid, Rank, Rating,
+  // Forced-Choice). Editors that DO have a selector (MCQ, FITB, Hotspot) will
+  // override this via their onChange callback.
+  const DEFAULT_SCORING_BY_TYPE: Record<string, string> = {
+    MCQ_TEXT_IMAGE: "BINARY",
+    MCQ_TEXT_IMAGE_IMG_OPTIONS: "BINARY",
+    MCQ_AUDIO_MULTI: "BINARY",
+    MCQ_VIDEO_MULTI: "BINARY",
+    MCQ_WORD_FLASH_MULTI: "BINARY",
+    MCQ_IMAGE_FLASH_MULTI: "BINARY",
+    MCQ_PASSAGE_DISPLAY_MULTI: "BINARY",
+    MCQ_IMAGE_DISPLAY_MULTI: "BINARY",
+    FITB_SINGLE: "BINARY",
+    FITB_MULTI_FIELD: "PARTIAL",
+    FITB_WORD_FLASH_MULTI: "PARTIAL",
+    FITB_IMAGE_FLASH_MULTI: "PARTIAL",
+    MATCH_FOLLOWING: "PARTIAL",
+    GRID_LIST_SELECTION: "PARTIAL",
+    HOTSPOT_SINGLE: "BINARY",
+    HOTSPOT_MULTI: "NEGATIVE",
+    RANK_SIMPLE: "RANK",
+    RANK_THEN_RATE: "RANK_RATE",
+    STANDARD_RATING_SCALE: "RATING",
+    FORCED_CHOICE_SINGLE_LEVEL: "FORCED_CHOICE",
+    FORCED_CHOICE_TWO_LEVEL: "FORCED_CHOICE_RATED",
+  };
+
   // Fetch categories for the category dropdown (only when modal is open).
-  // Categories are managed separately on the Question Bank page.
   const { data: categories } = useQuery({
     queryKey: ["question-bank", "categories"],
     queryFn: () => listCategories(),
@@ -613,9 +639,14 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
                   className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
                   value={questionType}
                   onChange={(e) => {
-                    setQuestionType(e.target.value);
+                    const newType = e.target.value;
+                    setQuestionType(newType);
                     setOptions([]);
                     setPairs([]);
+                    // Set the default scoring type for the new question type.
+                    // Editors with their own scoring type selector (MCQ, FITB,
+                    // Hotspot) will override this via their onChange callback.
+                    setScoringType(DEFAULT_SCORING_BY_TYPE[newType] ?? "BINARY");
                   }}
                 >
                   {QUESTION_TYPES.map((t) => (
@@ -640,9 +671,6 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-slate-500">
-                  Categories are managed on the Question Bank page.
-                </p>
               </div>
               <div>
                 <Label htmlFor="diff">Difficulty</Label>
@@ -677,35 +705,6 @@ export function QuestionEditorModal({ open, onClose, questionId }: QuestionEdito
                   <option value="Synthesis">Synthesis</option>
                 </select>
               </div>
-            </div>
-
-            {/* Scoring type — global selector with description.
-                Some type-specific editors (MCQ) also have their own scoring type
-                selector for convenience; both stay in sync via the shared
-                scoringType state. */}
-            <div className="rounded-md border border-slate-200 p-3">
-              <Label htmlFor="stype">Scoring type</Label>
-              <select
-                id="stype"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-                value={scoringType}
-                onChange={(e) => setScoringType(e.target.value)}
-              >
-                {SCORING_TYPES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-              {(() => {
-                const selected = SCORING_TYPES.find((s) => s.value === scoringType);
-                return selected?.description ? (
-                  <p className="mt-2 text-xs leading-relaxed text-slate-600">
-                    <span className="font-medium text-slate-700">How it works: </span>
-                    {selected.description}
-                  </p>
-                ) : null;
-              })()}
             </div>
 
             {/* Type-specific editor */}
