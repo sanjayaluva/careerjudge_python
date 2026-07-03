@@ -89,6 +89,9 @@ class ResponseOptionSerializer(serializers.ModelSerializer):
 
 
 class MediaFileSerializer(serializers.ModelSerializer):
+    # Allow file to be passed as a URL string (not just a file upload)
+    file = serializers.CharField()
+
     class Meta:
         model = MediaFile
         fields = ["id", "media_type", "file", "created_at"]

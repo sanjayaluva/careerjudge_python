@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Alert, AlertDescription, Button, Label, Modal } from "@/components/ui";
 import {
   bulkSaveOptions,
+  createMediaFile,
   createQuestion,
   DIFFICULTY_LEVELS,
   QUESTION_TYPES,
@@ -103,17 +104,32 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
       payload: Record<string, unknown>;
       opts: typeof options;
       prs: typeof pairs;
+      img?: string;
+      aud?: string;
+      vid?: string;
     }) => {
-      const { payload, opts, prs } = params;
-      // 1. Create the question
+      const { payload, opts, prs, img, aud, vid } = params;
+
+      // 1. Create the question (with image URL if set)
+      if (img) payload.image = img;
       const question = await createQuestion(payload);
-      // 2. If there are options, save them via bulk endpoint
+
+      // 2. Save audio/video as MediaFile records
+      if (aud) {
+        await createMediaFile(question.id, { media_type: "AUDIO", file: aud });
+      }
+      if (vid) {
+        await createMediaFile(question.id, { media_type: "VIDEO", file: vid });
+      }
+
+      // 3. If there are options, save them via bulk endpoint
       if (opts.length > 0) {
         const optionsPayload = opts.map((opt, i) => ({
           sub_question_index: opt.sub_question_index,
           option_type: opt.option_type,
           label: opt.label,
           text_value: opt.text_value,
+          image_file: opt.image_file,
           is_correct: opt.is_correct,
           match_pair_id: opt.match_pair_id,
           predefined_score: opt.predefined_score,
@@ -121,7 +137,7 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
         }));
         await bulkSaveOptions(question.id, optionsPayload);
       }
-      // 3. If there are match pairs, save those options too
+      // 4. If there are match pairs, save those options too
       if (prs.length > 0) {
         const pairOptions: Record<string, unknown>[] = [];
         prs.forEach((pair, i) => {
@@ -185,7 +201,14 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
     if (ratingScalePoints) payload.rating_scale_points = parseInt(ratingScalePoints);
     if (ratingDirection) payload.rating_direction = ratingDirection;
 
-    mutation.mutate({ payload, opts: options, prs: pairs });
+    mutation.mutate({
+      payload,
+      opts: options,
+      prs: pairs,
+      img: imageUrl || undefined,
+      aud: audioUrl || undefined,
+      vid: videoUrl || undefined,
+    });
   };
 
   // Determine which editor to render
