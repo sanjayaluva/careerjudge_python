@@ -2,18 +2,32 @@
  * Question Editor Modal — dynamic question creation/editing with type-specific editors.
  * Renders the correct editor (MCQ, FITB, Match, Grid, Hotspot, Rank, Rating, Forced-Choice)
  * based on the selected question type.
+ *
+ * Supports both CREATE and EDIT modes:
+ *   <QuestionEditorModal open={true} onClose={...} />                              // create
+ *   <QuestionEditorModal open={true} onClose={...} questionId={123} />             // edit
+ *
+ * When `questionId` is provided, the modal fetches the full question detail (including
+ * existing options, media, hotspots, flash items) and prefills the form. On submit, it
+ * PATCHes the question instead of POSTing, then re-syncs child resources (options/media/
+ * hotspots) via the same bulk endpoints used during create.
  */
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
-import { Alert, AlertDescription, Button, Label, Modal } from "@/components/ui";
+import { Alert, AlertDescription, Button, Label, Modal, Spinner } from "@/components/ui";
 import {
   bulkSaveOptions,
   createHotspot,
   createMediaFile,
   createQuestion,
+  deleteHotspot,
+  deleteMediaFile,
   DIFFICULTY_LEVELS,
   QUESTION_TYPES,
+  retrieveQuestion,
+  updateQuestion,
+  type QuestionDetail,
 } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
 import type { OptionData, MatchPairData } from "./editors/shared";
@@ -34,10 +48,13 @@ const QB_KEY = ["question-bank", "questions"];
 interface QuestionEditorModalProps {
   open: boolean;
   onClose: () => void;
+  /** When provided, the modal operates in EDIT mode for this question. */
+  questionId?: number | null;
 }
 
-export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps) {
+export function QuestionEditorModal({ open, onClose, questionId }: QuestionEditorModalProps) {
   const queryClient = useQueryClient();
+  const isEditMode = Boolean(questionId);
   const [questionType, setQuestionType] = useState("MCQ_TEXT_IMAGE");
   const [difficulty, setDifficulty] = useState("");
   const [cognitiveLevel, setCognitiveLevel] = useState("");
@@ -111,6 +128,156 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
     setError(null);
   };
 
+  // Populate the form from an existing QuestionDetail (edit mode).
+  // Maps every persisted field back into the local component state so the
+  // user sees the exact data they previously saved.
+  const populateForm = (q: QuestionDetail) => {
+    setQuestionType(q.question_type);
+    setDifficulty(q.difficulty_level ?? "");
+    setCognitiveLevel(q.cognitive_level ?? "");
+    setQuestionText1(q.question_text_1 ?? "");
+    setQuestionText2(q.question_text_2 ?? "");
+    setScoringType(q.scoring_type ?? "BINARY");
+    setPassageTitle(q.passage_title ?? "");
+    setPassageBody(q.passage_body ?? "");
+    setDisplayDuration(
+      q.display_duration_seconds != null ? String(q.display_duration_seconds) : "",
+    );
+    setCaseSensitive(Boolean(q.case_sensitive));
+    setPctThreshold(q.pct_match_threshold != null ? String(q.pct_match_threshold) : "");
+    setFlashInterval(q.flash_interval_ms != null ? String(q.flash_interval_ms) : "");
+    setFlashCount(q.flash_display_count != null ? String(q.flash_display_count) : "");
+    setGridRows(q.grid_rows != null ? String(q.grid_rows) : "3");
+    setGridCols(q.grid_cols != null ? String(q.grid_cols) : "3");
+    setRatingScalePoints(q.rating_scale_points != null ? String(q.rating_scale_points) : "5");
+    setRatingDirection(q.rating_direction ?? "FORWARD");
+    setImageUrl(q.image ?? "");
+    // Audio/video are stored as MediaFile records (media_type AUDIO/VIDEO).
+    setAudioUrl(q.media_files.find((m) => m.media_type === "AUDIO")?.file ?? "");
+    setVideoUrl(q.media_files.find((m) => m.media_type === "VIDEO")?.file ?? "");
+
+    // Restore options. The persisted options include TEXT/MATCH_A/MATCH_B/
+    // DRAG_POOL/RANK/FORCED_CHOICE — we keep TEXT and IMAGE for MCQ/FITB and
+    // rebuild match pairs from MATCH_A/MATCH_B pairs.
+    const textOptions: OptionData[] = q.options
+      .filter((o) => o.option_type === "TEXT" || o.option_type === "IMAGE")
+      .map((o) => ({
+        sub_question_index: o.sub_question_index,
+        option_type: o.option_type,
+        label: o.label ?? "",
+        text_value: o.text_value ?? "",
+        image_file: o.image_file ?? "",
+        is_correct: o.is_correct,
+        match_pair_id: o.match_pair_id,
+        predefined_score: o.predefined_score ?? 1,
+        order: o.order,
+        correct_answers: (o.correct_answers ?? []).map((ca) => ({
+          answer_text: ca.answer_text,
+          order: ca.order,
+        })),
+      }));
+    setOptions(textOptions);
+
+    // Rebuild match pairs from MATCH_A / MATCH_B option pairs (matched by match_pair_id).
+    const matchA = q.options.filter((o) => o.option_type === "MATCH_A");
+    const matchB = q.options.filter((o) => o.option_type === "MATCH_B");
+    if (matchA.length > 0 && matchB.length > 0) {
+      const rebuiltPairs: MatchPairData[] = matchA.map((a, i) => {
+        const b = matchB.find((x) => x.match_pair_id === a.match_pair_id);
+        const pairId = a.match_pair_id ?? i + 1;
+        return {
+          pairId,
+          groupA: {
+            id: a.id,
+            sub_question_index: a.sub_question_index,
+            option_type: "MATCH_A",
+            label: a.label ?? "",
+            text_value: a.text_value ?? "",
+            image_file: a.image_file ?? null,
+            is_correct: a.is_correct,
+            match_pair_id: a.match_pair_id,
+            predefined_score: a.predefined_score ?? 1,
+            order: a.order,
+            correct_answers: [],
+          },
+          groupB: {
+            id: b?.id,
+            sub_question_index: b?.sub_question_index ?? 0,
+            option_type: "MATCH_B",
+            label: b?.label ?? "",
+            text_value: b?.text_value ?? "",
+            image_file: b?.image_file ?? null,
+            is_correct: b?.is_correct ?? false,
+            match_pair_id: b?.match_pair_id ?? pairId,
+            predefined_score: b?.predefined_score ?? 1,
+            order: b?.order ?? i * 2 + 1,
+            correct_answers: [],
+          },
+        };
+      });
+      setPairs(rebuiltPairs);
+    } else {
+      setPairs([]);
+    }
+
+    setRowLabels([]);
+    setColLabels([]);
+    setCorrectCells([]);
+    setIsMultipleAnswer(textOptions.filter((o) => o.is_correct).length > 1);
+    setScaleLabels(
+      textOptions
+        .filter((o) => o.label?.startsWith("Point "))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .map((o) => o.text_value ?? ""),
+    );
+    setHotspotAreas(
+      q.hotspot_areas.map((h) => ({
+        x: h.x,
+        y: h.y,
+        width_px: h.width_px,
+        height_px: h.height_px,
+        area_size_code: h.area_size_code ?? "",
+        sub_question_index: h.sub_question_index,
+      })),
+    );
+    setError(null);
+  };
+
+  // Fetch the question detail when opening in edit mode.
+  // The query is only enabled when both `open` and `questionId` are truthy.
+  // Note: TanStack Query v5 removed `onSuccess` — we use a useEffect below
+  // to call populateForm when the data arrives.
+  const { data: existingQuestion, isFetching: isLoadingQuestion } = useQuery({
+    queryKey: ["question-bank", "question", questionId],
+    queryFn: () => retrieveQuestion(questionId as number),
+    enabled: Boolean(open && questionId),
+    staleTime: 0, // always refetch on open so we have fresh data
+  });
+
+  // When the fetched question data changes (e.g. on first load or refetch),
+  // populate the form fields. Using useEffect instead of onSuccess because
+  // TanStack Query v5 removed the onSuccess callback.
+  useEffect(() => {
+    if (existingQuestion && isEditMode) {
+      populateForm(existingQuestion);
+    }
+  }, [existingQuestion, isEditMode]);
+
+  // Reset the form when the modal closes (so the next open starts clean).
+  // For edit mode, populateForm runs via the useEffect above when data arrives.
+  useEffect(() => {
+    if (!open) {
+      // Small delay so the close animation doesn't show a half-empty form.
+      const t = setTimeout(() => resetForm(), 100);
+      return () => clearTimeout(t);
+    }
+    // When opening in CREATE mode, ensure the form is fresh.
+    // In EDIT mode, populateForm runs via the useEffect above.
+    if (open && !questionId) {
+      resetForm();
+    }
+  }, [open, questionId]);
+
   const mutation = useMutation({
     mutationFn: async (params: {
       payload: Record<string, unknown>;
@@ -132,15 +299,36 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
     }) => {
       const { payload, opts, prs, img, aud, vid, hotspots, gridCorrectCells, scaleLabels } = params;
 
-      // 1. Create the question (with image URL if set)
+      // 1a. CREATE or UPDATE the question (with image URL if set).
+      // For edit mode, PATCH the existing question; for create mode, POST a new one.
       if (img) payload.image = img;
-      const question = await createQuestion(payload);
+      const question = isEditMode
+        ? await updateQuestion(questionId as number, payload)
+        : await createQuestion(payload);
 
-      // 2. Save audio/video as MediaFile records
+      // 1b. In edit mode, also delete existing media files and hotspots before
+      // recreating them (since they don't have a bulk-sync endpoint like options).
+      // The bulkSaveOptions call below handles create/update/delete for options.
+      if (isEditMode) {
+        // Fetch current question detail to get existing media/hotspot IDs.
+        const current = await retrieveQuestion(questionId as number);
+        // Delete all existing media files (audio/video) — they'll be recreated below.
+        for (const m of current.media_files) {
+          await deleteMediaFile(questionId as number, m.id);
+        }
+        // Delete all existing hotspot areas — they'll be recreated below.
+        for (const h of current.hotspot_areas) {
+          await deleteHotspot(questionId as number, h.id);
+        }
+      }
+
+      // 2. Save audio/video as MediaFile records (create new ones)
       if (aud) await createMediaFile(question.id, { media_type: "AUDIO", file: aud });
       if (vid) await createMediaFile(question.id, { media_type: "VIDEO", file: vid });
 
-      // 3. Save options (includes correct_answers for FITB)
+      // 3. Save options (includes correct_answers for FITB).
+      // bulkSaveOptions syncs create/update/delete in one request — works for
+      // both create and edit modes.
       if (opts.length > 0) {
         const optionsPayload = opts.map((opt, i) => ({
           sub_question_index: opt.sub_question_index,
@@ -214,7 +402,7 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
         await bulkSaveOptions(question.id, ratingOptions);
       }
 
-      // 7. Save hotspot areas
+      // 7. Save hotspot areas (create new ones — old ones already deleted above if editing)
       if (hotspots && hotspots.length > 0) {
         for (const hs of hotspots) {
           await createHotspot(question.id, hs);
@@ -225,6 +413,10 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QB_KEY });
+      // Also invalidate the question detail query so a re-open shows fresh data.
+      void queryClient.invalidateQueries({
+        queryKey: ["question-bank", "question", questionId],
+      });
       resetForm();
       onClose();
     },
@@ -368,15 +560,28 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
         resetForm();
         onClose();
       }}
-      title="Question Designer"
-      description="Create a new question with full type-specific configuration."
+      title={isEditMode ? "Edit Question" : "Question Designer"}
+      description={
+        isEditMode
+          ? "Update the question configuration. Child resources (options, media, hotspots) will be re-synced."
+          : "Create a new question with full type-specific configuration."
+      }
       size="xl"
     >
-      {error && (
-        <Alert variant="error" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+      {isLoadingQuestion && isEditMode && (
+        <div className="mb-4 flex items-center justify-center py-8">
+          <Spinner size="md" />
+          <span className="ml-2 text-sm text-slate-500">Loading question…</span>
+        </div>
       )}
+
+      {!isLoadingQuestion && (
+        <>
+          {error && (
+            <Alert variant="error" className="mb-4">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
       <div className="space-y-4">
         {/* Type + difficulty + cognitive level */}
@@ -563,10 +768,12 @@ export function QuestionEditorModal({ open, onClose }: QuestionEditorModalProps)
             Cancel
           </Button>
           <Button type="button" loading={mutation.isPending} onClick={handleSubmit}>
-            Create question
+            {isEditMode ? "Update question" : "Create question"}
           </Button>
         </div>
       </div>
+        </>
+      )}
     </Modal>
   );
 }

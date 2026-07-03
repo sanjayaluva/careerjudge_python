@@ -24,6 +24,7 @@ import { retrieveQuestion, submitForReview, submitReview } from "@/api/questionB
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import type { QuestionDetail } from "@/api/questionBank";
+import { QuestionEditorModal } from "./QuestionEditorModal";
 
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning" | "primary"> = {
   draft: "default",
@@ -125,6 +126,7 @@ export default function QuestionDetailPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -161,6 +163,11 @@ export default function QuestionDetailPage() {
   }
 
   const q = question as QuestionDetail;
+  const isAdmin = user?.role === "cj_admin";
+  const canEditAnyQuestion = ["sme", "psychometrician", "cj_admin"].includes(user?.role ?? "");
+  // Edit rules: cj_admin can edit ANY question; others can edit only draft/sent_back.
+  const canEdit =
+    isAdmin || (canEditAnyQuestion && (q.status === "draft" || q.status === "sent_back"));
   const canSubmit =
     (q.status === "draft" || q.status === "sent_back") &&
     ["sme", "cj_admin"].includes(user?.role ?? "");
@@ -286,6 +293,11 @@ export default function QuestionDetailPage() {
               </dl>
 
               <div className="mt-6 flex gap-2 border-t border-slate-100 pt-4">
+                {canEdit && (
+                  <Button variant="outline" onClick={() => setEditorOpen(true)}>
+                    Edit question
+                  </Button>
+                )}
                 {canSubmit && (
                   <Button
                     loading={submitMutation.isPending}
@@ -773,6 +785,12 @@ export default function QuestionDetailPage() {
         questionId={qid}
         reviewType={canReviewPsychometric ? "psychometric" : "content"}
         canSetExposure={canReviewPsychometric}
+      />
+
+      <QuestionEditorModal
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        questionId={qid}
       />
     </div>
   );

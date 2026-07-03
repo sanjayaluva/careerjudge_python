@@ -206,15 +206,24 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
-        # Only allow editing when in draft or sent_back status
-        if not instance.can_be_edited:
+
+        # Editing rules:
+        # - cj_admin can edit ANY question regardless of status (override).
+        # - All other roles (SME, custom roles with 'change' permission) can
+        #   only edit questions in 'draft' or 'sent_back' status. Once a
+        #   question is submitted for review or confirmed/added to the
+        #   question bank, it is locked for non-admin users.
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_admin = user_role_name == "cj_admin"
+        if not is_admin and not instance.can_be_edited:
             return Response(
                 {
                     "error": {
                         "code": "forbidden",
                         "message": f"Question cannot be edited in '{instance.status}' status. "
-                        f"Only draft or sent_back questions can be edited.",
-                        "details": {},
+                        f"Only draft or sent_back questions can be edited. "
+                        f"CJ Admin can edit any question regardless of status.",
+                        "details": {"current_status": instance.status},
                     }
                 },
                 status=status.HTTP_403_FORBIDDEN,
@@ -229,14 +238,18 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        # Only allow deleting draft or sent_back questions
-        if not instance.can_be_edited:
+        # Deleting rules mirror editing: cj_admin can delete any question;
+        # other roles can only delete draft/sent_back questions.
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_admin = user_role_name == "cj_admin"
+        if not is_admin and not instance.can_be_edited:
             return Response(
                 {
                     "error": {
                         "code": "forbidden",
-                        "message": f"Question cannot be deleted in '{instance.status}' status.",
-                        "details": {},
+                        "message": f"Question cannot be deleted in '{instance.status}' status. "
+                        f"CJ Admin can delete any question regardless of status.",
+                        "details": {"current_status": instance.status},
                     }
                 },
                 status=status.HTTP_403_FORBIDDEN,

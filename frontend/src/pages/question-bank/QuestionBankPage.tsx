@@ -57,6 +57,7 @@ export default function QuestionBankPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editQuestionId, setEditQuestionId] = useState<number | null>(null);
   const [deleteQ, setDeleteQ] = useState<{ id: number; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -99,6 +100,23 @@ export default function QuestionBankPage() {
 
   const canCreate = ["sme", "psychometrician", "cj_admin"].includes(user?.role ?? "");
   const canDelete = ["sme", "cj_admin"].includes(user?.role ?? "");
+  const isAdmin = user?.role === "cj_admin";
+
+  // Can the current user edit a specific question?
+  // - cj_admin: can edit ANY question regardless of status
+  // - sme / custom roles with change permission: can edit only draft or sent_back
+  const canEditQuestion = (status: string) =>
+    isAdmin || (canCreate && (status === "draft" || status === "sent_back"));
+
+  const openCreateEditor = () => {
+    setEditQuestionId(null);
+    setEditorOpen(true);
+  };
+
+  const openEditEditor = (id: number) => {
+    setEditQuestionId(id);
+    setEditorOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -113,7 +131,7 @@ export default function QuestionBankPage() {
                   : "Manage assessment questions"}
               </CardDescription>
             </div>
-            {canCreate && <Button onClick={() => setEditorOpen(true)}>Create question</Button>}
+            {canCreate && <Button onClick={openCreateEditor}>Create question</Button>}
           </div>
         </CardHeader>
         <CardContent>
@@ -233,6 +251,15 @@ export default function QuestionBankPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
+                          {canEditQuestion(q.status) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditEditor(q.id)}
+                            >
+                              Edit
+                            </Button>
+                          )}
                           {(q.status === "draft" || q.status === "sent_back") && canCreate && (
                             <Button
                               variant="ghost"
@@ -243,7 +270,7 @@ export default function QuestionBankPage() {
                               Submit
                             </Button>
                           )}
-                          {(q.status === "draft" || q.status === "sent_back") && canDelete && (
+                          {canEditQuestion(q.status) && canDelete && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -288,7 +315,11 @@ export default function QuestionBankPage() {
         </CardContent>
       </Card>
 
-      <QuestionEditorModal open={editorOpen} onClose={() => setEditorOpen(false)} />
+      <QuestionEditorModal
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        questionId={editQuestionId}
+      />
       <DeleteQuestionModal
         question={deleteQ}
         loading={deleteMutation.isPending}
