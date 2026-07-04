@@ -331,6 +331,52 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
           Preview
         </p>
         <div className="space-y-2">
+          {/* Flash items (shown first at delivery time) */}
+          {isFlashType && data.flashItems.length > 0 && (
+            <div className="rounded border border-amber-300 bg-amber-50 p-2">
+              <p className="mb-1 text-xs font-medium text-amber-700">
+                Flash items ({data.flashIntervalMs || "?"}ms each · {data.flashDisplayCount || "?"}{" "}
+                shown)
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {data.flashItems.map((item, i) => (
+                  <div
+                    key={i}
+                    className="flex h-12 w-12 items-center justify-center rounded border border-slate-300 bg-white p-0.5"
+                  >
+                    {item.item_type === "IMAGE" && item.image_file ? (
+                      <img
+                        src={item.image_file}
+                        alt={`Flash ${i + 1}`}
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-center text-[10px] font-medium text-slate-700">
+                        {item.text_value || `(${i + 1})`}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Passage (shown first at delivery time) */}
+          {isPassageType && (data.passage_title || data.passage_body) && (
+            <div className="rounded border border-blue-300 bg-blue-50 p-2">
+              <p className="mb-1 text-xs font-medium text-blue-700">
+                Passage
+                {data.display_duration_seconds && ` · ${data.display_duration_seconds}s display`}
+              </p>
+              {data.passage_title && (
+                <p className="text-sm font-semibold text-slate-900">{data.passage_title}</p>
+              )}
+              {data.passage_body && (
+                <p className="mt-0.5 text-xs text-slate-700">{data.passage_body}</p>
+              )}
+            </div>
+          )}
+
           {data.imageUrl && <img src={data.imageUrl} alt="Question" className="max-h-32 rounded" />}
           {data.question_text_1 && (
             <p className="text-sm font-medium text-slate-900">{data.question_text_1}</p>
