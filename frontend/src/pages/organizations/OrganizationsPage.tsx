@@ -6,7 +6,6 @@ import {
   AlertDescription,
   Badge,
   Button,
-  Card,
   CardContent,
   CardDescription,
   CardHeader,
@@ -22,6 +21,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  PageCard,
 } from "@/components/ui";
 import {
   createOrganization,
@@ -88,7 +88,7 @@ export default function OrganizationsPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-l-0 border-r-0 border-t-0">
+      <PageCard>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -223,7 +223,7 @@ export default function OrganizationsPage() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </PageCard>
 
       <CreateOrganizationModal open={createOpen} onClose={() => setCreateOpen(false)} />
       <DeleteOrganizationModal

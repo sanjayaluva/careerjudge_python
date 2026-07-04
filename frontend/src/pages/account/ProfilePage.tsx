@@ -8,7 +8,6 @@ import {
   AlertDescription,
   Badge,
   Button,
-  Card,
   CardContent,
   CardDescription,
   CardHeader,
@@ -20,6 +19,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  PageCard,
 } from "@/components/ui";
 import { updateMe } from "@/api/me";
 import { extractApiError } from "@/api/client";
@@ -354,7 +354,7 @@ export default function ProfilePage() {
   const allProfileFields = [...COMMON_FIELDS, ...roleFields];
 
   return (
-    <Card className="border-l-0 border-r-0 border-t-0">
+    <PageCard>
       {/* Account overview section */}
       <CardHeader>
         <CardTitle>Account overview</CardTitle>
@@ -521,6 +521,6 @@ export default function ProfilePage() {
           </TabsContent>
         </Tabs>
       </CardContent>
-    </Card>
+    </PageCard>
   );
 }

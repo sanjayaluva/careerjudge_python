@@ -23,6 +23,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  PageCard,
 } from "@/components/ui";
 import {
   MODULE_DESCRIPTIONS,
@@ -74,7 +75,7 @@ export default function DashboardPage() {
         </Alert>
       )}
 
-      <Card className="border-l-0 border-r-0 border-t-0">
+      <PageCard>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -109,7 +110,7 @@ export default function DashboardPage() {
             based on your role. More detailed dashboards will be available in Phase 2.
           </p>
         </CardContent>
-      </Card>
+      </PageCard>
 
       <div className="px-6 pb-6">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">

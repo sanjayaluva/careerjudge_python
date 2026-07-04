@@ -11,6 +11,7 @@ import {
   CardTitle,
   Input,
   Label,
+  PageCard,
 } from "@/components/ui";
 import { changePassword } from "@/api/me";
 import { extractApiError } from "@/api/client";
@@ -61,7 +62,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-l-0 border-r-0 border-t-0">
+      <PageCard>
         <CardHeader>
           <CardTitle>Change password</CardTitle>
           <CardDescription>Update the password used to sign in.</CardDescription>
@@ -128,7 +129,7 @@ export default function SettingsPage() {
             </div>
           </form>
         </CardContent>
-      </Card>
+      </PageCard>
 
       <Card>
         <CardHeader>

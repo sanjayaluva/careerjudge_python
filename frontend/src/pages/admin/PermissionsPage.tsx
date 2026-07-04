@@ -1,10 +1,17 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge } from "@/components/ui";
+import {
+  Badge,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  PageCard,
+} from "@/components/ui";
 import { PERMISSION_CATALOG } from "@/api/roles";
 
 export default function PermissionsPage() {
   return (
     <div className="space-y-6">
-      <Card className="border-l-0 border-r-0 border-t-0">
+      <PageCard>
         <CardHeader>
           <CardTitle>Permissions catalog</CardTitle>
           <CardDescription>
@@ -35,7 +42,7 @@ export default function PermissionsPage() {
             ))}
           </div>
         </CardContent>
-      </Card>
+      </PageCard>
     </div>
   );
 }

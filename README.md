@@ -24,7 +24,7 @@ careerjudge_python/
 ├── frontend/       # React SPA
 ├── infra/          # Caddy, docker-compose, deploy scripts
 ├── specs/          # Frozen client requirement JSONs (read-only)
-├── docs/           # Architecture, ADRs, module freeze log
+├── docs/           # All project documentation (module specs, guides, plans)
 └── .github/        # CI/CD workflows
 ```
 
@@ -32,18 +32,18 @@ careerjudge_python/
 
 ## Modules
 
-The system is organized into 10 cohesive domain modules (spec-aligned). See [`PLAN.md`](./PLAN.md) and [`MODULE_FREEZE.md`](./MODULE_FREEZE.md) for the freeze policy.
+The system is organized into 10 cohesive domain modules (spec-aligned). See [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) for current status and [docs/MODULE_FREEZE.md](docs/MODULE_FREEZE.md) for the freeze policy.
 
-1. **accounts** — auth, users, roles, permissions, profile, demo seeding (Phase 1)
-2. **organizations** — corporate/group/channel-partner management (Phase 2)
-3. **question_bank** — 21 question types, tests, sections, media (Phase 2)
-4. **assessment** — sessions, attempts, 8 scoring modes (Phase 2)
-5. **career_profiling** — profiling config + match index + gap values + variables (Phase 3)
-6. **reporting** — general + profiling reports + PDF generation (Phase 3)
-7. **training** — training setup, assignments (Phase 4)
-8. **counseling** — counseling sessions (Phase 4)
-9. **cms** — content management (Phase 4)
-10. **notifications** — mail, content generator, content delivery (cross-cutting)
+1. **accounts** — auth, users, roles, permissions, profile, demo seeding ✅ Frozen v1.1.0
+2. **organizations** — corporate/group/channel-partner management ✅ Frozen v1.0.0
+3. **question_bank** — 21 question types, 9 scoring modes, 3-stage review workflow 🔧 Active
+4. **assessment** — sessions, attempts, 8 scoring modes 📋 Planned
+5. **career_profiling** — profiling config + match index + gap values + variables 📋 Planned
+6. **reporting** — general + profiling reports + PDF generation 📋 Planned
+7. **training** — training setup, assignments 📋 Planned
+8. **counseling** — counseling sessions 📋 Planned
+9. **cms** — content management 📋 Planned
+10. **notifications** — mail, content generator, content delivery 📋 Planned
 
 ## Quick Start
 
@@ -75,29 +75,42 @@ cp .env.example .env
 docker compose -f infra/docker/docker-compose.dev.yml up --build
 ```
 
+### Demo credentials
+
+After `seed_demo`, login with any of these (password: `Demo@1234`):
+- `cj.admin@demo.careerjudge.pp.ua` — CareerJudge Admin
+- `sme@demo.careerjudge.pp.ua` — SME (can create/edit questions)
+- `reviewer@demo.careerjudge.pp.ua` — Reviewer (can review questions)
+- `psychometrician@demo.careerjudge.pp.ua` — Psychometrician (can confirm questions)
+
 ## Git Discipline
 
 - **Branch model**: `main` (protected) ← `develop` (integration) ← `feature/<module>-<scope>`
 - **Commits**: [Conventional Commits](https://www.conventionalcommits.org/) — `feat(accounts): add JWT login endpoint`
-- **Module freeze**: see [`MODULE_FREEZE.md`](./MODULE_FREEZE.md). Frozen modules accept additive changes only.
+- **Module freeze**: see [docs/MODULE_FREEZE.md](docs/MODULE_FREEZE.md). Frozen modules accept additive changes only.
 - **PR rules**: CI must be green (lint + tests + coverage ≥ 80% on touched modules + security scans).
 
 ## CI/CD
 
-- Push to `main` → auto-deploy to **dev** (GCP)
+- Push to `main` → auto-deploy to **dev** (GCP) at https://careerjudge.pp.ua
 - Tag `v*.*.*` → auto-deploy to **prod** (OCI) after CI passes
 - Both via SSH + `docker compose pull && up -d`
 
 ## Documentation
 
-- [`PLAN.md`](./PLAN.md) — architecture, module map, phases
-- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — git rules, commit conventions, testing standards
-- [`MODULE_FREEZE.md`](./MODULE_FREEZE.md) — frozen module log and additive-only policy
-- [`specs/`](./specs/) — frozen client requirement specs (do not modify)
+All documentation lives in the [`docs/`](docs/) folder. Key documents:
+
+- [docs/README.md](docs/README.md) — Documentation index
+- [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) — Current development status and next priorities
+- [docs/ARCHITECTURE_PLAN.md](docs/ARCHITECTURE_PLAN.md) — Architecture and phased development plan
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — Git rules, commit conventions, testing standards
+- [docs/MODULE_FREEZE.md](docs/MODULE_FREEZE.md) — Frozen module log and additive-only policy
+- [docs/modules/](docs/modules/) — Per-module documentation (accounts, organizations, question_bank)
+- [specs/](specs/) — Frozen client requirement specs (do not modify)
 
 ## Security Notes
 
 - All secrets via environment variables or GCP/OCI secret managers — never committed.
-- JWT for API auth, httpOnly cookies for session tokens in browser.
+- JWT for API auth (60-min access, 30-day refresh, proactive refresh before expiry).
 - CORS allowlist, CSRF protection, rate-limiting on auth endpoints.
 - `bandit`, `pip-audit`, `npm audit` run on every CI build.
