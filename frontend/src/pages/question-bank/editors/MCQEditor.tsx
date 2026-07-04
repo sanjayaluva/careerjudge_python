@@ -25,6 +25,7 @@ interface MCQEditorProps {
     flashItems: FlashItemData[];
     flashIntervalMs: string;
     flashDisplayCount: string;
+    flashOrder: string;
   };
   onChange: (data: MCQEditorProps["data"]) => void;
 }
@@ -188,6 +189,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
           items={data.flashItems}
           flashIntervalMs={data.flashIntervalMs}
           flashDisplayCount={data.flashDisplayCount}
+          flashOrder={data.flashOrder}
           itemType={flashItemType}
           onChange={(flashData) =>
             onChange({
@@ -195,6 +197,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
               flashItems: flashData.items,
               flashIntervalMs: flashData.flashIntervalMs,
               flashDisplayCount: flashData.flashDisplayCount,
+              flashOrder: flashData.flashOrder,
             })
           }
         />

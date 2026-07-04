@@ -25,6 +25,7 @@ import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import type { QuestionDetail } from "@/api/questionBank";
 import { FlashPresentation } from "./FlashPresentation";
+import { PassagePresentation } from "./PassagePresentation";
 
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning" | "primary"> = {
   draft: "default",
@@ -613,7 +614,60 @@ export default function QuestionDetailPage() {
                 {q.question_id_label && (
                   <p className="mb-2 text-xs font-medium text-slate-400">{q.question_id_label}</p>
                 )}
-                {q.passage_title && (
+                {/* Passage type (1g) — 2-step: passage displays first, then question */}
+                {q.question_type === "MCQ_PASSAGE_DISPLAY_MULTI" && q.passage_title && (
+                  <PassagePresentation
+                    passageTitle={q.passage_title}
+                    passageBody={q.passage_body}
+                    displayDurationSeconds={q.display_duration_seconds}
+                  >
+                    <p className="mb-4 text-base font-medium text-slate-900">{q.question_text_1}</p>
+                    {q.question_text_2 && (
+                      <p className="mb-4 text-sm text-slate-600">{q.question_text_2}</p>
+                    )}
+                    {/* Options for passage MCQ */}
+                    {hasOptions && (
+                      <div className="space-y-2">
+                        {q.options.filter((o) => o.is_correct).length > 1
+                          ? q.options.map((opt) => (
+                              <label
+                                key={opt.id}
+                                className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                              >
+                                <input type="checkbox" disabled className="h-4 w-4" />
+                                {opt.image_file && (
+                                  <img src={opt.image_file} alt="" className="h-8 w-8 rounded" />
+                                )}
+                                {opt.text_value && (
+                                  <span className="text-slate-700">{opt.text_value}</span>
+                                )}
+                              </label>
+                            ))
+                          : q.options.map((opt) => (
+                              <label
+                                key={opt.id}
+                                className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                              >
+                                <input
+                                  type="radio"
+                                  name="preview-passage-mcq"
+                                  disabled
+                                  className="h-4 w-4"
+                                />
+                                {opt.image_file && (
+                                  <img src={opt.image_file} alt="" className="h-8 w-8 rounded" />
+                                )}
+                                {opt.text_value && (
+                                  <span className="text-slate-700">{opt.text_value}</span>
+                                )}
+                              </label>
+                            ))}
+                      </div>
+                    )}
+                  </PassagePresentation>
+                )}
+                {/* Non-passage, non-flash: static preview (passage info shown as text if present) */}
+                {q.question_type !== "MCQ_PASSAGE_DISPLAY_MULTI" && q.passage_title && (
                   <div className="mb-4 rounded-md bg-slate-50 p-4">
                     <p className="font-semibold text-slate-900">{q.passage_title}</p>
                     {q.passage_body && (
@@ -648,6 +702,7 @@ export default function QuestionDetailPage() {
                     flashItems={q.flash_items}
                     flashIntervalMs={q.flash_interval_ms}
                     flashDisplayCount={q.flash_display_count}
+                    flashOrder={q.flash_order}
                   >
                     <p className="mb-4 text-base font-medium text-slate-900">{q.question_text_1}</p>
                     {q.question_text_2 && (

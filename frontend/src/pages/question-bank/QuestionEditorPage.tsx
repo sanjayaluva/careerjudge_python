@@ -110,6 +110,7 @@ export default function QuestionEditorPage() {
   const [pctThreshold, setPctThreshold] = useState("");
   const [flashInterval, setFlashInterval] = useState("");
   const [flashCount, setFlashCount] = useState("");
+  const [flashOrder, setFlashOrder] = useState("SEQUENCE");
   const [gridRows, setGridRows] = useState("3");
   const [gridCols, setGridCols] = useState("3");
   const [ratingScalePoints, setRatingScalePoints] = useState("5");
@@ -154,6 +155,7 @@ export default function QuestionEditorPage() {
     setPctThreshold(q.pct_match_threshold != null ? String(q.pct_match_threshold) : "");
     setFlashInterval(q.flash_interval_ms != null ? String(q.flash_interval_ms) : "");
     setFlashCount(q.flash_display_count != null ? String(q.flash_display_count) : "");
+    setFlashOrder(q.flash_order ?? "SEQUENCE");
     setGridRows(q.grid_rows != null ? String(q.grid_rows) : "3");
     setGridCols(q.grid_cols != null ? String(q.grid_cols) : "3");
     setRatingScalePoints(q.rating_scale_points != null ? String(q.rating_scale_points) : "5");
@@ -473,6 +475,7 @@ export default function QuestionEditorPage() {
     if (pctThreshold) payload.pct_match_threshold = parseFloat(pctThreshold);
     if (flashInterval) payload.flash_interval_ms = parseInt(flashInterval);
     if (flashCount) payload.flash_display_count = parseInt(flashCount);
+    if (flashOrder) payload.flash_order = flashOrder;
     if (gridRows) payload.grid_rows = parseInt(gridRows);
     if (gridCols) payload.grid_cols = parseInt(gridCols);
     if (ratingScalePoints) payload.rating_scale_points = parseInt(ratingScalePoints);
@@ -534,6 +537,7 @@ export default function QuestionEditorPage() {
     flashItems,
     flashIntervalMs: flashInterval,
     flashDisplayCount: flashCount,
+    flashOrder,
   };
 
   const fitbData = {
@@ -543,6 +547,7 @@ export default function QuestionEditorPage() {
     pct_match_threshold: pctThreshold,
     flash_interval_ms: flashInterval,
     flash_display_count: flashCount,
+    flash_order: flashOrder,
     options,
     flashItems,
   };
@@ -713,6 +718,7 @@ export default function QuestionEditorPage() {
                   setFlashItems(d.flashItems);
                   setFlashInterval(d.flashIntervalMs);
                   setFlashCount(d.flashDisplayCount);
+                  setFlashOrder(d.flashOrder);
                 }}
               />
             )}
@@ -727,6 +733,7 @@ export default function QuestionEditorPage() {
                   setPctThreshold(d.pct_match_threshold);
                   setFlashInterval(d.flash_interval_ms);
                   setFlashCount(d.flash_display_count);
+                  setFlashOrder(d.flash_order);
                   setOptions(d.options);
                   setFlashItems(d.flashItems);
                 }}

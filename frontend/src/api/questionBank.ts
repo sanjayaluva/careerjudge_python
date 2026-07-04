@@ -65,6 +65,7 @@ export interface QuestionDetail extends QuestionListItem {
   display_duration_seconds: number | null;
   flash_interval_ms: number | null;
   flash_display_count: number | null;
+  flash_order: string;
   grid_rows: number | null;
   grid_cols: number | null;
   rating_scale_points: number | null;

@@ -189,6 +189,13 @@ class Question(models.Model):
     flash_display_count = models.PositiveIntegerField(
         _("flash display count"), null=True, blank=True
     )
+    flash_order = models.CharField(
+        _("flash order"),
+        max_length=10,
+        choices=[("SEQUENCE", "Sequence (as entered)"), ("RANDOM", "Random (shuffled)")],
+        default="SEQUENCE",
+        help_text="For flash types 1e/1f/2c/2d — order in which flash items are presented",
+    )
     grid_rows = models.PositiveIntegerField(
         _("grid rows"), null=True, blank=True, help_text="For type 4"
     )

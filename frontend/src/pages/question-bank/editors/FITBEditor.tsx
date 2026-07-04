@@ -23,6 +23,7 @@ interface FITBEditorProps {
     pct_match_threshold: string;
     flash_interval_ms: string;
     flash_display_count: string;
+    flash_order: string;
     options: OptionData[];
     flashItems: FlashItemData[];
   };
@@ -79,6 +80,7 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
           items={data.flashItems}
           flashIntervalMs={data.flash_interval_ms}
           flashDisplayCount={data.flash_display_count}
+          flashOrder={data.flash_order}
           itemType={flashItemType}
           onChange={(flashData) =>
             onChange({
@@ -86,6 +88,7 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
               flashItems: flashData.items,
               flash_interval_ms: flashData.flashIntervalMs,
               flash_display_count: flashData.flashDisplayCount,
+              flash_order: flashData.flashOrder,
             })
           }
         />

@@ -31,28 +31,45 @@ interface FlashPresentationProps {
   flashItems: FlashItem[];
   flashIntervalMs: number | null;
   flashDisplayCount: number | null;
+  flashOrder?: string;
   /** The question content to show after flashing completes */
   children: React.ReactNode;
 }
 
 type Phase = "idle" | "flashing" | "question";
 
+/** Fisher-Yates shuffle for randomizing flash items. */
+function shuffle<T>(array: T[]): T[] {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 export function FlashPresentation({
   flashItems,
   flashIntervalMs,
   flashDisplayCount,
+  flashOrder = "SEQUENCE",
   children,
 }: FlashPresentationProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [shuffledItems, setShuffledItems] = useState<FlashItem[]>([]);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Determine which items to show (respect flashDisplayCount if set)
   const pool = flashItems.filter((fi) => fi.is_in_display_pool !== false);
-  const itemsToShow =
+  const baseItems =
     flashDisplayCount && flashDisplayCount > 0
       ? pool.slice(0, Math.min(flashDisplayCount, pool.length))
       : pool;
+
+  // Use shuffled items if RANDOM, otherwise use baseItems
+  const itemsToShow =
+    flashOrder === "RANDOM" && shuffledItems.length > 0 ? shuffledItems : baseItems;
 
   const interval = flashIntervalMs && flashIntervalMs > 0 ? flashIntervalMs : 800;
 
@@ -65,9 +82,15 @@ export function FlashPresentation({
 
   const start = useCallback(() => {
     stop();
+    // Shuffle items if flash_order is RANDOM
+    if (flashOrder === "RANDOM") {
+      setShuffledItems(shuffle(baseItems));
+    } else {
+      setShuffledItems([]);
+    }
     setCurrentIndex(0);
     setPhase("flashing");
-  }, [stop]);
+  }, [stop, flashOrder, baseItems]);
 
   const skip = useCallback(() => {
     stop();

@@ -28,10 +28,12 @@ interface FlashItemsEditorProps {
   flashIntervalMs: string;
   flashDisplayCount: string;
   itemType: "TEXT" | "IMAGE";
+  flashOrder: string;
   onChange: (data: {
     items: FlashItemData[];
     flashIntervalMs: string;
     flashDisplayCount: string;
+    flashOrder: string;
   }) => void;
 }
 
@@ -39,6 +41,7 @@ export function FlashItemsEditor({
   items,
   flashIntervalMs,
   flashDisplayCount,
+  flashOrder,
   itemType,
   onChange,
 }: FlashItemsEditorProps) {
@@ -48,13 +51,14 @@ export function FlashItemsEditor({
       items: [...items, newItem],
       flashIntervalMs,
       flashDisplayCount,
+      flashOrder,
     });
   };
 
   const updateItem = (index: number, updates: Partial<FlashItemData>) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], ...updates };
-    onChange({ items: newItems, flashIntervalMs, flashDisplayCount });
+    onChange({ items: newItems, flashIntervalMs, flashDisplayCount, flashOrder });
   };
 
   const removeItem = (index: number) => {
@@ -62,6 +66,7 @@ export function FlashItemsEditor({
       items: items.filter((_, i) => i !== index),
       flashIntervalMs,
       flashDisplayCount,
+      flashOrder,
     });
   };
 
@@ -85,7 +90,7 @@ export function FlashItemsEditor({
       </div>
 
       {/* Flash timing settings */}
-      <div className="grid grid-cols-2 gap-3 rounded-md border border-slate-200 bg-white p-3">
+      <div className="grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-3">
         <div>
           <Label htmlFor="flashint">Flash interval (ms)</Label>
           <Input
@@ -93,13 +98,16 @@ export function FlashItemsEditor({
             type="number"
             value={flashIntervalMs}
             onChange={(e) =>
-              onChange({ items, flashIntervalMs: e.target.value, flashDisplayCount })
+              onChange({
+                items,
+                flashIntervalMs: e.target.value,
+                flashDisplayCount,
+                flashOrder,
+              })
             }
             placeholder="e.g. 500"
           />
-          <p className="mt-1 text-xs text-slate-500">
-            How long each item is displayed (in milliseconds).
-          </p>
+          <p className="mt-1 text-xs text-slate-500">How long each item is displayed.</p>
         </div>
         <div>
           <Label htmlFor="flashcount">Flash display count</Label>
@@ -108,13 +116,36 @@ export function FlashItemsEditor({
             type="number"
             value={flashDisplayCount}
             onChange={(e) =>
-              onChange({ items, flashIntervalMs, flashDisplayCount: e.target.value })
+              onChange({
+                items,
+                flashIntervalMs,
+                flashDisplayCount: e.target.value,
+                flashOrder,
+              })
             }
             placeholder="e.g. 10"
           />
-          <p className="mt-1 text-xs text-slate-500">
-            How many items are randomly selected and flashed.
-          </p>
+          <p className="mt-1 text-xs text-slate-500">How many items are flashed.</p>
+        </div>
+        <div>
+          <Label htmlFor="flashorder">Flash order</Label>
+          <select
+            id="flashorder"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={flashOrder}
+            onChange={(e) =>
+              onChange({
+                items,
+                flashIntervalMs,
+                flashDisplayCount,
+                flashOrder: e.target.value,
+              })
+            }
+          >
+            <option value="SEQUENCE">Sequence (as entered)</option>
+            <option value="RANDOM">Random (shuffled)</option>
+          </select>
+          <p className="mt-1 text-xs text-slate-500">Order in which items are presented.</p>
         </div>
       </div>
 
