@@ -626,26 +626,6 @@ export default function QuestionEditorPage() {
             </Alert>
           )}
 
-          {/* Question title — mandatory, shown at the very top */}
-          <div className="rounded-lg border border-slate-200 bg-white p-5">
-            <Label htmlFor="qtitle" required>
-              Question title
-            </Label>
-            <input
-              id="qtitle"
-              type="text"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={questionTitle}
-              onChange={(e) => setQuestionTitle(e.target.value)}
-              placeholder="Short title to identify this question (e.g. 'Capital Cities - Easy MCQ')"
-              maxLength={255}
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              This title identifies the question in lists and previews. It is not shown to
-              candidates.
-            </p>
-          </div>
-
           {/* Top form row: type + category + difficulty + cognitive level */}
           <div className="rounded-lg border border-slate-200 bg-white p-5">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -722,6 +702,26 @@ export default function QuestionEditorPage() {
                 </select>
               </div>
             </div>
+          </div>
+
+          {/* Question title — mandatory, just before the question text editor */}
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <Label htmlFor="qtitle" required>
+              Question title
+            </Label>
+            <input
+              id="qtitle"
+              type="text"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              value={questionTitle}
+              onChange={(e) => setQuestionTitle(e.target.value)}
+              placeholder="Short title to identify this question (e.g. 'Capital Cities - Easy MCQ')"
+              maxLength={255}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              This title identifies the question in lists and previews. It is not shown to
+              candidates.
+            </p>
           </div>
 
           {/* Type-specific editor */}
