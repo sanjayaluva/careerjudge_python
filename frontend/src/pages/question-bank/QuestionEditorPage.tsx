@@ -809,39 +809,6 @@ export default function QuestionEditorPage() {
             )}
           </div>
 
-          {/* Flash items preview — shown only for flash question types (1e, 1f, 2c, 2d) */}
-          {flashItems.length > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-5">
-              <h3 className="mb-3 text-sm font-semibold text-slate-900">
-                Flash Items Preview ({flashItems.length} items)
-              </h3>
-              <p className="mb-3 text-xs text-slate-600">
-                These items will flash before the candidate for {flashInterval || "?"} ms each.{" "}
-                {flashCount || "?"} of them will be randomly selected and shown.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {flashItems.map((item, i) => (
-                  <div
-                    key={i}
-                    className="flex h-20 w-20 items-center justify-center rounded border border-slate-300 bg-white p-1"
-                  >
-                    {item.item_type === "IMAGE" && item.image_file ? (
-                      <img
-                        src={item.image_file}
-                        alt={`Flash ${i + 1}`}
-                        className="max-h-full max-w-full object-contain"
-                      />
-                    ) : (
-                      <span className="text-center text-xs font-medium text-slate-700">
-                        {item.text_value || `(empty ${i + 1})`}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Submit bar — sticky at bottom for easy access */}
           <div className="sticky bottom-0 flex justify-end gap-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <Button

@@ -24,6 +24,7 @@ import { retrieveQuestion, submitForReview, submitReview } from "@/api/questionB
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import type { QuestionDetail } from "@/api/questionBank";
+import { FlashPresentation } from "./FlashPresentation";
 
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning" | "primary"> = {
   draft: "default",
@@ -638,211 +639,279 @@ export default function QuestionDetailPage() {
                   </div>
                 ))}
                 {q.flash_items.length > 0 && (
-                  <div className="mb-4">
-                    <p className="mb-2 text-xs text-slate-500">
-                      Flash items ({q.flash_display_count || q.flash_items.length} shown at{" "}
-                      {q.flash_interval_ms || "?"}ms intervals):
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {q.flash_items
-                        .filter((fi) => fi.is_in_display_pool)
-                        .map((fi) => (
-                          <div
-                            key={fi.id}
-                            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm"
-                          >
-                            {fi.item_type === "TEXT"
-                              ? fi.text_value
-                              : fi.image_file && (
-                                  <img src={fi.image_file} alt="" className="h-8 w-8" />
-                                )}
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-                <p className="mb-4 text-base font-medium text-slate-900">{q.question_text_1}</p>
-                {q.question_text_2 && (
-                  <p className="mb-4 text-sm text-slate-600">{q.question_text_2}</p>
-                )}
-
-                {/* Options rendered by type */}
-                {hasOptions && (
-                  <div className="space-y-2">
-                    {/* MCQ: radio or checkbox */}
-                    {q.question_type.startsWith("MCQ_") && (
-                      <>
-                        {q.options.filter((o) => o.is_correct).length > 1
-                          ? q.options.map((opt) => (
-                              <label
-                                key={opt.id}
-                                className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
-                              >
-                                <input type="checkbox" disabled className="h-4 w-4" />
-                                {opt.image_file && (
-                                  <img src={opt.image_file} alt="" className="h-8 w-8 rounded" />
-                                )}
-                                {opt.text_value && (
-                                  <span className="text-slate-700">{opt.text_value}</span>
-                                )}
-                              </label>
-                            ))
-                          : q.options.map((opt) => (
-                              <label
-                                key={opt.id}
-                                className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
-                              >
-                                <input
-                                  type="radio"
-                                  name="preview-mcq"
-                                  disabled
-                                  className="h-4 w-4"
-                                />
-                                {opt.image_file && (
-                                  <img src={opt.image_file} alt="" className="h-8 w-8 rounded" />
-                                )}
-                                {opt.text_value && (
-                                  <span className="text-slate-700">{opt.text_value}</span>
-                                )}
-                              </label>
-                            ))}
-                      </>
+                  <FlashPresentation
+                    flashItems={q.flash_items}
+                    flashIntervalMs={q.flash_interval_ms}
+                    flashDisplayCount={q.flash_display_count}
+                  >
+                    <p className="mb-4 text-base font-medium text-slate-900">{q.question_text_1}</p>
+                    {q.question_text_2 && (
+                      <p className="mb-4 text-sm text-slate-600">{q.question_text_2}</p>
                     )}
-                    {/* FITB: text inputs */}
-                    {q.question_type.startsWith("FITB_") &&
-                      q.options.map((opt, i) => (
-                        <div key={opt.id} className="flex items-center gap-2 text-sm">
-                          <span className="text-slate-600">Field {i + 1}:</span>
-                          <input
-                            type="text"
-                            disabled
-                            placeholder="Type answer..."
-                            className="flex-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm"
-                          />
-                        </div>
-                      ))}
-                    {/* Match: two columns */}
-                    {q.question_type === "MATCH_FOLLOWING" && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="mb-1 text-xs font-medium text-slate-500">Group A</p>
-                          {q.options
-                            .filter((o) => o.option_type === "MATCH_A")
-                            .map((opt) => (
-                              <div
-                                key={opt.id}
-                                className="mb-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm"
-                              >
-                                {opt.text_value}
-                              </div>
-                            ))}
-                        </div>
-                        <div>
-                          <p className="mb-1 text-xs font-medium text-slate-500">
-                            Group B (shuffled)
-                          </p>
-                          {q.options
-                            .filter((o) => o.option_type === "MATCH_B")
-                            .map((opt) => (
-                              <div
-                                key={opt.id}
-                                className="mb-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm"
-                              >
-                                {opt.text_value}
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                    {/* Grid: table */}
-                    {q.question_type === "GRID_LIST_SELECTION" && (
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {[...Array(q.grid_rows || 3)].map((_, r) => (
-                            <tr key={r}>
-                              <td className="border border-slate-200 p-2 font-medium text-slate-600">
-                                Row {r + 1}
-                              </td>
-                              {[...Array(q.grid_cols || 3)].map((_, c) => (
-                                <td key={c} className="border border-slate-200 p-2 text-center">
-                                  <input type="checkbox" disabled className="h-4 w-4" />
-                                </td>
-                              ))}
-                            </tr>
+                    {/* Options rendered by type */}
+                    {hasOptions && (
+                      <div className="space-y-2">
+                        {/* MCQ: radio or checkbox */}
+                        {q.question_type.startsWith("MCQ_") && (
+                          <>
+                            {q.options.filter((o) => o.is_correct).length > 1
+                              ? q.options.map((opt) => (
+                                  <label
+                                    key={opt.id}
+                                    className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                                  >
+                                    <input type="checkbox" disabled className="h-4 w-4" />
+                                    {opt.image_file && (
+                                      <img
+                                        src={opt.image_file}
+                                        alt=""
+                                        className="h-8 w-8 rounded"
+                                      />
+                                    )}
+                                    {opt.text_value && (
+                                      <span className="text-slate-700">{opt.text_value}</span>
+                                    )}
+                                  </label>
+                                ))
+                              : q.options.map((opt) => (
+                                  <label
+                                    key={opt.id}
+                                    className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                                  >
+                                    <input
+                                      type="radio"
+                                      name="preview-mcq"
+                                      disabled
+                                      className="h-4 w-4"
+                                    />
+                                    {opt.image_file && (
+                                      <img
+                                        src={opt.image_file}
+                                        alt=""
+                                        className="h-8 w-8 rounded"
+                                      />
+                                    )}
+                                    {opt.text_value && (
+                                      <span className="text-slate-700">{opt.text_value}</span>
+                                    )}
+                                  </label>
+                                ))}
+                          </>
+                        )}
+                        {/* FITB: text inputs */}
+                        {q.question_type.startsWith("FITB_") &&
+                          q.options.map((opt, i) => (
+                            <div key={opt.id} className="flex items-center gap-2 text-sm">
+                              <span className="text-slate-600">Field {i + 1}:</span>
+                              <input
+                                type="text"
+                                disabled
+                                placeholder="Type answer..."
+                                className="flex-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+                              />
+                            </div>
                           ))}
-                        </tbody>
-                      </table>
-                    )}
-                    {/* Hotspot: image with zones */}
-                    {q.question_type.startsWith("HOTSPOT_") && q.image && (
-                      <div className="relative inline-block">
-                        <img
-                          src={q.image}
-                          alt="Hotspot"
-                          className="max-w-md rounded border border-slate-300"
-                        />
-                        {q.hotspot_areas.map((ha, i) => (
-                          <div
-                            key={ha.id}
-                            className="absolute border-2 border-success-500/50 bg-success-500/10"
-                            style={{
-                              left: `${ha.x}px`,
-                              top: `${ha.y}px`,
-                              width: `${ha.width_px}px`,
-                              height: `${ha.height_px}px`,
-                            }}
-                          >
-                            <span className="absolute -top-5 left-0 text-xs text-success-600">
-                              Zone {i + 1}
-                            </span>
-                          </div>
-                        ))}
                       </div>
                     )}
-                    {/* Rank: dropdowns */}
-                    {q.question_type === "RANK_SIMPLE" &&
-                      q.options.map((opt, i) => (
-                        <div key={opt.id} className="flex items-center gap-2 text-sm">
-                          <select disabled className="h-8 rounded border border-slate-200 text-xs">
-                            <option>Rank {i + 1}</option>
-                          </select>
-                          <span className="text-slate-700">{opt.text_value}</span>
-                        </div>
-                      ))}
-                    {/* Rating: scale circles */}
-                    {q.question_type === "STANDARD_RATING_SCALE" && (
-                      <div className="flex items-center gap-3">
-                        {[...Array(q.rating_scale_points || 5)].map((_, p) => (
-                          <button
-                            key={p}
-                            type="button"
-                            disabled
-                            className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-300 text-xs text-slate-500"
-                          >
-                            {p + 1}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {/* Forced Choice: radios */}
-                    {q.question_type.startsWith("FORCED_CHOICE_") &&
-                      q.options.map((opt) => (
-                        <label key={opt.id} className="flex items-center gap-2 text-sm">
-                          <input type="radio" name="preview-fc" disabled className="h-4 w-4" />
-                          <span className="text-slate-700">{opt.text_value}</span>
-                          <span className="ml-auto text-xs text-slate-400">
-                            score: {opt.predefined_score}
-                          </span>
-                        </label>
-                      ))}
-                  </div>
+                  </FlashPresentation>
                 )}
+                {q.flash_items.length === 0 && (
+                  <>
+                    <p className="mb-4 text-base font-medium text-slate-900">{q.question_text_1}</p>
+                    {q.question_text_2 && (
+                      <p className="mb-4 text-sm text-slate-600">{q.question_text_2}</p>
+                    )}
 
-                {/* Empty state when no options */}
-                {!hasOptions && !hasMedia && (
-                  <p className="py-4 text-center text-sm text-slate-400">
-                    No options or media attached. Create options via the question editor.
-                  </p>
+                    {/* Options rendered by type */}
+                    {hasOptions && (
+                      <div className="space-y-2">
+                        {/* MCQ: radio or checkbox */}
+                        {q.question_type.startsWith("MCQ_") && (
+                          <>
+                            {q.options.filter((o) => o.is_correct).length > 1
+                              ? q.options.map((opt) => (
+                                  <label
+                                    key={opt.id}
+                                    className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                                  >
+                                    <input type="checkbox" disabled className="h-4 w-4" />
+                                    {opt.image_file && (
+                                      <img
+                                        src={opt.image_file}
+                                        alt=""
+                                        className="h-8 w-8 rounded"
+                                      />
+                                    )}
+                                    {opt.text_value && (
+                                      <span className="text-slate-700">{opt.text_value}</span>
+                                    )}
+                                  </label>
+                                ))
+                              : q.options.map((opt) => (
+                                  <label
+                                    key={opt.id}
+                                    className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                                  >
+                                    <input
+                                      type="radio"
+                                      name="preview-mcq"
+                                      disabled
+                                      className="h-4 w-4"
+                                    />
+                                    {opt.image_file && (
+                                      <img
+                                        src={opt.image_file}
+                                        alt=""
+                                        className="h-8 w-8 rounded"
+                                      />
+                                    )}
+                                    {opt.text_value && (
+                                      <span className="text-slate-700">{opt.text_value}</span>
+                                    )}
+                                  </label>
+                                ))}
+                          </>
+                        )}
+                        {/* FITB: text inputs */}
+                        {q.question_type.startsWith("FITB_") &&
+                          q.options.map((opt, i) => (
+                            <div key={opt.id} className="flex items-center gap-2 text-sm">
+                              <span className="text-slate-600">Field {i + 1}:</span>
+                              <input
+                                type="text"
+                                disabled
+                                placeholder="Type answer..."
+                                className="flex-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+                              />
+                            </div>
+                          ))}
+                        {/* Match: two columns */}
+                        {q.question_type === "MATCH_FOLLOWING" && (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="mb-1 text-xs font-medium text-slate-500">Group A</p>
+                              {q.options
+                                .filter((o) => o.option_type === "MATCH_A")
+                                .map((opt) => (
+                                  <div
+                                    key={opt.id}
+                                    className="mb-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+                                  >
+                                    {opt.text_value}
+                                  </div>
+                                ))}
+                            </div>
+                            <div>
+                              <p className="mb-1 text-xs font-medium text-slate-500">
+                                Group B (shuffled)
+                              </p>
+                              {q.options
+                                .filter((o) => o.option_type === "MATCH_B")
+                                .map((opt) => (
+                                  <div
+                                    key={opt.id}
+                                    className="mb-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+                                  >
+                                    {opt.text_value}
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* Grid: table */}
+                        {q.question_type === "GRID_LIST_SELECTION" && (
+                          <table className="w-full text-sm">
+                            <tbody>
+                              {[...Array(q.grid_rows || 3)].map((_, r) => (
+                                <tr key={r}>
+                                  <td className="border border-slate-200 p-2 font-medium text-slate-600">
+                                    Row {r + 1}
+                                  </td>
+                                  {[...Array(q.grid_cols || 3)].map((_, c) => (
+                                    <td key={c} className="border border-slate-200 p-2 text-center">
+                                      <input type="checkbox" disabled className="h-4 w-4" />
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                        {/* Hotspot: image with zones */}
+                        {q.question_type.startsWith("HOTSPOT_") && q.image && (
+                          <div className="relative inline-block">
+                            <img
+                              src={q.image}
+                              alt="Hotspot"
+                              className="max-w-md rounded border border-slate-300"
+                            />
+                            {q.hotspot_areas.map((ha, i) => (
+                              <div
+                                key={ha.id}
+                                className="absolute border-2 border-success-500/50 bg-success-500/10"
+                                style={{
+                                  left: `${ha.x}px`,
+                                  top: `${ha.y}px`,
+                                  width: `${ha.width_px}px`,
+                                  height: `${ha.height_px}px`,
+                                }}
+                              >
+                                <span className="absolute -top-5 left-0 text-xs text-success-600">
+                                  Zone {i + 1}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Rank: dropdowns */}
+                        {q.question_type === "RANK_SIMPLE" &&
+                          q.options.map((opt, i) => (
+                            <div key={opt.id} className="flex items-center gap-2 text-sm">
+                              <select
+                                disabled
+                                className="h-8 rounded border border-slate-200 text-xs"
+                              >
+                                <option>Rank {i + 1}</option>
+                              </select>
+                              <span className="text-slate-700">{opt.text_value}</span>
+                            </div>
+                          ))}
+                        {/* Rating: scale circles */}
+                        {q.question_type === "STANDARD_RATING_SCALE" && (
+                          <div className="flex items-center gap-3">
+                            {[...Array(q.rating_scale_points || 5)].map((_, p) => (
+                              <button
+                                key={p}
+                                type="button"
+                                disabled
+                                className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-300 text-xs text-slate-500"
+                              >
+                                {p + 1}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {/* Forced Choice: radios */}
+                        {q.question_type.startsWith("FORCED_CHOICE_") &&
+                          q.options.map((opt) => (
+                            <label key={opt.id} className="flex items-center gap-2 text-sm">
+                              <input type="radio" name="preview-fc" disabled className="h-4 w-4" />
+                              <span className="text-slate-700">{opt.text_value}</span>
+                              <span className="ml-auto text-xs text-slate-400">
+                                score: {opt.predefined_score}
+                              </span>
+                            </label>
+                          ))}
+                      </div>
+                    )}
+
+                    {/* Empty state when no options */}
+                    {!hasOptions && !hasMedia && (
+                      <p className="py-4 text-center text-sm text-slate-400">
+                        No options or media attached. Create options via the question editor.
+                      </p>
+                    )}
+                  </>
                 )}
 
                 <div className="mt-6 border-t border-slate-100 pt-3 text-xs text-slate-400">
