@@ -1,12 +1,54 @@
-# Question Bank Module — v1.0.0 (Active development)
+# Question Bank Module — v1.0.0 (Active development, not yet frozen)
 
 > **Version**: v1.0.0 (pre-freeze)
 > **Phase**: 2 (in progress)
 > **Test coverage**: 53 tests
+> **Frozen**: No — will freeze at v1.0.0 after assessment module validates the question contract
 
 ## Overview
 
 The question bank module is the core content authoring system. It supports 21 question types, 9 scoring modes, a 3-stage review workflow (SME → Reviewer → Psychometrician), and full media management (images, audio, video, flash items, hotspot areas).
+
+## Version History
+
+### v1.0.0-pre (2026-07-04) — Active development
+
+**Core features:**
+- 21 question types with type-specific editors (MCQ 8 variants, FITB 4 variants, Match, Grid, Hotspot 2 variants, Rank 2 variants, Rating, Forced-Choice 2 variants)
+- 9 scoring modes with in-editor descriptions (BINARY, BINARY_FUZZY, PARTIAL, NEGATIVE, RANK, RANK_RATE, RATING, FORCED_CHOICE, FORCED_CHOICE_RATED)
+- 3-stage review workflow: draft → pending_content_review → content_reviewed → pending_psychometric_review → confirmed
+- Send back / reject actions with reviewer comments (visible in Reviews tab)
+- Category management: hierarchical tree, CRUD, filter questions by category
+- Full-page question editor (create + edit) with type-specific sub-editors
+- cj_admin override: can edit/delete any question regardless of status
+
+**Media management:**
+- MediaManager component with 3 modes: upload (base64), URL, gallery (previously uploaded)
+- Images/audio/video stored as base64 data URLs or external URLs in TextField columns
+- No file storage infrastructure needed — simplifies deployment
+- FlashItemsEditor: add/edit/delete text + image flash items with timing settings (interval ms, display count)
+- HotspotArea editor: pixel-defined click zones for hotspot questions
+
+**Frontend pages:**
+- QuestionBankPage: full-width list with filters (search, type, status, mine, category), pagination, edit/delete/submit actions
+- QuestionDetailPage: 5 tabs (Details, Options, Media, Reviews, Preview) with candidate preview by question type
+- QuestionEditorPage: full-page editor (replaces modal) with type-specific sub-editors + flash items preview
+- CategoryManager: collapsible tree + CRUD, embedded via modal on QuestionBankPage
+
+**Performance optimizations:**
+- Bulk options save: single API call syncs create+update+delete in one request, wrapped in transaction.atomic()
+- Parallel API calls: media/hotspot/flash item deletes and creates use Promise.all
+- Combined 4 separate bulkSaveOptions calls into 1 (regular options + match pairs + grid cells + rating labels)
+- Caddy reverse_proxy timeouts: 120s for large base64 payloads
+- Axios timeout: 120s (matches Caddy)
+
+**Bug fixes applied:**
+- ImageField → TextField migration: base64 data URLs rejected by DRF ImageField (4 migrations total)
+- None → empty string normalization in serializers: prevents IntegrityError on null image_file
+- Bulk options kept_ids tracking: newly-created options were immediately deleted (fixed)
+- CategoryTreeSerializer: added description field (was missing, broke edit modal)
+- Option type labels: show TEXT/IMAGE/TEXT & IMAGE based on content (not always TEXT)
+- Preview placeholders removed: no "(option 1)" text for empty options
 
 ## Public API
 

@@ -160,13 +160,6 @@ export function FlashItemsEditor({
                     onChange={(url) => updateItem(i, { image_file: url || null })}
                   />
                 )}
-                {item.image_file && itemType === "IMAGE" && (
-                  <img
-                    src={item.image_file}
-                    alt={`Flash item ${i + 1}`}
-                    className="max-h-24 rounded border border-slate-200"
-                  />
-                )}
               </div>
               <button
                 type="button"

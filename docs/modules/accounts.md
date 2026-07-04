@@ -1,13 +1,36 @@
-# Accounts Module — v1.0.0 (Frozen)
+# Accounts Module — v1.1.0 (Frozen)
 
-> **Frozen since**: 2026-07-01
-> **Version**: v1.0.0
+> **Frozen since**: 2026-07-01 (v1.0.0), additive updates v1.1.0 (2026-07-03)
+> **Version**: v1.1.0
 > **Phase**: 1 (complete)
-> **Test coverage**: 89 tests, 81%
+> **Test coverage**: 83 tests, 84% coverage
 
 ## Overview
 
 The accounts module handles user authentication, authorization (RBAC), profile management, and role/permission administration. It is the foundation module — all other modules depend on it for user identity and access control.
+
+## Version History
+
+### v1.1.0 (2026-07-03) — Additive updates (still frozen-safe)
+
+- **Channel Partner role**: Added `channel_partner` as the 11th system role per admin spec section 2.1. Includes `channel_partner_agreement_id` and `contract_period` profile fields.
+- **Scoped individual user deletion**: `cj_admin` can delete any individual user; org admins can delete individuals within their org only; others get 403. Prevents accidental cross-org deletion.
+- **Bulk user upload**: CSV upload endpoint (`POST /api/accounts/users/bulk-upload/`) + template download (`GET /api/accounts/users/bulk-upload/template/`). Skips comment rows, handles duplicates gracefully.
+- **Role-specific profile fields**: Per SRS pages 8-22 — individual (occupation, education), professional (PAN, bank details), channel_partner (agreement ID, contract period).
+- **JWT session improvements**: Access token TTL increased to 60 min (was 15 min). Refresh token TTL 30 days. Proactive refresh before expiry (frontend axios interceptor refreshes 5 min before expiry).
+- **SME/Reviewer role split**: Split the combined `sme_reviewer` role into distinct `sme` and `reviewer` roles per client clarification. SME creates/edits/deletes own questions; Reviewer reviews/approves/rejects.
+- **Demo seeding**: 11 demo users (one per role) + 1 superuser, all with password `Demo@1234`.
+
+### v1.0.0 (2026-07-01) — Initial freeze
+
+- Custom email-based User model with JWT auth (SimpleJWT)
+- 10 system roles + custom roles with base_role inheritance
+- Module-level RBAC (Role × Module × Action permissions)
+- Email verification + password reset flows
+- User CRUD with role assignment
+- Role CRUD (system roles frozen, custom roles editable)
+- Permission assignment/removal
+- Demo data seeding (`seed_demo` management command)
 
 ## Public API (contractually stable)
 
