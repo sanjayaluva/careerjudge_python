@@ -50,7 +50,7 @@ def sme_client(db, sme_user):
 def question(sme_user):
     return Question.objects.create(
         question_type="MCQ_TEXT_IMAGE",
-        question_text_1="Bulk options test",
+        question_title="Bulk Options Test", question_text_1="Bulk options test",
         scoring_type="BINARY",
         created_by=sme_user,
     )
@@ -110,7 +110,7 @@ def test_bulk_options_accepts_string_image_file(sme_client, sme_user):
     """Bulk options save must also accept image_file as a base64 data URL string."""
     question = Question.objects.create(
         question_type="MCQ_TEXT_IMAGE_IMG_OPTIONS",
-        question_text_1="Image option test",
+        question_title="Image Option Test", question_text_1="Image option test",
         scoring_type="BINARY",
         created_by=sme_user,
     )

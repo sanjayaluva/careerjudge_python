@@ -31,7 +31,7 @@ def test_question_create_accepts_base64_data_url_image():
     )
     payload = {
         "question_type": "MCQ_TEXT_IMAGE",
-        "question_text_1": "What is 2 + 2?",
+        "question_title": "Math 2+2", "question_text_1": "What is 2 + 2?",
         "scoring_type": "BINARY",
         "difficulty_level": "Easy",
         "image": data_url,
@@ -54,7 +54,7 @@ def test_question_create_accepts_external_url_image():
     external_url = "https://example.com/images/question-1.png"
     payload = {
         "question_type": "MCQ_TEXT_IMAGE",
-        "question_text_1": "What is 3 + 3?",
+        "question_title": "Math 3+3", "question_text_1": "What is 3 + 3?",
         "scoring_type": "BINARY",
         "image": external_url,
     }
@@ -73,7 +73,7 @@ def test_question_create_accepts_no_image():
     sme = UserFactory()
     payload = {
         "question_type": "MCQ_TEXT_IMAGE",
-        "question_text_1": "What is 4 + 4?",
+        "question_title": "Math 4+4", "question_text_1": "What is 4 + 4?",
         "scoring_type": "BINARY",
     }
     factory = APIRequestFactory()
