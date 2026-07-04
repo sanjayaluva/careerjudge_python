@@ -77,60 +77,6 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
 
   return (
     <div className="space-y-4">
-      {/* Flash items preview — shown above question text for flash types (1e, 1f).
-          At delivery time, flash items display FIRST, then the question appears. */}
-      {isFlashType && data.flashItems.length > 0 && (
-        <div className="rounded-md border border-amber-200 bg-amber-50/50 p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
-            Flash Items (displayed first, then question)
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {data.flashItems.map((item, i) => (
-              <div
-                key={i}
-                className="flex h-16 w-16 items-center justify-center rounded border border-slate-300 bg-white p-1"
-              >
-                {item.item_type === "IMAGE" && item.image_file ? (
-                  <img
-                    src={item.image_file}
-                    alt={`Flash ${i + 1}`}
-                    className="max-h-full max-w-full object-contain"
-                  />
-                ) : (
-                  <span className="text-center text-xs font-medium text-slate-700">
-                    {item.text_value || `(empty ${i + 1})`}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            {data.flashItems.length} items · {data.flashIntervalMs || "?"} ms each ·{" "}
-            {data.flashDisplayCount || "?"} shown
-          </p>
-        </div>
-      )}
-
-      {/* Passage preview — shown above question text for passage type (1g).
-          At delivery time, the passage displays first (for display_duration_seconds),
-          then the question appears. */}
-      {isPassageType && (data.passage_title || data.passage_body) && (
-        <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-700">
-            Passage (displayed first, then question)
-            {data.display_duration_seconds && (
-              <span className="ml-2 font-normal text-slate-500">
-                · {data.display_duration_seconds}s display
-              </span>
-            )}
-          </p>
-          {data.passage_title && (
-            <p className="font-semibold text-slate-900">{data.passage_title}</p>
-          )}
-          {data.passage_body && <p className="mt-1 text-sm text-slate-700">{data.passage_body}</p>}
-        </div>
-      )}
-
       {/* Question text */}
       <div>
         <Label htmlFor="qtext1" required>

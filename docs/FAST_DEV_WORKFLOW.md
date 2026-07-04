@@ -1,155 +1,114 @@
-# Fast Dev Workflow — Skip Docker Rebuilds
+# Development Workflow — z.ai Sandbox + GCP + Vercel
 
-> **Problem**: Every code change requires a full Docker image rebuild + container restart via GitHub Actions deploy, which takes 2-3 minutes. This is too slow for iterative development.
+> **Constraint**: Development happens in the z.ai agent sandbox environment. There is no local dev server — all testing must be done online via the domain (careerjudge.pp.ua).
 
-> **Solution**: Use volume mounts + hot-reload dev servers so code changes are reflected instantly without rebuilding Docker images.
+## Architecture
 
-## Option 1: Local Development (Fastest — No Docker)
-
-Run the backend and frontend directly on your local machine (no Docker, no GCP).
-
-### Backend (Django runserver with auto-reload)
-
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env  # edit DATABASE_URL to point to Neon dev DB
-python manage.py migrate
-python manage.py runserver 0.0.0.0:8000
+```
+z.ai sandbox (code changes)
+       ↓ git push to main
+       ↓
+GitHub Actions CI/CD
+       ↓ SSH to GCP
+       ↓
+GCP Compute Engine (backend Docker container)
+       ← Caddy reverse proxy →
+Vercel (frontend CDN, builds from main branch)
+       ↓
+https://careerjudge.pp.ua (online testing)
 ```
 
-Django's dev server **auto-reloads** on any Python file change — no restart needed. Changes are reflected in <1 second.
+- **Backend**: GCP Compute Engine (Django + gunicorn in Docker)
+- **Frontend**: Vercel (React SPA, auto-builds on push to main)
+- **Domain**: careerjudge.pp.ua (Caddy reverse proxy with auto-TLS)
 
-### Frontend (Vite dev server with HMR)
+## Deployment Speed
 
-```bash
-cd frontend
-npm install
-npm run dev  # starts Vite dev server at http://localhost:5173
-```
+### Current: Docker Rebuild with Layer Caching (~30s for code-only changes)
 
-Vite provides **Hot Module Replacement (HMR)** — React components update instantly in the browser without losing state. Changes are reflected in <500ms.
-
-### Connect frontend to local backend
-
-In `frontend/.env`, set:
-```
-VITE_API_BASE_URL=http://localhost:8000/api
-```
-
-Or use the Vite proxy (already configured in `vite.config.ts`):
-```
-VITE_API_BASE_URL=/api  # proxies to localhost:8000
-```
-
-**This is the fastest workflow — use this for all iterative development.**
-
----
-
-## Option 2: GCP Dev Server with Volume Mounts (Fast — No Rebuild)
-
-If you need to test on the actual GCP dev server (careerjudge.pp.ua), use a volume-mount docker-compose that skips image rebuilds.
-
-### Create a fast dev compose file
-
-Already created: `infra/docker/docker-compose.dev-fast.yml`
-
-This compose file:
-- Mounts the `backend/` and `frontend/` directories as volumes (code changes are live)
-- Uses `python manage.py runserver` instead of gunicorn (auto-reload)
-- Uses `npm run dev` (Vite HMR) instead of nginx serving static build
-- No image rebuild needed — just restart the container
-
-### Usage on GCP server
-
-```bash
-# SSH into GCP server
-ssh user@35.207.59.232
-
-# Pull latest code
-cd /opt/careerjudge
-git pull origin main
-
-# Start fast dev mode (no rebuild!)
-docker compose -f infra/docker/docker-compose.dev-fast.yml up -d
-
-# Code changes are now live — just `git pull` to update
-# Backend auto-reloads on Python file changes
-# Frontend Vite HMR updates on React/CSS changes
-```
-
-### To update code on GCP:
-
-```bash
-# Just pull — no rebuild needed!
-git pull origin main
-
-# Backend auto-reloads (runserver watches for file changes)
-# Frontend Vite HMR picks up changes automatically
-```
-
----
-
-## Option 3: Docker Rebuild with Layer Caching (Slower but production-like)
-
-The current CI/CD pipeline uses this. Only use when you need to test the actual production Docker image.
-
-### Speed up rebuilds with layer caching
-
-The Dockerfile is already optimized:
-1. `requirements.txt` is copied and installed FIRST (before code)
+The Dockerfile is optimized with layer caching:
+1. `requirements.txt` is copied and installed FIRST (cached layer)
 2. Code is copied AFTER pip install
-3. So if only code changes (not requirements), the pip install layer is cached
+3. If only code changes (not requirements), the pip install layer is reused
 
+**Code-only change**: ~30s rebuild + ~30s deploy = **~1 minute total**
+**Requirements.txt change**: ~2-3 min (full pip reinstall)
+
+This is fast enough for iterative development. The GitHub Actions CI/CD pipeline:
+1. Push to `main` → GitHub Actions triggers
+2. SSH to GCP server
+3. `git pull` + `docker compose build` (cached layers) + `docker compose up -d`
+4. Health check
+
+### When to Do a Full/Complete Rebuild
+
+A full rebuild (no layer caching) is only needed:
+- When `requirements.txt` changes (new Python packages)
+- When the Dockerfile itself changes
+- At project finalization (handing over to client)
+- When changing deployment target (different domain, different server)
+
+For project finalization / client handover:
 ```bash
-# Only requirements.txt changes trigger a full rebuild
-# Code-only changes reuse the cached pip layer → fast rebuild (~30s)
-docker compose -f infra/docker/docker-compose.dev.yml up -d --build backend
+# Full clean rebuild (no cache)
+docker compose -f infra/docker/docker-compose.dev.yml build --no-cache
+docker compose -f infra/docker/docker-compose.dev.yml up -d
 ```
 
-### GitHub Actions CI/CD (current approach)
+This takes 5-10 minutes but only needs to be done once at delivery time.
 
-- Push to `main` → GitHub Actions SSH deploys to GCP
-- Rebuilds Docker image + restarts containers
-- Takes 2-3 minutes total
+## Development Cycle
 
-**Use this only for final testing before merging — not for iterative development.**
+### For each feature/fix:
 
----
+1. **Make code changes** in the z.ai sandbox
+2. **Commit + push** to main
+3. **Wait ~1 minute** for GitHub Actions to deploy
+4. **Test online** at https://careerjudge.pp.ua
+5. **Iterate** — repeat steps 1-4
 
-## Recommended Workflow
+### Tips to minimize deploy wait time:
 
-| Stage | Tool | Speed |
+- **Batch related changes** — push multiple files in one commit instead of many small commits
+- **Use feature branches** — push to a branch, test locally in the sandbox (typecheck/lint/tests), merge to main only when ready to deploy
+- **Run `npm run typecheck` + `npm run lint` + `npm test`** in the sandbox BEFORE pushing — catches errors without waiting for deploy
+- **The ~30s rebuild is cached** — if you push 5 times in 10 minutes, each deploy is still ~30s (not cumulative)
+
+## Vercel Frontend Auto-Deploy
+
+The frontend is deployed separately on Vercel:
+- Vercel auto-builds the frontend on every push to `main`
+- Build takes ~1-2 minutes
+- Vercel serves the built SPA via CDN
+- Caddy proxies `/*` to Vercel (browser stays on careerjudge.pp.ua)
+
+So after pushing:
+- **Backend changes**: ~1 minute (GCP Docker rebuild)
+- **Frontend changes**: ~1-2 minutes (Vercel build)
+- **Both**: ~2 minutes total (parallel)
+
+## Production Deployment (Future)
+
+When ready for production (client handover):
+
+1. **Tag a release**: `git tag v1.0.0 && git push origin v1.0.0`
+2. **GitHub Actions CD-prod workflow** triggers:
+   - SSH to OCI Ampere A1 (production server)
+   - Full Docker rebuild (no cache)
+   - Database backup
+   - Migration
+   - Health check
+3. **Client can test** on the production domain
+4. **If client wants different domain/server**: update DNS + Caddy config + redeploy
+
+## Summary
+
+| Scenario | Rebuild Type | Time |
 |---|---|---|
-| Iterative development (backend) | Local `manage.py runserver` | <1s reload |
-| Iterative development (frontend) | Local `npm run dev` (Vite HMR) | <500ms reload |
-| Test on GCP dev server | `docker-compose.dev-fast.yml` (volume mounts) | Instant (git pull) |
-| Pre-merge / production test | GitHub Actions CI/CD (full rebuild) | 2-3 min |
+| Code-only change (backend) | Cached layer rebuild | ~30s |
+| Code-only change (frontend) | Vercel build | ~1-2 min |
+| requirements.txt change | Full pip reinstall | ~2-3 min |
+| Project finalization | Full clean rebuild | ~5-10 min |
+| Production deploy (tag) | Full rebuild + backup | ~10-15 min |
 
-## Tips for Faster Development
-
-1. **Use local dev for 90% of development** — Django runserver + Vite HMR is 100x faster than Docker rebuilds
-2. **Use Neon dev DB** — the same Neon Postgres is accessible from both local and GCP
-3. **Only push to main when ready for integration testing** — not for every small change
-4. **Use feature branches** — push to a branch, test locally, merge to main when stable
-5. **The GCP dev server is for testing the deployed state** — not for iterative development
-
-## Frontend Vite Proxy Setup
-
-The frontend's `vite.config.ts` should have a proxy for `/api` to the backend:
-
-```typescript
-export default defineConfig({
-  server: {
-    proxy: {
-      "/api": {
-        target: "http://localhost:8000",
-        changeOrigin: true,
-      },
-    },
-  },
-});
-```
-
-This lets you use `VITE_API_BASE_URL=/api` locally without CORS issues.
+**The cached ~30s rebuild is the normal development cycle. Full rebuilds are only for final delivery or infrastructure changes.**
