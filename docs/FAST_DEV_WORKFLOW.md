@@ -22,57 +22,77 @@ https://careerjudge.pp.ua (online testing)
 - **Frontend**: Vercel (React SPA, auto-builds on push to main)
 - **Domain**: careerjudge.pp.ua (Caddy reverse proxy with auto-TLS)
 
-## Deployment Speed
+## Option 2: GCP Dev with Volume Mounts (RECOMMENDED — fastest)
 
-### Current: Docker Rebuild with Layer Caching (~30s for code-only changes)
+Instead of rebuilding the Docker image on every code change, use **volume mounts** so code changes are live instantly after `git pull` — no rebuild needed.
 
-The Dockerfile is optimized with layer caching:
-1. `requirements.txt` is copied and installed FIRST (cached layer)
-2. Code is copied AFTER pip install
-3. If only code changes (not requirements), the pip install layer is reused
+### How it works
 
-**Code-only change**: ~30s rebuild + ~30s deploy = **~1 minute total**
-**Requirements.txt change**: ~2-3 min (full pip reinstall)
+- The `backend/` directory is mounted as a Docker volume → code changes are reflected immediately
+- Django's `runserver` (instead of gunicorn) watches for file changes and auto-reloads in <2 seconds
+- The `frontend/src` directory is mounted as a volume → Vite HMR picks up changes instantly
+- Caddy proxies to the Vite dev server (port 5173) instead of nginx
 
-This is fast enough for iterative development. The GitHub Actions CI/CD pipeline:
-1. Push to `main` → GitHub Actions triggers
-2. SSH to GCP server
-3. `git pull` + `docker compose build` (cached layers) + `docker compose up -d`
-4. Health check
+### Setup (one-time on GCP server)
 
-### When to Do a Full/Complete Rebuild
-
-A full rebuild (no layer caching) is only needed:
-- When `requirements.txt` changes (new Python packages)
-- When the Dockerfile itself changes
-- At project finalization (handing over to client)
-- When changing deployment target (different domain, different server)
-
-For project finalization / client handover:
 ```bash
-# Full clean rebuild (no cache)
-docker compose -f infra/docker/docker-compose.dev.yml build --no-cache
-docker compose -f infra/docker/docker-compose.dev.yml up -d
+# SSH into GCP server
+ssh user@35.207.59.232
+
+# Stop the current (rebuild-based) containers
+cd /opt/careerjudge
+docker compose -f infra/docker/docker-compose.dev.yml down
+
+# Start the fast dev mode (volume mounts, no rebuild)
+docker compose -f infra/docker/docker-compose.dev-fast.yml up -d --build
 ```
 
-This takes 5-10 minutes but only needs to be done once at delivery time.
+This builds the images ONCE (same as before), but then runs with volume mounts + hot-reload.
 
-## Development Cycle
+### Daily development cycle (FAST — no rebuild!)
 
-### For each feature/fix:
+```bash
+# On GCP server — just pull, containers auto-reload
+cd /opt/careerjudge
+git pull origin main
 
-1. **Make code changes** in the z.ai sandbox
-2. **Commit + push** to main
-3. **Wait ~1 minute** for GitHub Actions to deploy
-4. **Test online** at https://careerjudge.pp.ua
-5. **Iterate** — repeat steps 1-4
+# That's it! Backend auto-reloads in <2s, frontend HMR instant
+# Test at https://careerjudge.pp.ua
+```
 
-### Tips to minimize deploy wait time:
+**No `docker compose build` needed!** The volume mount means the container sees the new code immediately. Django's runserver detects file changes and reloads automatically.
 
-- **Batch related changes** — push multiple files in one commit instead of many small commits
-- **Use feature branches** — push to a branch, test locally in the sandbox (typecheck/lint/tests), merge to main only when ready to deploy
-- **Run `npm run typecheck` + `npm run lint` + `npm test`** in the sandbox BEFORE pushing — catches errors without waiting for deploy
-- **The ~30s rebuild is cached** — if you push 5 times in 10 minutes, each deploy is still ~30s (not cumulative)
+### Switching back to production-like mode (for final testing)
+
+```bash
+# Stop fast dev mode
+docker compose -f infra/docker/docker-compose.dev-fast.yml down
+
+# Start normal (gunicorn + nginx) mode with rebuild
+docker compose -f infra/docker/docker-compose.dev.yml up -d --build
+```
+
+### Files created for Option 2
+
+- `infra/docker/docker-compose.dev-fast.yml` — volume-mounted dev compose with hot-reload
+- `infra/caddy/Caddyfile.dev-fast` — routes to Vite dev server (5173) with WebSocket support for HMR
+
+## Option 3: Docker Rebuild with Layer Caching (fallback)
+
+The current CI/CD pipeline uses this. Use this when you need to test the actual production Docker image (gunicorn + nginx).
+
+### Speed
+
+- Code-only change: ~30s rebuild (pip install layer cached)
+- Requirements.txt change: ~2-3 min (full pip reinstall)
+
+### GitHub Actions CI/CD (current approach)
+
+- Push to `main` → GitHub Actions SSH deploys to GCP
+- Rebuilds Docker image + restarts containers
+- Takes 2-3 minutes total
+
+**Use this for pre-merge integration testing or when Option 2 is not running.**
 
 ## Vercel Frontend Auto-Deploy
 
@@ -82,33 +102,30 @@ The frontend is deployed separately on Vercel:
 - Vercel serves the built SPA via CDN
 - Caddy proxies `/*` to Vercel (browser stays on careerjudge.pp.ua)
 
-So after pushing:
-- **Backend changes**: ~1 minute (GCP Docker rebuild)
-- **Frontend changes**: ~1-2 minutes (Vercel build)
-- **Both**: ~2 minutes total (parallel)
+**Note**: When using Option 2 (volume mounts), the frontend runs on the GCP server via Vite dev server (not Vercel). Caddy routes to `frontend:5173` instead of Vercel. This gives instant HMR but is dev-only — production still uses Vercel.
 
-## Production Deployment (Future)
+## When to Do a Full/Complete Rebuild
 
-When ready for production (client handover):
+A full rebuild (no layer caching) is only needed:
+- When `requirements.txt` changes (new Python packages)
+- When the Dockerfile itself changes
+- At project finalization (handing over to client)
+- When changing deployment target (different domain, different server)
 
-1. **Tag a release**: `git tag v1.0.0 && git push origin v1.0.0`
-2. **GitHub Actions CD-prod workflow** triggers:
-   - SSH to OCI Ampere A1 (production server)
-   - Full Docker rebuild (no cache)
-   - Database backup
-   - Migration
-   - Health check
-3. **Client can test** on the production domain
-4. **If client wants different domain/server**: update DNS + Caddy config + redeploy
+```bash
+# Full clean rebuild (no cache)
+docker compose -f infra/docker/docker-compose.dev.yml build --no-cache
+docker compose -f infra/docker/docker-compose.dev.yml up -d
+```
+
+This takes 5-10 minutes but only needs to be done once at delivery time.
 
 ## Summary
 
-| Scenario | Rebuild Type | Time |
+| Option | Speed | When to use |
 |---|---|---|
-| Code-only change (backend) | Cached layer rebuild | ~30s |
-| Code-only change (frontend) | Vercel build | ~1-2 min |
-| requirements.txt change | Full pip reinstall | ~2-3 min |
-| Project finalization | Full clean rebuild | ~5-10 min |
-| Production deploy (tag) | Full rebuild + backup | ~10-15 min |
+| **Option 2: Volume mounts** | Instant (git pull) | **Daily iterative dev (recommended)** |
+| Option 3: Cached rebuild | ~30s-2min | Pre-merge / production-like testing |
+| Full rebuild (no cache) | ~5-10 min | Project finalization / client handover |
 
-**The cached ~30s rebuild is the normal development cycle. Full rebuilds are only for final delivery or infrastructure changes.**
+**Recommended**: Use Option 2 for daily development. Switch to Option 3 for final testing before client handover.
