@@ -704,28 +704,28 @@ export default function QuestionEditorPage() {
             </div>
           </div>
 
-          {/* Question title — mandatory, just before the question text editor */}
-          <div className="rounded-lg border border-slate-200 bg-white p-5">
-            <Label htmlFor="qtitle" required>
-              Question title
-            </Label>
-            <input
-              id="qtitle"
-              type="text"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={questionTitle}
-              onChange={(e) => setQuestionTitle(e.target.value)}
-              placeholder="Short title to identify this question (e.g. 'Capital Cities - Easy MCQ')"
-              maxLength={255}
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              This title identifies the question in lists and previews. It is not shown to
-              candidates.
-            </p>
-          </div>
+          {/* Type-specific editor (with Question title as the first field) */}
+          <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+            {/* Question title — mandatory, first field in this section */}
+            <div>
+              <Label htmlFor="qtitle" required>
+                Question title
+              </Label>
+              <input
+                id="qtitle"
+                type="text"
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                value={questionTitle}
+                onChange={(e) => setQuestionTitle(e.target.value)}
+                placeholder="Short title to identify this question (e.g. 'Capital Cities - Easy MCQ')"
+                maxLength={255}
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                This title identifies the question in lists and previews. It is not shown to
+                candidates.
+              </p>
+            </div>
 
-          {/* Type-specific editor */}
-          <div className="rounded-lg border border-slate-200 bg-white p-5">
             {isMCQ && (
               <MCQEditor
                 questionType={questionType}
