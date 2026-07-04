@@ -775,7 +775,8 @@ export default function QuestionDetailPage() {
                     )}
                   </FlashPresentation>
                 )}
-                {q.flash_items.length === 0 && (
+                {/* Non-flash, non-passage: static question + options preview */}
+                {q.flash_items.length === 0 && q.question_type !== "MCQ_PASSAGE_DISPLAY_MULTI" && (
                   <>
                     <p className="mb-4 text-base font-medium text-slate-900">{q.question_text_1}</p>
                     {q.question_text_2 && (
