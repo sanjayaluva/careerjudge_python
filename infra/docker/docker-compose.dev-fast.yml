@@ -1,0 +1,95 @@
+# Fast Dev docker-compose — volume mounts + hot-reload (NO image rebuild needed)
+#
+# Use this for iterative development on the GCP dev server.
+# Code changes are live instantly — just `git pull`, no rebuild.
+#
+# Backend: Django runserver (auto-reloads on Python file changes)
+# Frontend: Vite dev server with HMR (auto-reloads on React/CSS changes)
+#
+# Usage:
+#   docker compose -f infra/docker/docker-compose.dev-fast.yml up -d
+#   git pull origin main  # code changes are live!
+#
+# To stop:
+#   docker compose -f infra/docker/docker-compose.dev-fast.yml down
+#
+# NOTE: This is for DEVELOPMENT ONLY. Do not use in production.
+# Production uses docker-compose.prod.yml with gunicorn + nginx.
+
+services:
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: cj-backend-fast
+    env_file:
+      - ../../.env.dev
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.dev
+    volumes:
+      # Mount the backend code as a volume — code changes are live without rebuild
+      - ../../backend:/app
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    # Override the CMD to use Django's dev server with auto-reload
+    # instead of gunicorn (which doesn't watch for file changes)
+    command: python manage.py runserver 0.0.0.0:8000
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - cj-fast-net
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      target: builder  # use the builder stage which has node + npm
+    container_name: cj-frontend-fast
+    volumes:
+      # Mount the frontend code as a volume — code changes are live with HMR
+      - ../../frontend/src:/app/src
+      - ../../frontend/index.html:/app/index.html
+      - ../../frontend/vite.config.ts:/app/vite.config.ts
+      - ../../frontend/tsconfig.json:/app/tsconfig.json
+      - ../../frontend/tailwind.config.js:/app/tailwind.config.js
+      - ../../frontend/postcss.config.js:/app/postcss.config.js
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+    # Override CMD to use Vite dev server with HMR instead of nginx serving static files
+    command: npm run dev -- --host 0.0.0.0
+    environment:
+      - VITE_API_BASE_URL=/api
+    depends_on:
+      - backend
+    networks:
+      - cj-fast-net
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: cj-caddy-fast
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../../infra/caddy/Caddyfile.dev-fast:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - cj-fast-net
+
+networks:
+  cj-fast-net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

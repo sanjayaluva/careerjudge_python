@@ -619,6 +619,11 @@ export default function QuestionDetailPage() {
                     {q.passage_body && (
                       <p className="mt-2 text-sm text-slate-700">{q.passage_body}</p>
                     )}
+                    {q.display_duration_seconds && (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Displays for {q.display_duration_seconds} seconds
+                      </p>
+                    )}
                   </div>
                 )}
                 {q.image && (

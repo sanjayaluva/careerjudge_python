@@ -111,6 +111,26 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
         </div>
       )}
 
+      {/* Passage preview — shown above question text for passage type (1g).
+          At delivery time, the passage displays first (for display_duration_seconds),
+          then the question appears. */}
+      {isPassageType && (data.passage_title || data.passage_body) && (
+        <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-700">
+            Passage (displayed first, then question)
+            {data.display_duration_seconds && (
+              <span className="ml-2 font-normal text-slate-500">
+                · {data.display_duration_seconds}s display
+              </span>
+            )}
+          </p>
+          {data.passage_title && (
+            <p className="font-semibold text-slate-900">{data.passage_title}</p>
+          )}
+          {data.passage_body && <p className="mt-1 text-sm text-slate-700">{data.passage_body}</p>}
+        </div>
+      )}
+
       {/* Question text */}
       <div>
         <Label htmlFor="qtext1" required>

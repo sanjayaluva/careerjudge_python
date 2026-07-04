@@ -1,0 +1,45 @@
+# Caddyfile for Fast Dev mode — routes to Vite dev server (5173) instead of nginx (80)
+# Backend API: /api/* → backend:8000 (Django runserver)
+# Frontend: /* → frontend:5173 (Vite dev server with HMR)
+#
+# This config is for DEVELOPMENT ONLY. Production uses Caddyfile.prod.
+
+careerjudge.pp.ua {
+	encode gzip zstd
+
+	# Backend API
+	handle /api/* {
+		reverse_proxy backend:8000 {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			transport http {
+				read_timeout 120s
+				write_timeout 120s
+				dial_timeout 10s
+			}
+		}
+	}
+
+	# Django admin (specific paths only)
+	@djangoAdmin {
+		path /admin /admin/ /admin/login /admin/login/ /admin/logout /admin/logout/
+		path /admin/auth/* /admin/accounts/* /admin/token_blacklist/*
+		path /admin/static/admin/*
+		path /admin/jsi18n/*
+	}
+	handle @djangoAdmin {
+		reverse_proxy backend:8000
+	}
+
+	# Frontend — Vite dev server (HMR via WebSocket)
+	# Vite's HMR client connects to the same host on port 443 (wss://)
+	# Caddy proxies both HTTP and WebSocket traffic to frontend:5173
+	handle {
+		reverse_proxy frontend:5173 {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			# Flush immediately for HMR WebSocket support
+			flush_interval -1
+		}
+	}
+}
