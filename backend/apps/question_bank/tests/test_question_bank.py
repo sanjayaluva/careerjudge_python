@@ -200,7 +200,8 @@ class TestQuestionCRUD:
             "/api/question-bank/questions/",
             {
                 "question_type": "MCQ_TEXT_IMAGE",
-                "question_title": "Math Question", "question_text_1": "What is 2 + 2?",
+                "question_title": "Math Question",
+                "question_text_1": "What is 2 + 2?",
                 "scoring_type": "BINARY",
             },
             format="json",
@@ -225,7 +226,8 @@ class TestQuestionCRUD:
                 "/api/question-bank/questions/",
                 {
                     "question_type": qtype,
-                    "question_title": f"Test {qtype}", "question_text_1": f"Question of type {qtype}",
+                    "question_title": f"Test {qtype}",
+                    "question_text_1": f"Question of type {qtype}",
                     "scoring_type": "BINARY",
                 },
                 format="json",
@@ -237,7 +239,8 @@ class TestQuestionCRUD:
             "/api/question-bank/questions/",
             {
                 "question_type": "MCQ_TEXT_IMAGE",
-                "question_title": "Test Q Title", "question_text_1": "Test Q",
+                "question_title": "Test Q Title",
+                "question_text_1": "Test Q",
                 "scoring_type": "BINARY",
             },
             format="json",
@@ -250,7 +253,8 @@ class TestQuestionCRUD:
             "/api/question-bank/questions/",
             {
                 "question_type": "MCQ_TEXT_IMAGE",
-                "question_title": "Detail Q Title", "question_text_1": "Detail Q",
+                "question_title": "Detail Q Title",
+                "question_text_1": "Detail Q",
                 "scoring_type": "BINARY",
             },
             format="json",
@@ -265,7 +269,8 @@ class TestQuestionCRUD:
             "/api/question-bank/questions/",
             {
                 "question_type": "MCQ_TEXT_IMAGE",
-                "question_title": "Original Title", "question_text_1": "Original",
+                "question_title": "Original Title",
+                "question_text_1": "Original",
                 "scoring_type": "BINARY",
             },
             format="json",
@@ -282,7 +287,12 @@ class TestQuestionCRUD:
     def test_cannot_edit_submitted_question(self, sme_client):
         create_resp = sme_client.post(
             "/api/question-bank/questions/",
-            {"question_type": "MCQ_TEXT_IMAGE", "question_title": "Q Title", "question_text_1": "Q", "scoring_type": "BINARY"},
+            {
+                "question_type": "MCQ_TEXT_IMAGE",
+                "question_title": "Q Title",
+                "question_text_1": "Q",
+                "scoring_type": "BINARY",
+            },
             format="json",
         )
         qid = create_resp.json()["data"]["id"]
@@ -301,7 +311,8 @@ class TestQuestionCRUD:
             "/api/question-bank/questions/",
             {
                 "question_type": "MCQ_TEXT_IMAGE",
-                "question_title": "Delete Me Title", "question_text_1": "Delete me",
+                "question_title": "Delete Me Title",
+                "question_text_1": "Delete me",
                 "scoring_type": "BINARY",
             },
             format="json",
@@ -315,7 +326,8 @@ class TestQuestionCRUD:
             "/api/question-bank/questions/",
             {
                 "question_type": "MCQ_TEXT_IMAGE",
-                "question_title": "Test Title", "question_text_1": "Test",
+                "question_title": "Test Title",
+                "question_text_1": "Test",
                 "scoring_type": "BINARY",
             },
             format="json",
@@ -327,14 +339,20 @@ class TestQuestionCRUD:
             "/api/question-bank/questions/",
             {
                 "question_type": "MCQ_TEXT_IMAGE",
-                "question_title": "MCQ Q Title", "question_text_1": "MCQ Q",
+                "question_title": "MCQ Q Title",
+                "question_text_1": "MCQ Q",
                 "scoring_type": "BINARY",
             },
             format="json",
         )
         sme_client.post(
             "/api/question-bank/questions/",
-            {"question_type": "FITB_SINGLE", "question_title": "FITB Q Title", "question_text_1": "FITB Q", "scoring_type": "BINARY"},
+            {
+                "question_type": "FITB_SINGLE",
+                "question_title": "FITB Q Title",
+                "question_text_1": "FITB Q",
+                "scoring_type": "BINARY",
+            },
             format="json",
         )
         resp = sme_client.get("/api/question-bank/questions/?question_type=FITB_SINGLE")
@@ -345,7 +363,8 @@ class TestQuestionCRUD:
             "/api/question-bank/questions/",
             {
                 "question_type": "MCQ_TEXT_IMAGE",
-                "question_title": "My Q Title", "question_text_1": "My Q",
+                "question_title": "My Q Title",
+                "question_text_1": "My Q",
                 "scoring_type": "BINARY",
             },
             format="json",
@@ -367,7 +386,8 @@ class TestReviewWorkflow:
             "/api/question-bank/questions/",
             {
                 "question_type": "MCQ_TEXT_IMAGE",
-                "question_title": "Review Q Title", "question_text_1": "Review Q",
+                "question_title": "Review Q Title",
+                "question_text_1": "Review Q",
                 "scoring_type": "BINARY",
             },
             format="json",
@@ -379,7 +399,12 @@ class TestReviewWorkflow:
     def test_sme_submit_for_review(self, sme_client):
         create_resp = sme_client.post(
             "/api/question-bank/questions/",
-            {"question_type": "MCQ_TEXT_IMAGE", "question_title": "Q Title", "question_text_1": "Q", "scoring_type": "BINARY"},
+            {
+                "question_type": "MCQ_TEXT_IMAGE",
+                "question_title": "Q Title",
+                "question_text_1": "Q",
+                "scoring_type": "BINARY",
+            },
             format="json",
         )
         qid = create_resp.json()["data"]["id"]
@@ -390,7 +415,12 @@ class TestReviewWorkflow:
     def test_cannot_submit_non_draft(self, sme_client):
         create_resp = sme_client.post(
             "/api/question-bank/questions/",
-            {"question_type": "MCQ_TEXT_IMAGE", "question_title": "Q Title", "question_text_1": "Q", "scoring_type": "BINARY"},
+            {
+                "question_type": "MCQ_TEXT_IMAGE",
+                "question_title": "Q Title",
+                "question_text_1": "Q",
+                "scoring_type": "BINARY",
+            },
             format="json",
         )
         qid = create_resp.json()["data"]["id"]
@@ -503,20 +533,33 @@ class TestQuestionModel:
     def test_can_be_edited_draft(self):
         from apps.question_bank.models import Question
 
-        q = Question(question_type="MCQ_TEXT_IMAGE", question_title="Test Title", question_text_1="Test", status="draft")
+        q = Question(
+            question_type="MCQ_TEXT_IMAGE",
+            question_title="Test Title",
+            question_text_1="Test",
+            status="draft",
+        )
         assert q.can_be_edited is True
 
     def test_can_be_edited_sent_back(self):
         from apps.question_bank.models import Question
 
-        q = Question(question_type="MCQ_TEXT_IMAGE", question_title="Test Title", question_text_1="Test", status="sent_back")
+        q = Question(
+            question_type="MCQ_TEXT_IMAGE",
+            question_title="Test Title",
+            question_text_1="Test",
+            status="sent_back",
+        )
         assert q.can_be_edited is True
 
     def test_cannot_be_edited_pending_review(self):
         from apps.question_bank.models import Question
 
         q = Question(
-            question_type="MCQ_TEXT_IMAGE", question_title="Test Title", question_text_1="Test", status="pending_content_review"
+            question_type="MCQ_TEXT_IMAGE",
+            question_title="Test Title",
+            question_text_1="Test",
+            status="pending_content_review",
         )
         assert q.can_be_edited is False
 
@@ -535,7 +578,12 @@ class TestQuestionModel:
     def test_is_not_in_question_bank_draft(self):
         from apps.question_bank.models import Question
 
-        q = Question(question_type="MCQ_TEXT_IMAGE", question_title="Test Title", question_text_1="Test", status="draft")
+        q = Question(
+            question_type="MCQ_TEXT_IMAGE",
+            question_title="Test Title",
+            question_text_1="Test",
+            status="draft",
+        )
         assert q.is_in_question_bank is False
 
 

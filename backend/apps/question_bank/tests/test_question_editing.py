@@ -95,7 +95,8 @@ def test_sme_can_edit_draft_question(sme_client, sme_user):
     """SME can edit a question in 'draft' status."""
     q = Question.objects.create(
         question_type="MCQ_TEXT_IMAGE",
-        question_title="Original Question", question_text_1="Original question",
+        question_title="Original Question",
+        question_text_1="Original question",
         scoring_type="BINARY",
         status="draft",
         created_by=sme_user,
@@ -115,7 +116,8 @@ def test_sme_can_edit_sent_back_question(sme_client, sme_user):
     """SME can edit a question that was sent back by a reviewer."""
     q = Question.objects.create(
         question_type="MCQ_TEXT_IMAGE",
-        question_title="Sent Back Question", question_text_1="Sent back question",
+        question_title="Sent Back Question",
+        question_text_1="Sent back question",
         scoring_type="BINARY",
         status="sent_back",
         created_by=sme_user,
@@ -135,7 +137,8 @@ def test_sme_cannot_edit_pending_review_question(sme_client, sme_user):
     """SME cannot edit a question that's pending content review."""
     q = Question.objects.create(
         question_type="MCQ_TEXT_IMAGE",
-        question_title="Pending Review", question_text_1="Pending review",
+        question_title="Pending Review",
+        question_text_1="Pending review",
         scoring_type="BINARY",
         status="pending_content_review",
         created_by=sme_user,
@@ -154,7 +157,8 @@ def test_sme_cannot_edit_confirmed_question(sme_client, sme_user):
     """SME cannot edit a confirmed question (already in question bank)."""
     q = Question.objects.create(
         question_type="MCQ_TEXT_IMAGE",
-        question_title="Confirmed Question", question_text_1="Confirmed question",
+        question_title="Confirmed Question",
+        question_text_1="Confirmed question",
         scoring_type="BINARY",
         status="confirmed",
         created_by=sme_user,
@@ -178,7 +182,8 @@ def test_cj_admin_can_edit_draft_question(admin_client, sme_user):
     """CJ Admin can edit a draft question (same as SME)."""
     q = Question.objects.create(
         question_type="MCQ_TEXT_IMAGE",
-        question_title="Draft Title", question_text_1="Draft",
+        question_title="Draft Title",
+        question_text_1="Draft",
         scoring_type="BINARY",
         status="draft",
         created_by=sme_user,
@@ -198,7 +203,8 @@ def test_cj_admin_can_edit_confirmed_question(admin_client, sme_user):
     """CJ Admin can edit a confirmed question (override status check)."""
     q = Question.objects.create(
         question_type="MCQ_TEXT_IMAGE",
-        question_title="Confirmed Title", question_text_1="Confirmed by psychometrician",
+        question_title="Confirmed Title",
+        question_text_1="Confirmed by psychometrician",
         scoring_type="BINARY",
         status="confirmed",
         created_by=sme_user,
@@ -218,7 +224,8 @@ def test_cj_admin_can_edit_pending_review_question(admin_client, sme_user):
     """CJ Admin can edit a question pending review (override)."""
     q = Question.objects.create(
         question_type="MCQ_TEXT_IMAGE",
-        question_title="Pending Title", question_text_1="Pending",
+        question_title="Pending Title",
+        question_text_1="Pending",
         scoring_type="BINARY",
         status="pending_content_review",
         created_by=sme_user,
@@ -238,7 +245,8 @@ def test_cj_admin_can_delete_confirmed_question(admin_client, sme_user):
     """CJ Admin can delete a confirmed question (override)."""
     q = Question.objects.create(
         question_type="MCQ_TEXT_IMAGE",
-        question_title="Confirmed Title", question_text_1="Confirmed",
+        question_title="Confirmed Title",
+        question_text_1="Confirmed",
         scoring_type="BINARY",
         status="confirmed",
         created_by=sme_user,
@@ -258,7 +266,8 @@ def test_custom_role_can_edit_draft_question(custom_client, sme_user):
     """A custom role with question_bank 'change' permission can edit draft questions."""
     q = Question.objects.create(
         question_type="MCQ_TEXT_IMAGE",
-        question_title="Custom Role Draft", question_text_1="Draft for custom role",
+        question_title="Custom Role Draft",
+        question_text_1="Draft for custom role",
         scoring_type="BINARY",
         status="draft",
         created_by=sme_user,
@@ -278,7 +287,8 @@ def test_custom_role_cannot_edit_confirmed_question(custom_client, sme_user):
     """A custom role cannot edit a confirmed question (same rules as SME)."""
     q = Question.objects.create(
         question_type="MCQ_TEXT_IMAGE",
-        question_title="Confirmed Title", question_text_1="Confirmed",
+        question_title="Confirmed Title",
+        question_text_1="Confirmed",
         scoring_type="BINARY",
         status="confirmed",
         created_by=sme_user,
