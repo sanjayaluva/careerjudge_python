@@ -150,6 +150,11 @@ class Question(models.Model):
     question_id_label = models.CharField(
         _("question ID label"), max_length=50, blank=True, help_text="Display ID shown to candidate"
     )
+    question_title = models.CharField(
+        _("question title"),
+        max_length=255,
+        help_text=_("Short title that identifies this question in lists and previews. Required."),
+    )
     question_text_1 = models.TextField(_("question text 1"))
     question_text_2 = models.TextField(_("question text 2"), blank=True)
     image = models.TextField(

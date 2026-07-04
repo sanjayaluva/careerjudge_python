@@ -25,6 +25,7 @@ export interface QuestionListItem {
   question_type: string;
   question_type_label: string;
   question_id_label: string;
+  question_title: string;
   question_text_1: string;
   category: number | null;
   category_name: string | null;

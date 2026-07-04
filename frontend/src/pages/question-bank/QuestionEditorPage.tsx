@@ -87,6 +87,7 @@ export default function QuestionEditorPage() {
   const queryClient = useQueryClient();
 
   const [questionType, setQuestionType] = useState("MCQ_TEXT_IMAGE");
+  const [questionTitle, setQuestionTitle] = useState("");
   const [difficulty, setDifficulty] = useState("");
   const [cognitiveLevel, setCognitiveLevel] = useState("");
   const [categoryId, setCategoryId] = useState<number | "">("");
@@ -140,6 +141,7 @@ export default function QuestionEditorPage() {
   // Populate the form from an existing QuestionDetail (edit mode).
   const populateForm = (q: QuestionDetail) => {
     setQuestionType(q.question_type);
+    setQuestionTitle(q.question_title ?? "");
     setDifficulty(q.difficulty_level ?? "");
     setCognitiveLevel(q.cognitive_level ?? "");
     setCategoryId(q.category ?? "");
@@ -451,6 +453,10 @@ export default function QuestionEditorPage() {
 
   const handleSubmit = () => {
     setError(null);
+    if (!questionTitle.trim()) {
+      setError("Question title is required.");
+      return;
+    }
     if (!questionText1.trim()) {
       setError("Question text is required.");
       return;
@@ -458,6 +464,7 @@ export default function QuestionEditorPage() {
 
     const payload: Record<string, unknown> = {
       question_type: questionType,
+      question_title: questionTitle,
       question_text_1: questionText1,
       question_text_2: questionText2,
       scoring_type: scoringType,
@@ -618,6 +625,26 @@ export default function QuestionEditorPage() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+
+          {/* Question title — mandatory, shown at the very top */}
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <Label htmlFor="qtitle" required>
+              Question title
+            </Label>
+            <input
+              id="qtitle"
+              type="text"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              value={questionTitle}
+              onChange={(e) => setQuestionTitle(e.target.value)}
+              placeholder="Short title to identify this question (e.g. 'Capital Cities - Easy MCQ')"
+              maxLength={255}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              This title identifies the question in lists and previews. It is not shown to
+              candidates.
+            </p>
+          </div>
 
           {/* Top form row: type + category + difficulty + cognitive level */}
           <div className="rounded-lg border border-slate-200 bg-white p-5">

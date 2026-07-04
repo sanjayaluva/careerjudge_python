@@ -260,7 +260,7 @@ export default function QuestionBankPage() {
                           to={`/question-bank/${q.id}`}
                           className="text-primary-600 hover:underline"
                         >
-                          {q.question_text_1}
+                          {q.question_title || q.question_text_1}
                         </Link>
                       </TableCell>
                       <TableCell>
@@ -298,7 +298,12 @@ export default function QuestionBankPage() {
                               variant="ghost"
                               size="sm"
                               className="text-danger hover:bg-danger-50"
-                              onClick={() => setDeleteQ({ id: q.id, text: q.question_text_1 })}
+                              onClick={() =>
+                                setDeleteQ({
+                                  id: q.id,
+                                  text: q.question_title || q.question_text_1,
+                                })
+                              }
                             >
                               Delete
                             </Button>

@@ -227,7 +227,10 @@ export default function QuestionDetailPage() {
           ← Back to Question Bank
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-bold text-slate-900">{q.question_type_label}</h1>
+          <h1 className="text-xl font-bold text-slate-900">
+            {q.question_title || q.question_text_1}
+          </h1>
+          <Badge variant="outline">{q.question_type_label}</Badge>
           <Badge variant={STATUS_VARIANTS[q.status] ?? "default"}>{q.status_label}</Badge>
           {q.difficulty_level && <Badge variant="outline">Difficulty: {q.difficulty_level}</Badge>}
           {q.cognitive_level && <Badge variant="outline">Cognitive: {q.cognitive_level}</Badge>}
