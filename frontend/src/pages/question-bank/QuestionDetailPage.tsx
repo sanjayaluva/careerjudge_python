@@ -882,7 +882,7 @@ export default function QuestionDetailPage() {
                             </div>
                           </div>
                         )}
-                        {/* Grid: table */}
+                        {/* Grid: table with cell content from DRAG_POOL options */}
                         {q.question_type === "GRID_LIST_SELECTION" && (
                           <table className="w-full text-sm">
                             <tbody>
@@ -891,11 +891,34 @@ export default function QuestionDetailPage() {
                                   <td className="border border-slate-200 p-2 font-medium text-slate-600">
                                     Row {r + 1}
                                   </td>
-                                  {[...Array(q.grid_cols || 3)].map((_, c) => (
-                                    <td key={c} className="border border-slate-200 p-2 text-center">
-                                      <input type="checkbox" disabled className="h-4 w-4" />
-                                    </td>
-                                  ))}
+                                  {[...Array(q.grid_cols || 3)].map((_, c) => {
+                                    // Find the DRAG_POOL option for this cell (by label match or order)
+                                    const cellOption = q.options.find(
+                                      (o) =>
+                                        o.option_type === "DRAG_POOL" &&
+                                        (o.label === `Row ${r + 1} → Col ${c + 1}` ||
+                                          o.order === r * (q.grid_cols || 3) + c),
+                                    );
+                                    return (
+                                      <td
+                                        key={c}
+                                        className="border border-slate-200 p-2 text-center"
+                                      >
+                                        {cellOption?.image_file ? (
+                                          <img
+                                            src={cellOption.image_file}
+                                            alt=""
+                                            className="mx-auto max-h-12 object-contain"
+                                          />
+                                        ) : cellOption?.text_value ? (
+                                          <span className="text-xs">{cellOption.text_value}</span>
+                                        ) : (
+                                          <span className="text-slate-300">—</span>
+                                        )}
+                                        <input type="checkbox" disabled className="ml-1 h-3 w-3" />
+                                      </td>
+                                    );
+                                  })}
                                 </tr>
                               ))}
                             </tbody>

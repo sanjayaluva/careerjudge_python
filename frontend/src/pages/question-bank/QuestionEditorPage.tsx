@@ -124,6 +124,9 @@ export default function QuestionEditorPage() {
   const [rowLabels, setRowLabels] = useState<string[]>([]);
   const [colLabels, setColLabels] = useState<string[]>([]);
   const [correctCells, setCorrectCells] = useState<boolean[][]>([]);
+  const [cellContent, setCellContent] = useState<
+    { text: string; image: string; is_correct: boolean }[][]
+  >([]);
   const [isMultipleAnswer, setIsMultipleAnswer] = useState(false);
   const [scaleLabels, setScaleLabels] = useState<string[]>([]);
   const [flashItems, setFlashItems] = useState<FlashItemData[]>([]);
@@ -293,6 +296,7 @@ export default function QuestionEditorPage() {
         sub_question_index?: number;
       }[];
       gridCorrectCells?: { row: number; col: number; rowLabel: string; colLabel: string }[];
+      gridCellOptions?: Record<string, unknown>[];
       scaleLabels?: string[];
       flashItems?: FlashItemData[];
     }) => {
@@ -304,7 +308,7 @@ export default function QuestionEditorPage() {
         aud,
         vid,
         hotspots,
-        gridCorrectCells,
+        gridCellOptions,
         scaleLabels,
         flashItems,
       } = params;
@@ -383,19 +387,9 @@ export default function QuestionEditorPage() {
         });
       }
 
-      // Grid correct cells
-      if (gridCorrectCells && gridCorrectCells.length > 0) {
-        gridCorrectCells.forEach((cell, i) => {
-          allOptions.push({
-            sub_question_index: 0,
-            option_type: "DRAG_POOL",
-            label: `${cell.rowLabel} → ${cell.colLabel}`,
-            text_value: `${cell.rowLabel} → ${cell.colLabel}`,
-            is_correct: true,
-            predefined_score: 1.0,
-            order: i,
-          });
-        });
+      // Grid cells with content (text/image per cell + correct flag)
+      if (gridCellOptions && gridCellOptions.length > 0) {
+        gridCellOptions.forEach((opt) => allOptions.push(opt));
       }
 
       // Rating scale labels
@@ -504,6 +498,29 @@ export default function QuestionEditorPage() {
       }
     }
 
+    // Build grid cell options from cellContent (text + image per cell)
+    const gridCellOptions: Record<string, unknown>[] = [];
+    if (cellContent.length > 0) {
+      let order = 0;
+      for (let r = 0; r < cellContent.length; r++) {
+        for (let c = 0; c < (cellContent[r]?.length ?? 0); c++) {
+          const cell = cellContent[r][c];
+          if (cell && (cell.text || cell.image)) {
+            gridCellOptions.push({
+              sub_question_index: 0,
+              option_type: "DRAG_POOL",
+              label: `${rowLabels[r] || `Row ${r + 1}`} → ${colLabels[c] || `Col ${c + 1}`}`,
+              text_value: cell.text || "",
+              image_file: cell.image || null,
+              is_correct: correctCells?.[r]?.[c] || false,
+              predefined_score: 1.0,
+              order: order++,
+            });
+          }
+        }
+      }
+    }
+
     mutation.mutate({
       payload,
       opts: options,
@@ -513,6 +530,7 @@ export default function QuestionEditorPage() {
       vid: videoUrl || undefined,
       hotspots: hotspotAreas.length > 0 ? hotspotAreas : undefined,
       gridCorrectCells: gridCorrectCells.length > 0 ? gridCorrectCells : undefined,
+      gridCellOptions: gridCellOptions.length > 0 ? gridCellOptions : undefined,
       scaleLabels: scaleLabels.length > 0 ? scaleLabels : undefined,
       flashItems: flashItems.length > 0 ? flashItems : undefined,
     });
@@ -568,6 +586,7 @@ export default function QuestionEditorPage() {
     rowLabels,
     colLabels,
     correctCells,
+    cellContent,
   };
 
   const hotspotData = {
@@ -785,6 +804,7 @@ export default function QuestionEditorPage() {
                   setRowLabels(d.rowLabels);
                   setColLabels(d.colLabels);
                   setCorrectCells(d.correctCells);
+                  setCellContent(d.cellContent);
                 }}
               />
             )}
