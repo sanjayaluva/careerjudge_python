@@ -46,6 +46,8 @@ else
 fi
 
 echo "→ Starting containers (backend + caddy)…"
+# Force remove any stale containers from previous deploys (handles name conflicts)
+docker rm -f cj-backend-dev cj-backend-fast 2>/dev/null || true
 docker compose -f "$COMPOSE_FILE" up -d --remove-orphans backend caddy
 
 echo "→ Waiting for backend to be healthy…"
