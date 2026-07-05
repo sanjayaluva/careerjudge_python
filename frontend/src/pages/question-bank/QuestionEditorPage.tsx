@@ -138,6 +138,10 @@ export default function QuestionEditorPage() {
       height_px: number;
       area_size_code: string;
       sub_question_index?: number;
+      shape_type: "RECTANGLE" | "CIRCLE" | "POLYGON";
+      is_correct: boolean;
+      radius?: number;
+      points?: { x: number; y: number }[];
     }[]
   >([]);
 
@@ -247,6 +251,8 @@ export default function QuestionEditorPage() {
         height_px: h.height_px,
         area_size_code: h.area_size_code ?? "",
         sub_question_index: h.sub_question_index,
+        shape_type: "RECTANGLE",
+        is_correct: true,
       })),
     );
     // Load flash items for flash question types (1e, 1f, 2c, 2d)
