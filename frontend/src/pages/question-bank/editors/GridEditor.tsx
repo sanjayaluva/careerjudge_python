@@ -66,13 +66,17 @@ export function GridEditor({ data, onChange }: GridEditorProps) {
   };
 
   const toggleCell = (r: number, c: number) => {
+    // Guard: ensure correctCells and cellContent are initialized
+    if (!data.correctCells || !data.correctCells[r]) return;
     const newCells = data.correctCells.map((row) => [...row]);
     newCells[r][c] = !newCells[r][c];
     // Sync is_correct into cellContent too
-    const newContent = data.cellContent.map((row) => row.map((cell) => ({ ...cell })));
-    if (newContent[r] && newContent[r][c]) {
-      newContent[r][c].is_correct = !newCells[r][c] ? false : true;
-    }
+    const newContent = (data.cellContent || []).map((row) => row.map((cell) => ({ ...cell })));
+    // Ensure newContent has enough rows/cols
+    while (newContent.length <= r) newContent.push([]);
+    if (!newContent[r]) newContent[r] = [];
+    if (!newContent[r][c]) newContent[r][c] = { text: "", image: "", is_correct: false };
+    newContent[r][c].is_correct = newCells[r][c];
     onChange({ ...data, correctCells: newCells, cellContent: newContent });
   };
 
@@ -89,7 +93,9 @@ export function GridEditor({ data, onChange }: GridEditorProps) {
   };
 
   const updateCellContent = (r: number, c: number, field: "text" | "image", val: string) => {
-    const newContent = data.cellContent.map((row) => row.map((cell) => ({ ...cell })));
+    const newContent = (data.cellContent || []).map((row) => row.map((cell) => ({ ...cell })));
+    // Ensure enough rows
+    while (newContent.length <= r) newContent.push([]);
     if (!newContent[r]) newContent[r] = [];
     if (!newContent[r][c]) newContent[r][c] = { text: "", image: "", is_correct: false };
     newContent[r][c][field] = val;
