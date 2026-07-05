@@ -719,9 +719,19 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
                 onClick={(e) => e.stopPropagation()}
               >
                 <input
-                  type="checkbox"
+                  type={isMulti ? "checkbox" : "radio"}
+                  name="hotspot-correct"
                   checked={area.is_correct}
-                  onChange={(e) => updateArea(i, { is_correct: e.target.checked })}
+                  onChange={(e) => {
+                    if (isMulti) {
+                      updateArea(i, { is_correct: e.target.checked });
+                    } else {
+                      // Single answer: radio — only one can be correct
+                      data.areas.forEach((_, idx) => {
+                        updateArea(idx, { is_correct: idx === i });
+                      });
+                    }
+                  }}
                   className="h-3 w-3"
                 />
                 Correct
