@@ -134,7 +134,19 @@ class FlashItemSerializer(serializers.ModelSerializer):
 class HotspotAreaSerializer(serializers.ModelSerializer):
     class Meta:
         model = HotspotArea
-        fields = ["id", "sub_question_index", "x", "y", "width_px", "height_px", "area_size_code"]
+        fields = [
+            "id",
+            "sub_question_index",
+            "x",
+            "y",
+            "width_px",
+            "height_px",
+            "area_size_code",
+            "shape_type",
+            "is_correct",
+            "radius",
+            "points",
+        ]
         read_only_fields = ["id"]
 
 

@@ -456,6 +456,113 @@ export default function QuestionDetailPage() {
                   ))}
                 </div>
               )}
+              {/* Hotspot areas (for types 5a, 5b) */}
+              {q.hotspot_areas.length > 0 && (
+                <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Hotspot Areas ({q.hotspot_areas.length})
+                  </p>
+                  {q.image && (
+                    <div className="relative inline-block">
+                      <img
+                        src={q.image}
+                        alt="Hotspot"
+                        className="max-w-md rounded-md border border-slate-300"
+                        style={{ pointerEvents: "none", userSelect: "none" }}
+                      />
+                      <svg
+                        className="pointer-events-none absolute left-0 top-0"
+                        width="100%"
+                        height="100%"
+                        viewBox={`0 0 400 300`}
+                        preserveAspectRatio="xMidYMid meet"
+                      >
+                        {q.hotspot_areas.map((ha, i) => {
+                          const fill = ha.is_correct
+                            ? "rgba(34,197,94,0.25)"
+                            : "rgba(239,68,68,0.2)";
+                          const stroke = ha.is_correct ? "#22c55e" : "#ef4444";
+                          return (
+                            <g key={ha.id}>
+                              {(ha.shape_type === "RECTANGLE" || !ha.shape_type) && (
+                                <rect
+                                  x={ha.x}
+                                  y={ha.y}
+                                  width={ha.width_px}
+                                  height={ha.height_px}
+                                  fill={fill}
+                                  stroke={stroke}
+                                  strokeWidth="2"
+                                />
+                              )}
+                              {ha.shape_type === "CIRCLE" && (
+                                <circle
+                                  cx={ha.x}
+                                  cy={ha.y}
+                                  r={ha.radius || 50}
+                                  fill={fill}
+                                  stroke={stroke}
+                                  strokeWidth="2"
+                                />
+                              )}
+                              {ha.shape_type === "POLYGON" && ha.points && (
+                                <polygon
+                                  points={ha.points.map((p) => `${p.x},${p.y}`).join(" ")}
+                                  fill={fill}
+                                  stroke={stroke}
+                                  strokeWidth="2"
+                                />
+                              )}
+                              <text
+                                x={ha.x + 4}
+                                y={ha.y - 4}
+                                fill={stroke}
+                                fontSize="12"
+                                fontWeight="bold"
+                              >
+                                {i + 1}
+                                {ha.is_correct ? " ✓" : " ✗"}
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    {q.hotspot_areas.map((ha, i) => (
+                      <div
+                        key={ha.id}
+                        className="flex items-center gap-2 rounded-md border border-slate-200 p-2 text-xs"
+                      >
+                        <span
+                          className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-medium ${
+                            ha.is_correct
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {i + 1}
+                        </span>
+                        <span className="text-slate-600">
+                          {(ha.shape_type || "RECTANGLE") === "RECTANGLE" &&
+                            `Rectangle ${ha.width_px}×${ha.height_px}`}
+                          {ha.shape_type === "CIRCLE" && `Circle r=${ha.radius || 50}`}
+                          {ha.shape_type === "POLYGON" &&
+                            `Polygon (${ha.points?.length || 0} points)`}
+                          {" at ("}
+                          {ha.x}, {ha.y})
+                        </span>
+                        <span
+                          className={`ml-auto ${ha.is_correct ? "text-green-600" : "text-red-600"}`}
+                        >
+                          {ha.is_correct ? "✓ Correct" : "✗ Distractor"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

@@ -93,6 +93,10 @@ export interface QuestionDetail extends QuestionListItem {
     width_px: number;
     height_px: number;
     area_size_code: string;
+    shape_type: string;
+    is_correct: boolean;
+    radius: number | null;
+    points: { x: number; y: number }[] | null;
   }[];
   reviews: {
     id: number;

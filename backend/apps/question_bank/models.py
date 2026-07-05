@@ -449,15 +449,35 @@ class HotspotArea(models.Model):
 
     The candidate clicks within the image; if the click falls inside a
     hotspot area, the answer is correct.
+
+    Supports three shape types:
+    - RECTANGLE: defined by x, y, width_px, height_px (bounding box)
+    - CIRCLE: defined by x, y (center) and radius
+    - POLYGON: defined by points (JSON array of {x, y} relative to image)
+
+    is_correct marks this area as a correct answer zone (green) vs
+    a distractor zone (red).
     """
+
+    SHAPE_CHOICES = [
+        ("RECTANGLE", "Rectangle"),
+        ("CIRCLE", "Circle"),
+        ("POLYGON", "Polygon"),
+    ]
 
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name="hotspot_areas")
     sub_question_index = models.PositiveIntegerField(_("sub-question index"), default=0)
-    x = models.PositiveIntegerField(_("x"), help_text="Top-left x pixel coordinate")
-    y = models.PositiveIntegerField(_("y"), help_text="Top-left y pixel coordinate")
-    width_px = models.PositiveIntegerField(_("width (px)"))
-    height_px = models.PositiveIntegerField(_("height (px)"))
+    x = models.PositiveIntegerField(_("x"), help_text="Top-left x (rect) or center x (circle)")
+    y = models.PositiveIntegerField(_("y"), help_text="Top-left y (rect) or center y (circle)")
+    width_px = models.PositiveIntegerField(_("width (px)"), default=0)
+    height_px = models.PositiveIntegerField(_("height (px)"), default=0)
     area_size_code = models.CharField(_("area size code"), max_length=10, blank=True)
+    shape_type = models.CharField(
+        _("shape type"), max_length=20, choices=SHAPE_CHOICES, default="RECTANGLE"
+    )
+    is_correct = models.BooleanField(_("is correct"), default=True)
+    radius = models.PositiveIntegerField(_("radius (px)"), null=True, blank=True)
+    points = models.JSONField(_("polygon points"), null=True, blank=True)
 
     class Meta:
         ordering = ["sub_question_index"]
