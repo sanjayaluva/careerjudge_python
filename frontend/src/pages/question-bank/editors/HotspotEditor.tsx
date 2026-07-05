@@ -40,6 +40,8 @@ interface HotspotEditorProps {
     image_url: string;
     scoring_type: string;
     areas: HotspotArea[];
+    image_width: number;
+    image_height: number;
   };
   onChange: (data: HotspotEditorProps["data"]) => void;
 }
@@ -69,16 +71,24 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
   // Handle image load to get displayed dimensions
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
-    // Cap the display size to max 600px wide for the editor
     const maxW = 600;
     const naturalW = img.naturalWidth || img.offsetWidth;
     const naturalH = img.naturalHeight || img.offsetHeight;
+    let displayW: number;
+    let displayH: number;
     if (naturalW > maxW) {
       const scale = maxW / naturalW;
-      setImageSize({ w: maxW, h: Math.round(naturalH * scale) });
+      displayW = maxW;
+      displayH = Math.round(naturalH * scale);
     } else if (naturalW > 0 && naturalH > 0) {
-      setImageSize({ w: naturalW, h: naturalH });
+      displayW = naturalW;
+      displayH = naturalH;
+    } else {
+      return;
     }
+    setImageSize({ w: displayW, h: displayH });
+    // Save the display dimensions to the question data for proportional scaling later
+    onChange({ ...data, image_width: displayW, image_height: displayH });
   };
 
   const addManualArea = (shape: ShapeType) => {

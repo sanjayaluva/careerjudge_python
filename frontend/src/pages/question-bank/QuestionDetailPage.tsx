@@ -241,7 +241,9 @@ export default function QuestionDetailPage() {
       <Tabs defaultValue="details">
         <TabsList>
           <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="options">Options ({q.options.length})</TabsTrigger>
+          <TabsTrigger value="options">
+            Options ({q.options.length || q.hotspot_areas.length})
+          </TabsTrigger>
           <TabsTrigger value="media">
             Media ({q.image ? 1 : 0 + q.media_files.length + q.flash_items.length})
           </TabsTrigger>
@@ -393,10 +395,7 @@ export default function QuestionDetailPage() {
         <TabsContent value="options">
           <Card>
             <CardHeader>
-              <CardTitle>
-                Response Options
-                {q.hotspot_areas.length > 0 && ` (${q.hotspot_areas.length})`}
-              </CardTitle>
+              <CardTitle>Response Options</CardTitle>
             </CardHeader>
             <CardContent>
               {q.options.length > 0 && (
@@ -458,7 +457,14 @@ export default function QuestionDetailPage() {
               {/* Hotspot areas (for types 5a, 5b) */}
               {q.hotspot_areas.length > 0 && (
                 <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
-                  {q.image && <HotspotImageWithShapes imageUrl={q.image} areas={q.hotspot_areas} />}
+                  {q.image && (
+                    <HotspotImageWithShapes
+                      imageUrl={q.image}
+                      areas={q.hotspot_areas}
+                      drawWidth={q.image_width}
+                      drawHeight={q.image_height}
+                    />
+                  )}
                   <div className="space-y-1">
                     {q.hotspot_areas.map((ha, i) => (
                       <div
@@ -931,7 +937,12 @@ export default function QuestionDetailPage() {
                         )}
                         {/* Hotspot: image with shapes (properly scaled) */}
                         {q.question_type.startsWith("HOTSPOT_") && q.image && (
-                          <HotspotImageWithShapes imageUrl={q.image} areas={q.hotspot_areas} />
+                          <HotspotImageWithShapes
+                            imageUrl={q.image}
+                            areas={q.hotspot_areas}
+                            drawWidth={q.image_width}
+                            drawHeight={q.image_height}
+                          />
                         )}
                         {/* Rank: dropdowns */}
                         {q.question_type === "RANK_SIMPLE" &&

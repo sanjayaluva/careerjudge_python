@@ -164,6 +164,18 @@ class Question(models.Model):
         default="",
         help_text=_("Question image as an external URL or base64 data URL."),
     )
+    image_width = models.PositiveIntegerField(
+        _("image width (px)"),
+        null=True,
+        blank=True,
+        help_text=_("Width of the image when hotspot shapes were drawn. Used to scale shapes."),
+    )
+    image_height = models.PositiveIntegerField(
+        _("image height (px)"),
+        null=True,
+        blank=True,
+        help_text=_("Height of the image when hotspot shapes were drawn. Used to scale shapes."),
+    )
     order = models.PositiveIntegerField(_("order"), default=0)
     is_active = models.BooleanField(_("active"), default=True)
 

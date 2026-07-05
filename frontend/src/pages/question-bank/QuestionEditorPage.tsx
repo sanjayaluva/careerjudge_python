@@ -112,6 +112,8 @@ export default function QuestionEditorPage() {
   const [flashInterval, setFlashInterval] = useState("");
   const [flashCount, setFlashCount] = useState("");
   const [flashOrder, setFlashOrder] = useState("SEQUENCE");
+  const [imageWidth, setImageWidth] = useState(0);
+  const [imageHeight, setImageHeight] = useState(0);
   const [gridRows, setGridRows] = useState("3");
   const [gridCols, setGridCols] = useState("3");
   const [ratingScalePoints, setRatingScalePoints] = useState("5");
@@ -170,6 +172,8 @@ export default function QuestionEditorPage() {
     setRatingScalePoints(q.rating_scale_points != null ? String(q.rating_scale_points) : "5");
     setRatingDirection(q.rating_direction ?? "FORWARD");
     setImageUrl(q.image ?? "");
+    setImageWidth(q.image_width ?? 0);
+    setImageHeight(q.image_height ?? 0);
     setAudioUrl(q.media_files.find((m) => m.media_type === "AUDIO")?.file ?? "");
     setVideoUrl(q.media_files.find((m) => m.media_type === "VIDEO")?.file ?? "");
 
@@ -322,6 +326,8 @@ export default function QuestionEditorPage() {
       } = params;
 
       if (img) payload.image = img;
+      if (imageWidth) payload.image_width = imageWidth;
+      if (imageHeight) payload.image_height = imageHeight;
       const question = isEditMode
         ? await updateQuestion(questionId as number, payload)
         : await createQuestion(payload);
@@ -602,6 +608,8 @@ export default function QuestionEditorPage() {
     image_url: imageUrl,
     scoring_type: scoringType,
     areas: hotspotAreas,
+    image_width: imageWidth,
+    image_height: imageHeight,
   };
 
   const rankData = { question_text_1: questionText1, options };
@@ -825,6 +833,8 @@ export default function QuestionEditorPage() {
                   setImageUrl(d.image_url);
                   setScoringType(d.scoring_type);
                   setHotspotAreas(d.areas);
+                  setImageWidth(d.image_width);
+                  setImageHeight(d.image_height);
                 }}
               />
             )}

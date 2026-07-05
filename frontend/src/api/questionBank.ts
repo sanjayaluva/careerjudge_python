@@ -60,6 +60,8 @@ export interface ResponseOption {
 export interface QuestionDetail extends QuestionListItem {
   question_text_2: string;
   image: string | null;
+  image_width: number | null;
+  image_height: number | null;
   order: number;
   case_sensitive: boolean;
   pct_match_threshold: number | null;
