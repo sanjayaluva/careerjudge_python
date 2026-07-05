@@ -66,10 +66,19 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
     };
   }, []);
 
-  // Handle image load to get natural dimensions
+  // Handle image load to get displayed dimensions
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
-    setImageSize({ w: img.offsetWidth, h: img.offsetHeight });
+    // Cap the display size to max 600px wide for the editor
+    const maxW = 600;
+    const naturalW = img.naturalWidth || img.offsetWidth;
+    const naturalH = img.naturalHeight || img.offsetHeight;
+    if (naturalW > maxW) {
+      const scale = maxW / naturalW;
+      setImageSize({ w: maxW, h: Math.round(naturalH * scale) });
+    } else if (naturalW > 0 && naturalH > 0) {
+      setImageSize({ w: naturalW, h: naturalH });
+    }
   };
 
   const addManualArea = (shape: ShapeType) => {
@@ -541,8 +550,6 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
           onMouseLeave={handleOverlayMouseUp}
           onDoubleClick={handleOverlayDoubleClick}
         >
-          {/* Hidden img to get natural dimensions — never displayed, just for sizing */}
-          <img src={data.image_url} alt="" onLoad={handleImageLoad} style={{ display: "none" }} />
           {/* SVG overlay for shapes — pointer-events: all so we can interact */}
           <svg
             className="absolute left-0 top-0"
