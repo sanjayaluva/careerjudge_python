@@ -22,6 +22,11 @@ services:
       - ../../.env.dev
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.dev
+    volumes:
+      # Mount backend code as volume — changes are live without rebuild
+      - ../../backend:/app
+    # Override gunicorn with runserver for auto-reload on code changes
+    command: python manage.py runserver 0.0.0.0:8000
     ports:
       - "8000:8000"
     restart: unless-stopped

@@ -8,12 +8,11 @@
 # Frontend is served by Vercel (not on this server) — Caddy proxies /* to Vercel.
 #
 # First deploy: builds the Docker image (one-time, ~3 min)
-# Subsequent deploys: NO rebuild — just restart container with new code (~10s)
+# Subsequent deploys: NO rebuild — just restart container with new code (~15s)
 set -euo pipefail
 
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/careerjudge}"
 COMPOSE_FILE="$DEPLOY_DIR/infra/docker/docker-compose.dev.yml"
-FAST_COMPOSE_FILE="$DEPLOY_DIR/infra/docker/docker-compose.dev-fast.yml"
 
 cd "$DEPLOY_DIR"
 
@@ -46,30 +45,14 @@ else
   echo "→ Docker image exists — skipping rebuild (volume mounts make code live)"
 fi
 
-echo "→ Starting backend container with volume mount (auto-reload)…"
-# Stop old containers (both normal and fast names)
-docker rm -f cj-backend-dev cj-backend-fast 2>/dev/null || true
-
-# Start backend with volume mount + runserver (auto-reload)
-# We use the dev.yml compose for the image but override the command + add volume mount
-docker compose -f "$COMPOSE_FILE" run -d \
-  --name cj-backend-dev \
-  --service-ports \
-  --no-deps \
-  -v "$DEPLOY_DIR/backend:/app" \
-  -e DJANGO_SETTINGS_MODULE=config.settings.dev \
-  --entrypoint "" \
-  backend \
-  python manage.py runserver 0.0.0.0:8000
-
-echo "→ Ensuring Caddy is running…"
-docker compose -f "$COMPOSE_FILE" up -d caddy
+echo "→ Starting containers (backend + caddy)…"
+docker compose -f "$COMPOSE_FILE" up -d --remove-orphans backend caddy
 
 echo "→ Waiting for backend to be healthy…"
 sleep 5
 
 echo "→ Running migrations…"
-docker exec cj-backend-dev python manage.py migrate --noinput
+docker compose -f "$COMPOSE_FILE" exec -T backend python manage.py migrate --noinput
 
 echo "→ Health check…"
 HEALTH_OK=false
@@ -89,6 +72,6 @@ if [ "$HEALTH_OK" = "true" ]; then
 else
   echo "✗ Backend health check failed after 30 attempts"
   echo "  Last response: $RESPONSE"
-  docker logs --tail=20 cj-backend-dev
+  docker compose -f "$COMPOSE_FILE" logs --tail=20 backend
   exit 1
 fi
