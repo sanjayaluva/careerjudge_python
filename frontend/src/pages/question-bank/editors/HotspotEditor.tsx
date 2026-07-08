@@ -739,10 +739,14 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
                     if (isMulti) {
                       updateArea(i, { is_correct: e.target.checked });
                     } else {
-                      // Single answer: radio — only one can be correct
-                      data.areas.forEach((_, idx) => {
-                        updateArea(idx, { is_correct: idx === i });
-                      });
+                      // Single answer: radio — only one can be correct.
+                      // Build the entire new array in one shot (not loop of updateArea
+                      // which reads stale data.areas on each call).
+                      const newAreas = data.areas.map((a, idx) => ({
+                        ...a,
+                        is_correct: idx === i,
+                      }));
+                      onChange({ ...data, areas: newAreas });
                     }
                   }}
                   className="h-3 w-3"
