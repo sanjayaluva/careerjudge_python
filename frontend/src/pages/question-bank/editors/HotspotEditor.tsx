@@ -773,19 +773,19 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
           {data.question_text_1 || "(no question text)"}
         </p>
         {data.image_url && (
-          <div className="relative inline-block">
+          <div className="relative inline-block" style={{ maxWidth: 500 }}>
             <img
               src={data.image_url}
               alt="Question"
-              className="max-w-md rounded-md border border-slate-300"
-              style={{ userSelect: "none", pointerEvents: "none" }}
+              className="w-full rounded-md border border-slate-300"
+              style={{ userSelect: "none", pointerEvents: "none", display: "block" }}
             />
             <svg
               className="pointer-events-none absolute left-0 top-0"
               width="100%"
               height="100%"
-              viewBox={`0 0 ${imageSize.w || 400} ${imageSize.h || 300}`}
-              preserveAspectRatio="xMidYMid meet"
+              viewBox={`0 0 ${data.image_width || imageSize.w || 400} ${data.image_height || imageSize.h || 300}`}
+              preserveAspectRatio="none"
             >
               {data.areas.map((area, i) => (
                 <g key={i}>
@@ -822,10 +822,11 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
                     x={area.x + 4}
                     y={area.y - 4}
                     fill={strokeColor(area)}
-                    fontSize="12"
+                    fontSize={Math.max(12, (data.image_width || imageSize.w || 400) / 35)}
                     fontWeight="bold"
                   >
                     {i + 1}
+                    {area.is_correct ? " ✓" : " ✗"}
                   </text>
                 </g>
               ))}
