@@ -9,6 +9,7 @@
 #
 # First deploy: builds the Docker image (one-time, ~3 min)
 # Subsequent deploys: NO rebuild — just restart container with new code (~15s)
+# Full rebuild: only when requirements.txt changes or manually triggered
 set -euo pipefail
 
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/careerjudge}"
@@ -33,16 +34,42 @@ else
   sed -i 's|^JWT_REFRESH_TTL_DAYS=.*|JWT_REFRESH_TTL_DAYS=30|' "$DEPLOY_DIR/.env.dev"
 fi
 
-# Check if the backend Docker image already exists
-# If it does, skip the rebuild — volume mounts make code changes live
-BACKEND_IMAGE=$(docker images --format '{{.Repository}}' | grep "docker-backend" || echo "")
+# Check if we need to rebuild the Docker image.
+# Rebuild ONLY if:
+# 1. The image doesn't exist yet (first deploy), OR
+# 2. requirements.txt changed since last deploy, OR
+# 3. FORCE_REBUILD env var is set
+NEEDS_REBUILD=false
 
-if [ -z "$BACKEND_IMAGE" ]; then
-  echo "→ First deploy: building Docker image (one-time, ~3 min)…"
-  docker compose -f "$COMPOSE_FILE" build --pull backend
-  echo "  ✓ Image built — future deploys will skip this step"
+# Check if the backend image exists (try multiple naming conventions)
+BACKEND_IMAGE_EXISTS=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -i "backend" | head -1 || echo "")
+
+if [ -z "$BACKEND_IMAGE_EXISTS" ]; then
+  echo "→ No backend Docker image found — need to build (first deploy)"
+  NEEDS_REBUILD=true
 else
-  echo "→ Docker image exists — skipping rebuild (volume mounts make code live)"
+  echo "→ Backend Docker image exists: $BACKEND_IMAGE_EXISTS"
+
+  # Check if requirements.txt changed since last deploy
+  REQUIREMENTS_HASH_FILE="$DEPLOY_DIR/.requirements-hash"
+  CURRENT_HASH=$(md5sum "$DEPLOY_DIR/backend/requirements.txt" | cut -d' ' -f1)
+  SAVED_HASH=$(cat "$REQUIREMENTS_HASH_FILE" 2>/dev/null || echo "")
+
+  if [ "$CURRENT_HASH" != "$SAVED_HASH" ]; then
+    echo "→ requirements.txt changed — need to rebuild Docker image"
+    NEEDS_REBUILD=true
+    echo "$CURRENT_HASH" > "$REQUIREMENTS_HASH_FILE"
+  else
+    echo "→ requirements.txt unchanged — no rebuild needed"
+  fi
+fi
+
+if [ "$NEEDS_REBUILD" = "true" ] || [ "${FORCE_REBUILD:-false}" = "true" ]; then
+  echo "→ Building Docker image…"
+  docker compose -f "$COMPOSE_FILE" build --pull backend
+  echo "  ✓ Image built"
+else
+  echo "→ Skipping Docker rebuild — code changes are live via volume mount"
 fi
 
 echo "→ Starting containers (backend + caddy)…"
