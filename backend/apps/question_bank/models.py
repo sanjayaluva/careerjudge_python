@@ -492,7 +492,7 @@ class HotspotArea(models.Model):
     points = models.JSONField(_("polygon points"), null=True, blank=True)
 
     class Meta:
-        ordering = ["sub_question_index"]
+        ordering = ["sub_question_index", "id"]
         verbose_name = _("hotspot area")
         verbose_name_plural = _("hotspot areas")
 
