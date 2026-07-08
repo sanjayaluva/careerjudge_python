@@ -92,6 +92,9 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
   };
 
   const addManualArea = (shape: ShapeType) => {
+    // For single-answer (5a): only one correct at a time. New shapes default
+    // to is_correct=false unless it's the first shape.
+    const isFirst = data.areas.length === 0;
     const newArea: HotspotArea = {
       x: 20,
       y: 20,
@@ -99,7 +102,7 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
       height_px: shape === "RECTANGLE" ? 80 : 60,
       area_size_code: "",
       shape_type: shape,
-      is_correct: true,
+      is_correct: isMulti ? true : isFirst,
       radius: shape === "CIRCLE" ? 40 : undefined,
       points:
         shape === "POLYGON"
@@ -166,7 +169,7 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
         height_px: 0,
         area_size_code: "",
         shape_type: "RECTANGLE",
-        is_correct: true,
+        is_correct: isMulti ? true : data.areas.length === 0,
       });
     } else if (drawMode === "CIRCLE") {
       setDrawingArea({
@@ -176,7 +179,7 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
         height_px: 0,
         area_size_code: "",
         shape_type: "CIRCLE",
-        is_correct: true,
+        is_correct: isMulti ? true : data.areas.length === 0,
         radius: 0,
       });
     } else if (drawMode === "POLYGON") {
@@ -201,7 +204,7 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
                 height_px: maxY - minY,
                 area_size_code: "",
                 shape_type: "POLYGON",
-                is_correct: true,
+                is_correct: isMulti ? true : data.areas.length === 0,
                 points: currentPoints,
               },
             ],
@@ -218,7 +221,7 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
         height_px: 0,
         area_size_code: "",
         shape_type: "POLYGON",
-        is_correct: true,
+        is_correct: isMulti ? true : data.areas.length === 0,
         points: [...currentPoints, coords],
       });
     }
@@ -832,8 +835,8 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
         <p className="mt-2 text-xs text-slate-500">
           Green = correct answer zone. Red = incorrect zone (distractor).{" "}
           {isMulti
-            ? "Multi-hotspot: candidate selects multiple."
-            : "Single hotspot: only one click evaluated."}
+            ? "Multi-hotspot: candidate can select multiple correct zones."
+            : "Single hotspot: only ONE shape is correct (green). All others are distractors (red). Use the radio button to set which shape is correct."}
         </p>
       </div>
     </div>
