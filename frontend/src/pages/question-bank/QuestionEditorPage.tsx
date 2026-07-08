@@ -237,9 +237,83 @@ export default function QuestionEditorPage() {
       setPairs([]);
     }
 
-    setRowLabels([]);
-    setColLabels([]);
-    setCorrectCells([]);
+    // Rebuild grid state from DRAG_POOL options (for type 4: Grid-List Selection)
+    const dragPoolOptions = q.options.filter((o) => o.option_type === "DRAG_POOL");
+    if (dragPoolOptions.length > 0) {
+      const numRows = q.grid_rows || 3;
+      const numCols = q.grid_cols || 3;
+      // Initialize empty grid
+      const newCellContent: { text: string; image: string; is_correct: boolean }[][] = [];
+      const newCorrectCells: boolean[][] = [];
+      for (let r = 0; r < numRows; r++) {
+        newCellContent.push([]);
+        newCorrectCells.push([]);
+        for (let c = 0; c < numCols; c++) {
+          newCellContent[r].push({ text: "", image: "", is_correct: false });
+          newCorrectCells[r].push(false);
+        }
+      }
+      // Populate from DRAG_POOL options — sorted by order
+      dragPoolOptions
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .forEach((opt) => {
+          // Parse row/col from the label "Row X → Col Y" or "RowLabel → ColLabel"
+          const label = opt.label || "";
+          const match = label.match(/^(.+?)\s*→\s*(.+)$/);
+          if (match) {
+            const rowLabel = match[1];
+            const colLabel = match[2];
+            // Try to find row index by label match or number
+            let rowIdx = -1;
+            let colIdx = -1;
+            // Try "Row N" format
+            const rowMatch = rowLabel.match(/Row\s*(\d+)/i);
+            const colMatch = colLabel.match(/Col\s*(\d+)/i);
+            if (rowMatch) rowIdx = parseInt(rowMatch[1]) - 1;
+            if (colMatch) colIdx = parseInt(colMatch[1]) - 1;
+            // Fallback: use order to determine position
+            if (rowIdx < 0 || colIdx < 0) {
+              const order = opt.order ?? 0;
+              rowIdx = Math.floor(order / numCols);
+              colIdx = order % numCols;
+            }
+            if (rowIdx >= 0 && rowIdx < numRows && colIdx >= 0 && colIdx < numCols) {
+              newCellContent[rowIdx][colIdx] = {
+                text: opt.text_value || "",
+                image: opt.image_file || "",
+                is_correct: opt.is_correct,
+              };
+              newCorrectCells[rowIdx][colIdx] = opt.is_correct;
+            }
+          }
+        });
+      setCellContent(newCellContent);
+      setCorrectCells(newCorrectCells);
+      // Rebuild row/col labels from the option labels
+      const rLabels: string[] = [];
+      const cLabels: string[] = [];
+      for (let r = 0; r < numRows; r++) rLabels.push(`Row ${r + 1}`);
+      for (let c = 0; c < numCols; c++) cLabels.push(`Col ${c + 1}`);
+      dragPoolOptions.forEach((opt) => {
+        const label = opt.label || "";
+        const match = label.match(/^(.+?)\s*→\s*(.+)$/);
+        if (match) {
+          const rowLabel = match[1];
+          const colLabel = match[2];
+          const rowMatch = rowLabel.match(/Row\s*(\d+)/i);
+          const colMatch = colLabel.match(/Col\s*(\d+)/i);
+          if (rowMatch) rLabels[parseInt(rowMatch[1]) - 1] = rowLabel;
+          if (colMatch) cLabels[parseInt(colMatch[1]) - 1] = colLabel;
+        }
+      });
+      setRowLabels(rLabels);
+      setColLabels(cLabels);
+    } else {
+      setRowLabels([]);
+      setColLabels([]);
+      setCorrectCells([]);
+      setCellContent([]);
+    }
     setIsMultipleAnswer(textOptions.filter((o) => o.is_correct).length > 1);
     setScaleLabels(
       textOptions
