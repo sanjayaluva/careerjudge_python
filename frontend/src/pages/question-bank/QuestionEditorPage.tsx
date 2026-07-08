@@ -248,18 +248,20 @@ export default function QuestionEditorPage() {
         .map((o) => o.text_value ?? ""),
     );
     setHotspotAreas(
-      q.hotspot_areas.map((h) => ({
-        x: h.x,
-        y: h.y,
-        width_px: h.width_px,
-        height_px: h.height_px,
-        area_size_code: h.area_size_code ?? "",
-        sub_question_index: h.sub_question_index,
-        shape_type: (h.shape_type as "RECTANGLE" | "CIRCLE" | "POLYGON") || "RECTANGLE",
-        is_correct: h.is_correct ?? true,
-        radius: h.radius ?? undefined,
-        points: h.points ?? undefined,
-      })),
+      [...q.hotspot_areas]
+        .sort((a, b) => a.id - b.id)
+        .map((h) => ({
+          x: h.x,
+          y: h.y,
+          width_px: h.width_px,
+          height_px: h.height_px,
+          area_size_code: h.area_size_code ?? "",
+          sub_question_index: h.sub_question_index,
+          shape_type: (h.shape_type as "RECTANGLE" | "CIRCLE" | "POLYGON") || "RECTANGLE",
+          is_correct: h.is_correct ?? true,
+          radius: h.radius ?? undefined,
+          points: h.points ?? undefined,
+        })),
     );
     // Load flash items for flash question types (1e, 1f, 2c, 2d)
     setFlashItems(
@@ -426,24 +428,26 @@ export default function QuestionEditorPage() {
         await bulkSaveOptions(question.id, allOptions);
       }
 
-      // Create hotspot areas in parallel
+      // Create hotspot areas SEQUENTIALLY (not parallel) so DB id order
+      // matches the array order — prevents shape shuffling on reload.
       if (hotspots && hotspots.length > 0) {
-        await Promise.all(hotspots.map((hs) => createHotspot(question.id, hs)));
+        for (const hs of hotspots) {
+          await createHotspot(question.id, hs);
+        }
       }
 
-      // Create flash items in parallel (for flash question types 1e, 1f, 2c, 2d)
+      // Create flash items SEQUENTIALLY (not parallel) so DB id order
+      // matches the array order — prevents item shuffling on reload.
       if (flashItems && flashItems.length > 0) {
-        await Promise.all(
-          flashItems.map((fi, i) =>
-            createFlashItem(question.id, {
-              item_type: fi.item_type,
-              text_value: fi.text_value,
-              image_file: fi.image_file,
-              order: i,
-              is_in_display_pool: fi.is_in_display_pool,
-            }),
-          ),
-        );
+        for (const fi of flashItems) {
+          await createFlashItem(question.id, {
+            item_type: fi.item_type,
+            text_value: fi.text_value,
+            image_file: fi.image_file,
+            order: flashItems.indexOf(fi),
+            is_in_display_pool: fi.is_in_display_pool,
+          });
+        }
       }
 
       return question;
