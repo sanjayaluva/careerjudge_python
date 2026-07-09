@@ -683,6 +683,7 @@ export default function QuestionEditorPage() {
 
   const hotspotData = {
     question_text_1: questionText1,
+    question_text_2: questionText2,
     image_url: imageUrl,
     scoring_type: scoringType,
     areas: hotspotAreas,
@@ -908,6 +909,7 @@ export default function QuestionEditorPage() {
                 data={hotspotData}
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
+                  setQuestionText2(d.question_text_2);
                   setImageUrl(d.image_url);
                   setScoringType(d.scoring_type);
                   setHotspotAreas(d.areas);

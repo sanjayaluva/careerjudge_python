@@ -6,7 +6,12 @@
  * at draw time in the editor) as the SVG viewBox. With preserveAspectRatio="none",
  * the SVG coordinate system stretches to match the displayed image — so shapes
  * drawn at 600px wide will align correctly even when displayed at 400px wide.
+ *
+ * Falls back to loading the image's naturalWidth/naturalHeight if the saved
+ * dimensions are not available (old questions).
  */
+import { useState } from "react";
+
 interface HotspotAreaData {
   id: number;
   x: number;
@@ -36,21 +41,30 @@ export function HotspotImageWithShapes({
   drawHeight,
   maxWidth = 500,
 }: HotspotImageWithShapesProps) {
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+
   const fillColor = (correct: boolean) =>
-    correct ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.2)";
+    correct ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.25)";
   const strokeColor = (correct: boolean) => (correct ? "#22c55e" : "#ef4444");
 
-  // Use saved draw-time dimensions for the viewBox. This ensures shapes
-  // align correctly regardless of the display size.
-  // Fallback to 400x300 if not saved (old questions without the field).
-  const vbW = drawWidth && drawWidth > 0 ? drawWidth : 400;
-  const vbH = drawHeight && drawHeight > 0 ? drawHeight : 300;
+  // Use saved draw-time dimensions, or fall back to natural dimensions loaded
+  // from the image itself, or 400x300 as last resort.
+  const vbW = drawWidth && drawWidth > 0 ? drawWidth : naturalSize.w || 400;
+  const vbH = drawHeight && drawHeight > 0 ? drawHeight : naturalSize.h || 300;
+
+  const handleImgLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+      setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+    }
+  };
 
   return (
     <div className="relative inline-block" style={{ maxWidth }}>
       <img
         src={imageUrl}
         alt="Hotspot"
+        onLoad={handleImgLoad}
         className="w-full rounded-md border border-slate-300"
         style={{ pointerEvents: "none", userSelect: "none", display: "block" }}
       />
@@ -74,7 +88,7 @@ export function HotspotImageWithShapes({
                   height={ha.height_px}
                   fill={fill}
                   stroke={stroke}
-                  strokeWidth="2"
+                  strokeWidth="3"
                 />
               )}
               {ha.shape_type === "CIRCLE" && (
@@ -84,7 +98,7 @@ export function HotspotImageWithShapes({
                   r={ha.radius || 50}
                   fill={fill}
                   stroke={stroke}
-                  strokeWidth="2"
+                  strokeWidth="3"
                 />
               )}
               {ha.shape_type === "POLYGON" && ha.points && (
@@ -92,14 +106,14 @@ export function HotspotImageWithShapes({
                   points={ha.points.map((p) => `${p.x},${p.y}`).join(" ")}
                   fill={fill}
                   stroke={stroke}
-                  strokeWidth="2"
+                  strokeWidth="3"
                 />
               )}
               <text
                 x={ha.x + 4}
                 y={ha.y - 4}
                 fill={stroke}
-                fontSize={Math.max(12, vbW / 40)}
+                fontSize={Math.max(14, vbW / 30)}
                 fontWeight="bold"
               >
                 {i + 1}

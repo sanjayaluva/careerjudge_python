@@ -37,6 +37,7 @@ interface HotspotEditorProps {
   questionType: string;
   data: {
     question_text_1: string;
+    question_text_2: string;
     image_url: string;
     scoring_type: string;
     areas: HotspotArea[];
@@ -416,6 +417,19 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
           value={data.question_text_1}
           onChange={(e) => onChange({ ...data, question_text_1: e.target.value })}
           placeholder="Click on the correct area in the image..."
+        />
+      </div>
+
+      {/* Additional text (optional) */}
+      <div>
+        <Label htmlFor="qtext2">Additional text (optional)</Label>
+        <textarea
+          id="qtext2"
+          rows={2}
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+          value={data.question_text_2}
+          onChange={(e) => onChange({ ...data, question_text_2: e.target.value })}
+          placeholder="Additional context or instructions..."
         />
       </div>
 
