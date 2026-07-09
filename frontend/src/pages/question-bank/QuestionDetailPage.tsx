@@ -935,15 +935,7 @@ export default function QuestionDetailPage() {
                             </tbody>
                           </table>
                         )}
-                        {/* Hotspot: image with shapes (properly scaled) */}
-                        {q.question_type.startsWith("HOTSPOT_") && q.image && (
-                          <HotspotImageWithShapes
-                            imageUrl={q.image}
-                            areas={q.hotspot_areas}
-                            drawWidth={q.image_width}
-                            drawHeight={q.image_height}
-                          />
-                        )}
+
                         {/* Rank: dropdowns */}
                         {q.question_type === "RANK_SIMPLE" &&
                           q.options.map((opt, i) => (
@@ -986,8 +978,19 @@ export default function QuestionDetailPage() {
                       </div>
                     )}
 
-                    {/* Empty state when no options */}
-                    {!hasOptions && !hasMedia && (
+                    {/* Hotspot: image with shapes — OUTSIDE hasOptions block
+                        because hotspot questions use hotspot_areas, not q.options */}
+                    {q.question_type.startsWith("HOTSPOT_") && q.image && (
+                      <HotspotImageWithShapes
+                        imageUrl={q.image}
+                        areas={q.hotspot_areas}
+                        drawWidth={q.image_width}
+                        drawHeight={q.image_height}
+                      />
+                    )}
+
+                    {/* Empty state when no options and no hotspot */}
+                    {!hasOptions && !hasMedia && q.hotspot_areas.length === 0 && (
                       <p className="py-4 text-center text-sm text-slate-400">
                         No options or media attached. Create options via the question editor.
                       </p>

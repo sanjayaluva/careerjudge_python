@@ -4,13 +4,12 @@
  *
  * Uses the image_width/image_height saved on the Question (the dimensions
  * at draw time in the editor) as the SVG viewBox. With preserveAspectRatio="none",
- * the SVG coordinate system stretches to match the displayed image — so shapes
- * drawn at 600px wide will align correctly even when displayed at 400px wide.
+ * the SVG coordinate system stretches to match the displayed image.
  *
- * Falls back to loading the image's naturalWidth/naturalHeight if the saved
- * dimensions are not available (old questions).
+ * If saved dimensions are not available (old questions), loads the image
+ * and uses its rendered offsetWidth/offsetHeight as the viewBox.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 interface HotspotAreaData {
   id: number;
@@ -27,9 +26,7 @@ interface HotspotAreaData {
 interface HotspotImageWithShapesProps {
   imageUrl: string;
   areas: HotspotAreaData[];
-  /** Image width at draw time (saved on Question.image_width) */
   drawWidth?: number | null;
-  /** Image height at draw time (saved on Question.image_height) */
   drawHeight?: number | null;
   maxWidth?: number;
 }
@@ -41,33 +38,35 @@ export function HotspotImageWithShapes({
   drawHeight,
   maxWidth = 500,
 }: HotspotImageWithShapesProps) {
-  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [renderedSize, setRenderedSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
   const fillColor = (correct: boolean) =>
-    correct ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.25)";
+    correct ? "rgba(34,197,94,0.35)" : "rgba(239,68,68,0.25)";
   const strokeColor = (correct: boolean) => (correct ? "#22c55e" : "#ef4444");
 
-  // Use saved draw-time dimensions, or fall back to natural dimensions loaded
-  // from the image itself, or 400x300 as last resort.
-  const vbW = drawWidth && drawWidth > 0 ? drawWidth : naturalSize.w || 400;
-  const vbH = drawHeight && drawHeight > 0 ? drawHeight : naturalSize.h || 300;
+  // Use saved draw-time dimensions, or fall back to rendered dimensions
+  const vbW = drawWidth && drawWidth > 0 ? drawWidth : renderedSize.w || 400;
+  const vbH = drawHeight && drawHeight > 0 ? drawHeight : renderedSize.h || 300;
 
-  const handleImgLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    const img = e.currentTarget;
-    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-      setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+  const handleImgLoad = () => {
+    const img = imgRef.current;
+    if (img && img.offsetWidth > 0 && img.offsetHeight > 0) {
+      setRenderedSize({ w: img.offsetWidth, h: img.offsetHeight });
     }
   };
 
   return (
     <div className="relative inline-block" style={{ maxWidth }}>
       <img
+        ref={imgRef}
         src={imageUrl}
         alt="Hotspot"
         onLoad={handleImgLoad}
         className="w-full rounded-md border border-slate-300"
         style={{ pointerEvents: "none", userSelect: "none", display: "block" }}
       />
+      {/* SVG overlay — only render once we have valid dimensions */}
       <svg
         className="pointer-events-none absolute left-0 top-0"
         width="100%"
