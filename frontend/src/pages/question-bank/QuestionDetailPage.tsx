@@ -694,7 +694,8 @@ export default function QuestionDetailPage() {
                     )}
                   </div>
                 )}
-                {q.image && (
+                {/* Hide plain question image for hotspot questions — shapes version is shown below */}
+                {q.image && !q.question_type.startsWith("HOTSPOT_") && (
                   <img
                     src={q.image}
                     alt="Question"
@@ -979,13 +980,15 @@ export default function QuestionDetailPage() {
                     )}
 
                     {/* Hotspot: image with shapes — OUTSIDE hasOptions block
-                        because hotspot questions use hotspot_areas, not q.options */}
+                        because hotspot questions use hotspot_areas, not q.options.
+                        showCorrectness=false: neutral colors so no clues for candidate. */}
                     {q.question_type.startsWith("HOTSPOT_") && q.image && (
                       <HotspotImageWithShapes
                         imageUrl={q.image}
                         areas={q.hotspot_areas}
                         drawWidth={q.image_width}
                         drawHeight={q.image_height}
+                        showCorrectness={false}
                       />
                     )}
 

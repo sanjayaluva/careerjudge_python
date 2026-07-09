@@ -29,6 +29,10 @@ interface HotspotImageWithShapesProps {
   drawWidth?: number | null;
   drawHeight?: number | null;
   maxWidth?: number;
+  /** If true (default), shows green for correct / red for distractor.
+   *  If false, all shapes use neutral color — for candidate-facing preview
+   *  so no clues about correct/incorrect. */
+  showCorrectness?: boolean;
 }
 
 export function HotspotImageWithShapes({
@@ -37,13 +41,21 @@ export function HotspotImageWithShapes({
   drawWidth,
   drawHeight,
   maxWidth = 500,
+  showCorrectness = true,
 }: HotspotImageWithShapesProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [renderedSize, setRenderedSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
+  // When showCorrectness is false (candidate-facing preview), all shapes
+  // use the same neutral color so no clues about correct/incorrect.
   const fillColor = (correct: boolean) =>
-    correct ? "rgba(34,197,94,0.35)" : "rgba(239,68,68,0.25)";
-  const strokeColor = (correct: boolean) => (correct ? "#22c55e" : "#ef4444");
+    showCorrectness
+      ? correct
+        ? "rgba(34,197,94,0.35)"
+        : "rgba(239,68,68,0.25)"
+      : "rgba(59,130,246,0.15)"; // neutral blue for all
+  const strokeColor = (correct: boolean) =>
+    showCorrectness ? (correct ? "#22c55e" : "#ef4444") : "#3b82f6"; // neutral blue for all
 
   // Use saved draw-time dimensions, or fall back to rendered dimensions
   const vbW = drawWidth && drawWidth > 0 ? drawWidth : renderedSize.w || 400;
@@ -116,7 +128,7 @@ export function HotspotImageWithShapes({
                 fontWeight="bold"
               >
                 {i + 1}
-                {ha.is_correct ? " ✓" : " ✗"}
+                {showCorrectness ? (ha.is_correct ? " ✓" : " ✗") : ""}
               </text>
             </g>
           );
