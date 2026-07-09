@@ -178,7 +178,7 @@ export default function QuestionEditorPage() {
     setVideoUrl(q.media_files.find((m) => m.media_type === "VIDEO")?.file ?? "");
 
     const textOptions: OptionData[] = q.options
-      .filter((o) => o.option_type === "TEXT" || o.option_type === "IMAGE")
+      .filter((o) => ["TEXT", "IMAGE", "RANK", "FORCED_CHOICE"].includes(o.option_type))
       .map((o) => ({
         sub_question_index: o.sub_question_index,
         option_type: o.option_type,
