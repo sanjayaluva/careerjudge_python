@@ -125,6 +125,58 @@ export function createSection(
 }
 
 // ---------------------------------------------------------------------------
+// Question Assignment
+// ---------------------------------------------------------------------------
+
+export interface AssessmentQuestion {
+  id: number;
+  section: number;
+  question: number;
+  order: number;
+  sub_question_index: number;
+  score_override: number | null;
+  duration_seconds: number | null;
+  question_detail?: {
+    id: number;
+    question_title: string;
+    question_type: string;
+    question_type_label: string;
+    status: string;
+    difficulty_level: string;
+  };
+}
+
+export function listSectionQuestions(
+  assessmentId: number,
+  sectionId: number,
+): Promise<AssessmentQuestion[]> {
+  return apiGetPaged<AssessmentQuestion>(
+    `${BASE}/assessments/${assessmentId}/sections/${sectionId}/questions/`,
+  ).then((r) => r.results);
+}
+
+export function assignQuestion(
+  assessmentId: number,
+  sectionId: number,
+  payload: { question: number; order?: number; sub_question_index?: number },
+): Promise<AssessmentQuestion> {
+  return apiPost<AssessmentQuestion>(
+    `${BASE}/assessments/${assessmentId}/sections/${sectionId}/questions/`,
+    payload,
+  );
+}
+
+export function removeQuestion(
+  assessmentId: number,
+  sectionId: number,
+  questionId: number,
+): Promise<void> {
+  return apiDelete(
+    `${BASE}/assessments/${assessmentId}/sections/${sectionId}/questions/${questionId}/`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Sessions
 // ---------------------------------------------------------------------------
 
