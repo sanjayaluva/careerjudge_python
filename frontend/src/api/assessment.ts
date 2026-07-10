@@ -269,6 +269,8 @@ export interface SessionQuestion {
     grid_cols: number | null;
     rating_scale_points: number | null;
     rating_direction: string | null;
+    image_width: number | null;
+    image_height: number | null;
   };
 }
 

@@ -16,6 +16,12 @@ import {
   CardHeader,
   CardTitle,
   Spinner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui";
 import { retrieveSession } from "@/api/assessment";
 
@@ -50,7 +56,7 @@ export default function SessionResultsPage() {
   }
 
   const percentage = session.percentage ?? 0;
-  const passed = percentage >= 40; // TODO: configurable pass mark
+  const passed = percentage >= 40;
 
   return (
     <div className="space-y-6 p-6">
@@ -111,16 +117,50 @@ export default function SessionResultsPage() {
         </CardContent>
       </Card>
 
-      {/* Section scores (if available) */}
+      {/* Session info */}
       <Card>
         <CardHeader>
-          <CardTitle>Section Breakdown</CardTitle>
+          <CardTitle>Session Details</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="py-4 text-center text-sm text-slate-500">
-            Detailed section scores will appear here once the scoring engine generates them. The
-            session has been submitted and scored successfully.
-          </p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Field</TableHead>
+                <TableHead>Value</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell className="text-slate-500">Session ID</TableCell>
+                <TableCell>{session.id}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-slate-500">Candidate</TableCell>
+                <TableCell>{session.candidate_name ?? session.candidate}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-slate-500">Status</TableCell>
+                <TableCell>
+                  <Badge variant={session.status === "completed" ? "success" : "default"}>
+                    {session.status}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-slate-500">Raw Score</TableCell>
+                <TableCell>{session.total_score?.toFixed(2) ?? "—"}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-slate-500">Max Score</TableCell>
+                <TableCell>{session.max_score?.toFixed(2) ?? "—"}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-slate-500">Percentage</TableCell>
+                <TableCell>{session.percentage?.toFixed(2) ?? "—"}%</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
