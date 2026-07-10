@@ -200,6 +200,109 @@ export function listMySessions(): Promise<AssessmentSession[]> {
   return apiGetPaged<AssessmentSession>(`${BASE}/assessments/sessions/`).then((r) => r.results);
 }
 
+export function retrieveSession(sessionId: number): Promise<AssessmentSession> {
+  return apiGet<AssessmentSession>(`${BASE}/assessments/sessions/${sessionId}/`);
+}
+
+export interface SessionQuestion {
+  id: number;
+  session: number;
+  question: number;
+  section: number | null;
+  sub_question_index: number;
+  status: string;
+  raw_answer: Record<string, unknown> | null;
+  score: number | null;
+  max_score: number | null;
+  answered_at: string | null;
+  time_spent_seconds: number | null;
+  question_detail: {
+    id: number;
+    question_title: string;
+    question_type: string;
+    question_type_label: string;
+    question_text_1: string;
+    question_text_2: string;
+    image: string | null;
+    scoring_type: string;
+    scoring_type_label: string;
+    difficulty_level: string;
+    cognitive_level: string;
+    status: string;
+    options: {
+      id: number;
+      option_type: string;
+      label: string;
+      text_value: string;
+      image_file: string | null;
+      is_correct: boolean;
+      match_pair_id: number | null;
+      predefined_score: number;
+      order: number;
+    }[];
+    flash_items: {
+      id: number;
+      item_type: string;
+      text_value: string;
+      image_file: string | null;
+      order: number;
+      is_in_display_pool: boolean;
+    }[];
+    hotspot_areas: {
+      id: number;
+      x: number;
+      y: number;
+      width_px: number;
+      height_px: number;
+      shape_type: string;
+      is_correct: boolean;
+      radius: number | null;
+      points: { x: number; y: number }[] | null;
+    }[];
+    flash_interval_ms: number | null;
+    flash_display_count: number | null;
+    flash_order: string;
+    passage_title: string;
+    passage_body: string;
+    display_duration_seconds: number | null;
+    grid_rows: number | null;
+    grid_cols: number | null;
+    rating_scale_points: number | null;
+    rating_direction: string | null;
+  };
+}
+
+export function getSessionQuestions(sessionId: number): Promise<SessionQuestion[]> {
+  return apiGet<SessionQuestion[]>(`${BASE}/assessments/sessions/${sessionId}/questions/`);
+}
+
+export function submitAnswer(
+  sessionId: number,
+  payload: {
+    question_id: number;
+    sub_question_index?: number;
+    raw_answer?: Record<string, unknown>;
+    bookmark?: boolean;
+  },
+): Promise<SessionQuestion> {
+  return apiPost<SessionQuestion>(`${BASE}/assessments/sessions/${sessionId}/answer/`, payload);
+}
+
+export function submitSessionResult(sessionId: number): Promise<{
+  session: AssessmentSession;
+  section_scores: {
+    id: number;
+    session: number;
+    section: number;
+    section_title: string;
+    raw_score: number;
+    max_score: number;
+    percentage: number;
+  }[];
+}> {
+  return apiPost(`${BASE}/assessments/sessions/${sessionId}/submit/`);
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
