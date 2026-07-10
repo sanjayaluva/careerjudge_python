@@ -7,7 +7,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import {
   Alert,
@@ -32,11 +32,15 @@ import {
   type AssessmentSection,
   ATTEMPT_RULES,
   NAVIGATION_RULES,
+  assignQuestion,
   createSection,
+  listSectionQuestions,
   publishAssessment,
+  removeQuestion,
   retrieveAssessment,
   startSession,
 } from "@/api/assessment";
+import { listQuestions, QUESTION_TYPES } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
@@ -49,6 +53,7 @@ export default function AssessmentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const aid = Number(id);
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [sectionModal, setSectionModal] = useState<{
@@ -72,7 +77,10 @@ export default function AssessmentDetailPage() {
 
   const startSessionMutation = useMutation({
     mutationFn: () => startSession(aid),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["assessments", aid] }),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
+      navigate(`/assessments/sessions/${data.id}`);
+    },
     onError: (err) => setError(extractApiError(err)),
   });
 
@@ -134,6 +142,7 @@ export default function AssessmentDetailPage() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="sections">Sections ({a.sections.length})</TabsTrigger>
+          <TabsTrigger value="questions">Questions</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
         </TabsList>
 
@@ -264,17 +273,45 @@ export default function AssessmentDetailPage() {
           </Card>
         </TabsContent>
 
+        {/* === QUESTIONS TAB === */}
+        <TabsContent value="questions">
+          <QuestionAssignmentTab
+            assessmentId={aid}
+            sections={a.sections}
+            canManage={canManage && a.status === "draft"}
+          />
+        </TabsContent>
+
         {/* === SESSIONS TAB === */}
         <TabsContent value="sessions">
           <Card>
             <CardHeader>
-              <CardTitle>Assessment Sessions</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Assessment Sessions</CardTitle>
+                {a.status === "published" && (
+                  <Button
+                    loading={startSessionMutation.isPending}
+                    onClick={() => startSessionMutation.mutate()}
+                  >
+                    Start Session
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              <p className="py-4 text-center text-sm text-slate-500">
-                Session management will be available here once the assessment is published and
-                candidates start taking it.
-              </p>
+              {a.session_count === 0 ? (
+                <p className="py-4 text-center text-sm text-slate-500">
+                  No sessions yet.{" "}
+                  {a.status === "published"
+                    ? 'Click "Start Session" to begin.'
+                    : "Publish the assessment to enable sessions."}
+                </p>
+              ) : (
+                <p className="py-4 text-center text-sm text-slate-500">
+                  {a.session_count} session(s) have been created for this assessment. Session
+                  details will be shown here.
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -287,6 +324,248 @@ export default function AssessmentDetailPage() {
         onClose={() => setSectionModal({ open: false, parent: null })}
         onSubmit={(payload) => sectionCreateMutation.mutate(payload)}
       />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Question Assignment Tab
+// ---------------------------------------------------------------------------
+
+function QuestionAssignmentTab({
+  assessmentId,
+  sections,
+  canManage,
+}: {
+  assessmentId: number;
+  sections: AssessmentSection[];
+  canManage: boolean;
+}) {
+  const [selectedSectionId, setSelectedSectionId] = useState<number | null>(
+    sections.length > 0 ? sections[0].id : null,
+  );
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  // Flatten sections for the dropdown (show level + title)
+  const flatSections: { id: number; label: string }[] = [];
+  const flatten = (secs: AssessmentSection[], depth: number) => {
+    for (const s of secs) {
+      flatSections.push({
+        id: s.id,
+        label: `${"  ".repeat(depth)}L${s.level}: ${s.title}`,
+      });
+      if (s.subsections) flatten(s.subsections, depth + 1);
+    }
+  };
+  flatten(sections, 0);
+
+  // Load assigned questions for the selected section
+  const { data: assignedQuestions, isLoading: assignedLoading } = useQuery({
+    queryKey: ["assessment-section-questions", assessmentId, selectedSectionId],
+    queryFn: () =>
+      selectedSectionId
+        ? listSectionQuestions(assessmentId, selectedSectionId)
+        : Promise.resolve([]),
+    enabled: Boolean(selectedSectionId),
+  });
+
+  // Load question bank questions for browsing
+  const { data: bankData, isLoading: bankLoading } = useQuery({
+    queryKey: ["question-bank", "for-assignment", search, typeFilter],
+    queryFn: () =>
+      listQuestions({
+        ...(search ? { search } : {}),
+        ...(typeFilter ? { question_type: typeFilter } : {}),
+        status: "confirmed",
+      }),
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: (questionId: number) =>
+      assignQuestion(assessmentId, selectedSectionId!, { question: questionId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["assessment-section-questions", assessmentId, selectedSectionId],
+      });
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (qId: number) => removeQuestion(assessmentId, selectedSectionId!, qId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["assessment-section-questions", assessmentId, selectedSectionId],
+      });
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  const assignedIds = new Set((assignedQuestions ?? []).map((q) => q.question));
+  const bankQuestions = bankData?.results ?? [];
+
+  if (sections.length === 0) {
+    return (
+      <Card>
+        <CardContent>
+          <p className="py-8 text-center text-sm text-slate-500">
+            Create sections first before assigning questions.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && (
+        <Alert variant="error">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Section selector */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Assign Questions to Sections</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-4">
+            <Label htmlFor="section-select">Select section</Label>
+            <select
+              id="section-select"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={selectedSectionId ?? ""}
+              onChange={(e) => setSelectedSectionId(Number(e.target.value))}
+            >
+              {flatSections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Assigned questions */}
+          <div className="mb-6">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Assigned Questions ({assignedQuestions?.length ?? 0})
+            </p>
+            {assignedLoading ? (
+              <Spinner size="sm" />
+            ) : (assignedQuestions?.length ?? 0) === 0 ? (
+              <p className="rounded-md border border-dashed border-slate-200 py-4 text-center text-xs text-slate-400">
+                No questions assigned to this section yet.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {assignedQuestions?.map((aq) => (
+                  <div
+                    key={aq.id}
+                    className="flex items-center gap-2 rounded-md border border-slate-200 p-2 text-xs"
+                  >
+                    <Badge variant="outline">
+                      {aq.question_detail?.question_type_label ?? "Q"}
+                    </Badge>
+                    <span className="flex-1 truncate text-slate-700">
+                      {aq.question_detail?.question_title ?? `Question #${aq.question}`}
+                    </span>
+                    {aq.question_detail?.difficulty_level && (
+                      <span className="text-slate-400">{aq.question_detail.difficulty_level}</span>
+                    )}
+                    {canManage && (
+                      <button
+                        onClick={() => removeMutation.mutate(aq.id)}
+                        className="rounded px-2 py-0.5 text-danger hover:bg-danger-50"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Question bank browser */}
+          {canManage && (
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Question Bank (confirmed questions only)
+              </p>
+              <div className="mb-3 flex gap-2">
+                <Input
+                  type="search"
+                  placeholder="Search questions..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="max-w-xs text-sm"
+                />
+                <select
+                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                >
+                  <option value="">All types</option>
+                  {QUESTION_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {bankLoading ? (
+                <Spinner size="sm" />
+              ) : bankQuestions.length === 0 ? (
+                <p className="py-4 text-center text-xs text-slate-400">
+                  No confirmed questions found. Create and confirm questions in the Question Bank
+                  first.
+                </p>
+              ) : (
+                <div className="max-h-96 space-y-1 overflow-y-auto">
+                  {bankQuestions.map((q) => {
+                    const isAssigned = assignedIds.has(q.id);
+                    return (
+                      <div
+                        key={q.id}
+                        className={`flex items-center gap-2 rounded-md border p-2 text-xs ${
+                          isAssigned
+                            ? "border-green-200 bg-green-50"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <Badge variant="outline">{q.question_type_label}</Badge>
+                        <span className="flex-1 truncate text-slate-700">
+                          {q.question_title || q.question_text_1}
+                        </span>
+                        {q.difficulty_level && (
+                          <span className="text-slate-400">{q.difficulty_level}</span>
+                        )}
+                        {isAssigned ? (
+                          <span className="text-green-600">✓ Assigned</span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            loading={assignMutation.isPending}
+                            onClick={() => assignMutation.mutate(q.id)}
+                          >
+                            + Assign
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
