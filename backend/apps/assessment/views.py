@@ -285,7 +285,10 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         session.completed_at = timezone.now()
         session.save(update_fields=["status", "completed_at"])
 
-        # TODO: Calculate scores (Phase 3 — scoring engine)
+        # Calculate scores using the scoring engine
+        from .scoring import calculate_session_scores
+
+        session = calculate_session_scores(session)
 
         return Response(
             {
@@ -493,12 +496,22 @@ class SessionViewSet(ModelViewSet):
         session.completed_at = timezone.now()
         session.save(update_fields=["status", "completed_at"])
 
-        # TODO: Phase 3 — scoring engine will calculate scores here
+        # Calculate scores using the scoring engine
+        from .scoring import calculate_session_scores
+
+        session = calculate_session_scores(session)
+
+        # Get section scores for the response
+        section_scores = session.section_scores.select_related("section").all()
+        from .serializers import SectionScoreSerializer
 
         return Response(
             {
                 "message": "Session submitted successfully.",
-                "data": AssessmentSessionSerializer(session).data,
+                "data": {
+                    "session": AssessmentSessionSerializer(session).data,
+                    "section_scores": SectionScoreSerializer(section_scores, many=True).data,
+                },
             },
             status=status.HTTP_200_OK,
         )
