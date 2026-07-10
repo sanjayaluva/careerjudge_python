@@ -24,6 +24,7 @@ import OrganizationDetailPage from "@/pages/organizations/OrganizationDetailPage
 import QuestionBankPage from "@/pages/question-bank/QuestionBankPage";
 import QuestionDetailPage from "@/pages/question-bank/QuestionDetailPage";
 import QuestionEditorPage from "@/pages/question-bank/QuestionEditorPage";
+import AssessmentsPage from "@/pages/assessment/AssessmentsPage";
 import { useAuthStore } from "@/stores/auth";
 
 const queryClient = new QueryClient({
@@ -130,7 +131,11 @@ export default function App() {
               <Route path="question-bank/new" element={<QuestionEditorPage />} />
               <Route path="question-bank/:id/edit" element={<QuestionEditorPage />} />
               <Route path="question-bank/:id" element={<QuestionDetailPage />} />
-              <Route path="assessments" element={<PlaceholderPage title="Assessments" />} />
+              <Route path="assessments" element={<AssessmentsPage />} />
+              <Route
+                path="assessments/:id"
+                element={<PlaceholderPage title="Assessment Detail" />}
+              />
               <Route
                 path="career-profiling"
                 element={<PlaceholderPage title="Career Profiling" />}
