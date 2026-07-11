@@ -73,6 +73,23 @@ class Category(models.Model):
 # Question (UC013, UC016, UC017) — supports 21 question types
 # ---------------------------------------------------------------------------
 
+# Psychometric-type question codes per SRS 03_assessment_configuration.json §4.2.
+# These question types use special scoring flows (rating scale, pairing, rank
+# grouping, rank-rate grouping) instead of the standard per-option scoring (§4.1)
+# used by normal question types.
+#
+# An assessment may contain ONLY normal questions OR ONLY psychometric questions —
+# never both. The assessment module's AssessmentQuestionViewSet enforces this.
+PSYCHOMETRIC_QUESTION_TYPES: frozenset[str] = frozenset(
+    {
+        "RANK_SIMPLE",  # 6a: Simple Ranking Scale
+        "RANK_THEN_RATE",  # 6b: First Rank-Then Rate Scale
+        "STANDARD_RATING_SCALE",  # 7:  Standard Rating Scale
+        "FORCED_CHOICE_SINGLE_LEVEL",  # 8a: Forced-Choice - Single Level
+        "FORCED_CHOICE_TWO_LEVEL",  # 8b: Forced-Choice - Two-Level
+    }
+)
+
 
 class Question(models.Model):
     """A question in the question bank. Supports 21 question types.
@@ -289,6 +306,30 @@ class Question(models.Model):
     def is_in_question_bank(self) -> bool:
         """Question is in the active question bank (confirmed or active)."""
         return self.status == "confirmed" and self.is_active
+
+    @property
+    def is_psychometric(self) -> bool:
+        """Whether this question is a psychometric-type question.
+
+        Per SRS 03_assessment_configuration.json §4.1 vs §4.2:
+          - Normal questions (MCQ, FITB, Match, Grid, Hotspot) use standard
+            per-option scoring (§4.1).
+          - Psychometric questions (Rating, Rank, Rank-then-Rate, Forced-Choice)
+            use special scoring flows (§4.2: rating scale, pairing, rank grouping).
+
+        An assessment must contain only one class — no mixing. The assessment
+        module enforces this in AssessmentQuestionViewSet.create.
+        """
+        return self.question_type in PSYCHOMETRIC_QUESTION_TYPES
+
+    @property
+    def question_category(self) -> str:
+        """Return the question's category: 'normal' or 'psychometric'.
+
+        Used by the assessment module to validate that only same-category
+        questions are attached to an assessment.
+        """
+        return "psychometric" if self.is_psychometric else "normal"
 
 
 # ---------------------------------------------------------------------------

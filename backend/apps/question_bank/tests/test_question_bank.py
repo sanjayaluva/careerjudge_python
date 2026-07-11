@@ -586,6 +586,75 @@ class TestQuestionModel:
         )
         assert q.is_in_question_bank is False
 
+    # --- is_psychometric / question_category property tests ---
+
+    def test_mcq_is_not_psychometric(self):
+        from apps.question_bank.models import Question
+
+        q = Question(
+            question_type="MCQ_TEXT_IMAGE",
+            question_title="Test Title",
+            question_text_1="Test",
+            status="draft",
+        )
+        assert q.is_psychometric is False
+        assert q.question_category == "normal"
+
+    @pytest.mark.parametrize(
+        "qtype",
+        [
+            "MCQ_TEXT_IMAGE",
+            "MCQ_TEXT_IMAGE_IMG_OPTIONS",
+            "MCQ_AUDIO_MULTI",
+            "MCQ_VIDEO_MULTI",
+            "MCQ_WORD_FLASH_MULTI",
+            "MCQ_IMAGE_FLASH_MULTI",
+            "MCQ_PASSAGE_DISPLAY_MULTI",
+            "MCQ_IMAGE_DISPLAY_MULTI",
+            "FITB_SINGLE",
+            "FITB_MULTI_FIELD",
+            "FITB_WORD_FLASH_MULTI",
+            "FITB_IMAGE_FLASH_MULTI",
+            "MATCH_FOLLOWING",
+            "GRID_LIST_SELECTION",
+            "HOTSPOT_SINGLE",
+            "HOTSPOT_MULTI",
+        ],
+    )
+    def test_normal_question_types_are_not_psychometric(self, qtype):
+        from apps.question_bank.models import Question
+
+        q = Question(
+            question_type=qtype,
+            question_title="Test Title",
+            question_text_1="Test",
+            status="draft",
+        )
+        assert q.is_psychometric is False
+        assert q.question_category == "normal"
+
+    @pytest.mark.parametrize(
+        "qtype",
+        [
+            "RANK_SIMPLE",
+            "RANK_THEN_RATE",
+            "STANDARD_RATING_SCALE",
+            "FORCED_CHOICE_SINGLE_LEVEL",
+            "FORCED_CHOICE_TWO_LEVEL",
+        ],
+    )
+    def test_psychometric_question_types_are_psychometric(self, qtype):
+        from apps.question_bank.models import Question
+
+        q = Question(
+            question_type=qtype,
+            question_title="Test Title",
+            question_text_1="Test",
+            status="draft",
+        )
+        assert q.is_psychometric is True
+        assert q.question_category == "psychometric"
+
 
 @pytest.mark.django_db
 class TestHotspotAreaModel:

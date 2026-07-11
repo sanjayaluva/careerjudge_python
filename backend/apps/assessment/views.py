@@ -403,11 +403,62 @@ class AssessmentQuestionViewSet(ModelViewSet):
         section = get_object_or_404(AssessmentSection, id=sid)
         serializer.save(section=section)
 
-    def list(self, request, *args, **kwargs):
-        resp = super().list(request, *args, **kwargs)
-        return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
-
     def create(self, request, *args, **kwargs):
+        """Assign a question to a section.
+
+        Enforces the assessment_type ↔ question_category rule:
+          - normal assessments accept only normal questions
+            (MCQ/FITB/Match/Grid/Hotspot)
+          - psychometric assessments accept only psychometric questions
+            (Rating/Rank/Rank-then-Rate/Forced-Choice)
+
+        Per SRS 03_assessment_configuration.json §4.1 vs §4.2, mixing the two
+        categories in a single assessment is not allowed.
+        """
+        from apps.question_bank.models import Question
+
+        sid = self.kwargs.get("section_id")
+        section = get_object_or_404(AssessmentSection, id=sid)
+        assessment = section.assessment
+
+        question_id = request.data.get("question")
+        if not question_id:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "question is required.",
+                        "details": {"question": ["This field is required."]},
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        question = get_object_or_404(Question, id=question_id)
+
+        # Type-mismatch check: normal vs psychometric
+        question_cat = question.question_category  # 'normal' or 'psychometric'
+        if question_cat != assessment.assessment_type:
+            return Response(
+                {
+                    "error": {
+                        "code": "question_category_mismatch",
+                        "message": (
+                            f"Cannot attach a {question_cat} question to a "
+                            f"{assessment.assessment_type} assessment. "
+                            "Normal and psychometric questions cannot be mixed "
+                            "in the same assessment."
+                        ),
+                        "details": {
+                            "assessment_type": assessment.assessment_type,
+                            "question_category": question_cat,
+                            "question_type": question.question_type,
+                        },
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -418,6 +469,10 @@ class AssessmentQuestionViewSet(ModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+    def list(self, request, *args, **kwargs):
+        resp = super().list(request, *args, **kwargs)
+        return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
 
 
 # ---------------------------------------------------------------------------

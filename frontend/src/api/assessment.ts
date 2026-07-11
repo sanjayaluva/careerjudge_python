@@ -9,6 +9,8 @@ const BASE = "/assessments";
 // Types
 // ---------------------------------------------------------------------------
 
+export type AssessmentType = "normal" | "psychometric";
+
 export interface Assessment {
   id: number;
   title: string;
@@ -16,6 +18,8 @@ export interface Assessment {
   description: string;
   instructions: string;
   status: string;
+  assessment_type: AssessmentType;
+  assessment_type_label: string;
   total_duration_seconds: number | null;
   timer_level: string;
   display_order: string;
@@ -326,6 +330,19 @@ export const ASSESSMENT_STATUSES = [
   { value: "published", label: "Published" },
   { value: "archived", label: "Archived" },
 ];
+
+export const ASSESSMENT_TYPES = [
+  {
+    value: "normal",
+    label: "Normal Assessment",
+    description: "Aptitude / ability questions (MCQ, FITB, Match, Grid, Hotspot)",
+  },
+  {
+    value: "psychometric",
+    label: "Psychometric Assessment",
+    description: "Rating, Rank, Rank-then-Rate, Forced-Choice questions",
+  },
+] as const;
 
 export const NAVIGATION_RULES = [
   { value: "FREE", label: "Free Navigation" },

@@ -204,3 +204,32 @@ class TestAssessmentQuestionModel(AssessmentModelTestBase):
     def test_score_override_nullable(self):
         aq = AssessmentQuestion.objects.create(section=self.section, question=self.question)
         assert aq.score_override is None
+
+
+class TestAssessmentType(AssessmentModelTestBase):
+    """Test the assessment_type field and its enforcement rules."""
+
+    def setUp(self):
+        self.user = UserFactory.create(role=self.individual_role)
+
+    def test_default_assessment_type_is_normal(self):
+        a = Assessment.objects.create(title="Test", created_by=self.user)
+        assert a.assessment_type == "normal"
+
+    def test_can_create_psychometric_assessment(self):
+        a = Assessment.objects.create(
+            title="Test", assessment_type="psychometric", created_by=self.user
+        )
+        a.refresh_from_db()
+        assert a.assessment_type == "psychometric"
+
+    def test_assessment_type_choices(self):
+        """Both 'normal' and 'psychometric' are valid choices."""
+        for type_code in ("normal", "psychometric"):
+            a = Assessment.objects.create(
+                title=f"Test {type_code}",
+                assessment_type=type_code,
+                created_by=self.user,
+            )
+            a.refresh_from_db()
+            assert a.assessment_type == type_code

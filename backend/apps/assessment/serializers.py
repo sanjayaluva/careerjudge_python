@@ -57,6 +57,9 @@ class AssessmentQuestionSerializer(serializers.ModelSerializer):
 
 class AssessmentSerializer(serializers.ModelSerializer):
     sections = AssessmentSectionSerializer(many=True, read_only=True)
+    assessment_type_label = serializers.CharField(
+        source="get_assessment_type_display", read_only=True
+    )
 
     class Meta:
         model = Assessment
@@ -67,6 +70,8 @@ class AssessmentSerializer(serializers.ModelSerializer):
             "description",
             "instructions",
             "status",
+            "assessment_type",
+            "assessment_type_label",
             "total_duration_seconds",
             "timer_level",
             "display_order",
@@ -88,6 +93,9 @@ class AssessmentListSerializer(serializers.ModelSerializer):
     )
     section_count = serializers.IntegerField(source="sections.count", read_only=True)
     session_count = serializers.IntegerField(source="sessions.count", read_only=True)
+    assessment_type_label = serializers.CharField(
+        source="get_assessment_type_display", read_only=True
+    )
 
     class Meta:
         model = Assessment
@@ -96,6 +104,8 @@ class AssessmentListSerializer(serializers.ModelSerializer):
             "title",
             "objective",
             "status",
+            "assessment_type",
+            "assessment_type_label",
             "total_duration_seconds",
             "display_order",
             "navigation_rule",

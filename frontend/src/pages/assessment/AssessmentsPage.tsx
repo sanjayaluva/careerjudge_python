@@ -23,6 +23,7 @@ import {
 } from "@/components/ui";
 import {
   ASSESSMENT_STATUSES,
+  ASSESSMENT_TYPES,
   ATTEMPT_RULES,
   NAVIGATION_RULES,
   createAssessment,
@@ -141,6 +142,7 @@ export default function AssessmentsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Title</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Duration</TableHead>
                 <TableHead>Navigation</TableHead>
@@ -156,6 +158,11 @@ export default function AssessmentsPage() {
                     <a href={`/assessments/${a.id}`} className="text-primary-600 hover:underline">
                       {a.title}
                     </a>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={a.assessment_type === "psychometric" ? "primary" : "default"}>
+                      {a.assessment_type === "psychometric" ? "Psychometric" : "Normal"}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANTS[a.status] ?? "default"}>{a.status}</Badge>
@@ -229,6 +236,7 @@ function CreateAssessmentModal({
   onSubmit: (payload: Record<string, unknown>) => void;
 }) {
   const [title, setTitle] = useState("");
+  const [assessmentType, setAssessmentType] = useState<"normal" | "psychometric">("normal");
   const [objective, setObjective] = useState("");
   const [instructions, setInstructions] = useState("");
   const [duration, setDuration] = useState("");
@@ -253,6 +261,7 @@ function CreateAssessmentModal({
           e.preventDefault();
           onSubmit({
             title,
+            assessment_type: assessmentType,
             objective,
             instructions,
             total_duration_seconds: duration ? parseInt(duration) : null,
@@ -273,6 +282,39 @@ function CreateAssessmentModal({
             placeholder="e.g. Career Aptitude Test 2026"
             required
           />
+        </div>
+        <div>
+          <Label htmlFor="assessment_type" required>
+            Assessment type
+          </Label>
+          <div className="mt-1 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {ASSESSMENT_TYPES.map((t) => (
+              <label
+                key={t.value}
+                className={`flex cursor-pointer flex-col rounded-md border p-3 text-sm transition-colors ${
+                  assessmentType === t.value
+                    ? "border-primary-500 bg-primary-50"
+                    : "border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="assessment_type"
+                    checked={assessmentType === t.value}
+                    onChange={() => setAssessmentType(t.value)}
+                    className="h-4 w-4"
+                  />
+                  <span className="font-medium text-slate-900">{t.label}</span>
+                </div>
+                <span className="mt-1 text-xs text-slate-500">{t.description}</span>
+              </label>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-amber-700">
+            ⚠ Once created, only matching question types can be attached to this assessment. Normal
+            and psychometric questions cannot be mixed.
+          </p>
         </div>
         <div>
           <Label htmlFor="objective">Objective</Label>

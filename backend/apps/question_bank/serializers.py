@@ -165,6 +165,8 @@ class QuestionListSerializer(serializers.ModelSerializer):
     question_type_label = serializers.CharField(source="get_question_type_display", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     scoring_type_label = serializers.CharField(source="get_scoring_type_display", read_only=True)
+    is_psychometric = serializers.BooleanField(read_only=True)
+    question_category = serializers.CharField(read_only=True)
 
     class Meta:
         model = Question
@@ -189,8 +191,18 @@ class QuestionListSerializer(serializers.ModelSerializer):
             "updated_at",
             "is_active",
             "exposure_count",
+            "is_psychometric",
+            "question_category",
         ]
-        read_only_fields = ["id", "created_by", "created_at", "updated_at", "exposure_count"]
+        read_only_fields = [
+            "id",
+            "created_by",
+            "created_at",
+            "updated_at",
+            "exposure_count",
+            "is_psychometric",
+            "question_category",
+        ]
 
 
 class QuestionDetailSerializer(serializers.ModelSerializer):
@@ -210,6 +222,8 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
     )
     question_type_label = serializers.CharField(source="get_question_type_display", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
+    is_psychometric = serializers.BooleanField(read_only=True)
+    question_category = serializers.CharField(read_only=True)
 
     class Meta:
         model = Question
@@ -248,6 +262,8 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
             "difficulty_level",
             "cognitive_level",
             "discrimination_index",
+            "is_psychometric",
+            "question_category",
             "created_by",
             "created_by_name",
             "created_at",
@@ -265,6 +281,8 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "exposure_count",
+            "is_psychometric",
+            "question_category",
             "options",
             "media_files",
             "flash_items",

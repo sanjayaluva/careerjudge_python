@@ -40,7 +40,11 @@ import {
   retrieveAssessment,
   startSession,
 } from "@/api/assessment";
-import { listQuestions, QUESTION_TYPES } from "@/api/questionBank";
+import {
+  listQuestions,
+  NORMAL_QUESTION_TYPES,
+  PSYCHOMETRIC_QUESTION_TYPES_LIST,
+} from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
@@ -162,6 +166,21 @@ export default function AssessmentDetailPage() {
                 </div>
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Assessment Type
+                  </dt>
+                  <dd className="text-sm text-slate-900">
+                    <Badge variant={a.assessment_type === "psychometric" ? "primary" : "default"}>
+                      {a.assessment_type === "psychometric" ? "Psychometric" : "Normal"}
+                    </Badge>
+                    <span className="ml-2 text-xs text-slate-500">
+                      {a.assessment_type === "psychometric"
+                        ? "(Rating/Rank/Forced-Choice only)"
+                        : "(MCQ/FITB/Match/Grid/Hotspot only)"}
+                    </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
                     Duration
                   </dt>
                   <dd className="text-sm text-slate-900">
@@ -277,6 +296,7 @@ export default function AssessmentDetailPage() {
         <TabsContent value="questions">
           <QuestionAssignmentTab
             assessmentId={aid}
+            assessmentType={a.assessment_type}
             sections={a.sections}
             canManage={canManage && a.status === "draft"}
           />
@@ -334,10 +354,12 @@ export default function AssessmentDetailPage() {
 
 function QuestionAssignmentTab({
   assessmentId,
+  assessmentType,
   sections,
   canManage,
 }: {
   assessmentId: number;
+  assessmentType: "normal" | "psychometric";
   sections: AssessmentSection[];
   canManage: boolean;
 }) {
@@ -493,6 +515,15 @@ function QuestionAssignmentTab({
           {/* Question bank browser */}
           {canManage && (
             <div>
+              <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                This is a{" "}
+                <strong>{assessmentType === "psychometric" ? "psychometric" : "normal"}</strong>{" "}
+                assessment — only{" "}
+                {assessmentType === "psychometric"
+                  ? "Rating / Rank / Rank-then-Rate / Forced-Choice"
+                  : "MCQ / FITB / Match / Grid / Hotspot"}{" "}
+                questions can be attached. The backend will reject mismatched assignments.
+              </div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Question Bank (confirmed questions only)
               </p>
@@ -509,8 +540,11 @@ function QuestionAssignmentTab({
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
                 >
-                  <option value="">All types</option>
-                  {QUESTION_TYPES.map((t) => (
+                  <option value="">All matching types</option>
+                  {(assessmentType === "psychometric"
+                    ? PSYCHOMETRIC_QUESTION_TYPES_LIST
+                    : NORMAL_QUESTION_TYPES
+                  ).map((t) => (
                     <option key={t.value} value={t.value}>
                       {t.label}
                     </option>
@@ -522,8 +556,8 @@ function QuestionAssignmentTab({
                 <Spinner size="sm" />
               ) : bankQuestions.length === 0 ? (
                 <p className="py-4 text-center text-xs text-slate-400">
-                  No confirmed questions found. Create and confirm questions in the Question Bank
-                  first.
+                  No confirmed {assessmentType === "psychometric" ? "psychometric" : "normal"}{" "}
+                  questions found. Create and confirm questions in the Question Bank first.
                 </p>
               ) : (
                 <div className="max-h-96 space-y-1 overflow-y-auto">

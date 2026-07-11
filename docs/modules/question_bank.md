@@ -117,6 +117,17 @@ The question bank module is the core content authoring system. It supports 21 qu
 | FORCED_CHOICE_SINGLE_LEVEL | 8a: Forced-Choice Single | ForcedChoiceEditor |
 | FORCED_CHOICE_TWO_LEVEL | 8b: Forced-Choice Two-Level | ForcedChoiceEditor |
 
+### Question category: Normal vs Psychometric
+
+Per SRS `03_assessment_configuration.json` §4.1 vs §4.2, each question is categorised by its `question_type`:
+
+- **Normal questions** (types 1a–5b) — scored via §4.1 per-option scoring flow. Exposed via `Question.is_psychometric = False` and `Question.question_category = "normal"`.
+- **Psychometric questions** (types 6a, 6b, 7, 8a, 8b) — scored via §4.2 special flows (rating scale, paired, rank grouping, rank-rate grouping). Exposed via `Question.is_psychometric = True` and `Question.question_category = "psychometric"`.
+
+The list of psychometric codes is defined in `apps/question_bank/models.py` as `PSYCHOMETRIC_QUESTION_TYPES`. The Assessment module enforces that an assessment may contain only one category — see [assessment.md → Assessment Type Enforcement](assessment.md#assessment-type-enforcement) for details.
+
+Both `QuestionListSerializer` and `QuestionDetailSerializer` expose `is_psychometric` and `question_category` as read-only fields, so the frontend can display badges and filter assignment lists without recomputing the categorisation.
+
 ## 9 Scoring Modes
 
 | Code | Description |

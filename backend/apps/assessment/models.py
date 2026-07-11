@@ -57,12 +57,39 @@ class Assessment(models.Model):
         ("question", "Question Level"),
     ]
 
+    ASSESSMENT_TYPE_CHOICES = [
+        (
+            "normal",
+            "Normal Assessment (aptitude/ability — MCQ, FITB, Match, Grid, Hotspot)",
+        ),
+        (
+            "psychometric",
+            "Psychometric Assessment (Rating, Rank, Rank-then-Rate, Forced-Choice)",
+        ),
+    ]
+
     title = models.CharField(_("title"), max_length=255)
     objective = models.TextField(_("objective"), blank=True)
     description = models.TextField(_("description"), blank=True)
     instructions = models.TextField(_("instructions"), blank=True)
 
     status = models.CharField(_("status"), max_length=20, choices=STATUS_CHOICES, default="draft")
+
+    # Assessment type — controls which question categories can be attached.
+    # Per SRS 03_assessment_configuration.json §4.1 vs §4.2, normal and
+    # psychometric questions cannot be mixed in the same assessment.
+    assessment_type = models.CharField(
+        _("assessment type"),
+        max_length=20,
+        choices=ASSESSMENT_TYPE_CHOICES,
+        default="normal",
+        help_text=_(
+            "Determines which question categories can be attached. "
+            "Normal assessments accept only normal questions (MCQ/FITB/Match/Grid/Hotspot); "
+            "psychometric assessments accept only psychometric questions "
+            "(Rating/Rank/Rank-then-Rate/Forced-Choice). Mixing is not allowed."
+        ),
+    )
 
     # Display parameters
     total_duration_seconds = models.PositiveIntegerField(

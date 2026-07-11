@@ -375,3 +375,119 @@ class TestSessionFlow(AssessmentViewTestBase):
         self.client.force_authenticate(user=other)
         resp = self.client.get(f"/api/assessments/sessions/{sid}/")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+class TestAssessmentTypeEnforcement(AssessmentViewTestBase):
+    """Verify that normal and psychometric questions cannot be mixed in one assessment.
+
+    Per SRS 03_assessment_configuration.json §4.1 vs §4.2, an assessment must
+    contain either normal questions (MCQ/FITB/Match/Grid/Hotspot) OR psychometric
+    questions (Rating/Rank/Rank-then-Rate/Forced-Choice) — never both.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = UserFactory.create(role=get_or_create_role("cj_admin", is_system=True))
+        grant_assessment_perms(self.user)
+        self.client.force_authenticate(user=self.user)
+
+        # Two assessments — one normal, one psychometric
+        self.normal_assessment = Assessment.objects.create(
+            title="Normal Test",
+            assessment_type="normal",
+            created_by=self.user,
+        )
+        self.psychometric_assessment = Assessment.objects.create(
+            title="Psychometric Test",
+            assessment_type="psychometric",
+            created_by=self.user,
+        )
+        self.normal_section = AssessmentSection.objects.create(
+            assessment=self.normal_assessment, title="Normal Section", level=1, order=1
+        )
+        self.psychometric_section = AssessmentSection.objects.create(
+            assessment=self.psychometric_assessment,
+            title="Psychometric Section",
+            level=1,
+            order=1,
+        )
+
+        # Normal question (MCQ) and psychometric question (Rating)
+        self.normal_question = make_mcq_question(self.user)
+        self.psychometric_question = make_rating_question(self.user)
+
+    def test_normal_question_can_attach_to_normal_assessment(self):
+        """A normal question (MCQ) can be attached to a normal assessment."""
+        resp = self.client.post(
+            f"/api/assessments/{self.normal_assessment.id}/sections/"
+            f"{self.normal_section.id}/questions/",
+            {"question": self.normal_question.id, "order": 1},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+
+    def test_psychometric_question_can_attach_to_psychometric_assessment(self):
+        """A psychometric question (Rating) can be attached to a psychometric assessment."""
+        resp = self.client.post(
+            f"/api/assessments/{self.psychometric_assessment.id}/sections/"
+            f"{self.psychometric_section.id}/questions/",
+            {"question": self.psychometric_question.id, "order": 1},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+
+    def test_psychometric_question_rejected_for_normal_assessment(self):
+        """A psychometric question (Rating) cannot be attached to a normal assessment."""
+        resp = self.client.post(
+            f"/api/assessments/{self.normal_assessment.id}/sections/"
+            f"{self.normal_section.id}/questions/",
+            {"question": self.psychometric_question.id, "order": 1},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        body = resp.json()
+        assert body["error"]["code"] == "question_category_mismatch"
+        assert body["error"]["details"]["assessment_type"] == "normal"
+        assert body["error"]["details"]["question_category"] == "psychometric"
+        # Verify the question was NOT assigned
+        assert not AssessmentQuestion.objects.filter(
+            section=self.normal_section, question=self.psychometric_question
+        ).exists()
+
+    def test_normal_question_rejected_for_psychometric_assessment(self):
+        """A normal question (MCQ) cannot be attached to a psychometric assessment."""
+        resp = self.client.post(
+            f"/api/assessments/{self.psychometric_assessment.id}/sections/"
+            f"{self.psychometric_section.id}/questions/",
+            {"question": self.normal_question.id, "order": 1},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        body = resp.json()
+        assert body["error"]["code"] == "question_category_mismatch"
+        assert body["error"]["details"]["assessment_type"] == "psychometric"
+        assert body["error"]["details"]["question_category"] == "normal"
+        # Verify the question was NOT assigned
+        assert not AssessmentQuestion.objects.filter(
+            section=self.psychometric_section, question=self.normal_question
+        ).exists()
+
+    def test_default_assessment_type_is_normal(self):
+        """New assessments default to assessment_type='normal'."""
+        a = Assessment.objects.create(title="Default Test", created_by=self.user)
+        assert a.assessment_type == "normal"
+
+    def test_question_category_property_is_correct(self):
+        """The Question.is_psychometric and Question.question_category properties work."""
+        assert self.normal_question.is_psychometric is False
+        assert self.normal_question.question_category == "normal"
+        assert self.psychometric_question.is_psychometric is True
+        assert self.psychometric_question.question_category == "psychometric"
+
+    def test_assessment_type_exposed_in_api(self):
+        """The assessment serializer exposes assessment_type and assessment_type_label."""
+        resp = self.client.get(f"/api/assessments/{self.psychometric_assessment.id}/")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()["data"]
+        assert data["assessment_type"] == "psychometric"
+        assert "psychometric" in data["assessment_type_label"].lower()

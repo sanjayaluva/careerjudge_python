@@ -34,6 +34,7 @@ The module wires together the authored content (Question Bank) and the eventual 
 - Attempt-rule enforcement: `MULTIPLE_RETAKE`, `SINGLE_RETAKE`, `MULTIPLE_SESSION`, `SINGLE_SESSION`
 - Session lifecycle: `active` → `suspended` (resumable) → `completed`; resuming a suspended session reactivates it
 - Pre-created `QuestionAttempt` records when a session starts — the candidate-facing player can render the question palette immediately
+- **Assessment-type enforcement** (per SRS §4.1 vs §4.2): every assessment is typed `normal` or `psychometric` at creation; the question-assignment API rejects mismatched questions so the two categories can never be mixed in a single assessment
 
 **Frontend pages:**
 
@@ -278,6 +279,77 @@ Permission class: `HasAssessmentPermission` (extends `HasModulePermission`).
 | destroy | `assessment.delete` |
 
 The candidate-facing `SessionViewSet` only requires `IsAuthenticated` — candidates always see their own sessions. The `get_queryset` filter ensures they cannot retrieve other users' sessions (returns 404).
+
+## Assessment Type Enforcement
+
+Per SRS `03_assessment_configuration.json` §4.1 ("Setting Question Scores") vs §4.2 ("Psychometric Question Settings"), the system distinguishes two question categories:
+
+| Category | Question types | Scoring flow |
+|---|---|---|
+| **Normal** | MCQ (1a–1h), FITB (2a–2d), Match (3), Grid (4), Hotspot (5a, 5b) | §4.1 — per-option scores set on each question |
+| **Psychometric** | Rank (6a), Rank-then-Rate (6b), Rating (7), Forced-Choice (8a, 8b) | §4.2 — rating scale, paired, rank grouping, rank-rate grouping |
+
+The two categories **cannot be mixed** in a single assessment — a normal assessment accepts only normal questions, and a psychometric assessment accepts only psychometric questions. This is enforced at three layers:
+
+### 1. Model layer
+
+- `Assessment.assessment_type` — `CharField` with choices `normal` (default) or `psychometric`. Set at creation; cannot be changed after publishing.
+- `Question.is_psychometric` (property) — derived from `question_type` against the `PSYCHOMETRIC_QUESTION_TYPES` constant in `apps/question_bank/models.py`.
+- `Question.question_category` (property) — returns `"psychometric"` or `"normal"` for convenience.
+
+### 2. API layer
+
+`AssessmentQuestionViewSet.create` (the question-assignment endpoint) validates that the question's `question_category` matches the parent assessment's `assessment_type`. On mismatch it returns:
+
+```http
+HTTP/1.1 400 Bad Request
+{
+  "error": {
+    "code": "question_category_mismatch",
+    "message": "Cannot attach a psychometric question to a normal assessment. Normal and psychometric questions cannot be mixed in the same assessment.",
+    "details": {
+      "assessment_type": "normal",
+      "question_category": "psychometric",
+      "question_type": "STANDARD_RATING_SCALE"
+    }
+  }
+}
+```
+
+The validation is at the API layer only — direct ORM creation (`AssessmentQuestion.objects.create(...)`) bypasses it. This is intentional so test fixtures and data migrations can construct mixed-type assessments if ever needed for legacy data, but the user-facing API never allows it.
+
+### 3. Frontend layer
+
+- **Create modal** (`AssessmentsPage.tsx`) — mandatory radio-card selector for assessment type with a warning that mixing is not allowed.
+- **List page** — Type column with badge (Normal / Psychometric).
+- **Detail page → Overview tab** — Shows assessment type with description of allowed question types.
+- **Detail page → Questions tab** — Question-type dropdown is filtered to only show types matching the assessment's type; an amber warning banner reminds the author which category is allowed. The backend will still reject any mismatched assignment as a defense-in-depth.
+
+### Example: Create a psychometric assessment
+
+```bash
+curl -X POST /api/assessments/ \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "title": "Career Interest Inventory",
+    "assessment_type": "psychometric",
+    "objective": "Measure career interests via forced-choice ranking",
+    "total_duration_seconds": 1800
+  }'
+```
+
+### Example: Mismatch rejection
+
+```bash
+# Try to attach an MCQ (normal) to a psychometric assessment
+curl -X POST /api/assessments/42/sections/7/questions/ \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"question": 103}'   # question 103 is an MCQ_TEXT_IMAGE
+
+# → 400 Bad Request, error.code = "question_category_mismatch"
+```
 
 ## Frontend Integration
 

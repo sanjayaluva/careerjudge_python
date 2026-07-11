@@ -41,6 +41,8 @@ export interface QuestionListItem {
   updated_at: string;
   is_active: boolean;
   exposure_count: number;
+  is_psychometric: boolean;
+  question_category: "normal" | "psychometric";
 }
 
 export interface ResponseOption {
@@ -333,6 +335,34 @@ export const QUESTION_TYPES = [
   { value: "FORCED_CHOICE_SINGLE_LEVEL", label: "8a: Forced-Choice – Single Level" },
   { value: "FORCED_CHOICE_TWO_LEVEL", label: "8b: Forced-Choice – Two-Level" },
 ];
+
+// Psychometric-type question codes (must match the backend
+// PSYCHOMETRIC_QUESTION_TYPES constant in apps/question_bank/models.py).
+// Per SRS 03_assessment_configuration.json §4.2, these question types use
+// special scoring flows and cannot be mixed with normal question types
+// (§4.1) in a single assessment.
+export const PSYCHOMETRIC_QUESTION_TYPE_CODES = [
+  "RANK_SIMPLE",
+  "RANK_THEN_RATE",
+  "STANDARD_RATING_SCALE",
+  "FORCED_CHOICE_SINGLE_LEVEL",
+  "FORCED_CHOICE_TWO_LEVEL",
+] as const;
+
+export function isPsychometricQuestionType(questionType: string): boolean {
+  return (PSYCHOMETRIC_QUESTION_TYPE_CODES as readonly string[]).includes(questionType);
+}
+
+// Pre-split lists for the assessment question-assignment UI — used to
+// filter the question-type dropdown to only show types that match the
+// assessment_type of the current assessment.
+export const NORMAL_QUESTION_TYPES = QUESTION_TYPES.filter(
+  (t) => !isPsychometricQuestionType(t.value),
+);
+
+export const PSYCHOMETRIC_QUESTION_TYPES_LIST = QUESTION_TYPES.filter((t) =>
+  isPsychometricQuestionType(t.value),
+);
 
 export const SCORING_TYPES = [
   {
