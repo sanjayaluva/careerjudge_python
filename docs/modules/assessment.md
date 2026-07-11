@@ -280,6 +280,26 @@ Permission class: `HasAssessmentPermission` (extends `HasModulePermission`).
 
 The candidate-facing `SessionViewSet` only requires `IsAuthenticated` — candidates always see their own sessions. The `get_queryset` filter ensures they cannot retrieve other users' sessions (returns 404).
 
+### Role × Assessment permissions
+
+Per SRS UC029 "Prepare Assessment Blueprint", the **psychometrician** is the primary author of assessments. The role-permission matrix:
+
+| Role | view | add | change | delete | Notes |
+|---|---|---|---|---|---|
+| cj_admin | ✅ | ✅ | ✅ | ✅ | Can edit/delete any assessment, including published (admin override) |
+| psychometrician | ✅ | ✅ | ✅ | ✅ | Primary author — creates and manages own assessments; subject to publish-lock |
+| corp_admin | ✅ | ✅ | — | — | Can create + view; cannot delete |
+| corp_exclusive | ✅ | ✅ | — | — | Same as corp_admin |
+| sme | ✅ | — | — | — | View only — authors questions, not assessments |
+| reviewer | ✅ | — | — | — | View only |
+| trainer | ✅ | — | — | — | View only — assigns assessments to trainees |
+| group_admin | ✅ | — | — | — | View + assign to group members |
+| counsellor | ✅ | — | — | — | View only |
+| channel_partner | ✅ | ✅ | — | — | Can create for their org |
+| individual | ✅ | — | — | — | Takes assessments only |
+
+**Published-assessment lock:** non-admin users (including psychometrician) cannot edit or delete a published assessment — they must archive it first or ask a `cj_admin` to make the change. This implements the SRS §2.2 rule: *"After going live, user cannot directly edit Assessment Title. An edit request is sent to Admin for approval."*
+
 ## Assessment Type Enforcement
 
 Per SRS `03_assessment_configuration.json` §4.1 ("Setting Question Scores") vs §4.2 ("Psychometric Question Settings"), the system distinguishes two question categories:

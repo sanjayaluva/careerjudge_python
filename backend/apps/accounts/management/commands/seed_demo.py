@@ -115,7 +115,14 @@ ROLE_PERMISSIONS = {
         ("question_bank", "add"),
         ("question_bank", "change"),
         ("question_bank", "review"),
+        # Psychometrician is the primary assessment author per SRS UC029
+        # "Prepare Assessment Blueprint" — full CRUD on assessments.
         ("assessment", "view"),
+        ("assessment", "add"),
+        ("assessment", "change"),
+        ("assessment", "delete"),
+        ("career_profiling", "view"),
+        ("career_profiling", "change"),
         ("reporting", "view"),
     ],
     "sme": [

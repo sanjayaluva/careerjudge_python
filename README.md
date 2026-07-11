@@ -127,7 +127,7 @@ See [docs/FAST_DEV_WORKFLOW.md](docs/FAST_DEV_WORKFLOW.md) for details.
 | cj_admin | view/add/change/delete/approve/reject/review | view/add/change/delete | full | full | view + generate |
 | corp_admin | — | view/add | view/add/change | view/change | view + generate |
 | corp_exclusive | — | view/add | view/add/change | view | view + generate |
-| psychometrician | view/add/change/review | view | — | — | view |
+| psychometrician | view/add/change/review | view/add/change/delete | — | — | view |
 | sme | view/add/change/delete/request_delete (own only) | view | — | — | — |
 | reviewer | view/review/approve/reject (no edit) | view | — | — | — |
 | trainer | — | view | view | — | — |

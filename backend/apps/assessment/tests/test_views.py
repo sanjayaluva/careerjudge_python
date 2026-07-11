@@ -181,6 +181,79 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert resp.status_code == status.HTTP_403_FORBIDDEN
 
 
+class TestPsychometricianAssessmentAccess(AssessmentViewTestBase):
+    """Per SRS UC029 'Prepare Assessment Blueprint', the psychometrician is the
+    primary author of assessments. They should have full CRUD on assessments
+    (subject to the standard published-status lock for non-admins).
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.psy = UserFactory.create(role=get_or_create_role("psychometrician", is_system=True))
+        # Grant the same perms the seed_demo grants to psychometrician:
+        # view + add + change + delete on assessment.
+        grant_assessment_perms(self.psy, actions=("view", "add", "change", "delete"))
+        self.client.force_authenticate(user=self.psy)
+
+    def test_psychometrician_can_create_assessment(self):
+        """Psychometrician can create a new assessment."""
+        resp = self.client.post(
+            "/api/assessments/",
+            {"title": "Psy Assessment", "objective": "Designed by psychometrician"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert resp.json()["data"]["title"] == "Psy Assessment"
+        assert resp.json()["data"]["created_by"] == self.psy.id
+
+    def test_psychometrician_can_edit_own_draft_assessment(self):
+        """Psychometrician can edit a draft assessment they created."""
+        a = Assessment.objects.create(title="Psy Draft", created_by=self.psy)
+        resp = self.client.patch(
+            f"/api/assessments/{a.id}/",
+            {"title": "Psy Draft Updated"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        a.refresh_from_db()
+        assert a.title == "Psy Draft Updated"
+
+    def test_psychometrician_can_delete_own_draft_assessment(self):
+        """Psychometrician can delete a draft assessment they created."""
+        a = Assessment.objects.create(title="Psy To Delete", created_by=self.psy)
+        resp = self.client.delete(f"/api/assessments/{a.id}/")
+        assert resp.status_code == status.HTTP_200_OK
+        assert not Assessment.objects.filter(id=a.id).exists()
+
+    def test_psychometrician_can_publish_own_draft_assessment(self):
+        """Psychometrician can publish a draft assessment they created."""
+        a = Assessment.objects.create(title="Psy To Publish", created_by=self.psy)
+        resp = self.client.post(f"/api/assessments/{a.id}/publish/")
+        assert resp.status_code == status.HTTP_200_OK
+        a.refresh_from_db()
+        assert a.status == "published"
+
+    def test_psychometrician_cannot_edit_published_assessment(self):
+        """Non-admin psychometrician is still subject to the publish-lock."""
+        a = Assessment.objects.create(
+            title="Psy Published", status="published", created_by=self.psy
+        )
+        resp = self.client.patch(
+            f"/api/assessments/{a.id}/", {"title": "Try Update"}, format="json"
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_psychometrician_can_create_section_in_own_assessment(self):
+        """Psychometrician can build sections in their own assessment."""
+        a = Assessment.objects.create(title="Psy With Sections", created_by=self.psy)
+        resp = self.client.post(
+            f"/api/assessments/{a.id}/sections/",
+            {"title": "Section A", "level": 1, "order": 1},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+
+
 class TestSectionCRUD(AssessmentViewTestBase):
     def setUp(self):
         self.client = APIClient()
