@@ -13,6 +13,7 @@ This folder contains all project documentation. The [root README.md](../README.m
 ### Development
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Coding standards, git workflow, PR process
 - [MODULE_FREEZE.md](MODULE_FREEZE.md) — Module freeze policy (additive-only changes after version tag)
+- [FAST_DEV_WORKFLOW.md](FAST_DEV_WORKFLOW.md) — Volume-mount fast deploy workflow (~15s code-only redeploy)
 
 ### Infrastructure & Deployment
 - [ACTIONS_SECRETS_SETUP.md](ACTIONS_SECRETS_SETUP.md) — GitHub Actions secrets configuration
@@ -24,18 +25,18 @@ This folder contains all project documentation. The [root README.md](../README.m
 
 Each module has its own doc in [modules/](modules/):
 
-| Module | Version | Status | Doc |
-|---|---|---|---|
-| Accounts | v1.1.0 | ✅ Frozen | [accounts.md](modules/accounts.md) |
-| Organizations | v1.0.0 | ✅ Frozen | [organizations.md](modules/organizations.md) |
-| Question Bank | v1.0.0-pre | 🔧 Active | [question_bank.md](modules/question_bank.md) |
-| Assessment | — | 📋 Planned | — |
-| Career Profiling | — | 📋 Planned | — |
-| Reporting | — | 📋 Planned | — |
-| Training | — | 📋 Planned | — |
-| Counseling | — | 📋 Planned | — |
-| CMS | — | 📋 Planned | — |
-| Notifications | — | 📋 Planned | — |
+| Module | Version | Status | Tests | Doc |
+|---|---|---|---|---|
+| Accounts | v1.1.0 | ✅ Frozen | 83 tests, 84% coverage | [accounts.md](modules/accounts.md) |
+| Organizations | v1.0.0 | ✅ Frozen | 82% coverage | [organizations.md](modules/organizations.md) |
+| Question Bank | v1.0.0-pre | 🔧 Active | 53 tests | [question_bank.md](modules/question_bank.md) |
+| Assessment | v1.0.0-pre | 🔧 Active | 76 tests | [assessment.md](modules/assessment.md) |
+| Career Profiling | — | 📋 Planned | — | — |
+| Reporting | — | 📋 Planned | — | — |
+| Training | — | 📋 Planned | — | — |
+| Counseling | — | 📋 Planned | — | — |
+| CMS | — | 📋 Planned | — | — |
+| Notifications | — | 📋 Planned | — | — |
 
 ### Documentation Conventions
 

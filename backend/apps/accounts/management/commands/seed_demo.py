@@ -4,9 +4,9 @@ Usage:
     python manage.py seed_demo
 
 Creates:
-- 10 roles (cj_admin, corp_admin, corp_exclusive, psychometrician,
-  sme, reviewer, trainer, group_admin, counsellor, individual)
-- 10 demo users (one per role) with predictable passwords
+- 11 system roles (cj_admin, corp_admin, corp_exclusive, psychometrician,
+  sme, reviewer, trainer, group_admin, counsellor, channel_partner, individual)
+- 11 demo users (one per role) with predictable passwords
 - 1 superuser for emergency access
 - Sample module rights per role (view/add/change/delete on relevant modules)
 
