@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from apps.question_bank.serializers import QuestionListSerializer
+from apps.question_bank.serializers import QuestionDetailSerializer, QuestionListSerializer
 
 from .models import (
     Assessment,
@@ -30,7 +30,7 @@ class AssessmentSectionSerializer(serializers.ModelSerializer):
             "duration_seconds",
             "subsections",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "assessment"]
 
     def get_subsections(self, obj):
         children = obj.subsections.all().order_by("order")
@@ -52,7 +52,7 @@ class AssessmentQuestionSerializer(serializers.ModelSerializer):
             "duration_seconds",
             "question_detail",
         ]
-        read_only_fields = ["id", "question_detail"]
+        read_only_fields = ["id", "section", "question_detail"]
 
 
 class AssessmentSerializer(serializers.ModelSerializer):
@@ -115,6 +115,10 @@ class AssessmentSessionSerializer(serializers.ModelSerializer):
     candidate_name = serializers.CharField(
         source="candidate.full_name", read_only=True, default=None
     )
+    # Expose assessment-level config the candidate player needs at runtime
+    total_duration_seconds = serializers.IntegerField(
+        source="assessment.total_duration_seconds", read_only=True
+    )
 
     class Meta:
         model = AssessmentSession
@@ -132,6 +136,7 @@ class AssessmentSessionSerializer(serializers.ModelSerializer):
             "total_score",
             "max_score",
             "percentage",
+            "total_duration_seconds",
         ]
         read_only_fields = [
             "id",
@@ -145,11 +150,19 @@ class AssessmentSessionSerializer(serializers.ModelSerializer):
             "percentage",
             "assessment_title",
             "candidate_name",
+            "total_duration_seconds",
         ]
 
 
 class QuestionAttemptSerializer(serializers.ModelSerializer):
-    question_detail = QuestionListSerializer(source="question", read_only=True)
+    """Serializer for a candidate's attempt at one question.
+
+    Uses ``QuestionDetailSerializer`` for ``question_detail`` because the
+    session player needs the full question including options, flash items,
+    hotspot areas, passage, image, etc. to render the answer input.
+    """
+
+    question_detail = QuestionDetailSerializer(source="question", read_only=True)
 
     class Meta:
         model = QuestionAttempt

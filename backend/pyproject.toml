@@ -70,11 +70,7 @@ omit = [
     "*/tests.py",
     "*/admin.py",
     "*/apps.py",
-    "*/models.py",   # stub models for unfrozen modules
-    "*/serializers.py",  # stub serializers for unfrozen modules
-    "*/views.py",   # stub views for unfrozen modules
-    "*/urls.py",    # stub urls for unfrozen modules
-    "apps/assessment/*",
+    # Stub modules — not yet implemented (Phase 3+)
     "apps/career_profiling/*",
     "apps/reporting/*",
     "apps/training/*",

@@ -1,6 +1,8 @@
 /**
  * Session Results Page — shows scores after assessment submission.
  *
+ * Fetches the session summary plus per-section score breakdown from the API.
+ *
  * Route: /assessments/sessions/:sessionId/results
  */
 import { useQuery } from "@tanstack/react-query";
@@ -23,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
-import { retrieveSession } from "@/api/assessment";
+import { getSessionSectionScores, retrieveSession, type SectionScore } from "@/api/assessment";
 
 export default function SessionResultsPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -37,6 +39,13 @@ export default function SessionResultsPage() {
     queryKey: ["assessment-session", sid],
     queryFn: () => retrieveSession(sid),
     enabled: !Number.isNaN(sid),
+  });
+
+  // Fetch section score breakdown (only meaningful for completed sessions)
+  const { data: sectionScores, isLoading: scoresLoading } = useQuery({
+    queryKey: ["assessment-session-section-scores", sid],
+    queryFn: () => getSessionSectionScores(sid),
+    enabled: !Number.isNaN(sid) && session?.status === "completed",
   });
 
   if (isLoading) {
@@ -57,6 +66,7 @@ export default function SessionResultsPage() {
 
   const percentage = session.percentage ?? 0;
   const passed = percentage >= 40;
+  const hasSectionScores = (sectionScores?.length ?? 0) > 0;
 
   return (
     <div className="space-y-6 p-6">
@@ -114,6 +124,59 @@ export default function SessionResultsPage() {
               </span>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Section Score Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Section Score Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {scoresLoading ? (
+            <div className="flex justify-center py-6">
+              <Spinner />
+            </div>
+          ) : hasSectionScores ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Section</TableHead>
+                  <TableHead className="text-right">Raw Score</TableHead>
+                  <TableHead className="text-right">Max Score</TableHead>
+                  <TableHead className="text-right">Percentage</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sectionScores!.map((ss: SectionScore) => (
+                  <TableRow key={ss.id}>
+                    <TableCell className="font-medium text-slate-900">
+                      {ss.section_title}
+                    </TableCell>
+                    <TableCell className="text-right">{ss.raw_score.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{ss.max_score.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge
+                        variant={
+                          ss.percentage >= 60
+                            ? "success"
+                            : ss.percentage >= 40
+                              ? "warning"
+                              : "danger"
+                        }
+                      >
+                        {ss.percentage.toFixed(1)}%
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="py-4 text-sm text-slate-500">
+              No section scores available. This session may not have been scored yet.
+            </p>
+          )}
         </CardContent>
       </Card>
 

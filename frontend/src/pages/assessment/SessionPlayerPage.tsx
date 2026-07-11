@@ -39,15 +39,19 @@ export default function SessionPlayerPage() {
     enabled: !Number.isNaN(sid),
   });
 
-  // Timer countdown
+  // Initialize the timer once we know the assessment duration.
+  // total_duration_seconds is exposed on the session serializer for the player.
   useEffect(() => {
     if (!session || session.status !== "active") return;
-    // Get duration from the assessment (stored on session.assessment)
-    // For now, use a simple approach: check if total_duration_seconds is set
-    // We'll need the assessment data — retrieve from session
-    // The session API returns assessment_title but not duration directly.
-    // For simplicity, we'll skip timer if duration is not available.
-  }, [session]);
+    if (timeLeft !== null) return; // already initialised
+    if (session.total_duration_seconds && session.total_duration_seconds > 0) {
+      // For an in-progress session we approximate remaining time from started_at.
+      // (Server-side enforcement is the source of truth; this is purely UX.)
+      const elapsed = Math.floor((Date.now() - new Date(session.started_at).getTime()) / 1000);
+      const remaining = Math.max(0, session.total_duration_seconds - elapsed);
+      setTimeLeft(remaining);
+    }
+  }, [session, timeLeft]);
 
   useEffect(() => {
     if (timeLeft === null || timeLeft <= 0) return;
@@ -239,39 +243,25 @@ export default function SessionPlayerPage() {
             </button>
           </div>
 
-          {/* Flash items (for flash types) */}
+          {/* Flash items — interactive simulation for flash-based question types.
+              The candidate sees each item briefly (flash_interval_ms) before
+              the question is revealed. They can replay the sequence. */}
           {qd.flash_items.length > 0 && (
-            <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="mb-2 text-xs font-medium text-amber-700">
-                Flash items ({qd.flash_interval_ms}ms each · {qd.flash_display_count} shown):
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {qd.flash_items.map((fi) => (
-                  <div
-                    key={fi.id}
-                    className="flex h-12 w-12 items-center justify-center rounded border border-slate-300 bg-white p-1"
-                  >
-                    {fi.item_type === "IMAGE" && fi.image_file ? (
-                      <img
-                        src={fi.image_file}
-                        alt=""
-                        className="max-h-full max-w-full object-contain"
-                      />
-                    ) : (
-                      <span className="text-xs font-medium">{fi.text_value}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <FlashSimulation
+              items={qd.flash_items}
+              intervalMs={qd.flash_interval_ms ?? 1000}
+              displayCount={qd.flash_display_count ?? qd.flash_items.length}
+              order={qd.flash_order}
+            />
           )}
 
-          {/* Passage (for passage type) */}
+          {/* Passage — collapsible panel for passage-based questions. */}
           {qd.passage_title && (
-            <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3">
-              <p className="font-semibold text-slate-900">{qd.passage_title}</p>
-              {qd.passage_body && <p className="mt-1 text-sm text-slate-700">{qd.passage_body}</p>}
-            </div>
+            <PassageDisplay
+              title={qd.passage_title}
+              body={qd.passage_body}
+              displayDurationSeconds={qd.display_duration_seconds ?? null}
+            />
           )}
 
           {/* Question image */}
@@ -799,5 +789,191 @@ function AnswerInput({
     <p className="text-sm text-slate-500">
       Answer input for this question type ({qd.question_type_label}) is not yet implemented.
     </p>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FlashSimulation — plays flash items one at a time at the configured interval.
+// Respects flash_order (SEQUENCE = saved order, RANDOM = shuffled).
+// Candidate can replay the sequence on demand.
+// ---------------------------------------------------------------------------
+
+interface FlashItemLike {
+  id: number;
+  item_type: string;
+  text_value: string;
+  image_file: string | null;
+  order: number;
+  is_in_display_pool: boolean;
+}
+
+function FlashSimulation({
+  items,
+  intervalMs,
+  displayCount,
+  order,
+}: {
+  items: FlashItemLike[];
+  intervalMs: number;
+  displayCount: number;
+  order: string;
+}) {
+  // Use only items flagged for the display pool (default to all if none flagged)
+  const pool = items.filter((i) => i.is_in_display_pool);
+  const sourceItems = pool.length > 0 ? pool : items;
+
+  const [playing, setPlaying] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState<number | null>(null);
+  const [playedOnce, setPlayedOnce] = useState(false);
+
+  // Build the sequence once on mount (or when question changes)
+  const [sequence] = useState<FlashItemLike[]>(() => {
+    const sorted = [...sourceItems].sort((a, b) => a.order - b.order);
+    const trimmed = sorted.slice(0, displayCount);
+    if (order === "RANDOM") {
+      // Fisher-Yates shuffle
+      for (let i = trimmed.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [trimmed[i], trimmed[j]] = [trimmed[j], trimmed[i]];
+      }
+    }
+    return trimmed;
+  });
+
+  const play = () => {
+    if (sequence.length === 0) return;
+    setPlaying(true);
+    setCurrentIndex(0);
+
+    sequence.forEach((_, i) => {
+      setTimeout(() => {
+        if (i + 1 < sequence.length) {
+          setCurrentIndex(i + 1);
+        } else {
+          // End of sequence
+          setTimeout(() => {
+            setPlaying(false);
+            setCurrentIndex(null);
+            setPlayedOnce(true);
+          }, intervalMs);
+        }
+      }, intervalMs * (i + 1));
+    });
+  };
+
+  return (
+    <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-xs font-medium text-amber-700">
+          Flash items · {intervalMs}ms each · {sequence.length} shown
+          {order === "RANDOM" ? " (random order)" : " (sequence)"}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={play}
+          disabled={playing}
+          className="h-7 px-2 text-xs"
+        >
+          {playing ? "Flashing..." : playedOnce ? "↻ Replay" : "▶ Play"}
+        </Button>
+      </div>
+      <div className="flex h-32 items-center justify-center rounded-md border border-amber-200 bg-white">
+        {playing && currentIndex !== null && sequence[currentIndex] ? (
+          <div className="text-center">
+            {sequence[currentIndex].item_type === "IMAGE" && sequence[currentIndex].image_file ? (
+              <img
+                src={sequence[currentIndex].image_file!}
+                alt=""
+                className="mx-auto max-h-24 max-w-full object-contain"
+              />
+            ) : (
+              <span className="text-2xl font-bold text-slate-900">
+                {sequence[currentIndex].text_value}
+              </span>
+            )}
+            <p className="mt-1 text-xs text-slate-400">
+              {currentIndex + 1} / {sequence.length}
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">
+            {playedOnce ? "Click Replay to see the items again." : "Click Play to begin."}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PassageDisplay — collapsible passage panel for passage-based questions.
+// Shows the passage title and body, with an optional display_duration_seconds
+// countdown (after which the passage is hidden to simulate exam conditions).
+// ---------------------------------------------------------------------------
+
+function PassageDisplay({
+  title,
+  body,
+  displayDurationSeconds,
+}: {
+  title: string;
+  body: string;
+  displayDurationSeconds: number | null;
+}) {
+  const [visible, setVisible] = useState(true);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(displayDurationSeconds);
+
+  // Countdown for timed passages
+  useEffect(() => {
+    if (secondsLeft === null || secondsLeft <= 0) return;
+    const timer = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s === null || s <= 1) {
+          clearInterval(timer);
+          setVisible(false);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [secondsLeft]);
+
+  if (!visible) {
+    return (
+      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+        <p className="text-sm text-slate-600">
+          Passage display time has elapsed. The passage is no longer visible.
+        </p>
+        {displayDurationSeconds && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={() => {
+              setVisible(true);
+              setSecondsLeft(null);
+            }}
+          >
+            Show passage anyway
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3">
+      <div className="mb-1 flex items-center justify-between">
+        <p className="font-semibold text-slate-900">{title}</p>
+        {secondsLeft !== null && secondsLeft > 0 && (
+          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+            {secondsLeft}s left
+          </span>
+        )}
+      </div>
+      {body && <p className="mt-1 text-sm leading-relaxed text-slate-700">{body}</p>}
+    </div>
   );
 }

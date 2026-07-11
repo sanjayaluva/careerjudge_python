@@ -59,6 +59,8 @@ export interface AssessmentSession {
   total_score: number | null;
   max_score: number | null;
   percentage: number | null;
+  /** Assessment-level total duration (seconds) — exposed via session API for the player timer. */
+  total_duration_seconds: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +77,7 @@ export function listAssessments(params?: {
   previous: string | null;
   results: Assessment[];
 }> {
-  return apiGetPaged<Assessment>(`${BASE}/assessments/`, {
+  return apiGetPaged<Assessment>(`${BASE}/`, {
     params: {
       page: params?.page ?? 1,
       ...(params?.search ? { search: params.search } : {}),
@@ -85,26 +87,26 @@ export function listAssessments(params?: {
 }
 
 export function retrieveAssessment(id: number): Promise<AssessmentDetail> {
-  return apiGet<AssessmentDetail>(`${BASE}/assessments/${id}/`);
+  return apiGet<AssessmentDetail>(`${BASE}/${id}/`);
 }
 
 export function createAssessment(payload: Record<string, unknown>): Promise<AssessmentDetail> {
-  return apiPost<AssessmentDetail>(`${BASE}/assessments/`, payload);
+  return apiPost<AssessmentDetail>(`${BASE}/`, payload);
 }
 
 export function updateAssessment(
   id: number,
   payload: Record<string, unknown>,
 ): Promise<AssessmentDetail> {
-  return apiPatch<AssessmentDetail>(`${BASE}/assessments/${id}/`, payload);
+  return apiPatch<AssessmentDetail>(`${BASE}/${id}/`, payload);
 }
 
 export function deleteAssessment(id: number): Promise<void> {
-  return apiDelete(`${BASE}/assessments/${id}/`);
+  return apiDelete(`${BASE}/${id}/`);
 }
 
 export function publishAssessment(id: number): Promise<{ id: number; status: string }> {
-  return apiPost(`${BASE}/assessments/${id}/publish/`);
+  return apiPost(`${BASE}/${id}/publish/`);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +114,7 @@ export function publishAssessment(id: number): Promise<{ id: number; status: str
 // ---------------------------------------------------------------------------
 
 export function listSections(assessmentId: number): Promise<AssessmentSection[]> {
-  return apiGetPaged<AssessmentSection>(`${BASE}/assessments/${assessmentId}/sections/`).then(
+  return apiGetPaged<AssessmentSection>(`${BASE}/${assessmentId}/sections/`).then(
     (r) => r.results,
   );
 }
@@ -121,7 +123,7 @@ export function createSection(
   assessmentId: number,
   payload: { title: string; parent?: number | null; description?: string; level?: number },
 ): Promise<AssessmentSection> {
-  return apiPost<AssessmentSection>(`${BASE}/assessments/${assessmentId}/sections/`, payload);
+  return apiPost<AssessmentSection>(`${BASE}/${assessmentId}/sections/`, payload);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +153,7 @@ export function listSectionQuestions(
   sectionId: number,
 ): Promise<AssessmentQuestion[]> {
   return apiGetPaged<AssessmentQuestion>(
-    `${BASE}/assessments/${assessmentId}/sections/${sectionId}/questions/`,
+    `${BASE}/${assessmentId}/sections/${sectionId}/questions/`,
   ).then((r) => r.results);
 }
 
@@ -161,7 +163,7 @@ export function assignQuestion(
   payload: { question: number; order?: number; sub_question_index?: number },
 ): Promise<AssessmentQuestion> {
   return apiPost<AssessmentQuestion>(
-    `${BASE}/assessments/${assessmentId}/sections/${sectionId}/questions/`,
+    `${BASE}/${assessmentId}/sections/${sectionId}/questions/`,
     payload,
   );
 }
@@ -172,7 +174,7 @@ export function removeQuestion(
   questionId: number,
 ): Promise<void> {
   return apiDelete(
-    `${BASE}/assessments/${assessmentId}/sections/${sectionId}/questions/${questionId}/`,
+    `${BASE}/${assessmentId}/sections/${sectionId}/questions/${questionId}/`,
   );
 }
 
@@ -181,27 +183,27 @@ export function removeQuestion(
 // ---------------------------------------------------------------------------
 
 export function listSessions(assessmentId: number): Promise<AssessmentSession[]> {
-  return apiGet<AssessmentSession[]>(`${BASE}/assessments/${assessmentId}/sessions/`);
+  return apiGet<AssessmentSession[]>(`${BASE}/${assessmentId}/sessions/`);
 }
 
 export function startSession(assessmentId: number): Promise<AssessmentSession> {
-  return apiPost<AssessmentSession>(`${BASE}/assessments/${assessmentId}/start_session/`);
+  return apiPost<AssessmentSession>(`${BASE}/${assessmentId}/start_session/`);
 }
 
 export function submitSession(sessionId: number): Promise<AssessmentSession> {
-  return apiPost<AssessmentSession>(`${BASE}/assessments/sessions/${sessionId}/submit/`);
+  return apiPost<AssessmentSession>(`${BASE}/sessions/${sessionId}/submit/`);
 }
 
 export function suspendSession(sessionId: number): Promise<AssessmentSession> {
-  return apiPost<AssessmentSession>(`${BASE}/assessments/sessions/${sessionId}/suspend/`);
+  return apiPost<AssessmentSession>(`${BASE}/sessions/${sessionId}/suspend/`);
 }
 
 export function listMySessions(): Promise<AssessmentSession[]> {
-  return apiGetPaged<AssessmentSession>(`${BASE}/assessments/sessions/`).then((r) => r.results);
+  return apiGetPaged<AssessmentSession>(`${BASE}/sessions/`).then((r) => r.results);
 }
 
 export function retrieveSession(sessionId: number): Promise<AssessmentSession> {
-  return apiGet<AssessmentSession>(`${BASE}/assessments/sessions/${sessionId}/`);
+  return apiGet<AssessmentSession>(`${BASE}/sessions/${sessionId}/`);
 }
 
 export interface SessionQuestion {
@@ -275,7 +277,7 @@ export interface SessionQuestion {
 }
 
 export function getSessionQuestions(sessionId: number): Promise<SessionQuestion[]> {
-  return apiGet<SessionQuestion[]>(`${BASE}/assessments/sessions/${sessionId}/questions/`);
+  return apiGet<SessionQuestion[]>(`${BASE}/sessions/${sessionId}/questions/`);
 }
 
 export function submitAnswer(
@@ -287,7 +289,7 @@ export function submitAnswer(
     bookmark?: boolean;
   },
 ): Promise<SessionQuestion> {
-  return apiPost<SessionQuestion>(`${BASE}/assessments/sessions/${sessionId}/answer/`, payload);
+  return apiPost<SessionQuestion>(`${BASE}/sessions/${sessionId}/answer/`, payload);
 }
 
 export function submitSessionResult(sessionId: number): Promise<{
@@ -302,7 +304,21 @@ export function submitSessionResult(sessionId: number): Promise<{
     percentage: number;
   }[];
 }> {
-  return apiPost(`${BASE}/assessments/sessions/${sessionId}/submit/`);
+  return apiPost(`${BASE}/sessions/${sessionId}/submit/`);
+}
+
+export interface SectionScore {
+  id: number;
+  session: number;
+  section: number;
+  section_title: string;
+  raw_score: number;
+  max_score: number;
+  percentage: number;
+}
+
+export function getSessionSectionScores(sessionId: number): Promise<SectionScore[]> {
+  return apiGet<SectionScore[]>(`${BASE}/sessions/${sessionId}/section_scores/`);
 }
 
 // ---------------------------------------------------------------------------

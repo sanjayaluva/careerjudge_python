@@ -23,7 +23,7 @@ urlpatterns = [
         include("apps.question_bank.urls", namespace="question_bank"),
     ),
     path(
-        "api/assessments/",
+        "api/",
         include("apps.assessment.urls", namespace="assessment"),
     ),
     path("api/notifications/", include("apps.notifications.urls", namespace="notifications")),

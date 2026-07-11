@@ -1,7 +1,7 @@
 # Project Status — CareerJudge
 
-> **Last updated**: 2026-07-04
-> **Current phase**: Phase 2 (Question Bank — in progress)
+> **Last updated**: 2026-07-11
+> **Current phase**: Phase 2 (Question Bank + Assessment — in progress)
 
 ## Completed Modules
 
@@ -18,7 +18,7 @@
 | Module | Version | Status | Tests | Docs |
 |---|---|---|---|---|
 | Question Bank | v1.0.0-pre | 🔧 Active | 53 tests | [question_bank.md](modules/question_bank.md) |
-| Assessment | — | 📋 Planned | — | — |
+| Assessment | v1.0.0-pre | 🔧 Active | 76 tests | [assessment.md](modules/assessment.md) |
 | Career Profiling | — | 📋 Planned | — | — |
 | Reporting | — | 📋 Planned | — | — |
 
@@ -59,6 +59,21 @@
 - ✅ Question preview tab (candidate view)
 - ✅ cj_admin override (edit/delete any question regardless of status)
 
+### Assessment
+- ✅ 6 models: Assessment, AssessmentSection (hierarchical L1–4), AssessmentQuestion, AssessmentSession, QuestionAttempt, SectionScore
+- ✅ 9-mode scoring engine (BINARY, BINARY_FUZZY, PARTIAL, NEGATIVE, RANK, RANK_RATE, RATING, FORCED_CHOICE, FORCED_CHOICE_RATED)
+- ✅ Exposure tracking + auto-deactivation at exposure_limit
+- ✅ Per-section score aggregation with auto-computed percentages
+- ✅ Attempt-rule enforcement (MULTIPLE_RETAKE, SINGLE_RETAKE, MULTIPLE_SESSION, SINGLE_SESSION)
+- ✅ Session lifecycle: active → suspended (resumable) → completed
+- ✅ Fullscreen delivery player with question palette, bookmark, timer
+- ✅ Per-type answer inputs: MCQ, FITB, Rating, Rank, Forced-Choice, Hotspot (image click capture), Match (two-column pair matching), Grid (checkbox table)
+- ✅ Flash simulation (respects SEQUENCE/RANDOM order, configurable interval & count, replayable)
+- ✅ Passage display with optional display_duration countdown
+- ✅ Results page with per-section score breakdown table
+- ✅ Candidate isolation (users see only their own sessions)
+- ✅ 76 backend tests (models, scoring, views)
+
 ### Infrastructure
 - ✅ Django 5 + DRF + SimpleJWT backend
 - ✅ React 18 + Vite + TypeScript + Tailwind frontend
@@ -88,8 +103,9 @@
 
 ## Next Priorities
 
-1. **Assessment module** — sessions, 8 scoring modes implementation, fullscreen player
+1. **End-to-end staging validation** — exercise all 21 question types through the assessment player; collect scoring-engine edge cases
 2. **Freeze question_bank v1.0.0** — after assessment module validates the question contract
-3. **Career profiling** — assessment packages, profile generation
-4. **Reporting** — PDF/HTML report generation
-5. **Production deployment** — OCI Ampere A1 + CI/CD pipeline
+3. **Server-side timer enforcement** — currently the player timer is client-side only; add server-side check on submit
+4. **Career profiling** — assessment packages, profile generation
+5. **Reporting** — PDF/HTML report generation
+6. **Production deployment** — OCI Ampere A1 + CI/CD pipeline

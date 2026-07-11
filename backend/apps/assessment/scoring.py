@@ -42,13 +42,21 @@ def _get_max_score(question: Question) -> float:
     if st in ("BINARY", "BINARY_FUZZY"):
         return 1.0
     elif st == "PARTIAL":
-        # Max = number of scoreable items (options or fields)
-        return float(question.options.count())
+        # Max = number of scoreable items.
+        # For FITB multi-field: 1 per option (field).
+        # For Match: 1 per pair = half the options (half A, half B).
+        n_opts = question.options.count()
+        has_match = question.options.filter(option_type__in=["MATCH_A", "MATCH_B"]).exists()
+        if has_match:
+            return float(n_opts / 2)  # pairs
+        return float(n_opts)
     elif st == "NEGATIVE":
         return 1.0
     elif st == "RANK":
+        # Rank scoring counts correct pairs (i<j in correct order).
+        # Number of pairs = n*(n-1)/2.
         n = question.options.count()
-        return float(n * (n + 1) / 2) if n > 0 else 1.0  # sum of 1..n
+        return float(n * (n - 1) / 2) if n > 0 else 1.0
     elif st == "RANK_RATE":
         n = question.options.count()
         max_rating = question.rating_scale_points or 5
@@ -145,12 +153,21 @@ def _score_binary_fuzzy(question: Question, raw_answer: dict) -> tuple[float, fl
 
 
 def _score_partial(question: Question, raw_answer: dict) -> tuple[float, float]:
-    """Each correct item = +1, incorrect = 0. Total = sum of correct items."""
-    options = list(question.options.all().order_by("order"))
-    max_score = float(len(options))
+    """Each correct item = +1, incorrect = 0. Total = sum of correct items.
 
+    Supports two question types:
+      - FITB multi-field (2b): raw_answer = {"answers": ["a", "b", ...]}
+        Max score = number of fields (options).
+      - Match-the-following (3): raw_answer = {"pairs": [{"a_id": 1, "b_id": 3}, ...]}
+        Max score = number of pairs (half the options).
+    """
+    options = list(question.options.all().order_by("order"))
     if not options:
         return 0.0, 0.0
+
+    # Detect Match-the-following by option_type
+    has_match = any(o.option_type in ("MATCH_A", "MATCH_B") for o in options)
+    max_score = float(len(options) / 2) if has_match else float(len(options))
 
     # For FITB multi-field: raw_answer = {"answers": ["ans1", "ans2", ...]}
     answers = raw_answer.get("answers", [])
@@ -225,10 +242,13 @@ def _score_negative(question: Question, raw_answer: dict) -> tuple[float, float]
 
 
 def _score_rank(question: Question, raw_answer: dict) -> tuple[float, float]:
-    """Score = number of items in correct relative order."""
+    """Score = number of items in correct relative order.
+
+    Max score = n*(n-1)/2 (number of unique pairs).
+    """
     options = list(question.options.all().order_by("order"))
     n = len(options)
-    max_score = float(n * (n + 1) / 2) if n > 0 else 1.0
+    max_score = float(n * (n - 1) / 2) if n > 0 else 1.0
 
     # raw_answer = {"ranking": [3, 1, 4, 2]} — option IDs in rank order
     ranking = raw_answer.get("ranking", [])

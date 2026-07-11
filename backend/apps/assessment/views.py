@@ -1,6 +1,39 @@
-"""Views for the Assessment module."""
+"""Views for the Assessment module.
+
+Endpoints
+----------
+Assessments (admin/author):
+  GET    /api/assessments/                              — list (filterable by status)
+  POST   /api/assessments/                              — create
+  GET    /api/assessments/<id>/                         — retrieve (with sections)
+  PATCH  /api/assessments/<id>/                         — update (draft only)
+  DELETE /api/assessments/<id>/                         — delete (draft only)
+  POST   /api/assessments/<id>/publish/                 — publish assessment
+  GET    /api/assessments/<id>/sessions/                — list sessions for assessment
+  POST   /api/assessments/<id>/start_session/           — start/resume a session
+
+Sections (nested under assessment):
+  GET    /api/assessments/<aid>/sections/               — list sections
+  POST   /api/assessments/<aid>/sections/               — create section
+  PATCH  /api/assessments/<aid>/sections/<id>/          — update section
+  DELETE /api/assessments/<aid>/sections/<id>/          — delete section
+
+Questions (nested under section):
+  GET    /api/assessments/<aid>/sections/<sid>/questions/   — list assigned questions
+  POST   /api/assessments/<aid>/sections/<sid>/questions/   — assign question
+  DELETE /api/assessments/<aid>/sections/<sid>/questions/<id>/  — remove question
+
+Sessions (candidate-facing):
+  GET    /api/assessments/sessions/                     — list my sessions
+  GET    /api/assessments/sessions/<id>/                — retrieve session
+  GET    /api/assessments/sessions/<id>/questions/      — get questions for session
+  POST   /api/assessments/sessions/<id>/answer/         — save answer for one question
+  POST   /api/assessments/sessions/<id>/submit/         — submit entire session
+  POST   /api/assessments/sessions/<id>/suspend/        — suspend session
+"""
 
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import filters, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -192,10 +225,27 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Check attempt rules
+        # First, check for an existing active/suspended session to resume.
+        # This takes priority over attempt_rule restrictions — resuming your
+        # own in-flight session is always allowed.
         existing_sessions = AssessmentSession.objects.filter(
             assessment=assessment, candidate=request.user
         )
+        existing = existing_sessions.filter(status__in=["active", "suspended"]).first()
+        if existing:
+            if existing.status == "suspended":
+                existing.status = "active"
+                existing.resumed_at = timezone.now()
+                existing.save(update_fields=["status", "resumed_at"])
+            return Response(
+                {
+                    "message": "Resuming existing session.",
+                    "data": AssessmentSessionSerializer(existing).data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # No resumable session — enforce attempt rules before creating a new one.
         if existing_sessions.exists():
             if assessment.attempt_rule == "SINGLE_RETAKE":
                 return Response(
@@ -222,21 +272,6 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
-
-        # Check for existing active/suspended session to resume
-        existing = existing_sessions.filter(status__in=["active", "suspended"]).first()
-        if existing:
-            if existing.status == "suspended":
-                existing.status = "active"
-                existing.resumed_at = timezone.now()
-                existing.save(update_fields=["status", "resumed_at"])
-            return Response(
-                {
-                    "message": "Resuming existing session.",
-                    "data": AssessmentSessionSerializer(existing).data,
-                },
-                status=status.HTTP_200_OK,
-            )
 
         # Create new session
         session = AssessmentSession.objects.create(
@@ -269,9 +304,10 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def submit_session(self, request, pk=None):
-        """Submit/complete an assessment session."""
-        from django.utils import timezone
+        """Submit/complete an assessment session (alternate endpoint on assessment).
 
+        Prefer ``/api/assessments/sessions/<id>/submit/`` — kept for backwards compat.
+        """
         assessment = self.get_object()
         session = get_object_or_404(
             AssessmentSession,
@@ -392,12 +428,13 @@ class AssessmentQuestionViewSet(ModelViewSet):
 class SessionViewSet(ModelViewSet):
     """Candidate-facing session endpoints.
 
-    GET    /api/assessments/sessions/           — list my sessions
-    GET    /api/assessments/sessions/<id>/       — session detail
-    GET    /api/assessments/sessions/<id>/questions/ — get questions for session
-    POST   /api/assessments/sessions/<id>/answer/   — submit answer for a question
-    POST   /api/assessments/sessions/<id>/submit/   — submit entire session
-    POST   /api/assessments/sessions/<id>/suspend/  — suspend session
+    GET    /api/assessments/sessions/                    — list my sessions
+    GET    /api/assessments/sessions/<id>/                — session detail
+    GET    /api/assessments/sessions/<id>/questions/      — get questions for session
+    POST   /api/assessments/sessions/<id>/answer/         — save answer for a question
+    POST   /api/assessments/sessions/<id>/submit/         — submit entire session
+    POST   /api/assessments/sessions/<id>/suspend/        — suspend session
+    GET    /api/assessments/sessions/<id>/section_scores/ — section score breakdown
     """
 
     serializer_class = AssessmentSessionSerializer
@@ -428,9 +465,14 @@ class SessionViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def answer(self, request, pk=None):
-        """Submit an answer for a single question."""
-        from django.utils import timezone
+        """Save an answer for a single question (or mark bookmark/skipped).
 
+        Payload:
+          - question_id: int (required)
+          - sub_question_index: int (default 0)
+          - raw_answer: dict (optional — omit to mark as skipped)
+          - bookmark: bool (optional — marks as bookmarked)
+        """
         session = self.get_object()
         if session.status != "active":
             return Response(
@@ -476,9 +518,17 @@ class SessionViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):
-        """Submit the entire session — calculate scores and complete."""
-        from django.utils import timezone
+        """Submit the entire session — calculate scores and complete.
 
+        Returns:
+            {
+              "message": "...",
+              "data": {
+                "session": {...},
+                "section_scores": [{section_title, raw_score, max_score, percentage}, ...]
+              }
+            }
+        """
         session = self.get_object()
         if session.status != "active":
             return Response(
@@ -518,9 +568,7 @@ class SessionViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def suspend(self, request, pk=None):
-        """Suspend the session (can resume later if attempt_rule allows)."""
-        from django.utils import timezone
-
+        """Suspend the session (candidate can resume later if attempt_rule allows)."""
         session = self.get_object()
         if session.status != "active":
             return Response(
@@ -546,6 +594,18 @@ class SessionViewSet(ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=True, methods=["get"])
+    def section_scores(self, request, pk=None):
+        """Return the per-section score breakdown for a completed session.
 
-# Import timezone at module level (used in start_session and submit_session)
-from django.utils import timezone  # noqa: E402
+        GET /api/assessments/sessions/<id>/section_scores/
+        → {message, data: [{section, section_title, raw_score, max_score, percentage}, ...]}
+        """
+        session = self.get_object()
+        from .serializers import SectionScoreSerializer
+
+        scores = session.section_scores.select_related("section").all()
+        return Response(
+            {"message": "OK", "data": SectionScoreSerializer(scores, many=True).data},
+            status=status.HTTP_200_OK,
+        )
