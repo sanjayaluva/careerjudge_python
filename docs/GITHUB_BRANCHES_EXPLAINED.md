@@ -38,7 +38,7 @@ Dependabot opens a PR for each branch. CI runs on each PR. Some fail because:
 
 ### Option A — Review and merge safe ones (recommended)
 
-1. Go to https://github.com/sanjayaluva/careerjudge_python/pulls
+1. Go to `https://github.com/<org-or-user>/careerjudge_python/pulls`
 2. For each PR:
    - **Patch/minor bumps** (e.g., ruff 0.15.20, black 26.5.1) → safe to merge if CI is green
    - **Major bumps** (Python 3.14, Node 26, Django major) → review changelog, test manually, then merge or close

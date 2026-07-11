@@ -216,14 +216,14 @@
 |---|---|---|
 | Backend Docker image | ✅ | Multi-stage, Python 3.12-slim, gunicorn |
 | Frontend Docker image | ✅ | Multi-stage, Node 20 → nginx |
-| Caddy reverse proxy | ✅ | Auto-TLS, /api/* → backend, /* → Vercel |
+| Caddy reverse proxy | ✅ | Auto-TLS, /api/* → backend, /* → frontend CDN |
 | docker-compose (dev) | ✅ | backend + caddy (frontend optional via --profile) |
 | docker-compose (prod) | ✅ | full stack: backend + db + redis + celery + caddy |
 | GitHub Actions CI | ✅ | lint + test + coverage + security + docker build |
 | GitHub Actions CD (dev) | ✅ | SSH deploy on push to main (needs secrets) |
-| GitHub Actions CD (prod) | ✅ | SSH deploy on tag (needs secrets + OCI VM) |
-| Vercel frontend deploy | ✅ | Auto-deploy on push to main |
-| Neon Postgres (dev) | ✅ | External, free tier, seeded |
+| GitHub Actions CD (prod) | ✅ | SSH deploy on tag (needs secrets + prod server) |
+| Frontend CDN deploy | ✅ | Auto-deploy on push to main |
+| Managed Postgres (dev) | ✅ | External, seeded |
 | Dependabot | ✅ | Weekly pip + npm + Docker + Actions updates |
 
 ---

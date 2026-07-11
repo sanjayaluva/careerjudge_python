@@ -1,28 +1,28 @@
-# Development Workflow — z.ai Sandbox + GCP + Vercel
+# Development Workflow — Sandbox + Cloud VM
 
-> **Constraint**: Development happens in the z.ai agent sandbox environment. There is no local dev server — all testing must be done online via the domain (careerjudge.pp.ua).
+> **Constraint**: Development happens in an agent sandbox environment. There is no local dev server — all testing must be done online via the domain (careerjudge.pp.ua).
 
 ## Architecture
 
 ```
-z.ai sandbox (code changes)
+agent sandbox (code changes)
        ↓ git push to main
        ↓
 GitHub Actions CI/CD
-       ↓ SSH to GCP
+       ↓ SSH to dev server
        ↓
-GCP Compute Engine (backend Docker container)
+Dev cloud VM (backend Docker container)
        ← Caddy reverse proxy →
-Vercel (frontend CDN, builds from main branch)
+Frontend CDN (React SPA, auto-builds from main branch)
        ↓
 https://careerjudge.pp.ua (online testing)
 ```
 
-- **Backend**: GCP Compute Engine (Django + gunicorn in Docker)
-- **Frontend**: Vercel (React SPA, auto-builds on push to main)
+- **Backend**: Cloud VM (Django + gunicorn in Docker)
+- **Frontend**: Frontend CDN (React SPA, auto-builds on push to main)
 - **Domain**: careerjudge.pp.ua (Caddy reverse proxy with auto-TLS)
 
-## Option 2: GCP Dev with Volume Mounts (RECOMMENDED — fastest)
+## Option 2: Dev VM with Volume Mounts (RECOMMENDED — fastest)
 
 Instead of rebuilding the Docker image on every code change, use **volume mounts** so code changes are live instantly after `git pull` — no rebuild needed.
 
@@ -33,11 +33,11 @@ Instead of rebuilding the Docker image on every code change, use **volume mounts
 - The `frontend/src` directory is mounted as a volume → Vite HMR picks up changes instantly
 - Caddy proxies to the Vite dev server (port 5173) instead of nginx
 
-### Setup (one-time on GCP server)
+### Setup (one-time on dev server)
 
 ```bash
-# SSH into GCP server
-ssh user@35.207.59.232
+# SSH into dev server
+ssh user@<dev-server-ip>
 
 # Stop the current (rebuild-based) containers
 cd /opt/careerjudge
@@ -52,7 +52,7 @@ This builds the images ONCE (same as before), but then runs with volume mounts +
 ### Daily development cycle (FAST — no rebuild!)
 
 ```bash
-# On GCP server — just pull, containers auto-reload
+# On dev server — just pull, containers auto-reload
 cd /opt/careerjudge
 git pull origin main
 
@@ -88,21 +88,21 @@ The current CI/CD pipeline uses this. Use this when you need to test the actual 
 
 ### GitHub Actions CI/CD (current approach)
 
-- Push to `main` → GitHub Actions SSH deploys to GCP
+- Push to `main` → GitHub Actions SSH deploys to dev server
 - Rebuilds Docker image + restarts containers
 - Takes 2-3 minutes total
 
 **Use this for pre-merge integration testing or when Option 2 is not running.**
 
-## Vercel Frontend Auto-Deploy
+## Frontend Auto-Deploy
 
-The frontend is deployed separately on Vercel:
-- Vercel auto-builds the frontend on every push to `main`
+The frontend is deployed separately on a managed frontend CDN:
+- The CDN auto-builds the frontend on every push to `main`
 - Build takes ~1-2 minutes
-- Vercel serves the built SPA via CDN
-- Caddy proxies `/*` to Vercel (browser stays on careerjudge.pp.ua)
+- The CDN serves the built SPA globally
+- Caddy proxies `/*` to the CDN (browser stays on careerjudge.pp.ua)
 
-**Note**: When using Option 2 (volume mounts), the frontend runs on the GCP server via Vite dev server (not Vercel). Caddy routes to `frontend:5173` instead of Vercel. This gives instant HMR but is dev-only — production still uses Vercel.
+**Note**: When using Option 2 (volume mounts), the frontend runs on the dev server via Vite dev server instead. Caddy routes to `frontend:5173`. This gives instant HMR but is dev-only — production still uses the managed CDN.
 
 ## When to Do a Full/Complete Rebuild
 

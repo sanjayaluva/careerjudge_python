@@ -35,7 +35,7 @@
    ▼                ▼             ▼
 ┌─────────┐  ┌──────────┐  ┌────────────────┐
 │Postgres │  │  Redis   │  │ Object Storage │
-│  16     │  │  7       │  │ (OCI / GCS)    │
+│  16     │  │  7       │  │ (S3-compatible)│
 └─────────┘  └──────────┘  └────────────────┘
 ```
 
@@ -54,13 +54,13 @@
 | Testing | pytest + pytest-django + factory_boy (backend); Vitest + Playwright (frontend) | Mature, covers every route + E2E |
 | Lint/format | ruff + black + mypy (backend); eslint + prettier + tsc (frontend) | Modern Python/JS toolchain |
 | Infra | Docker + Caddy + docker-compose | One-command deploy; auto-TLS |
-| CI/CD | GitHub Actions | Free minutes; native SSH deploy |
-| Dev host | GCP Compute Engine (1 vCPU/1 GB) | Already configured, domain points here |
-| Prod host | OCI Ampere A1 (1 OCPU/6 GB, Always Free) | Sufficient RAM for full stack; zero cost forever |
-| Dev DB | Neon Postgres free tier | External, frees GCP VM RAM, branching for tests |
-| Prod DB | Postgres on OCI VM | Local = no egress latency |
-| Object storage | OCI Object Storage (S3-compatible) | Free 20 GB, native to prod host |
-| Container registry | GHCR (GitHub Container Registry) | Free, integrated with GitHub Actions |
+| CI/CD | GitHub Actions | Integrated CI/CD; native SSH deploy |
+| Dev host | Cloud VM (min. 1 vCPU, 1 GB RAM) | Already configured; domain points here |
+| Prod host | Cloud VM (min. 2 vCPU, 4 GB RAM recommended) | Sufficient RAM for full stack |
+| Dev DB | Managed PostgreSQL service | External; frees dev VM RAM; branching for tests |
+| Prod DB | Postgres on prod VM | Local = no egress latency |
+| Object storage | Any S3-compatible object storage | Self-hosted or managed |
+| Container registry | GHCR (GitHub Container Registry) | Integrated with GitHub Actions |
 
 ## 3. Module map (10 modules)
 
@@ -98,7 +98,7 @@
   - [ ] Frontend: dashboard shell with role-based nav, Profile, Settings, Users, Roles, Permissions pages
   - [ ] Frontend tests: Vitest unit + Playwright E2E for auth flows
 - [ ] `notifications` module — minimal: email send via SMTP/console, Celery task wrapper
-- [ ] Deploy to GCP dev, verify auto-deploy works
+- [ ] Deploy to dev server, verify auto-deploy works
 
 ### Phase 2 — Assessment engine
 
@@ -151,7 +151,7 @@ Examples:
 feat(accounts): add JWT login endpoint with refresh token rotation
 test(accounts): add tests for signup endpoint validation
 fix(accounts): handle case-insensitive email lookup
-ci: add SSH deploy to GCP dev on push to main
+ci: add SSH deploy to dev server on push to main
 docs: add PLAN.md and CONTRIBUTING.md
 ```
 
@@ -177,8 +177,8 @@ Every PR must pass:
 
 ### CD triggers
 
-- Push to `main` → deploy to **dev** (GCP CE 35.208.224.41)
-- Tag `v*.*.*` → deploy to **prod** (OCI) after CI green
+- Push to `main` → deploy to **dev** server
+- Tag `v*.*.*` → deploy to **prod** server after CI green
 - Both via: SSH → `docker compose pull && up -d && python manage.py migrate`
 
 ## 6. Spec mapping

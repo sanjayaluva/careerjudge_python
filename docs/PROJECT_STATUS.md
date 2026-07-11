@@ -80,9 +80,9 @@
 - ✅ Caddy reverse proxy (auto-TLS, 120s timeouts)
 - ✅ Docker (multi-stage builds)
 - ✅ GitHub Actions CI (lint + test + coverage ≥80% + security)
-- ✅ GitHub Actions CD (auto-deploy to GCP dev on push to main)
-- ✅ Neon Postgres (dev DB)
-- ✅ Vercel frontend CDN + Caddy reverse proxy
+- ✅ GitHub Actions CD (auto-deploy to dev server on push to main)
+- ✅ Managed PostgreSQL (dev DB)
+- ✅ Frontend CDN + Caddy reverse proxy
 
 ## Tech Stack
 
@@ -90,16 +90,16 @@
 |---|---|
 | Backend | Django 5 + DRF 3.15 + SimpleJWT |
 | Frontend | React 18 + Vite + TypeScript 5 + Tailwind CSS 3 |
-| Database | PostgreSQL (Neon dev, OCI prod planned) |
+| Database | PostgreSQL 16 (managed service for dev; self-hosted on prod VM) |
 | Reverse Proxy | Caddy (auto-TLS) |
 | CI/CD | GitHub Actions |
 | Container | Docker (multi-stage) |
-| Deploy | GCP CE (dev) + OCI Ampere A1 (prod planned) |
+| Deploy | Cloud VM (dev) + Cloud VM (prod) — any standard provider |
 
 ## Deployment
 
-- **Dev**: https://careerjudge.pp.ua (GCP CE, auto-deploys on push to main)
-- **Prod**: Not yet deployed (OCI Ampere A1 planned, auto-deploy on tag v*.*.*)
+- **Dev**: https://careerjudge.pp.ua (cloud VM, auto-deploys on push to main)
+- **Prod**: Not yet deployed (cloud VM planned, auto-deploy on tag v*.*.*)
 
 ## Next Priorities
 
@@ -108,4 +108,4 @@
 3. **Server-side timer enforcement** — currently the player timer is client-side only; add server-side check on submit
 4. **Career profiling** — assessment packages, profile generation
 5. **Reporting** — PDF/HTML report generation
-6. **Production deployment** — OCI Ampere A1 + CI/CD pipeline
+6. **Production deployment** — provision prod cloud VM + CI/CD pipeline

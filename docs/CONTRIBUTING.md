@@ -195,7 +195,7 @@ Before requesting review:
 - All secrets via environment variables.
 - Local dev: copy `.env.example` to `.env`, fill in values.
 - CI/CD: GitHub Actions secrets (encrypted).
-- Prod: OCI/GCP secret managers or `.env` files with `chmod 600` owned by deploy user only.
+- Prod: cloud secret managers or `.env` files with `chmod 600` owned by deploy user only.
 
 ## 8. Reviewer guidelines
 

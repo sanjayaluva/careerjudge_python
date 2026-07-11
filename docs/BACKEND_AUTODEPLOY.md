@@ -1,6 +1,6 @@
 # Backend Auto-Deploy Setup
 
-Vercel auto-deploys the frontend on every push to `main`. This guide sets up the same for the backend — every push to `main` auto-deploys to the GCP dev VM via GitHub Actions SSH.
+A managed frontend CDN auto-deploys the frontend on every push to `main`. This guide sets up the same for the backend — every push to `main` auto-deploys to the dev server via GitHub Actions SSH.
 
 ## Architecture
 
@@ -11,21 +11,21 @@ git push to main
 ┌─────────────────────────────────────────┐
 │  GitHub Actions (cd-dev.yml workflow)   │
 │  1. Checkout code                       │
-│  2. SSH into GCP VM (35.207.59.232)     │
-│  3. Run deploy-dev.sh:                   │
-│     - git pull                           │
-│     - docker compose build               │
-│     - docker compose up -d               │
-│     - python manage.py migrate           │
-│     - health check                       │
+│  2. SSH into dev server                 │
+│  3. Run deploy-dev.sh:                  │
+│     - git pull                          │
+│     - docker compose build              │
+│     - docker compose up -d              │
+│     - python manage.py migrate          │
+│     - health check                      │
 └─────────────────────────────────────────┘
       │
       ▼
 ┌─────────────────────────────────────────┐
-│  GCP CE VM (careerjudge.pp.ua)          │
+│  Dev cloud VM (careerjudge.pp.ua)       │
 │  - Backend container (restarted)        │
 │  - Caddy container (reloaded)           │
-│  - Neon DB (migrated)                   │
+│  - Postgres DB (migrated)               │
 └─────────────────────────────────────────┘
 ```
 
@@ -38,32 +38,34 @@ ssh-keygen -t ed25519 -f ~/.ssh/cj_dev_deploy -C "github-actions-deploy@dev"
 
 # This creates:
 #   ~/.ssh/cj_dev_deploy      (private key — goes in GitHub secrets)
-#   ~/.ssh/cj_dev_deploy.pub  (public key — goes on the VM)
+#   ~/.ssh/cj_dev_deploy.pub  (public key — goes on the dev server)
 ```
 
-## Step 2 — Add the public key to the GCP VM
+## Step 2 — Add the public key to the dev server
 
 ```bash
-# From your local machine — copy the public key to the VM
-ssh-copy-id -i ~/.ssh/cj_dev_deploy.pub sanjayaluva@35.207.59.232
+# From your local machine — copy the public key to the dev server
+ssh-copy-id -i ~/.ssh/cj_dev_deploy.pub <deploy-user>@<dev-server-ip>
 
-# OR manually — append to the VM's authorized_keys:
-cat ~/.ssh/cj_dev_deploy.pub | ssh sanjayaluva@35.207.59.232 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+# OR manually — append to the server's authorized_keys:
+cat ~/.ssh/cj_dev_deploy.pub | ssh <deploy-user>@<dev-server-ip> "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
 
 # Test that the key works (should login without password):
-ssh -i ~/.ssh/cj_dev_deploy sanjayaluva@35.207.59.232 "echo 'SSH key works!'"
+ssh -i ~/.ssh/cj_dev_deploy <deploy-user>@<dev-server-ip> "echo 'SSH key works!'"
 ```
+
+> Replace `<deploy-user>` with the SSH user on the dev server and `<dev-server-ip>` with the dev server's public IP.
 
 ## Step 3 — Add GitHub Actions secrets
 
-Go to: https://github.com/sanjayaluva/careerjudge_python/settings/secrets/actions
+Go to: `https://github.com/<org-or-user>/careerjudge_python/settings/secrets/actions`
 
 Click **"New repository secret"** for each:
 
 | Secret name | Value |
 |---|---|
-| `DEV_SSH_HOST` | `35.207.59.232` |
-| `DEV_SSH_USER` | `sanjayaluva` |
+| `DEV_SSH_HOST` | *(dev server public IP)* |
+| `DEV_SSH_USER` | *(deploy user on the dev server)* |
 | `DEV_SSH_PRIVATE_KEY` | *(paste the entire contents of `~/.ssh/cj_dev_deploy` — the private key, starting with `-----BEGIN OPENSSH PRIVATE KEY-----` and ending with `-----END OPENSSH PRIVATE KEY-----`)* |
 
 To get the private key contents:
@@ -72,7 +74,7 @@ cat ~/.ssh/cj_dev_deploy
 # Copy the ENTIRE output including the BEGIN/END lines
 ```
 
-## Step 4 — Ensure the deploy script exists on the VM
+## Step 4 — Ensure the deploy script exists on the dev server
 
 The deploy script (`infra/deploy/deploy-dev.sh`) is already in the repo. It:
 1. `git pull origin main`
@@ -93,7 +95,7 @@ The GitHub Actions workflow (`cd-dev.yml`) SSHes in and runs this script.
    git commit -m "docs: test auto-deploy"
    git push origin main
    ```
-3. Go to https://github.com/sanjayaluva/careerjudge_python/actions
+3. Go to `https://github.com/<org-or-user>/careerjudge_python/actions`
 4. You should see "Deploy Dev" workflow running
 5. After ~1-2 minutes, it should show ✓ green
 6. Verify the backend is still healthy:
@@ -130,34 +132,34 @@ jobs:
 
 ### "Permission denied (publickey)"
 
-- The SSH key wasn't added to the VM correctly
-- Re-run: `ssh-copy-id -i ~/.ssh/cj_dev_deploy.pub sanjayaluva@35.207.59.232`
-- Verify: `ssh -i ~/.ssh/cj_dev_deploy sanjayaluva@35.207.59.232 "whoami"`
+- The SSH key wasn't added to the dev server correctly
+- Re-run: `ssh-copy-id -i ~/.ssh/cj_dev_deploy.pub <deploy-user>@<dev-server-ip>`
+- Verify: `ssh -i ~/.ssh/cj_dev_deploy <deploy-user>@<dev-server-ip> "whoami"`
 
 ### "Host key verification failed"
 
-- The VM's host key isn't in `known_hosts`
-- The workflow runs `ssh-keyscan` automatically, but if the VM was recreated, the key changed
+- The server's host key isn't in `known_hosts`
+- The workflow runs `ssh-keyscan` automatically, but if the server was recreated, the key changed
 - Fix: add `StrictHostKeyChecking=accept-new` to the SSH command in the workflow
 
 ### Deploy succeeds but backend is down
 
-- Check VM logs: `docker compose -f /opt/careerjudge/infra/docker/docker-compose.dev.yml logs --tail=50 backend`
+- Check server logs: `docker compose -f /opt/careerjudge/infra/docker/docker-compose.dev.yml logs --tail=50 backend`
 - Common cause: migration failed (DB issue) → check migration output in the Actions log
 
 ### "docker: command not found" on SSH
 
-- The deploy user (`sanjayaluva`) isn't in the `docker` group
-- Fix on VM: `sudo usermod -aG docker sanjayaluva && newgrp docker`
+- The deploy user isn't in the `docker` group
+- Fix on server: `sudo usermod -aG docker <deploy-user> && newgrp docker`
 
-## Production auto-deploy (OCI)
+## Production auto-deploy
 
 Same setup but with separate secrets:
 
 | Secret | Value |
 |---|---|
-| `PROD_SSH_HOST` | *(OCI VM public IP)* |
-| `PROD_SSH_USER` | `deploy` (or your OCI username) |
+| `PROD_SSH_HOST` | *(prod server public IP)* |
+| `PROD_SSH_USER` | *(deploy user on the prod server)* |
 | `PROD_SSH_PRIVATE_KEY` | *(separate ED25519 key for prod)* |
 | `PROD_POSTGRES_USER` | `cj` |
 | `PROD_POSTGRES_PASSWORD` | *(strong password)* |
@@ -168,15 +170,15 @@ The `cd-prod.yml` workflow triggers on **tags** (`v*.*.*`), not pushes to `main`
 # Create a production release
 git tag -a v1.0.0 -m "Production release v1.0.0"
 git push origin v1.0.0
-# This triggers cd-prod.yml → deploys to OCI with DB backup
+# This triggers cd-prod.yml → deploys to prod server with DB backup
 ```
 
 ## Summary
 
-| Trigger | Frontend (Vercel) | Backend (GCP dev) | Backend (OCI prod) |
+| Trigger | Frontend (CDN) | Backend (dev server) | Backend (prod server) |
 |---|---|---|---|
 | Push to `main` | ✅ Auto-deploys | ✅ Auto-deploys (after secrets set) | ❌ |
 | Push tag `v*.*.*` | ✅ Auto-deploys | ✅ Auto-deploys | ✅ Auto-deploys (after secrets set) |
 | Pull request | ✅ Preview deploy | ❌ CI runs only | ❌ CI runs only |
 
-Once you set up the 3 GitHub secrets (`DEV_SSH_HOST`, `DEV_SSH_USER`, `DEV_SSH_PRIVATE_KEY`), every `git push origin main` will auto-deploy both frontend (Vercel) and backend (GCP) simultaneously.
+Once you set up the 3 GitHub secrets (`DEV_SSH_HOST`, `DEV_SSH_USER`, `DEV_SSH_PRIVATE_KEY`), every `git push origin main` will auto-deploy both frontend (CDN) and backend (dev server) simultaneously.

@@ -1,18 +1,18 @@
 # CareerJudge
 
-A modern, professional career assessment, profiling, and counseling platform built with **Django 5 + DRF** (backend) and **React 18 + Vite + TypeScript + Tailwind** (frontend), deployed to **GCP Compute Engine** (dev) and **OCI Ampere A1** (prod) via **GitHub Actions SSH auto-deploy**.
+A modern, professional career assessment, profiling, and counseling platform built with **Django 5 + DRF** (backend) and **React 18 + Vite + TypeScript + Tailwind** (frontend), deployed to **any standard cloud VM provider** via **GitHub Actions SSH auto-deploy**.
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
 | Backend | Django 5.x, Django REST Framework 3.15, SimpleJWT, django-role-permissions, Celery 5, Redis 7 |
-| Database | PostgreSQL 16 (Neon free tier for dev; OCI Postgres for prod) |
+| Database | PostgreSQL 16 (managed Postgres service for dev; self-hosted on prod VM) |
 | Frontend | React 18, Vite 5, TypeScript 5, Tailwind CSS 3, shadcn/ui, TanStack Query, Zustand, React Router |
 | Tests | pytest + pytest-django + factory_boy + coverage.py (backend — 247 tests, 87% coverage); Vitest + Playwright (frontend — 30 unit tests) |
 | Infra | Docker (multi-stage builds + volume mounts for fast dev redeploy), Caddy (auto-TLS reverse proxy), docker-compose |
 | CI/CD | GitHub Actions (lint → test → build → security scan → SSH deploy) |
-| Hosting | GCP Compute Engine (dev, 1 vCPU/1 GB) + OCI Ampere A1 (prod, 1 OCPU/6 GB) |
+| Hosting | Cloud VM (dev) + Cloud VM (prod) — any standard provider |
 
 ## Architecture
 
@@ -47,6 +47,18 @@ The system is organized into 11 cohesive domain modules (spec-aligned). See [doc
 | 9 | **cms** — content management | 📋 Planned | — | — |
 | 10 | **notifications** — mail, content generator, content delivery | 📋 Planned | — | — |
 | 11 | **infrastructure** — Docker, Caddy, CI/CD, deploy scripts | ✅ Complete | — | [infrastructure/](docs/infrastructure/) |
+
+### Server Requirements
+
+The application runs on any standard cloud VM provider. Minimum recommended specs:
+
+| Environment | vCPU | RAM | Disk | Notes |
+|---|---|---|---|---|
+| Dev | 1 | 1 GB | 20 GB | Backend + Caddy; Postgres external |
+| Prod (small) | 2 | 4 GB | 40 GB | Full stack: backend + Postgres + Redis + Celery |
+| Prod (recommended) | 4 | 8 GB | 80 GB | Headroom for growth + reporting workloads |
+
+Compatible with any Linux distribution that supports Docker (Ubuntu 22.04+, Debian 12+, RHEL 9+). No vendor lock-in — deployment is fully containerized via Docker Compose.
 
 ## Quick Start
 
@@ -135,8 +147,8 @@ See `backend/apps/accounts/management/commands/seed_demo.py` for the authoritati
 
 ## CI/CD
 
-- Push to `main` → auto-deploy to **dev** (GCP) at https://careerjudge.pp.ua
-- Tag `v*.*.*` → auto-deploy to **prod** (OCI) after CI passes
+- Push to `main` → auto-deploy to **dev** server at https://careerjudge.pp.ua
+- Tag `v*.*.*` → auto-deploy to **prod** server after CI passes
 - Both via SSH + `docker compose pull && up -d`
 - Docker image builds only run on tags or `workflow_dispatch` — code-only pushes use volume mounts for ~15s deploys
 
@@ -181,7 +193,7 @@ npm run typecheck && npm run lint && npm run test && npm run build
 
 ## Security Notes
 
-- All secrets via environment variables or GCP/OCI secret managers — never committed.
+- All secrets via environment variables or cloud secret managers — never committed.
 - JWT for API auth (60-min access, 30-day refresh, rotation + blacklist, proactive refresh before expiry).
 - CORS allowlist, CSRF protection, rate-limiting on auth endpoints.
 - `bandit`, `pip-audit`, `npm audit` run on every CI build.

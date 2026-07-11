@@ -7,27 +7,27 @@ The CI/CD workflows require these secrets to be configured in the GitHub reposit
 
 None. CI uses GitHub-hosted Postgres service containers.
 
-## Required for CD to Dev (GCP CE)
+## Required for CD to Dev
 
 | Secret name | Description | How to generate |
 |---|---|---|
-| `DEV_SSH_HOST` | Public IP of GCP dev VM | `35.208.224.41` |
-| `DEV_SSH_USER` | SSH username on dev VM | `deploy` (create this user) |
+| `DEV_SSH_HOST` | Public IP of the dev server | *(your dev server's public IP)* |
+| `DEV_SSH_USER` | SSH username on the dev server | `deploy` (create this user) |
 | `DEV_SSH_PRIVATE_KEY` | ED25519 private key (PEM format, no passphrase) | `ssh-keygen -t ed25519 -f ~/.ssh/cj_dev_deploy -C "github-actions-deploy@dev"` |
 
-## Required for CD to Prod (OCI)
+## Required for CD to Prod
 
 | Secret name | Description | How to generate |
 |---|---|---|
-| `PROD_SSH_HOST` | Public IP of OCI prod VM | (fill when OCI VM is provisioned) |
-| `PROD_SSH_USER` | SSH username on prod VM | `deploy` (create this user) |
+| `PROD_SSH_HOST` | Public IP of the prod server | *(your prod server's public IP)* |
+| `PROD_SSH_USER` | SSH username on the prod server | `deploy` (create this user) |
 | `PROD_SSH_PRIVATE_KEY` | ED25519 private key (separate from dev) | `ssh-keygen -t ed25519 -f ~/.ssh/cj_prod_deploy -C "github-actions-deploy@prod"` |
 | `PROD_POSTGRES_USER` | Postgres username | `cj` |
 | `PROD_POSTGRES_PASSWORD` | Strong Postgres password | `openssl rand -base64 32` |
 
 ## How to set up SSH deploy keys
 
-On the dev VM (GCP CE):
+On the dev server:
 
 ```bash
 # Create deploy user
@@ -47,7 +47,7 @@ sudo usermod -aG docker deploy
 # Clone the repo
 sudo mkdir -p /opt/careerjudge
 sudo chown deploy:deploy /opt/careerjudge
-sudo -u deploy git clone https://github.com/sanjayaluva/careerjudge_python.git /opt/careerjudge
+sudo -u deploy git clone https://github.com/<org-or-user>/careerjudge_python.git /opt/careerjudge
 
 # Copy env file
 sudo -u deploy cp /opt/careerjudge/.env.dev.example /opt/careerjudge/.env.dev
@@ -56,11 +56,11 @@ sudo -u deploy cp /opt/careerjudge/.env.dev.example /opt/careerjudge/.env.dev
 
 On the GitHub repo:
 1. Settings → Secrets and variables → Actions → New repository secret
-2. Add `DEV_SSH_HOST` = `35.208.224.41`
+2. Add `DEV_SSH_HOST` = *(your dev server's public IP)*
 3. Add `DEV_SSH_USER` = `deploy`
 4. Add `DEV_SSH_PRIVATE_KEY` = contents of `~/.ssh/cj_dev_deploy` (private key)
 
-Repeat for prod on OCI VM with separate keys.
+Repeat for prod server with separate keys.
 
 ## Triggering deploys
 
