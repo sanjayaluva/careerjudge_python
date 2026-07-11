@@ -113,6 +113,21 @@ export default function QuestionBankPage() {
   const isAdmin = user?.role === "cj_admin";
   const canManageCategories = ["psychometrician", "cj_admin"].includes(user?.role ?? "");
 
+  // Review permissions — Reviewer reviews content, Psychometrician reviews psychometric,
+  // cj_admin can review both. Used to show the Review button on the list and to power
+  // the "Pending My Review" quick filter.
+  const canReviewContent = ["reviewer", "cj_admin"].includes(user?.role ?? "");
+  const canReviewPsychometric = ["psychometrician", "cj_admin"].includes(user?.role ?? "");
+  const canReviewAny = canReviewContent || canReviewPsychometric;
+
+  // The statuses the current user can review — used by the "Pending My Review" shortcut.
+  const reviewStatuses: string[] = [];
+  if (canReviewContent) reviewStatuses.push("pending_content_review");
+  if (canReviewPsychometric) reviewStatuses.push("pending_psychometric_review");
+
+  /** Does this question's status match a review stage the current user can act on? */
+  const canReviewQuestion = (qStatus: string) => reviewStatuses.includes(qStatus);
+
   // Can the current user edit a specific question?
   // - cj_admin: can edit ANY question regardless of status
   // - sme / custom roles with change permission: can edit only draft or sent_back
@@ -153,6 +168,48 @@ export default function QuestionBankPage() {
             <Alert variant="error" className="mb-4">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
+          )}
+
+          {/* Quick filter for reviewers / psychometricians — surfaces questions
+              pending their review so they don't have to dig through the status
+              dropdown. Hidden for SMEs and roles with no review permission. */}
+          {canReviewAny && (
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+              <span className="text-sm font-medium text-amber-900">Quick filters:</span>
+              {canReviewContent && (
+                <Button
+                  variant={statusFilter === "pending_content_review" ? "primary" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setStatusFilter(
+                      statusFilter === "pending_content_review" ? "" : "pending_content_review",
+                    );
+                    setPage(1);
+                  }}
+                >
+                  Pending Content Review
+                </Button>
+              )}
+              {canReviewPsychometric && (
+                <Button
+                  variant={statusFilter === "pending_psychometric_review" ? "primary" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setStatusFilter(
+                      statusFilter === "pending_psychometric_review"
+                        ? ""
+                        : "pending_psychometric_review",
+                    );
+                    setPage(1);
+                  }}
+                >
+                  Pending Psychometric Review
+                </Button>
+              )}
+              <span className="ml-auto text-xs text-amber-700">
+                Click a status to filter; click again to clear.
+              </span>
+            </div>
           )}
 
           <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -278,6 +335,16 @@ export default function QuestionBankPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
+                          {canReviewQuestion(q.status) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-primary-600 hover:bg-primary-50"
+                              onClick={() => navigate(`/question-bank/${q.id}?review=1`)}
+                            >
+                              Review
+                            </Button>
+                          )}
                           {canEditQuestion(q.status) && (
                             <Button variant="ghost" size="sm" onClick={() => openEditEditor(q.id)}>
                               Edit

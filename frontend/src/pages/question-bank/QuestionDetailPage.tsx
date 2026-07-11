@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import {
   Alert,
@@ -161,6 +161,18 @@ export default function QuestionDetailPage() {
   const queryClient = useQueryClient();
   const [reviewOpen, setReviewOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open the Review modal when the URL has ?review=1 (used by the
+  // QuestionBankPage list "Review" action button for one-click access).
+  useEffect(() => {
+    if (searchParams.get("review") === "1") {
+      setReviewOpen(true);
+      // Strip the param so the modal doesn't re-open on every navigation.
+      searchParams.delete("review");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const {
     data: question,
