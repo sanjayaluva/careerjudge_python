@@ -377,6 +377,33 @@ class AssessmentSectionViewSet(ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    def update(self, request, *args, **kwargs):
+        """PATCH/PUT /api/assessments/<aid>/sections/<id>/"""
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {
+                "message": "Section updated.",
+                "data": AssessmentSectionSerializer(serializer.instance).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        """DELETE /api/assessments/<aid>/sections/<id>/
+
+        Cascades to subsections and any assigned AssessmentQuestion rows.
+        """
+        instance = self.get_object()
+        instance.delete()
+        return Response(
+            {"message": "Section deleted.", "data": {}},
+            status=status.HTTP_200_OK,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Assessment Question ViewSet

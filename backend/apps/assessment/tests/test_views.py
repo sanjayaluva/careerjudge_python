@@ -162,6 +162,74 @@ class TestSectionCRUD(AssessmentViewTestBase):
         assert len(parent_section["subsections"]) == 1
         assert parent_section["subsections"][0]["title"] == "Child"
 
+    def test_update_section_title(self):
+        """PATCH /api/assessments/<aid>/sections/<id>/ updates the section."""
+        section = AssessmentSection.objects.create(
+            assessment=self.assessment, title="Original Title", level=1, order=1
+        )
+        resp = self.client.patch(
+            f"/api/assessments/{self.assessment.id}/sections/{section.id}/",
+            {"title": "Updated Title", "description": "New description"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["data"]["title"] == "Updated Title"
+        assert resp.json()["data"]["description"] == "New description"
+        section.refresh_from_db()
+        assert section.title == "Updated Title"
+        assert section.description == "New description"
+
+    def test_update_section_response_envelope(self):
+        """Section PATCH returns the {message, data} envelope (not bare DRF output)."""
+        section = AssessmentSection.objects.create(
+            assessment=self.assessment, title="S1", level=1, order=1
+        )
+        resp = self.client.patch(
+            f"/api/assessments/{self.assessment.id}/sections/{section.id}/",
+            {"title": "S1 updated"},
+            format="json",
+        )
+        body = resp.json()
+        assert "message" in body
+        assert "data" in body
+        assert body["message"] == "Section updated."
+
+    def test_delete_section(self):
+        """DELETE /api/assessments/<aid>/sections/<id>/ removes the section."""
+        section = AssessmentSection.objects.create(
+            assessment=self.assessment, title="To Delete", level=1, order=1
+        )
+        resp = self.client.delete(f"/api/assessments/{self.assessment.id}/sections/{section.id}/")
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["message"] == "Section deleted."
+        assert not AssessmentSection.objects.filter(id=section.id).exists()
+
+    def test_delete_section_cascades_to_subsections(self):
+        """Deleting a parent section cascades to its sub-sections."""
+        parent = AssessmentSection.objects.create(
+            assessment=self.assessment, title="Parent", level=1, order=1
+        )
+        child = AssessmentSection.objects.create(
+            assessment=self.assessment, parent=parent, title="Child", level=2, order=1
+        )
+        resp = self.client.delete(f"/api/assessments/{self.assessment.id}/sections/{parent.id}/")
+        assert resp.status_code == status.HTTP_200_OK
+        assert not AssessmentSection.objects.filter(id=parent.id).exists()
+        assert not AssessmentSection.objects.filter(id=child.id).exists()
+
+    def test_delete_section_cascades_to_assigned_questions(self):
+        """Deleting a section cascades to its AssessmentQuestion rows."""
+        from apps.assessment.tests.factories import make_mcq_question
+
+        section = AssessmentSection.objects.create(
+            assessment=self.assessment, title="With Questions", level=1, order=1
+        )
+        question = make_mcq_question(self.user)
+        aq = AssessmentQuestion.objects.create(section=section, question=question, order=1)
+        resp = self.client.delete(f"/api/assessments/{self.assessment.id}/sections/{section.id}/")
+        assert resp.status_code == status.HTTP_200_OK
+        assert not AssessmentQuestion.objects.filter(id=aq.id).exists()
+
 
 class TestQuestionAssignment(AssessmentViewTestBase):
     def setUp(self):

@@ -128,6 +128,25 @@ export function createSection(
   return apiPost<AssessmentSection>(`${BASE}/${assessmentId}/sections/`, payload);
 }
 
+export function updateSection(
+  assessmentId: number,
+  sectionId: number,
+  payload: Partial<{
+    title: string;
+    description: string;
+    level: number;
+    order: number;
+    parent: number | null;
+    duration_seconds: number | null;
+  }>,
+): Promise<AssessmentSection> {
+  return apiPatch<AssessmentSection>(`${BASE}/${assessmentId}/sections/${sectionId}/`, payload);
+}
+
+export function deleteSection(assessmentId: number, sectionId: number): Promise<void> {
+  return apiDelete(`${BASE}/${assessmentId}/sections/${sectionId}/`);
+}
+
 // ---------------------------------------------------------------------------
 // Question Assignment
 // ---------------------------------------------------------------------------

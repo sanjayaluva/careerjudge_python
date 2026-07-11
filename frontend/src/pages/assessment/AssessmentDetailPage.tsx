@@ -6,7 +6,7 @@
  * - Sessions: list sessions for this assessment
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import {
@@ -34,11 +34,13 @@ import {
   NAVIGATION_RULES,
   assignQuestion,
   createSection,
+  deleteSection,
   listSectionQuestions,
   publishAssessment,
   removeQuestion,
   retrieveAssessment,
   startSession,
+  updateSection,
 } from "@/api/assessment";
 import {
   listQuestions,
@@ -63,7 +65,10 @@ export default function AssessmentDetailPage() {
   const [sectionModal, setSectionModal] = useState<{
     open: boolean;
     parent: number | null;
-  }>({ open: false, parent: null });
+    /** When set, the modal is in edit-mode (pre-populated with this section). */
+    editSection: AssessmentSection | null;
+  }>({ open: false, parent: null, editSection: null });
+  const [sectionToDelete, setSectionToDelete] = useState<AssessmentSection | null>(null);
 
   const canManage = ["cj_admin", "corp_admin", "psychometrician"].includes(user?.role ?? "");
 
@@ -97,7 +102,33 @@ export default function AssessmentDetailPage() {
     }) => createSection(aid, payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
-      setSectionModal({ open: false, parent: null });
+      setSectionModal({ open: false, parent: null, editSection: null });
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  const sectionUpdateMutation = useMutation({
+    mutationFn: (payload: {
+      sectionId: number;
+      data: {
+        title?: string;
+        description?: string;
+        duration_seconds?: number | null;
+        order?: number;
+      };
+    }) => updateSection(aid, payload.sectionId, payload.data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
+      setSectionModal({ open: false, parent: null, editSection: null });
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  const sectionDeleteMutation = useMutation({
+    mutationFn: (sectionId: number) => deleteSection(aid, sectionId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
+      setSectionToDelete(null);
     },
     onError: (err) => setError(extractApiError(err)),
   });
@@ -262,7 +293,10 @@ export default function AssessmentDetailPage() {
               <div className="flex items-center justify-between">
                 <CardTitle>Sections (Variable Structure)</CardTitle>
                 {canManage && a.status === "draft" && (
-                  <Button size="sm" onClick={() => setSectionModal({ open: true, parent: null })}>
+                  <Button
+                    size="sm"
+                    onClick={() => setSectionModal({ open: true, parent: null, editSection: null })}
+                  >
                     + Add Section
                   </Button>
                 )}
@@ -282,8 +316,12 @@ export default function AssessmentDetailPage() {
                       depth={0}
                       canManage={canManage && a.status === "draft"}
                       onAddSubsection={(parentId) =>
-                        setSectionModal({ open: true, parent: parentId })
+                        setSectionModal({ open: true, parent: parentId, editSection: null })
                       }
+                      onEditSection={(section) =>
+                        setSectionModal({ open: true, parent: null, editSection: section })
+                      }
+                      onDeleteSection={(section) => setSectionToDelete(section)}
                     />
                   ))}
                 </div>
@@ -340,10 +378,53 @@ export default function AssessmentDetailPage() {
       <CreateSectionModal
         open={sectionModal.open}
         parentId={sectionModal.parent}
-        loading={sectionCreateMutation.isPending}
-        onClose={() => setSectionModal({ open: false, parent: null })}
-        onSubmit={(payload) => sectionCreateMutation.mutate(payload)}
+        editSection={sectionModal.editSection}
+        loading={sectionCreateMutation.isPending || sectionUpdateMutation.isPending}
+        onClose={() => setSectionModal({ open: false, parent: null, editSection: null })}
+        onSubmit={(payload) => {
+          if (sectionModal.editSection) {
+            // Edit mode — PATCH the existing section
+            sectionUpdateMutation.mutate({
+              sectionId: sectionModal.editSection.id,
+              data: {
+                title: payload.title,
+                description: payload.description,
+                // duration_seconds passed in description-level form below
+              },
+            });
+          } else {
+            // Create mode
+            sectionCreateMutation.mutate(payload);
+          }
+        }}
       />
+
+      {/* Delete confirmation modal */}
+      <Modal
+        open={sectionToDelete !== null}
+        onClose={() => setSectionToDelete(null)}
+        title="Delete section"
+        size="sm"
+      >
+        <p className="text-sm text-slate-700">
+          Delete <strong>{sectionToDelete?.title}</strong>? This will also delete all sub-sections
+          and any questions assigned to them. This cannot be undone.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setSectionToDelete(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            loading={sectionDeleteMutation.isPending}
+            onClick={() => {
+              if (sectionToDelete) sectionDeleteMutation.mutate(sectionToDelete.id);
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -613,11 +694,15 @@ function SectionTreeRow({
   depth,
   canManage,
   onAddSubsection,
+  onEditSection,
+  onDeleteSection,
 }: {
   section: AssessmentSection;
   depth: number;
   canManage: boolean;
   onAddSubsection: (parentId: number) => void;
+  onEditSection: (section: AssessmentSection) => void;
+  onDeleteSection: (section: AssessmentSection) => void;
 }) {
   return (
     <>
@@ -634,10 +719,25 @@ function SectionTreeRow({
             </span>
           )}
         </div>
-        {canManage && depth < 3 && (
-          <Button variant="ghost" size="sm" onClick={() => onAddSubsection(section.id)}>
-            + Sub-section
-          </Button>
+        {canManage && (
+          <div className="flex items-center gap-1">
+            {depth < 3 && (
+              <Button variant="ghost" size="sm" onClick={() => onAddSubsection(section.id)}>
+                + Sub-section
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={() => onEditSection(section)}>
+              Edit
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-danger hover:bg-danger-50"
+              onClick={() => onDeleteSection(section)}
+            >
+              Delete
+            </Button>
+          </div>
         )}
       </div>
       {section.subsections &&
@@ -648,6 +748,8 @@ function SectionTreeRow({
             depth={depth + 1}
             canManage={canManage}
             onAddSubsection={onAddSubsection}
+            onEditSection={onEditSection}
+            onDeleteSection={onDeleteSection}
           />
         ))}
     </>
@@ -655,18 +757,21 @@ function SectionTreeRow({
 }
 
 // ---------------------------------------------------------------------------
-// Create Section Modal
+// Create / Edit Section Modal
 // ---------------------------------------------------------------------------
 
 function CreateSectionModal({
   open,
   parentId,
+  editSection,
   loading,
   onClose,
   onSubmit,
 }: {
   open: boolean;
   parentId: number | null;
+  /** When set, the modal is in edit-mode (pre-populated with this section). */
+  editSection: AssessmentSection | null;
   loading: boolean;
   onClose: () => void;
   onSubmit: (payload: {
@@ -679,15 +784,28 @@ function CreateSectionModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
 
+  // Sync form fields when the modal opens (create or edit).
+  // useEffect deps: [open, editSection] — runs when the modal opens or when
+  // the edit target changes.
+  useEffect(() => {
+    if (!open) return;
+    setTitle(editSection?.title ?? "");
+    setDescription(editSection?.description ?? "");
+  }, [open, editSection]);
+
+  const isEdit = editSection !== null;
+
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={parentId ? "Add Sub-Section" : "Add Section"}
+      title={isEdit ? "Edit Section" : parentId ? "Add Sub-Section" : "Add Section"}
       description={
-        parentId
-          ? "Create a sub-section within the selected section."
-          : "Create a top-level section (Level 1 variable)."
+        isEdit
+          ? "Update this section's title and description."
+          : parentId
+            ? "Create a sub-section within the selected section."
+            : "Create a top-level section (Level 1 variable)."
       }
       size="md"
     >
@@ -700,8 +818,6 @@ function CreateSectionModal({
             description,
             level: parentId ? 2 : 1, // TODO: calculate level from parent
           });
-          setTitle("");
-          setDescription("");
         }}
         className="space-y-4"
       >
@@ -733,7 +849,7 @@ function CreateSectionModal({
             Cancel
           </Button>
           <Button type="submit" loading={loading}>
-            Create section
+            {isEdit ? "Save changes" : "Create section"}
           </Button>
         </div>
       </form>
