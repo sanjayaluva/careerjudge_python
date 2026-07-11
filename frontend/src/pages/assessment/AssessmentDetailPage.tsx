@@ -505,7 +505,14 @@ function QuestionAssignmentTab({
     enabled: Boolean(selectedSectionId),
   });
 
-  // Load question bank questions for browsing
+  // Load question bank questions for browsing. We fetch ALL confirmed
+  // questions (no type filter at the API level when the dropdown is on
+  // "All matching types") and then filter client-side by assessment type
+  // using the is_psychometric field — this is the critical guard that
+  // prevents a psychometric question from showing up in a normal
+  // assessment's browser (and vice versa). The backend still rejects
+  // mismatched assignments as defense-in-depth, but the UI must never
+  // offer the user a question they can't attach.
   const { data: bankData, isLoading: bankLoading } = useQuery({
     queryKey: ["question-bank", "for-assignment", search, typeFilter],
     queryFn: () =>
@@ -515,6 +522,14 @@ function QuestionAssignmentTab({
         status: "confirmed",
       }),
   });
+
+  // Client-side filter: only show questions whose category matches the
+  // assessment type. is_psychometric comes from the backend
+  // (Question.is_psychometric property → QuestionListSerializer).
+  const wantPsychometric = assessmentType === "psychometric";
+  const bankQuestions = (bankData?.results ?? []).filter(
+    (q) => q.is_psychometric === wantPsychometric,
+  );
 
   const assignMutation = useMutation({
     mutationFn: (questionId: number) =>
@@ -538,7 +553,6 @@ function QuestionAssignmentTab({
   });
 
   const assignedIds = new Set((assignedQuestions ?? []).map((q) => q.question));
-  const bankQuestions = bankData?.results ?? [];
 
   if (sections.length === 0) {
     return (
@@ -666,10 +680,25 @@ function QuestionAssignmentTab({
               {bankLoading ? (
                 <Spinner size="sm" />
               ) : bankQuestions.length === 0 ? (
-                <p className="py-4 text-center text-xs text-slate-400">
-                  No confirmed {assessmentType === "psychometric" ? "psychometric" : "normal"}{" "}
-                  questions found. Create and confirm questions in the Question Bank first.
-                </p>
+                <div className="py-4 text-center text-xs text-slate-400">
+                  <p>
+                    No confirmed {assessmentType === "psychometric" ? "psychometric" : "normal"}{" "}
+                    questions found. Create and confirm questions in the Question Bank first.
+                  </p>
+                  {(() => {
+                    const total = bankData?.results.length ?? 0;
+                    const hidden = total - bankQuestions.length;
+                    if (hidden > 0) {
+                      return (
+                        <p className="mt-1 text-amber-600">
+                          {hidden} question{hidden === 1 ? "" : "s"} hidden — wrong category for
+                          this {assessmentType} assessment.
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
               ) : (
                 <div className="max-h-96 space-y-1 overflow-y-auto">
                   {bankQuestions.map((q) => {
