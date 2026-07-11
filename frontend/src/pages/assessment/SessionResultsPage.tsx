@@ -150,9 +150,7 @@ export default function SessionResultsPage() {
               <TableBody>
                 {sectionScores!.map((ss: SectionScore) => (
                   <TableRow key={ss.id}>
-                    <TableCell className="font-medium text-slate-900">
-                      {ss.section_title}
-                    </TableCell>
+                    <TableCell className="font-medium text-slate-900">{ss.section_title}</TableCell>
                     <TableCell className="text-right">{ss.raw_score.toFixed(2)}</TableCell>
                     <TableCell className="text-right">{ss.max_score.toFixed(2)}</TableCell>
                     <TableCell className="text-right">

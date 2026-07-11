@@ -114,9 +114,7 @@ export function publishAssessment(id: number): Promise<{ id: number; status: str
 // ---------------------------------------------------------------------------
 
 export function listSections(assessmentId: number): Promise<AssessmentSection[]> {
-  return apiGetPaged<AssessmentSection>(`${BASE}/${assessmentId}/sections/`).then(
-    (r) => r.results,
-  );
+  return apiGetPaged<AssessmentSection>(`${BASE}/${assessmentId}/sections/`).then((r) => r.results);
 }
 
 export function createSection(
@@ -173,9 +171,7 @@ export function removeQuestion(
   sectionId: number,
   questionId: number,
 ): Promise<void> {
-  return apiDelete(
-    `${BASE}/${assessmentId}/sections/${sectionId}/questions/${questionId}/`,
-  );
+  return apiDelete(`${BASE}/${assessmentId}/sections/${sectionId}/questions/${questionId}/`);
 }
 
 // ---------------------------------------------------------------------------

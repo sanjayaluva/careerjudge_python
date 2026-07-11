@@ -846,18 +846,21 @@ function FlashSimulation({
     setCurrentIndex(0);
 
     sequence.forEach((_, i) => {
-      setTimeout(() => {
-        if (i + 1 < sequence.length) {
-          setCurrentIndex(i + 1);
-        } else {
-          // End of sequence
-          setTimeout(() => {
-            setPlaying(false);
-            setCurrentIndex(null);
-            setPlayedOnce(true);
-          }, intervalMs);
-        }
-      }, intervalMs * (i + 1));
+      setTimeout(
+        () => {
+          if (i + 1 < sequence.length) {
+            setCurrentIndex(i + 1);
+          } else {
+            // End of sequence
+            setTimeout(() => {
+              setPlaying(false);
+              setCurrentIndex(null);
+              setPlayedOnce(true);
+            }, intervalMs);
+          }
+        },
+        intervalMs * (i + 1),
+      );
     });
   };
 
