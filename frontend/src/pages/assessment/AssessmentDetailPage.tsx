@@ -32,6 +32,7 @@ import {
   type AssessmentSection,
   ATTEMPT_RULES,
   NAVIGATION_RULES,
+  TIMER_LEVELS,
   assignQuestion,
   createSection,
   deleteSection,
@@ -40,6 +41,7 @@ import {
   removeQuestion,
   retrieveAssessment,
   startSession,
+  updateAssessment,
   updateSection,
 } from "@/api/assessment";
 import {
@@ -89,6 +91,18 @@ export default function AssessmentDetailPage() {
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
       navigate(`/assessments/sessions/${data.id}`);
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  // Edit-assessment modal state. cj_admin can edit any assessment (including
+  // published); other roles can only edit draft assessments (backend enforces).
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const assessmentUpdateMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => updateAssessment(aid, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
+      setEditModalOpen(false);
     },
     onError: (err) => setError(extractApiError(err)),
   });
@@ -264,7 +278,15 @@ export default function AssessmentDetailPage() {
                 </div>
               )}
 
-              <div className="mt-6 flex gap-2 border-t border-slate-100 pt-4">
+              <div className="mt-6 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+                {/* Edit button — cj_admin can edit any assessment (including
+                    published per SRS §2.2 admin-approval path); other roles
+                    can only edit draft assessments. */}
+                {canManage && (a.status === "draft" || user?.role === "cj_admin") && (
+                  <Button variant="outline" onClick={() => setEditModalOpen(true)}>
+                    Edit Assessment
+                  </Button>
+                )}
                 {a.status === "draft" && canManage && (
                   <Button
                     loading={publishMutation.isPending}
@@ -425,6 +447,14 @@ export default function AssessmentDetailPage() {
           </Button>
         </div>
       </Modal>
+
+      <EditAssessmentModal
+        open={editModalOpen}
+        assessment={a}
+        loading={assessmentUpdateMutation.isPending}
+        onClose={() => setEditModalOpen(false)}
+        onSubmit={(payload) => assessmentUpdateMutation.mutate(payload)}
+      />
     </div>
   );
 }
@@ -850,6 +880,190 @@ function CreateSectionModal({
           </Button>
           <Button type="submit" loading={loading}>
             {isEdit ? "Save changes" : "Create section"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit Assessment Modal
+// ---------------------------------------------------------------------------
+
+function EditAssessmentModal({
+  open,
+  assessment,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  assessment: AssessmentDetail;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (payload: Record<string, unknown>) => void;
+}) {
+  // Local form state — initialised from the assessment on open.
+  const [title, setTitle] = useState("");
+  const [objective, setObjective] = useState("");
+  const [instructions, setInstructions] = useState("");
+  const [duration, setDuration] = useState("");
+  const [navigationRule, setNavigationRule] = useState("FREE");
+  const [attemptRule, setAttemptRule] = useState("SINGLE_SESSION");
+  const [displayOrder, setDisplayOrder] = useState<"STATIC" | "RANDOM">("STATIC");
+  const [timerLevel, setTimerLevel] = useState("assessment");
+
+  // Sync form fields when the modal opens.
+  useEffect(() => {
+    if (!open) return;
+    setTitle(assessment.title ?? "");
+    setObjective(assessment.objective ?? "");
+    setInstructions(assessment.instructions ?? "");
+    // Backend stores seconds; the form shows minutes.
+    const minutes = assessment.total_duration_seconds
+      ? Math.round(assessment.total_duration_seconds / 60)
+      : 0;
+    setDuration(minutes > 0 ? String(minutes) : "");
+    setNavigationRule(assessment.navigation_rule ?? "FREE");
+    setAttemptRule(assessment.attempt_rule ?? "SINGLE_SESSION");
+    setDisplayOrder((assessment.display_order as "STATIC" | "RANDOM") ?? "STATIC");
+    setTimerLevel(assessment.timer_level ?? "assessment");
+  }, [open, assessment]);
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Edit Assessment"
+      description="Update assessment configuration. cj_admin can edit published assessments."
+      size="lg"
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          // Convert minutes (form input) → seconds (backend storage).
+          const durationMinutes = duration ? parseInt(duration, 10) : null;
+          onSubmit({
+            title,
+            objective,
+            instructions,
+            total_duration_seconds: durationMinutes !== null ? durationMinutes * 60 : null,
+            navigation_rule: navigationRule,
+            attempt_rule: attemptRule,
+            display_order: displayOrder,
+            timer_level: timerLevel,
+          });
+        }}
+        className="space-y-4"
+      >
+        <div>
+          <Label htmlFor="edit-title" required>
+            Assessment title
+          </Label>
+          <Input
+            id="edit-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="edit-objective">Objective</Label>
+          <textarea
+            id="edit-objective"
+            rows={2}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={objective}
+            onChange={(e) => setObjective(e.target.value)}
+          />
+        </div>
+        <div>
+          <Label htmlFor="edit-instructions">Instructions (shown to candidates)</Label>
+          <textarea
+            id="edit-instructions"
+            rows={3}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <Label htmlFor="edit-duration">Duration (minutes)</Label>
+            <Input
+              id="edit-duration"
+              type="number"
+              min="1"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              placeholder="Leave empty for no time limit"
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-nav">Navigation</Label>
+            <select
+              id="edit-nav"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={navigationRule}
+              onChange={(e) => setNavigationRule(e.target.value)}
+            >
+              {NAVIGATION_RULES.map((n) => (
+                <option key={n.value} value={n.value}>
+                  {n.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label htmlFor="edit-attempt">Attempt rule</Label>
+            <select
+              id="edit-attempt"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={attemptRule}
+              onChange={(e) => setAttemptRule(e.target.value)}
+            >
+              {ATTEMPT_RULES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label htmlFor="edit-display-order">Display order</Label>
+            <select
+              id="edit-display-order"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={displayOrder}
+              onChange={(e) => setDisplayOrder(e.target.value as "STATIC" | "RANDOM")}
+            >
+              <option value="STATIC">Static (as configured)</option>
+              <option value="RANDOM">Random</option>
+            </select>
+          </div>
+          <div>
+            <Label htmlFor="edit-timer-level">Timer level</Label>
+            <select
+              id="edit-timer-level"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={timerLevel}
+              onChange={(e) => setTimerLevel(e.target.value)}
+            >
+              {TIMER_LEVELS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading}>
+            Save changes
           </Button>
         </div>
       </form>

@@ -26,6 +26,7 @@ import {
   ASSESSMENT_TYPES,
   ATTEMPT_RULES,
   NAVIGATION_RULES,
+  TIMER_LEVELS,
   createAssessment,
   deleteAssessment,
   listAssessments,
@@ -242,6 +243,8 @@ function CreateAssessmentModal({
   const [duration, setDuration] = useState("");
   const [navigationRule, setNavigationRule] = useState("FREE");
   const [attemptRule, setAttemptRule] = useState("SINGLE_SESSION");
+  const [displayOrder, setDisplayOrder] = useState<"STATIC" | "RANDOM">("STATIC");
+  const [timerLevel, setTimerLevel] = useState("assessment");
 
   return (
     <Modal
@@ -259,14 +262,19 @@ function CreateAssessmentModal({
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          // The form collects duration in MINUTES (user-friendly), but the
+          // backend stores total_duration_seconds. Convert here.
+          const durationMinutes = duration ? parseInt(duration, 10) : null;
           onSubmit({
             title,
             assessment_type: assessmentType,
             objective,
             instructions,
-            total_duration_seconds: duration ? parseInt(duration) : null,
+            total_duration_seconds: durationMinutes !== null ? durationMinutes * 60 : null,
             navigation_rule: navigationRule,
             attempt_rule: attemptRule,
+            display_order: displayOrder,
+            timer_level: timerLevel,
           });
         }}
         className="space-y-4"
@@ -344,10 +352,14 @@ function CreateAssessmentModal({
             <Input
               id="duration"
               type="number"
+              min="1"
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
               placeholder="e.g. 60"
             />
+            <p className="mt-1 text-xs text-slate-400">
+              Leave empty for no time limit. Stored as seconds on the server.
+            </p>
           </div>
           <div>
             <Label htmlFor="nav">Navigation</Label>
@@ -378,6 +390,36 @@ function CreateAssessmentModal({
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <Label htmlFor="display_order">Display order</Label>
+            <select
+              id="display_order"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={displayOrder}
+              onChange={(e) => setDisplayOrder(e.target.value as "STATIC" | "RANDOM")}
+            >
+              <option value="STATIC">Static (as configured)</option>
+              <option value="RANDOM">Random</option>
+            </select>
+          </div>
+          <div>
+            <Label htmlFor="timer_level">Timer level</Label>
+            <select
+              id="timer_level"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={timerLevel}
+              onChange={(e) => setTimerLevel(e.target.value)}
+            >
+              {TIMER_LEVELS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">
+              Only one level can have a timer — set the duration above for assessment-level.
+            </p>
           </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">

@@ -70,6 +70,40 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert resp.json()["data"]["title"] == "New Test"
         assert resp.json()["data"]["status"] == "draft"
 
+    def test_create_assessment_stores_duration_in_seconds(self):
+        """total_duration_seconds is stored as-is (seconds) on the backend.
+
+        The frontend converts minutes → seconds before sending. This test
+        verifies the backend doesn't do any additional conversion.
+        """
+        resp = self.client.post(
+            "/api/assessments/",
+            {
+                "title": "Timed Test",
+                "total_duration_seconds": 900,  # 15 minutes in seconds
+                "display_order": "STATIC",
+                "timer_level": "assessment",
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert resp.json()["data"]["total_duration_seconds"] == 900
+        assert resp.json()["data"]["display_order"] == "STATIC"
+        assert resp.json()["data"]["timer_level"] == "assessment"
+
+    def test_update_assessment_duration(self):
+        """PATCH can update total_duration_seconds."""
+        a = Assessment.objects.create(title="Test", created_by=self.user)
+        resp = self.client.patch(
+            f"/api/assessments/{a.id}/",
+            {"total_duration_seconds": 1800},  # 30 minutes
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["data"]["total_duration_seconds"] == 1800
+        a.refresh_from_db()
+        assert a.total_duration_seconds == 1800
+
     def test_list_assessments(self):
         Assessment.objects.create(title="A1", created_by=self.user)
         Assessment.objects.create(title="A2", created_by=self.user)
@@ -92,10 +126,25 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert resp.status_code == status.HTTP_200_OK
         assert resp.json()["data"]["title"] == "Updated"
 
-    def test_cannot_update_published_assessment(self):
+    def test_cannot_update_published_assessment_non_admin(self):
+        """Non-admin users cannot edit a published assessment (must archive first)."""
+        # Switch to a non-admin role (corp_admin) to test the restriction.
+        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
+        grant_assessment_perms(corp_admin)
+        self.client.force_authenticate(user=corp_admin)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         resp = self.client.patch(f"/api/assessments/{a.id}/", {"title": "Updated"}, format="json")
         assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_cj_admin_can_update_published_assessment(self):
+        """cj_admin can override the publish-lock and edit any assessment."""
+        a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
+        resp = self.client.patch(
+            f"/api/assessments/{a.id}/", {"title": "Admin Updated"}, format="json"
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        a.refresh_from_db()
+        assert a.title == "Admin Updated"
 
     def test_delete_draft_assessment(self):
         a = Assessment.objects.create(title="Test 1", created_by=self.user)
@@ -103,10 +152,21 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert resp.status_code == status.HTTP_200_OK
         assert not Assessment.objects.filter(id=a.id).exists()
 
-    def test_cannot_delete_published_assessment(self):
+    def test_cannot_delete_published_assessment_non_admin(self):
+        """Non-admin users cannot delete a published assessment."""
+        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
+        grant_assessment_perms(corp_admin)
+        self.client.force_authenticate(user=corp_admin)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         resp = self.client.delete(f"/api/assessments/{a.id}/")
         assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_cj_admin_can_delete_published_assessment(self):
+        """cj_admin can override the publish-lock and delete any assessment."""
+        a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
+        resp = self.client.delete(f"/api/assessments/{a.id}/")
+        assert resp.status_code == status.HTTP_200_OK
+        assert not Assessment.objects.filter(id=a.id).exists()
 
     def test_publish_assessment(self):
         a = Assessment.objects.create(title="Test 1", status="draft", created_by=self.user)

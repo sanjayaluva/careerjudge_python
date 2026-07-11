@@ -140,13 +140,30 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
-        # Don't allow editing published assessments (except archiving)
-        if instance.status == "published" and request.data.get("status") != "archived":
+        # Per SRS 03_assessment_configuration.json §2.2: "After going live,
+        # user cannot directly edit Assessment Title. An edit request is sent
+        # to Admin for approval."
+        #
+        # Interpretation: non-admin users cannot edit published assessments
+        # (they must archive first). cj_admin can override and edit any
+        # assessment regardless of status — this is the "Admin approval"
+        # path described in the SRS.
+        is_admin = request.user.is_superuser or (
+            request.user.role and request.user.role.name == "cj_admin"
+        )
+        if (
+            instance.status == "published"
+            and request.data.get("status") != "archived"
+            and not is_admin
+        ):
             return Response(
                 {
                     "error": {
                         "code": "forbidden",
-                        "message": "Cannot edit a published assessment. Archive it first.",
+                        "message": (
+                            "Cannot edit a published assessment. Archive it first, "
+                            "or contact a CareerJudge Admin to make the edit."
+                        ),
                         "details": {},
                     }
                 },
@@ -162,7 +179,12 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.status == "published":
+        # Same admin-override rule as update(): cj_admin can delete a
+        # published assessment; everyone else must archive first.
+        is_admin = request.user.is_superuser or (
+            request.user.role and request.user.role.name == "cj_admin"
+        )
+        if instance.status == "published" and not is_admin:
             return Response(
                 {
                     "error": {
