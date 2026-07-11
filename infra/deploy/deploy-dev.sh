@@ -83,6 +83,9 @@ sleep 5
 echo "→ Running migrations…"
 docker compose -f "$COMPOSE_FILE" exec -T backend python manage.py migrate --noinput
 
+echo "→ Re-seeding demo users (idempotent — resets passwords to Demo@1234)…"
+docker compose -f "$COMPOSE_FILE" exec -T backend python manage.py seed_demo
+
 echo "→ Health check…"
 HEALTH_OK=false
 for i in $(seq 1 30); do
