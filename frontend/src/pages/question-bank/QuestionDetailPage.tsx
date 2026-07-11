@@ -162,13 +162,17 @@ export default function QuestionDetailPage() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  // Captures the ?review=1 request on mount; the actual modal open is gated
+  // on the question loading + the user still being able to review it (the
+  // status may have moved past their stage if they clicked a stale list row).
+  const [reviewRequested, setReviewRequested] = useState(false);
 
-  // Auto-open the Review modal when the URL has ?review=1 (used by the
-  // QuestionBankPage list "Review" action button for one-click access).
+  // Strip ?review=1 from the URL immediately so it doesn't re-trigger on
+  // navigation, but remember the request so we can act on it once the
+  // question data is available.
   useEffect(() => {
     if (searchParams.get("review") === "1") {
-      setReviewOpen(true);
-      // Strip the param so the modal doesn't re-open on every navigation.
+      setReviewRequested(true);
       searchParams.delete("review");
       setSearchParams(searchParams, { replace: true });
     }
@@ -186,10 +190,37 @@ export default function QuestionDetailPage() {
 
   const submitMutation = useMutation({
     mutationFn: () => submitForReview(qid),
-    onSuccess: () =>
-      void queryClient.invalidateQueries({ queryKey: ["question-bank", "questions", qid] }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["question-bank"] }),
     onError: (err) => setError(extractApiError(err)),
   });
+
+  // Act on the ?review=1 request once the question is loaded. Only auto-open
+  // the ReviewModal if the user can actually review the question at its
+  // current status — if the status has already moved past their stage (e.g.
+  // they clicked a stale list row), skip opening so they don't see a
+  // "Question must be in 'pending_content_review' status" error on submit.
+  // NOTE: This hook runs BEFORE the early-return guards below (React hooks
+  // rule). We inline the review-permission check instead of using the
+  // derived canReviewContent / canReviewPsychometric (which are computed
+  // after the early return).
+  useEffect(() => {
+    if (!reviewRequested || !question) return;
+    setReviewRequested(false);
+    const role = user?.role ?? "";
+    const status = question.status;
+    const canReview =
+      (status === "pending_content_review" && ["reviewer", "cj_admin"].includes(role)) ||
+      (status === "pending_psychometric_review" && ["psychometrician", "cj_admin"].includes(role));
+    if (canReview) {
+      setReviewOpen(true);
+    } else {
+      setError(
+        `This question is currently in '${status}' status and is not pending your review. ` +
+          "It may have already been reviewed by someone else — refresh the question bank list to see the latest status.",
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewRequested, question]);
 
   if (isLoading) {
     return (
@@ -1069,7 +1100,14 @@ function ReviewModal({
         ...(canSetExposure && exposureLimit ? { exposure_limit: Number(exposureLimit) } : {}),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["question-bank", "questions", questionId] });
+      // Invalidate the broad "question-bank" prefix so BOTH the detail
+      // query (["question-bank", "questions", questionId]) AND the list
+      // query (["question-bank", "questions", ...filters]) are marked
+      // stale. Without this, the list stays cached for 30s (the global
+      // staleTime) and the Review button keeps pointing at a status that
+      // no longer matches — causing "Question must be in
+      // 'pending_content_review' status" errors when the user re-clicks.
+      void queryClient.invalidateQueries({ queryKey: ["question-bank"] });
       setComment("");
       setExposureLimit("");
       setError(null);
