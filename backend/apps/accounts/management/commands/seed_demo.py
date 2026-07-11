@@ -211,19 +211,24 @@ class Command(BaseCommand):
                     "role": roles[role_name],
                 },
             )
+            # ALWAYS reset the password for demo users — these are documented
+            # credentials (README + seed_demo output) and must always work
+            # after running this command. Without this, existing users keep
+            # whatever password they had, causing "Invalid credentials" errors.
+            user.set_password(password)
+            # Ensure role + profile fields are current
+            user.full_name = full_name
+            user.is_active = True
+            user.is_email_verified = True
+            user.role = roles[role_name]
+            user.save()
+            UserProfile.objects.get_or_create(user=user)
             if created:
-                user.set_password(password)
-                user.save()
-                UserProfile.objects.get_or_create(user=user)
                 self.stdout.write(
                     self.style.SUCCESS(f"  ✓ Created: {email} / {password} (role: {role_name})")
                 )
             else:
-                # Ensure role is set
-                if user.role_id != roles[role_name].id:
-                    user.role = roles[role_name]
-                    user.save(update_fields=["role", "updated_at"])
-                self.stdout.write(f"  → Exists: {email}")
+                self.stdout.write(f"  → Exists (password reset): {email}")
 
         self.stdout.write(self.style.MIGRATE_HEADING("→ Creating superuser…"))
         superuser, created = User.objects.get_or_create(
@@ -236,16 +241,21 @@ class Command(BaseCommand):
                 "full_name": "Superuser",
             },
         )
+        # Always reset the superuser password too (same rationale as demo users).
+        superuser.set_password("Su@12345678")
+        superuser.is_superuser = True
+        superuser.is_staff = True
+        superuser.is_active = True
+        superuser.is_email_verified = True
+        superuser.save()
         if created:
-            superuser.set_password("Su@12345678")
-            superuser.save()
             self.stdout.write(
                 self.style.SUCCESS(
                     "  ✓ Created superuser: superuser@careerjudge.pp.ua / Su@12345678"
                 )
             )
         else:
-            self.stdout.write("  → Superuser exists.")
+            self.stdout.write("  → Superuser exists (password reset).")
 
         self.stdout.write(self.style.SUCCESS("\n✓ Demo seed complete."))
         self.stdout.write("\nDemo login credentials:")

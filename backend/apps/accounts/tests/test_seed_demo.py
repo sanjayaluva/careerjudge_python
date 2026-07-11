@@ -49,3 +49,34 @@ class TestSeedDemoCommand:
         assert user.check_password("Demo@1234") is True
         assert user.is_active is True
         assert user.is_email_verified is True
+
+    def test_seed_resets_password_for_existing_user(self):
+        """Re-running seed_demo must reset passwords to the documented value.
+
+        Without this, demo users created earlier with a different password
+        cause 'Invalid credentials' errors — the documented credentials
+        in README.md stop working.
+        """
+        out = StringIO()
+        call_command("seed_demo", stdout=out)
+        # Change the password to something wrong
+        user = User.objects.get(email="individual@demo.careerjudge.pp.ua")
+        user.set_password("WrongPassword123")
+        user.save()
+        assert user.check_password("Demo@1234") is False
+        # Re-run seed_demo — should reset the password back
+        call_command("seed_demo", stdout=out)
+        user.refresh_from_db()
+        assert user.check_password("Demo@1234") is True
+
+    def test_seed_resets_superuser_password(self):
+        """Re-running seed_demo must also reset the superuser password."""
+        out = StringIO()
+        call_command("seed_demo", stdout=out)
+        superuser = User.objects.get(email="superuser@careerjudge.pp.ua")
+        superuser.set_password("WrongSuperPassword")
+        superuser.save()
+        # Re-run
+        call_command("seed_demo", stdout=out)
+        superuser.refresh_from_db()
+        assert superuser.check_password("Su@12345678") is True
