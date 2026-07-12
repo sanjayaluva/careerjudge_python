@@ -318,3 +318,98 @@ class TestCalculateSessionScores(ScoringTestBase):
         self.q1.refresh_from_db()
         assert self.q1.exposure_count == 1
         assert self.q1.is_active is False
+
+    def test_hierarchical_section_score_rollup(self):
+        """Per SRS §3.2: scores roll up L4 → L3 → L2 → L1.
+
+        Creates a 4-level hierarchy:
+          L1: Root Variable
+            L2: Sub-Variable A
+              L3: Sub-Sub A1
+                L4: Leaf A1a (question attached here)
+            L2: Sub-Variable B
+              L3: Sub-Sub B1
+                L4: Leaf B1a (question attached here)
+
+        After scoring, every level should have a SectionScore — parents
+        get the sum of their children's scores.
+        """
+        from apps.assessment.models import AssessmentQuestion, SectionScore
+
+        # Build the hierarchy
+        l1 = AssessmentSection.objects.create(
+            assessment=self.assessment, title="Root Variable", level=1, order=1
+        )
+        l2a = AssessmentSection.objects.create(
+            assessment=self.assessment, parent=l1, title="Sub-Variable A", level=2, order=1
+        )
+        l3a = AssessmentSection.objects.create(
+            assessment=self.assessment, parent=l2a, title="Sub-Sub A1", level=3, order=1
+        )
+        l4a = AssessmentSection.objects.create(
+            assessment=self.assessment, parent=l3a, title="Leaf A1a", level=4, order=1
+        )
+        l2b = AssessmentSection.objects.create(
+            assessment=self.assessment, parent=l1, title="Sub-Variable B", level=2, order=2
+        )
+        l3b = AssessmentSection.objects.create(
+            assessment=self.assessment, parent=l2b, title="Sub-Sub B1", level=3, order=1
+        )
+        l4b = AssessmentSection.objects.create(
+            assessment=self.assessment, parent=l3b, title="Leaf B1b", level=4, order=1
+        )
+
+        # Attach one MCQ to each leaf (L4)
+        q_a = make_mcq_question(self.user, scoring_type="BINARY")
+        q_b = make_mcq_question(self.user, scoring_type="BINARY")
+        AssessmentQuestion.objects.create(section=l4a, question=q_a, order=1)
+        AssessmentQuestion.objects.create(section=l4b, question=q_b, order=1)
+
+        # Create attempts — answer both correctly (each scores 1.0)
+        from apps.assessment.models import QuestionAttempt
+
+        correct_a = q_a.options.filter(is_correct=True).first()
+        correct_b = q_b.options.filter(is_correct=True).first()
+        QuestionAttempt.objects.create(
+            session=self.session,
+            question=q_a,
+            section=l4a,
+            status="attempted",
+            raw_answer={"selected_option_ids": [correct_a.id]},
+        )
+        QuestionAttempt.objects.create(
+            session=self.session,
+            question=q_b,
+            section=l4b,
+            status="attempted",
+            raw_answer={"selected_option_ids": [correct_b.id]},
+        )
+
+        calculate_session_scores(self.session)
+
+        # Verify ALL sections have SectionScore records (7 from this hierarchy
+        # + 1 from setUp's self.section with its 2 questions = 8 total)
+        scores = {s.section_id: s for s in SectionScore.objects.filter(session=self.session)}
+        assert len(scores) == 8, f"Expected 8 section scores, got {len(scores)}"
+
+        # L4 leaves: each scored 1.0 / 1.0
+        assert scores[l4a.id].raw_score == 1.0
+        assert scores[l4a.id].max_score == 1.0
+        assert scores[l4b.id].raw_score == 1.0
+        assert scores[l4b.id].max_score == 1.0
+
+        # L3: sum of children (1 child each, so 1.0 / 1.0)
+        assert scores[l3a.id].raw_score == 1.0
+        assert scores[l3a.id].max_score == 1.0
+        assert scores[l3b.id].raw_score == 1.0
+        assert scores[l3b.id].max_score == 1.0
+
+        # L2: sum of children (1 child each, so 1.0 / 1.0)
+        assert scores[l2a.id].raw_score == 1.0
+        assert scores[l2a.id].max_score == 1.0
+        assert scores[l2b.id].raw_score == 1.0
+        assert scores[l2b.id].max_score == 1.0
+
+        # L1 root: sum of both L2 children (2.0 / 2.0)
+        assert scores[l1.id].raw_score == 2.0
+        assert scores[l1.id].max_score == 2.0

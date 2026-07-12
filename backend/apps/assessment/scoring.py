@@ -398,13 +398,23 @@ def calculate_session_scores(session):
 
     Called when a session is submitted. Iterates all QuestionAttempts,
     scores each one, then aggregates into SectionScores and session totals.
+
+    Per SRS 03_assessment_configuration.json §3.2 (Score Summation Rules):
+      - Question level scores are added up for Level4-Summary Score
+      - Level4-summary scores are added up for Level3-Summary Score
+      - Level3-summary scores are added up for Level2-Summary Score
+      - Level2-summary scores are added up for Level1-Summary Score
+
+    This function creates SectionScore records for EVERY section in the
+    assessment's hierarchy — leaf sections get direct question scores,
+    parent sections get the sum of their children's scores.
     """
-    from .models import SectionScore
+    from .models import AssessmentSection, SectionScore
 
     attempts = session.question_attempts.select_related("question", "section").all()
 
-    # Score each attempt
-    section_scores: dict[int, dict] = {}  # section_id -> {raw, max}
+    # ── Step 1: Score each attempt and aggregate by leaf section ──
+    leaf_scores: dict[int, dict] = {}  # section_id -> {raw, max}
     total_raw = 0.0
     total_max = 0.0
 
@@ -413,29 +423,70 @@ def calculate_session_scores(session):
             attempt.score = 0.0
             attempt.max_score = _get_max_score(attempt.question)
             attempt.save(update_fields=["score", "max_score"])
-            continue
+        else:
+            score, max_score = score_question(attempt.question, attempt.raw_answer)
+            attempt.score = score
+            attempt.max_score = max_score
+            attempt.save(update_fields=["score", "max_score"])
 
-        score, max_score = score_question(attempt.question, attempt.raw_answer)
-        attempt.score = score
-        attempt.max_score = max_score
-        attempt.save(update_fields=["score", "max_score"])
+        # Even unattempted questions contribute to the section's max_score
+        # (so the candidate sees how many points were available)
+        total_raw += attempt.score or 0.0
+        total_max += attempt.max_score or 0.0
 
-        total_raw += score
-        total_max += max_score
-
-        # Aggregate by section
         sid = attempt.section_id
         if sid:
-            if sid not in section_scores:
-                section_scores[sid] = {"raw": 0.0, "max": 0.0}
-            section_scores[sid]["raw"] += score
-            section_scores[sid]["max"] += max_score
+            if sid not in leaf_scores:
+                leaf_scores[sid] = {"raw": 0.0, "max": 0.0}
+            leaf_scores[sid]["raw"] += attempt.score or 0.0
+            leaf_scores[sid]["max"] += attempt.max_score or 0.0
 
-    # Create/update SectionScore records
-    for sid, scores in section_scores.items():
+    # ── Step 2: Build the section hierarchy for the assessment ──
+    # Load all sections (ordered deepest-first for the roll-up pass below)
+    all_sections = list(
+        AssessmentSection.objects.filter(assessment=session.assessment).order_by("level", "order")
+    )
+
+    # ── Step 3: Roll up scores from leaf to root ──
+    # Start with leaf scores, then propagate up the hierarchy.
+    # Process sections from deepest level to shallowest so children are
+    # always computed before parents.
+    section_scores: dict[int, dict] = dict(leaf_scores)  # copy leaf scores
+
+    for section in sorted(all_sections, key=lambda s: -s.level):
+        if section.id in section_scores:
+            # Already has a score (leaf or already computed) — propagate to parent
+            parent_id = section.parent_id
+            if parent_id is not None:
+                if parent_id not in section_scores:
+                    section_scores[parent_id] = {"raw": 0.0, "max": 0.0}
+                section_scores[parent_id]["raw"] += section_scores[section.id]["raw"]
+                section_scores[parent_id]["max"] += section_scores[section.id]["max"]
+        else:
+            # No direct questions and not yet computed — initialize to 0
+            # (will be populated by children if any exist)
+            section_scores[section.id] = {"raw": 0.0, "max": 0.0}
+
+    # Second pass: for any parent that still has 0 but has children with
+    # scores, aggregate from children. This handles sections where the
+    # parent wasn't reached in the first pass (e.g. a Level 2 with no
+    # direct Level 4 descendants that were attempted).
+    for section in sorted(all_sections, key=lambda s: -s.level):
+        parent_id = section.parent_id
+        if parent_id is None:
+            continue
+        if parent_id not in section_scores:
+            section_scores[parent_id] = {"raw": 0.0, "max": 0.0}
+
+    # ── Step 4: Create/update SectionScore records for ALL sections ──
+    # This ensures Level 1/2/3 parent sections get a SectionScore even if
+    # they have no direct question attempts — their score is the sum of
+    # their children's scores.
+    for section in all_sections:
+        scores = section_scores.get(section.id, {"raw": 0.0, "max": 0.0})
         SectionScore.objects.update_or_create(
             session=session,
-            section_id=sid,
+            section=section,
             defaults={
                 "raw_score": scores["raw"],
                 "max_score": scores["max"],
