@@ -666,6 +666,27 @@ class TestSessionFlow(AssessmentViewTestBase):
         resp = self.client.get(f"/api/assessments/sessions/{sid}/")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
+    def test_session_list_endpoint_returns_user_sessions(self):
+        """GET /api/assessments/sessions/ returns the current user's sessions.
+
+        This is the endpoint used by the 'My Sessions' tab on the assessment
+        detail page. It was previously broken by a URL routing conflict where
+        the 'assessments/<pk>/' pattern shadowed 'assessments/sessions/'.
+        """
+        # Start a session as the candidate
+        self.client.force_authenticate(user=self.candidate)
+        self.client.post(f"/api/assessments/{self.assessment.id}/start_session/")
+
+        # List my sessions
+        resp = self.client.get("/api/assessments/sessions/")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()["data"]
+        # Could be paginated ({count, results}) or a flat list
+        results = data.get("results", []) if isinstance(data, dict) else data
+        assert len(results) >= 1
+        assert results[0]["candidate"] == self.candidate.id
+        assert results[0]["assessment"] == self.assessment.id
+
 
 class TestAssessmentTypeEnforcement(AssessmentViewTestBase):
     """Verify that normal and psychometric questions cannot be mixed in one assessment.
