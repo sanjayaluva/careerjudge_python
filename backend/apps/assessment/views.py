@@ -111,6 +111,27 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         if qstatus:
             qs = qs.filter(status=qstatus)
 
+        # Role-based visibility: only assessment managers (cj_admin,
+        # psychometrician, corp_admin, corp_exclusive) can see non-published
+        # assessments. All other roles (individual, sme, reviewer, trainer,
+        # group_admin, counsellor, channel_partner) only see published ones.
+        # This applies to list + retrieve — candidates shouldn't be able to
+        # open a draft assessment by ID either.
+        if self.request.user.is_authenticated:
+            role_name = self.request.user.role.name if self.request.user.role else None
+            is_manager = (
+                role_name
+                in (
+                    "cj_admin",
+                    "psychometrician",
+                    "corp_admin",
+                    "corp_exclusive",
+                )
+                or self.request.user.is_superuser
+            )
+            if not is_manager:
+                qs = qs.filter(status="published")
+
         return qs
 
     def perform_create(self, serializer):

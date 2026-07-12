@@ -181,6 +181,89 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert resp.status_code == status.HTTP_403_FORBIDDEN
 
 
+class TestAssessmentVisibilityFiltering(AssessmentViewTestBase):
+    """Verify that non-manager roles only see published assessments.
+
+    Per requirement: individual users (candidates) should only see published
+    assessments. Draft/archived assessments are visible only to assessment
+    managers (cj_admin, psychometrician, corp_admin, corp_exclusive).
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        # Create one assessment in each status
+        self.draft = Assessment.objects.create(title="Draft A", status="draft")
+        self.published = Assessment.objects.create(title="Published A", status="published")
+        self.archived = Assessment.objects.create(title="Archived A", status="archived")
+
+    def test_individual_only_sees_published(self):
+        """Individual users only see published assessments in the list."""
+        individual = UserFactory.create(role=get_or_create_role("individual", is_system=True))
+        grant_assessment_perms(individual, actions=("view",))
+        self.client.force_authenticate(user=individual)
+        resp = self.client.get("/api/assessments/")
+        data = resp.json()["data"]
+        results = data.get("results", data) if isinstance(data, dict) else data
+        titles = [r["title"] for r in results]
+        assert "Published A" in titles
+        assert "Draft A" not in titles
+        assert "Archived A" not in titles
+
+    def test_individual_cannot_retrieve_draft(self):
+        """Individual users get 404 when trying to open a draft assessment."""
+        individual = UserFactory.create(role=get_or_create_role("individual", is_system=True))
+        grant_assessment_perms(individual, actions=("view",))
+        self.client.force_authenticate(user=individual)
+        resp = self.client.get(f"/api/assessments/{self.draft.id}/")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_individual_can_retrieve_published(self):
+        """Individual users can open a published assessment."""
+        individual = UserFactory.create(role=get_or_create_role("individual", is_system=True))
+        grant_assessment_perms(individual, actions=("view",))
+        self.client.force_authenticate(user=individual)
+        resp = self.client.get(f"/api/assessments/{self.published.id}/")
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["data"]["title"] == "Published A"
+
+    def test_cj_admin_sees_all_statuses(self):
+        """cj_admin sees draft, published, and archived assessments."""
+        admin = UserFactory.create(role=get_or_create_role("cj_admin", is_system=True))
+        grant_assessment_perms(admin)
+        self.client.force_authenticate(user=admin)
+        resp = self.client.get("/api/assessments/")
+        data = resp.json()["data"]
+        results = data.get("results", data) if isinstance(data, dict) else data
+        titles = [r["title"] for r in results]
+        assert "Draft A" in titles
+        assert "Published A" in titles
+        assert "Archived A" in titles
+
+    def test_psychometrician_sees_all_statuses(self):
+        """Psychometrician sees all statuses (they're the assessment author)."""
+        psy = UserFactory.create(role=get_or_create_role("psychometrician", is_system=True))
+        grant_assessment_perms(psy, actions=("view", "add", "change", "delete"))
+        self.client.force_authenticate(user=psy)
+        resp = self.client.get("/api/assessments/")
+        data = resp.json()["data"]
+        results = data.get("results", data) if isinstance(data, dict) else data
+        titles = [r["title"] for r in results]
+        assert "Draft A" in titles
+        assert "Published A" in titles
+
+    def test_sme_only_sees_published(self):
+        """SME (question author) only sees published assessments."""
+        sme = UserFactory.create(role=get_or_create_role("sme", is_system=True))
+        grant_assessment_perms(sme, actions=("view",))
+        self.client.force_authenticate(user=sme)
+        resp = self.client.get("/api/assessments/")
+        data = resp.json()["data"]
+        results = data.get("results", data) if isinstance(data, dict) else data
+        titles = [r["title"] for r in results]
+        assert "Published A" in titles
+        assert "Draft A" not in titles
+
+
 class TestPsychometricianAssessmentAccess(AssessmentViewTestBase):
     """Per SRS UC029 'Prepare Assessment Blueprint', the psychometrician is the
     primary author of assessments. They should have full CRUD on assessments
@@ -447,11 +530,17 @@ class TestSessionFlow(AssessmentViewTestBase):
         assert resp.json()["data"]["total_duration_seconds"] == 600
 
     def test_cannot_start_session_for_draft_assessment(self):
+        """Individual user can't start a session on a draft assessment.
+
+        Returns 404 (not 403) because the queryset filters out non-published
+        assessments for non-manager roles — the candidate can't even see
+        that the draft exists.
+        """
         self.assessment.status = "draft"
         self.assessment.save()
         self.client.force_authenticate(user=self.candidate)
         resp = self.client.post(f"/api/assessments/{self.assessment.id}/start_session/")
-        assert resp.status_code == status.HTTP_403_FORBIDDEN
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     def test_resuming_active_session_returns_same_session(self):
         self.client.force_authenticate(user=self.candidate)
