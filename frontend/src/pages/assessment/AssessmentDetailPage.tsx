@@ -173,6 +173,12 @@ export default function AssessmentDetailPage() {
 
   const a = assessment as AssessmentDetail;
 
+  // canEdit: who can modify this assessment's structure (sections + questions)?
+  // - Managers can edit DRAFT assessments
+  // - cj_admin can also edit PUBLISHED assessments (admin override per SRS §2.2)
+  // This single variable drives all section/question edit-button visibility.
+  const canEdit = canManage && (a.status === "draft" || user?.role === "cj_admin");
+
   return (
     <div className="space-y-6 p-6">
       {error && (
@@ -296,7 +302,7 @@ export default function AssessmentDetailPage() {
                 {/* Edit button — cj_admin can edit any assessment (including
                     published per SRS §2.2 admin-approval path); other roles
                     can only edit draft assessments. */}
-                {canManage && (a.status === "draft" || user?.role === "cj_admin") && (
+                {canEdit && (
                   <Button variant="outline" onClick={() => setEditModalOpen(true)}>
                     Edit Assessment
                   </Button>
@@ -328,7 +334,7 @@ export default function AssessmentDetailPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Sections (Variable Structure)</CardTitle>
-                {canManage && a.status === "draft" && (
+                {canEdit && (
                   <Button
                     size="sm"
                     onClick={() => setSectionModal({ open: true, parent: null, editSection: null })}
@@ -350,7 +356,7 @@ export default function AssessmentDetailPage() {
                       key={s.id}
                       section={s}
                       depth={0}
-                      canManage={canManage && a.status === "draft"}
+                      canManage={canEdit}
                       onAddSubsection={(parentId) =>
                         setSectionModal({ open: true, parent: parentId, editSection: null })
                       }
@@ -372,7 +378,7 @@ export default function AssessmentDetailPage() {
             assessmentId={aid}
             assessmentType={a.assessment_type}
             sections={a.sections}
-            canManage={canManage && a.status === "draft"}
+            canManage={canEdit}
           />
         </TabsContent>
 
