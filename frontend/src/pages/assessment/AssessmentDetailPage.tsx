@@ -22,6 +22,12 @@ import {
   Label,
   Modal,
   Spinner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
   Tabs,
   TabsContent,
   TabsList,
@@ -30,12 +36,14 @@ import {
 import {
   type AssessmentDetail,
   type AssessmentSection,
+  type AssessmentSession,
   ATTEMPT_RULES,
   NAVIGATION_RULES,
   TIMER_LEVELS,
   assignQuestion,
   createSection,
   deleteSection,
+  listMySessions,
   listSectionQuestions,
   publishAssessment,
   removeQuestion,
@@ -190,9 +198,15 @@ export default function AssessmentDetailPage() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          {/* Sections tab: visible to managers (who can edit) and to
+              candidates (read-only — just shows the variable structure,
+              not question content). */}
           <TabsTrigger value="sections">Sections ({a.sections.length})</TabsTrigger>
-          <TabsTrigger value="questions">Questions</TabsTrigger>
-          <TabsTrigger value="sessions">Sessions</TabsTrigger>
+          {/* Questions tab: MANAGERS ONLY. Candidates must NOT see the
+              assigned questions before taking the assessment — showing
+              question titles/content would let them preview the test. */}
+          {canManage && <TabsTrigger value="questions">Questions</TabsTrigger>}
+          <TabsTrigger value="sessions">My Sessions</TabsTrigger>
         </TabsList>
 
         {/* === OVERVIEW TAB === */}
@@ -363,37 +377,15 @@ export default function AssessmentDetailPage() {
         </TabsContent>
 
         {/* === SESSIONS TAB === */}
+        {/* === SESSIONS TAB (My Sessions) === */}
         <TabsContent value="sessions">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Assessment Sessions</CardTitle>
-                {a.status === "published" && (
-                  <Button
-                    loading={startSessionMutation.isPending}
-                    onClick={() => startSessionMutation.mutate()}
-                  >
-                    Start Session
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {a.session_count === 0 ? (
-                <p className="py-4 text-center text-sm text-slate-500">
-                  No sessions yet.{" "}
-                  {a.status === "published"
-                    ? 'Click "Start Session" to begin.'
-                    : "Publish the assessment to enable sessions."}
-                </p>
-              ) : (
-                <p className="py-4 text-center text-sm text-slate-500">
-                  {a.session_count} session(s) have been created for this assessment. Session
-                  details will be shown here.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <MySessionsTab
+            assessmentId={aid}
+            assessmentStatus={a.status}
+            canStartSession={a.status === "published"}
+            onStartSession={() => startSessionMutation.mutate()}
+            startingSession={startSessionMutation.isPending}
+          />
         </TabsContent>
       </Tabs>
 
@@ -1097,5 +1089,149 @@ function EditAssessmentModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// My Sessions Tab — shows the current user's sessions for this assessment
+// ---------------------------------------------------------------------------
+
+function MySessionsTab({
+  assessmentId,
+  assessmentStatus,
+  canStartSession,
+  onStartSession,
+  startingSession,
+}: {
+  assessmentId: number;
+  assessmentStatus: string;
+  canStartSession: boolean;
+  onStartSession: () => void;
+  startingSession: boolean;
+}) {
+  const navigate = useNavigate();
+  const { data: allMySessions, isLoading } = useQuery({
+    queryKey: ["my-sessions", assessmentId],
+    queryFn: () => listMySessions(),
+  });
+
+  // Filter to only this assessment's sessions
+  const mySessions = (allMySessions ?? []).filter((s) => s.assessment === assessmentId);
+
+  const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : "—");
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent>
+          <div className="flex justify-center py-8">
+            <Spinner />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>My Sessions</CardTitle>
+          {canStartSession && (
+            <Button loading={startingSession} onClick={onStartSession}>
+              Start New Session
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {mySessions.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-500">
+            {assessmentStatus === "published"
+              ? 'You have not taken this assessment yet. Click "Start New Session" to begin.'
+              : "This assessment is not yet published."}
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Started</TableHead>
+                <TableHead>Completed</TableHead>
+                <TableHead>Score</TableHead>
+                <TableHead>Percentage</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {mySessions.map((s: AssessmentSession, idx: number) => (
+                <TableRow key={s.id}>
+                  <TableCell className="text-slate-500">{idx + 1}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        s.status === "completed"
+                          ? "success"
+                          : s.status === "active"
+                            ? "primary"
+                            : s.status === "suspended"
+                              ? "warning"
+                              : "default"
+                      }
+                    >
+                      {s.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-slate-500">
+                    {formatDate(s.started_at)}
+                  </TableCell>
+                  <TableCell className="text-xs text-slate-500">
+                    {formatDate(s.completed_at)}
+                  </TableCell>
+                  <TableCell className="text-slate-700">
+                    {s.total_score !== null ? s.total_score.toFixed(1) : "—"}
+                    {s.max_score !== null && (
+                      <span className="text-slate-400"> / {s.max_score.toFixed(1)}</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {s.percentage !== null ? (
+                      <Badge variant={s.percentage >= 40 ? "success" : "warning"}>
+                        {s.percentage.toFixed(1)}%
+                      </Badge>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-1">
+                      {(s.status === "active" || s.status === "suspended") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/assessments/sessions/${s.id}`)}
+                        >
+                          Resume
+                        </Button>
+                      )}
+                      {s.status === "completed" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/assessments/sessions/${s.id}/results`)}
+                        >
+                          View Results
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
