@@ -136,7 +136,6 @@ export default function App() {
               <Route path="question-bank/:id" element={<QuestionDetailPage />} />
               <Route path="assessments" element={<AssessmentsPage />} />
               <Route path="assessments/:id" element={<AssessmentDetailPage />} />
-              <Route path="assessments/sessions/:sessionId" element={<SessionPlayerPage />} />
               <Route
                 path="assessments/sessions/:sessionId/results"
                 element={<SessionResultsPage />}
@@ -150,6 +149,19 @@ export default function App() {
               <Route path="counseling" element={<PlaceholderPage title="Counseling" />} />
               <Route path="cms" element={<PlaceholderPage title="CMS" />} />
             </Route>
+
+            {/* Fullscreen session player — outside DashboardShell so the
+                candidate gets a distraction-free test-taking experience
+                with no app sidebar/topbar. Per SRS 00_question_types_spec.json
+                the layout is three-panel: sidebar + content + footer. */}
+            <Route
+              path="/assessments/sessions/:sessionId"
+              element={
+                <ProtectedRoute>
+                  <SessionPlayerPage />
+                </ProtectedRoute>
+              }
+            />
 
             <Route path="*" element={<NotFoundPage />} />
           </Routes>

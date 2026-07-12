@@ -3,6 +3,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   Alert,
@@ -22,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import {
+  type AssessmentSession,
   ASSESSMENT_STATUSES,
   ASSESSMENT_TYPES,
   ATTEMPT_RULES,
@@ -30,7 +32,9 @@ import {
   createAssessment,
   deleteAssessment,
   listAssessments,
+  listMySessions,
   publishAssessment,
+  startSession,
 } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -46,6 +50,7 @@ const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
 export default function AssessmentsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -62,6 +67,23 @@ export default function AssessmentsPage() {
         ...(statusFilter ? { status: statusFilter } : {}),
       }),
   });
+
+  // Fetch the current user's sessions so we can show Take / Resume / View
+  // Results actions per assessment. Individual users (candidates) need this
+  // to interact with assessments — without it, the actions column is empty.
+  const { data: mySessions } = useQuery({
+    queryKey: ["my-sessions"],
+    queryFn: () => listMySessions(),
+  });
+
+  // Build a lookup: assessmentId → latest session for the current user
+  const sessionByAssessment = new Map<number, AssessmentSession>();
+  for (const s of mySessions ?? []) {
+    const existing = sessionByAssessment.get(s.assessment);
+    if (!existing || new Date(s.started_at) > new Date(existing.started_at)) {
+      sessionByAssessment.set(s.assessment, s);
+    }
+  }
 
   const createMutation = useMutation({
     mutationFn: (payload: Record<string, unknown>) => createAssessment(payload),
@@ -81,6 +103,17 @@ export default function AssessmentsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteAssessment(id),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ASSESS_KEY }),
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  // Start/resume session mutation — used by individual users (candidates)
+  // to take an assessment. On success, navigate to the session player.
+  const startSessionMutation = useMutation({
+    mutationFn: (assessmentId: number) => startSession(assessmentId),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["my-sessions"] });
+      navigate(`/assessments/sessions/${data.id}`);
+    },
     onError: (err) => setError(extractApiError(err)),
   });
 
@@ -180,6 +213,7 @@ export default function AssessmentsPage() {
                   <TableCell className="text-slate-500">{a.session_count}</TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
+                      {/* Manager actions: Publish + Delete (draft only) */}
                       {a.status === "draft" && canManage && (
                         <Button
                           variant="ghost"
@@ -200,6 +234,48 @@ export default function AssessmentsPage() {
                           Delete
                         </Button>
                       )}
+                      {/* Candidate actions: Take / Resume / View Results.
+                          Available to all users on published assessments. */}
+                      {a.status === "published" &&
+                        (() => {
+                          const session = sessionByAssessment.get(a.id);
+                          if (!session) {
+                            return (
+                              <Button
+                                size="sm"
+                                loading={startSessionMutation.isPending}
+                                onClick={() => startSessionMutation.mutate(a.id)}
+                              >
+                                Take Assessment
+                              </Button>
+                            );
+                          }
+                          if (session.status === "active" || session.status === "suspended") {
+                            return (
+                              <Button
+                                size="sm"
+                                loading={startSessionMutation.isPending}
+                                onClick={() => startSessionMutation.mutate(a.id)}
+                              >
+                                Resume
+                              </Button>
+                            );
+                          }
+                          if (session.status === "completed") {
+                            return (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  navigate(`/assessments/sessions/${session.id}/results`)
+                                }
+                              >
+                                View Results
+                              </Button>
+                            );
+                          }
+                          return null;
+                        })()}
                     </div>
                   </TableCell>
                 </TableRow>

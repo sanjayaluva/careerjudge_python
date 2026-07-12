@@ -181,146 +181,209 @@ export default function SessionPlayerPage() {
     }
   };
 
+  // Group questions by section for the sidebar navigation tree.
+  // Each group: { sectionId, questions: [{ question, index }] }
+  const sections = new Map<number | null, { questionIndex: number }[]>();
+  questions.forEach((q, i) => {
+    const sid = q.section;
+    if (!sections.has(sid)) sections.set(sid, []);
+    sections.get(sid)!.push({ questionIndex: i });
+  });
+  const sectionEntries = Array.from(sections.entries());
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Top bar */}
-      <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-6 py-3 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-sm font-bold text-slate-900">{session.assessment_title}</h1>
-            <p className="text-xs text-slate-500">
-              Question {currentIndex + 1} of {questions.length} · Answered: {answeredCount} ·
-              Bookmarked: {bookmarkedCount}
-            </p>
+    <div className="flex h-screen flex-col bg-slate-50">
+      {/* ─── Top bar ─── */}
+      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-3 shadow-sm">
+        <div>
+          <h1 className="text-sm font-bold text-slate-900">{session.assessment_title}</h1>
+          <p className="text-xs text-slate-500">
+            Question {currentIndex + 1} of {questions.length} · Answered: {answeredCount} ·
+            Bookmarked: {bookmarkedCount}
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          {timeLeft !== null && timeLeft > 0 && (
+            <span
+              className={`font-mono text-sm font-bold ${timeLeft < 60 ? "text-danger" : "text-slate-600"}`}
+            >
+              {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
+            </span>
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => suspendMutation.mutate()}>
+              Suspend
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={submitMutation.isPending}
+              onClick={handleSubmit}
+            >
+              Submit Assessment
+            </Button>
           </div>
-          <div className="flex items-center gap-4">
-            {timeLeft !== null && timeLeft > 0 && (
-              <span
-                className={`font-mono text-sm font-bold ${timeLeft < 60 ? "text-danger" : "text-slate-600"}`}
-              >
-                {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
-              </span>
+        </div>
+      </div>
+
+      {/* ─── Main area: sidebar + content ─── */}
+      <div className="flex min-h-0 flex-1">
+        {/* Left sidebar — section/question navigation tree + test summary */}
+        <aside className="w-64 shrink-0 overflow-y-auto border-r border-slate-200 bg-white">
+          {/* Test Summary */}
+          <div className="border-b border-slate-100 p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Test Summary
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-md bg-slate-50 p-2">
+                <span className="text-slate-500">Total</span>
+                <p className="text-lg font-bold text-slate-900">{questions.length}</p>
+              </div>
+              <div className="rounded-md bg-green-50 p-2">
+                <span className="text-green-600">Answered</span>
+                <p className="text-lg font-bold text-green-700">{answeredCount}</p>
+              </div>
+              <div className="rounded-md bg-amber-50 p-2">
+                <span className="text-amber-600">Bookmarked</span>
+                <p className="text-lg font-bold text-amber-700">{bookmarkedCount}</p>
+              </div>
+              <div className="rounded-md bg-slate-50 p-2">
+                <span className="text-slate-500">Remaining</span>
+                <p className="text-lg font-bold text-slate-700">
+                  {questions.length - answeredCount}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Section / Question navigation tree */}
+          <div className="p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Test Progress
+            </p>
+            {sectionEntries.map(([sid, items], secIdx) => (
+              <div key={sid ?? "no-section"} className="mb-3">
+                <p className="mb-1 text-xs font-medium text-slate-700">
+                  {sid !== null ? `Section ${secIdx + 1}` : "Questions"}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {items.map(({ questionIndex: i }) => {
+                    const aKey = `${questions[i].question}_${questions[i].sub_question_index}`;
+                    const isAnswered = Boolean(answers[aKey]);
+                    const isBookmarked = bookmarked.has(aKey);
+                    const isCurrent = i === currentIndex;
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setCurrentIndex(i)}
+                        title={`Question ${i + 1}`}
+                        className={`h-7 w-7 rounded-md text-xs font-medium transition-colors ${
+                          isCurrent
+                            ? "bg-primary-600 text-white"
+                            : isAnswered
+                              ? "bg-green-100 text-green-700 hover:bg-green-200"
+                              : isBookmarked
+                                ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                        }`}
+                      >
+                        {i + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        {/* Center content — question card */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl px-6 py-8">
+            {error && (
+              <Alert variant="error" className="mb-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => suspendMutation.mutate()}>
-                Suspend
-              </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                loading={submitMutation.isPending}
-                onClick={handleSubmit}
-              >
-                Submit Assessment
-              </Button>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-6">
+              {/* Question type badge + bookmark */}
+              <div className="mb-4 flex items-center gap-2">
+                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                  {qd.question_type_label}
+                </span>
+                {qd.difficulty_level && (
+                  <span className="text-xs text-slate-400">· {qd.difficulty_level}</span>
+                )}
+                <button
+                  onClick={handleBookmark}
+                  className={`ml-auto text-sm ${bookmarked.has(answerKey) ? "text-primary-600" : "text-slate-400 hover:text-slate-600"}`}
+                >
+                  {bookmarked.has(answerKey) ? "★ Bookmarked" : "☆ Bookmark"}
+                </button>
+              </div>
+
+              {/* Flash items — interactive simulation */}
+              {qd.flash_items.length > 0 && (
+                <FlashSimulation
+                  items={qd.flash_items}
+                  intervalMs={qd.flash_interval_ms ?? 1000}
+                  displayCount={qd.flash_display_count ?? qd.flash_items.length}
+                  order={qd.flash_order}
+                />
+              )}
+
+              {/* Passage — collapsible panel */}
+              {qd.passage_title && (
+                <PassageDisplay
+                  title={qd.passage_title}
+                  body={qd.passage_body}
+                  displayDurationSeconds={qd.display_duration_seconds ?? null}
+                />
+              )}
+
+              {/* Question image */}
+              {qd.image && (
+                <img
+                  src={qd.image}
+                  alt="Question"
+                  className="mb-4 max-h-60 rounded-md border border-slate-200"
+                />
+              )}
+
+              {/* Question text */}
+              <p className="mb-4 text-base font-medium text-slate-900">{qd.question_text_1}</p>
+              {qd.question_text_2 && (
+                <p className="mb-4 text-sm text-slate-600">{qd.question_text_2}</p>
+              )}
+
+              {/* Answer input area — by question type */}
+              <AnswerInput
+                question={q}
+                currentAnswer={answers[answerKey]}
+                onChange={(ans) => setAnswers({ ...answers, [answerKey]: ans })}
+              />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Question content */}
-      <div className="mx-auto max-w-3xl px-6 py-8">
-        {error && (
-          <Alert variant="error" className="mb-4">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        <div className="rounded-lg border border-slate-200 bg-white p-6">
-          {/* Question type badge */}
-          <div className="mb-4 flex items-center gap-2">
-            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-              {qd.question_type_label}
-            </span>
-            {qd.difficulty_level && (
-              <span className="text-xs text-slate-400">· {qd.difficulty_level}</span>
-            )}
-            <button
-              onClick={handleBookmark}
-              className={`ml-auto text-sm ${bookmarked.has(answerKey) ? "text-primary-600" : "text-slate-400 hover:text-slate-600"}`}
-            >
-              {bookmarked.has(answerKey) ? "★ Bookmarked" : "☆ Bookmark"}
-            </button>
-          </div>
-
-          {/* Flash items — interactive simulation for flash-based question types.
-              The candidate sees each item briefly (flash_interval_ms) before
-              the question is revealed. They can replay the sequence. */}
-          {qd.flash_items.length > 0 && (
-            <FlashSimulation
-              items={qd.flash_items}
-              intervalMs={qd.flash_interval_ms ?? 1000}
-              displayCount={qd.flash_display_count ?? qd.flash_items.length}
-              order={qd.flash_order}
-            />
-          )}
-
-          {/* Passage — collapsible panel for passage-based questions. */}
-          {qd.passage_title && (
-            <PassageDisplay
-              title={qd.passage_title}
-              body={qd.passage_body}
-              displayDurationSeconds={qd.display_duration_seconds ?? null}
-            />
-          )}
-
-          {/* Question image */}
-          {qd.image && (
-            <img
-              src={qd.image}
-              alt="Question"
-              className="mb-4 max-h-60 rounded-md border border-slate-200"
-            />
-          )}
-
-          {/* Question text */}
-          <p className="mb-4 text-base font-medium text-slate-900">{qd.question_text_1}</p>
-          {qd.question_text_2 && (
-            <p className="mb-4 text-sm text-slate-600">{qd.question_text_2}</p>
-          )}
-
-          {/* Answer input area — by question type */}
-          <AnswerInput
-            question={q}
-            currentAnswer={answers[answerKey]}
-            onChange={(ans) => setAnswers({ ...answers, [answerKey]: ans })}
-          />
-        </div>
-
-        {/* Navigation */}
-        <div className="mt-6 flex items-center justify-between">
-          <Button variant="outline" onClick={handlePrev} disabled={currentIndex === 0}>
-            ← Previous
+      {/* ─── Footer — navigation buttons ─── */}
+      <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white px-6 py-3">
+        <Button variant="outline" onClick={handlePrev} disabled={currentIndex === 0}>
+          ← Previous
+        </Button>
+        <p className="text-xs text-slate-400">
+          {currentIndex + 1} / {questions.length}
+        </p>
+        {isLast ? (
+          <Button onClick={handleSubmit} loading={submitMutation.isPending}>
+            Submit Assessment
           </Button>
-          <div className="flex gap-1">
-            {questions.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setCurrentIndex(i)}
-                className={`h-8 w-8 rounded-md text-xs font-medium ${
-                  i === currentIndex
-                    ? "bg-primary-600 text-white"
-                    : answers[`${questions[i].question}_${questions[i].sub_question_index}`]
-                      ? "bg-green-100 text-green-700"
-                      : bookmarked.has(
-                            `${questions[i].question}_${questions[i].sub_question_index}`,
-                          )
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-slate-100 text-slate-500"
-                }`}
-              >
-                {i + 1}
-              </button>
-            ))}
-          </div>
-          {isLast ? (
-            <Button onClick={handleSubmit} loading={submitMutation.isPending}>
-              Submit
-            </Button>
-          ) : (
-            <Button onClick={handleNext}>Next →</Button>
-          )}
-        </div>
+        ) : (
+          <Button onClick={handleNext}>Next →</Button>
+        )}
       </div>
     </div>
   );
