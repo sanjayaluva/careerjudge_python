@@ -566,10 +566,14 @@ class SessionViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Candidates see only their own sessions
-        return AssessmentSession.objects.filter(candidate=self.request.user).select_related(
-            "assessment", "candidate"
-        )
+        # Candidates see only their own sessions.
+        # cj_admin can see ALL sessions (needed for the debug endpoint
+        # and for admin oversight of candidate activity).
+        qs = AssessmentSession.objects.select_related("assessment", "candidate")
+        role_name = self.request.user.role.name if self.request.user.role else None
+        if role_name == "cj_admin" or self.request.user.is_superuser:
+            return qs
+        return qs.filter(candidate=self.request.user)
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -732,5 +736,248 @@ class SessionViewSet(ModelViewSet):
         scores = session.section_scores.select_related("section").all()
         return Response(
             {"message": "OK", "data": SectionScoreSerializer(scores, many=True).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get"])
+    def debug(self, request, pk=None):
+        """Full scoring debug breakdown for a session.
+
+        GET /api/assessments/sessions/<id>/debug/
+        → Returns the complete scoring pipeline: every question attempt with
+          its raw_answer, the correct answer, the calculated score, the
+          scoring mode used, and the section hierarchy with rolled-up scores.
+
+        cj_admin only — this is a diagnostic tool for verifying the scoring
+        engine works correctly across all question types.
+        """
+        # Restrict to cj_admin
+        role_name = request.user.role.name if request.user.role else None
+        if role_name != "cj_admin" and not request.user.is_superuser:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Debug view is restricted to cj_admin.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        session = self.get_object()
+        from .scoring import _get_max_score, score_question
+
+        # ── Build the section hierarchy ──
+        all_sections = list(session.assessment.sections.all().order_by("level", "order"))
+        section_map = {s.id: s for s in all_sections}
+        sections_debug = []
+        for s in all_sections:
+            sections_debug.append(
+                {
+                    "id": s.id,
+                    "title": s.title,
+                    "level": s.level,
+                    "order": s.order,
+                    "parent_id": s.parent_id,
+                    "parent_title": section_map[s.parent_id].title if s.parent_id else None,
+                    "duration_seconds": s.duration_seconds,
+                }
+            )
+
+        # ── Build per-attempt debug ──
+        attempts = session.question_attempts.select_related("question", "section").all()
+        attempts_debug = []
+        for att in attempts:
+            q = att.question
+            # Determine correct answer for display
+            correct_answer = None
+            if q.options.exists():
+                correct_opts = list(q.options.filter(is_correct=True))
+                if q.question_type.startswith("MCQ_"):
+                    correct_answer = {
+                        "type": "MCQ",
+                        "is_multi": len(correct_opts) > 1,
+                        "correct_option_ids": [o.id for o in correct_opts],
+                        "correct_option_texts": [o.text_value for o in correct_opts],
+                    }
+                elif q.question_type.startswith("FITB_"):
+                    correct_answer = {
+                        "type": "FITB",
+                        "fields": [
+                            {
+                                "option_id": o.id,
+                                "label": o.text_value,
+                                "accepted_answers": [
+                                    ca.answer_text for ca in o.correct_answers.all()
+                                ],
+                            }
+                            for o in q.options.all().order_by("order")
+                        ],
+                    }
+                elif q.question_type == "MATCH_FOLLOWING":
+                    correct_answer = {
+                        "type": "MATCH",
+                        "pairs": [
+                            {
+                                "a_id": o.id,
+                                "a_text": o.text_value,
+                                "b_match_pair_id": o.match_pair_id,
+                            }
+                            for o in q.options.filter(option_type="MATCH_A").order_by("order")
+                        ],
+                    }
+                elif q.question_type == "HOTSPOT_SINGLE":
+                    correct_answer = {
+                        "type": "HOTSPOT",
+                        "is_multi": False,
+                        "areas": [
+                            {
+                                "id": ha.id,
+                                "shape": ha.shape_type,
+                                "is_correct": ha.is_correct,
+                                "x": ha.x,
+                                "y": ha.y,
+                                "w": ha.width_px,
+                                "h": ha.height_px,
+                            }
+                            for ha in q.hotspot_areas.all()
+                        ],
+                    }
+                elif q.question_type == "HOTSPOT_MULTI":
+                    correct_answer = {
+                        "type": "HOTSPOT",
+                        "is_multi": True,
+                        "areas": [
+                            {
+                                "id": ha.id,
+                                "shape": ha.shape_type,
+                                "is_correct": ha.is_correct,
+                                "x": ha.x,
+                                "y": ha.y,
+                                "w": ha.width_px,
+                                "h": ha.height_px,
+                            }
+                            for ha in q.hotspot_areas.all()
+                        ],
+                    }
+                elif q.question_type == "STANDARD_RATING_SCALE":
+                    correct_answer = {
+                        "type": "RATING",
+                        "scale_points": q.rating_scale_points,
+                        "direction": q.rating_direction,
+                    }
+                elif q.question_type.startswith("FORCED_CHOICE"):
+                    correct_answer = {
+                        "type": "FORCED_CHOICE",
+                        "options": [
+                            {
+                                "id": o.id,
+                                "text": o.text_value,
+                                "predefined_score": o.predefined_score,
+                            }
+                            for o in q.options.all().order_by("order")
+                        ],
+                    }
+                elif q.question_type.startswith("RANK"):
+                    correct_answer = {
+                        "type": "RANK",
+                        "correct_order": [
+                            {"id": o.id, "text": o.text_value, "order": o.order}
+                            for o in q.options.all().order_by("order")
+                        ],
+                    }
+
+            # Re-score to show the calculation
+            calculated_score, calculated_max = score_question(q, att.raw_answer)
+            default_max = _get_max_score(q)
+
+            attempts_debug.append(
+                {
+                    "attempt_id": att.id,
+                    "question_id": q.id,
+                    "question_title": q.question_title,
+                    "question_type": q.question_type,
+                    "question_type_label": q.get_question_type_display(),
+                    "scoring_type": q.scoring_type,
+                    "scoring_type_label": q.get_scoring_type_display(),
+                    "section_id": att.section_id,
+                    "section_title": (
+                        section_map[att.section_id].title
+                        if att.section_id and att.section_id in section_map
+                        else None
+                    ),
+                    "section_level": (
+                        section_map[att.section_id].level
+                        if att.section_id and att.section_id in section_map
+                        else None
+                    ),
+                    "sub_question_index": att.sub_question_index,
+                    "status": att.status,
+                    "raw_answer": att.raw_answer,
+                    "correct_answer": correct_answer,
+                    "score": att.score,
+                    "max_score": att.max_score,
+                    "calculated_score": calculated_score,
+                    "calculated_max": calculated_max,
+                    "default_max": default_max,
+                    "score_matches": (
+                        (att.score == calculated_score) if att.score is not None else None
+                    ),
+                    "answered_at": att.answered_at.isoformat() if att.answered_at else None,
+                    "time_spent_seconds": att.time_spent_seconds,
+                }
+            )
+
+        # ── Build section scores with hierarchy ──
+
+        section_scores = {ss.section_id: ss for ss in session.section_scores.all()}
+        scores_debug = []
+        for s in all_sections:
+            ss = section_scores.get(s.id)
+            scores_debug.append(
+                {
+                    "section_id": s.id,
+                    "title": s.title,
+                    "level": s.level,
+                    "parent_id": s.parent_id,
+                    "raw_score": ss.raw_score if ss else 0.0,
+                    "max_score": ss.max_score if ss else 0.0,
+                    "percentage": ss.percentage if ss else 0.0,
+                    "has_direct_questions": any(a["section_id"] == s.id for a in attempts_debug),
+                }
+            )
+
+        # ── Session summary ──
+        session_summary = {
+            "id": session.id,
+            "assessment_id": session.assessment_id,
+            "assessment_title": session.assessment.title,
+            "assessment_type": session.assessment.assessment_type,
+            "candidate_id": session.candidate_id,
+            "candidate_email": session.candidate.email,
+            "status": session.status,
+            "started_at": session.started_at.isoformat(),
+            "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+            "total_score": session.total_score,
+            "max_score": session.max_score,
+            "percentage": session.percentage,
+            "total_duration_seconds": session.assessment.total_duration_seconds,
+            "question_count": len(attempts_debug),
+            "attempted_count": sum(1 for a in attempts_debug if a["status"] == "attempted"),
+            "unattempted_count": sum(1 for a in attempts_debug if a["status"] != "attempted"),
+            "bookmarked_count": sum(1 for a in attempts_debug if a["status"] == "bookmarked"),
+        }
+
+        return Response(
+            {
+                "message": "OK",
+                "data": {
+                    "session": session_summary,
+                    "sections": sections_debug,
+                    "section_scores": scores_debug,
+                    "attempts": attempts_debug,
+                },
+            },
             status=status.HTTP_200_OK,
         )

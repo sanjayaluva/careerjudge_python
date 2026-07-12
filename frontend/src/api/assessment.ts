@@ -341,6 +341,79 @@ export function getSessionSectionScores(sessionId: number): Promise<SectionScore
 }
 
 // ---------------------------------------------------------------------------
+// Debug endpoint (cj_admin only)
+// ---------------------------------------------------------------------------
+
+export interface SessionDebugData {
+  session: {
+    id: number;
+    assessment_id: number;
+    assessment_title: string;
+    assessment_type: string;
+    candidate_id: number;
+    candidate_email: string;
+    status: string;
+    started_at: string;
+    completed_at: string | null;
+    total_score: number | null;
+    max_score: number | null;
+    percentage: number | null;
+    total_duration_seconds: number | null;
+    question_count: number;
+    attempted_count: number;
+    unattempted_count: number;
+    bookmarked_count: number;
+  };
+  sections: {
+    id: number;
+    title: string;
+    level: number;
+    order: number;
+    parent_id: number | null;
+    parent_title: string | null;
+    duration_seconds: number | null;
+  }[];
+  section_scores: {
+    section_id: number;
+    title: string;
+    level: number;
+    parent_id: number | null;
+    raw_score: number;
+    max_score: number;
+    percentage: number;
+    has_direct_questions: boolean;
+  }[];
+  attempts: {
+    attempt_id: number;
+    question_id: number;
+    question_title: string;
+    question_type: string;
+    question_type_label: string;
+    scoring_type: string;
+    scoring_type_label: string;
+    section_id: number | null;
+    section_title: string | null;
+    section_level: number | null;
+    sub_question_index: number;
+    status: string;
+    raw_answer: Record<string, unknown> | null;
+    correct_answer: Record<string, unknown> | null;
+    score: number | null;
+    max_score: number | null;
+    calculated_score: number;
+    calculated_max: number;
+    default_max: number;
+    score_matches: boolean | null;
+    answered_at: string | null;
+    time_spent_seconds: number | null;
+  }[];
+}
+
+export function getSessionDebug(sessionId: number): Promise<SessionDebugData> {
+  return apiGet<SessionDebugData>(`${BASE}/sessions/${sessionId}/debug/`);
+}
+
+// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 

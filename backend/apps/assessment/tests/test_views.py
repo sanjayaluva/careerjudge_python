@@ -802,3 +802,78 @@ class TestAssessmentTypeEnforcement(AssessmentViewTestBase):
         data = resp.json()["data"]
         assert data["assessment_type"] == "psychometric"
         assert "psychometric" in data["assessment_type_label"].lower()
+
+
+class TestSessionDebugEndpoint(AssessmentViewTestBase):
+    """Test the /api/assessments/sessions/<id>/debug/ endpoint.
+
+    This is a cj_admin-only diagnostic tool that returns the full scoring
+    breakdown: every attempt with raw_answer, correct_answer, calculated
+    score, and the section hierarchy with rolled-up scores.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = UserFactory.create(role=get_or_create_role("cj_admin", is_system=True))
+        grant_assessment_perms(self.admin)
+        self.candidate = UserFactory.create(role=get_or_create_role("individual", is_system=True))
+        grant_assessment_perms(self.candidate, actions=("view",))
+
+        self.assessment = Assessment.objects.create(
+            title="Debug Test", status="published", created_by=self.admin
+        )
+        self.section = AssessmentSection.objects.create(
+            assessment=self.assessment, title="Section 1", level=1, order=1
+        )
+        self.q1 = make_mcq_question(self.admin)
+        AssessmentQuestion.objects.create(section=self.section, question=self.q1, order=1)
+
+        # Start + answer + submit
+        self.client.force_authenticate(user=self.candidate)
+        start = self.client.post(f"/api/assessments/{self.assessment.id}/start_session/")
+        self.sid = start.json()["data"]["id"]
+        correct_opt = self.q1.options.filter(is_correct=True).first()
+        self.client.post(
+            f"/api/assessments/sessions/{self.sid}/answer/",
+            {"question_id": self.q1.id, "raw_answer": {"selected_option_ids": [correct_opt.id]}},
+            format="json",
+        )
+        self.client.post(f"/api/assessments/sessions/{self.sid}/submit/")
+
+    def test_cj_admin_can_access_debug(self):
+        """cj_admin can access the debug endpoint."""
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.get(f"/api/assessments/sessions/{self.sid}/debug/")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()["data"]
+        assert "session" in data
+        assert "sections" in data
+        assert "section_scores" in data
+        assert "attempts" in data
+        assert len(data["attempts"]) == 1
+        att = data["attempts"][0]
+        assert att["question_type"] == "MCQ_TEXT_IMAGE"
+        assert att["raw_answer"] == {
+            "selected_option_ids": [att["correct_answer"]["correct_option_ids"][0]]
+        }
+        assert att["score"] == 1.0
+        assert att["calculated_score"] == 1.0
+        assert att["score_matches"] is True
+        assert att["correct_answer"]["is_multi"] is False
+
+    def test_non_admin_cannot_access_debug(self):
+        """Non-admin users get 403 on the debug endpoint."""
+        self.client.force_authenticate(user=self.candidate)
+        resp = self.client.get(f"/api/assessments/sessions/{self.sid}/debug/")
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_debug_shows_section_hierarchy(self):
+        """Debug endpoint returns the full section hierarchy with scores."""
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.get(f"/api/assessments/sessions/{self.sid}/debug/")
+        data = resp.json()["data"]
+        assert len(data["sections"]) == 1
+        assert data["sections"][0]["title"] == "Section 1"
+        assert len(data["section_scores"]) == 1
+        assert data["section_scores"][0]["raw_score"] == 1.0
+        assert data["section_scores"][0]["has_direct_questions"] is True
