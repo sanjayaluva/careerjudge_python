@@ -222,9 +222,19 @@ export function extractApiError(err: unknown): string {
       }
       if (parts.length > 0) return parts.join("; ");
     }
-    // No response received (Network Error) — provide a helpful message
-    if (!err.response && err.message === "Network Error") {
-      return "Network error — the server may be restarting or unreachable. Please try again in a moment.";
+    // No response received (Network Error / DNS failure) — provide a
+    // helpful message. This covers ERR_NAME_NOT_RESOLVED, ERR_NETWORK,
+    // ERR_CONNECTION_RESET, etc.
+    if (!err.response) {
+      const code = (err as { code?: string }).code;
+      if (code === "ERR_NAME_NOT_RESOLVED" || err.message === "Network Error") {
+        return (
+          "Network error — couldn't reach the server (DNS or connection issue). " +
+          "Your answers are saved locally. Please check your internet connection " +
+          "and try again in a moment."
+        );
+      }
+      return err.message || "Network error — please try again.";
     }
     if (err.message) return err.message;
     return `Request failed with status ${err.response?.status ?? "?"}`;
@@ -248,7 +258,22 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
       _skipAuthRefresh?: boolean;
+      _networkRetryCount?: number;
     };
+
+    // ─── Network-error retry (ERR_NAME_NOT_RESOLVED, ERR_NETWORK, etc.) ───
+    // These are transient client-side DNS/connection issues. Retry up to 2
+    // times with a short backoff before failing — critical for assessment
+    // answer/submit calls where losing data mid-test is unacceptable.
+    const isNetworkError =
+      !error.response && Boolean(error.request) && error.code !== "ECONNABORTED";
+    if (isNetworkError && originalRequest && (originalRequest._networkRetryCount ?? 0) < 2) {
+      originalRequest._networkRetryCount = (originalRequest._networkRetryCount ?? 0) + 1;
+      // Backoff: 1s, then 2s
+      const delayMs = originalRequest._networkRetryCount * 1000;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return apiClient(originalRequest);
+    }
 
     // 401 -> try to refresh once
     if (

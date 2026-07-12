@@ -136,7 +136,7 @@ describe("extractApiError", () => {
     const err = { isAxiosError: true, message: "Network Error" };
     const result = extractApiError(err);
     expect(result).toContain("Network error");
-    expect(result).toContain("server may be");
+    expect(result).toContain("DNS or connection");
   });
 
   it("handles plain Error instances", () => {
