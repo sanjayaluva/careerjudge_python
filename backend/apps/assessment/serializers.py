@@ -63,6 +63,16 @@ class AssessmentSerializer(serializers.ModelSerializer):
     section_count = serializers.IntegerField(source="sections.count", read_only=True)
     session_count = serializers.IntegerField(source="sessions.count", read_only=True)
 
+    def get_question_count(self, obj):
+        """Count total questions assigned across ALL sections (including
+        nested subsections). Uses a single query for efficiency."""
+        from apps.assessment.models import AssessmentQuestion
+
+        section_ids = obj.sections.values_list("id", flat=True)
+        return AssessmentQuestion.objects.filter(section_id__in=section_ids).count()
+
+    question_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Assessment
         fields = [
@@ -83,6 +93,7 @@ class AssessmentSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "section_count",
+            "question_count",
             "session_count",
             "sections",
         ]
@@ -92,6 +103,7 @@ class AssessmentSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "section_count",
+            "question_count",
             "session_count",
             "sections",
         ]

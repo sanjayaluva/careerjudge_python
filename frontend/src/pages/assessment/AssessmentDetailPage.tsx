@@ -196,11 +196,10 @@ export default function AssessmentDetailPage() {
   // This single variable drives all section/question edit-button visibility.
   const canEdit = canManage && (a.status === "draft" || user?.role === "cj_admin");
 
-  // Count total questions across all sections. For draft assessments, we
-  // use the readiness endpoint's question_count (fetched live). For
-  // published assessments where readiness isn't fetched, we show 0 if
-  // not available (the Questions tab is managers-only anyway).
-  const questionCount = readiness?.question_count ?? 0;
+  // Question count comes from the detail serializer's question_count
+  // field (counts all assigned questions across all sections, including
+  // nested subsections). This works for both draft AND published assessments.
+  const questionCount = a.question_count ?? 0;
   // session_count comes from the detail serializer (added to include both
   // section_count + session_count on the detail endpoint). For candidates,
   // this shows the total sessions across ALL users; their own sessions

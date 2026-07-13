@@ -28,6 +28,7 @@ export interface Assessment {
   created_by: number | null;
   created_by_name: string | null;
   section_count: number;
+  question_count: number;
   session_count: number;
   created_at: string;
   updated_at: string;
