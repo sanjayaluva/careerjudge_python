@@ -44,6 +44,8 @@ export function useAuth(): UseAuthResult {
         full_name: query.data.full_name,
         role: query.data.role,
         is_email_verified: query.data.is_email_verified,
+        is_superuser: query.data.is_superuser,
+        is_staff: query.data.is_staff,
       };
       // Only update if the snapshot changed (avoid render loop).
       const cur = useAuthStore.getState().user;

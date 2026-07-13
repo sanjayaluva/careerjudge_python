@@ -45,6 +45,8 @@ export interface AuthUser {
   full_name: string;
   role: RoleName | null;
   is_email_verified: boolean;
+  is_superuser: boolean;
+  is_staff: boolean;
 }
 
 export interface LoginResponse {
@@ -119,6 +121,8 @@ export interface User {
   is_active: boolean;
   is_email_verified: boolean;
   is_trial_user: boolean;
+  is_superuser: boolean;
+  is_staff: boolean;
   role: RoleName | null;
   profile: UserProfile | null;
   created_at: string;

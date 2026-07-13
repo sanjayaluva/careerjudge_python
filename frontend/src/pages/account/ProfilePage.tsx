@@ -313,6 +313,8 @@ export default function ProfilePage() {
         full_name: updated.full_name,
         role: updated.role,
         is_email_verified: updated.is_email_verified,
+        is_superuser: me?.is_superuser ?? false,
+        is_staff: me?.is_staff ?? false,
       });
       setSavedAt(new Date().toLocaleTimeString());
       refresh();

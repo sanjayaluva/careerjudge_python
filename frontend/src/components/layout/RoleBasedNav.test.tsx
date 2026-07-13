@@ -21,6 +21,8 @@ function setUser(role: AuthUser["role"]): void {
     full_name: "U",
     role,
     is_email_verified: true,
+    is_superuser: false,
+    is_staff: false,
   };
   useAuthStore.getState().login({
     access: "a",

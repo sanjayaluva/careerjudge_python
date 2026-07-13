@@ -31,6 +31,8 @@ function buildLoginResponse(): LoginResponse {
       full_name: "U",
       role: "individual",
       is_email_verified: true,
+      is_superuser: false,
+      is_staff: false,
     },
   };
 }

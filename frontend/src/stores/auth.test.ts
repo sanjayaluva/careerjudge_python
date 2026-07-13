@@ -12,6 +12,8 @@ const mockLoginResponse: LoginResponse = {
     full_name: "Test User",
     role: "individual",
     is_email_verified: true,
+    is_superuser: false,
+    is_staff: false,
   },
 };
 

@@ -297,6 +297,18 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
 
         assessment.status = "published"
         assessment.save(update_fields=["status", "updated_at"])
+
+        # Notify all individual users (candidates) that a new assessment is available
+        from apps.notifications.models import notify_role
+
+        notify_role(
+            "individual",
+            "New assessment available",
+            f"'{assessment.title}' is now available for you to take.",
+            "assessment",
+            f"/assessments/{assessment.id}",
+        )
+
         return Response(
             {
                 "message": "Assessment published.",
@@ -475,6 +487,18 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         from .scoring import calculate_session_scores
 
         session = calculate_session_scores(session)
+
+        # Notify the candidate that their session has been scored
+        from apps.notifications.models import notify_user
+
+        notify_user(
+            session.candidate,
+            "Assessment completed",
+            f"Your assessment '{session.assessment.title}' has been submitted. "
+            f"Score: {session.total_score}/{session.max_score} ({session.percentage}%).",
+            "session",
+            f"/assessments/sessions/{session.id}/results",
+        )
 
         return Response(
             {
@@ -786,6 +810,18 @@ class SessionViewSet(ModelViewSet):
         from .scoring import calculate_session_scores
 
         session = calculate_session_scores(session)
+
+        # Notify the candidate that their session has been scored
+        from apps.notifications.models import notify_user
+
+        notify_user(
+            session.candidate,
+            "Assessment completed",
+            f"Your assessment '{session.assessment.title}' has been submitted. "
+            f"Score: {session.total_score}/{session.max_score} ({session.percentage}%).",
+            "session",
+            f"/assessments/sessions/{session.id}/results",
+        )
 
         # Get section scores for the response
         section_scores = session.section_scores.select_related("section").all()

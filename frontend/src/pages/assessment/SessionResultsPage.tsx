@@ -43,7 +43,7 @@ export default function SessionResultsPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const sid = Number(sessionId);
   const { user } = useAuth();
-  const isAdmin = user?.role === "cj_admin";
+  const isAdmin = user?.role === "cj_admin" || user?.is_superuser === true;
 
   const {
     data: session,
