@@ -6,8 +6,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
-  Alert,
-  AlertDescription,
   Badge,
   Button,
   Input,
@@ -21,6 +19,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  useToast,
 } from "@/components/ui";
 import {
   type AssessmentSession,
@@ -51,11 +50,11 @@ export default function AssessmentsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const toast = useToast();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const canManage = ["cj_admin", "corp_admin", "psychometrician"].includes(user?.role ?? "");
 
@@ -91,19 +90,25 @@ export default function AssessmentsPage() {
       void queryClient.invalidateQueries({ queryKey: ASSESS_KEY });
       setCreateOpen(false);
     },
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   const publishMutation = useMutation({
     mutationFn: (id: number) => publishAssessment(id),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ASSESS_KEY }),
-    onError: (err) => setError(extractApiError(err)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ASSESS_KEY });
+      toast.success("Assessment published.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteAssessment(id),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ASSESS_KEY }),
-    onError: (err) => setError(extractApiError(err)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ASSESS_KEY });
+      toast.success("Assessment deleted.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   // Start/resume session mutation — used by individual users (candidates)
@@ -114,7 +119,7 @@ export default function AssessmentsPage() {
       void queryClient.invalidateQueries({ queryKey: ["my-sessions"] });
       navigate(`/assessments/sessions/${data.id}`);
     },
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   const assessments = data?.results ?? [];
@@ -131,12 +136,6 @@ export default function AssessmentsPage() {
           </div>
           {canManage && <Button onClick={() => setCreateOpen(true)}>Create assessment</Button>}
         </div>
-
-        {error && (
-          <Alert variant="error" className="mx-6 mb-4">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
 
         <div className="flex flex-wrap items-center gap-2 px-6 pb-4">
           <Input
@@ -288,10 +287,8 @@ export default function AssessmentsPage() {
       <CreateAssessmentModal
         open={createOpen}
         loading={createMutation.isPending}
-        error={error}
         onClose={() => {
           setCreateOpen(false);
-          setError(null);
         }}
         onSubmit={(payload) => createMutation.mutate(payload)}
       />
@@ -302,13 +299,11 @@ export default function AssessmentsPage() {
 function CreateAssessmentModal({
   open,
   loading,
-  error,
   onClose,
   onSubmit,
 }: {
   open: boolean;
   loading: boolean;
-  error: string | null;
   onClose: () => void;
   onSubmit: (payload: Record<string, unknown>) => void;
 }) {
@@ -330,11 +325,6 @@ function CreateAssessmentModal({
       description="Configure a new assessment with sections, questions, and delivery rules."
       size="lg"
     >
-      {error && (
-        <Alert variant="error" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();

@@ -15,14 +15,24 @@ export interface AppNotification {
   read_at: string | null;
 }
 
-export function listNotifications(): Promise<AppNotification[]> {
-  return apiGet<AppNotification[]>(`/notifications/`);
+/**
+ * List my notifications.
+ * The backend wraps the response in {message, data: {count, results}} when
+ * paginated, or {message, data: [...]} when not. Handle both shapes.
+ */
+export async function listNotifications(): Promise<AppNotification[]> {
+  const data = await apiGet<unknown>("/notifications/");
+  // Paginated: {count, next, previous, results: [...]}
+  if (data && typeof data === "object" && "results" in (data as Record<string, unknown>)) {
+    return (data as { results: AppNotification[] }).results;
+  }
+  // Flat array
+  return data as AppNotification[];
 }
 
-export function getUnreadCount(): Promise<number> {
-  return apiGet<{ unread_count: number }>(`/notifications/unread_count/`).then(
-    (r) => r.unread_count,
-  );
+export async function getUnreadCount(): Promise<number> {
+  const data = await apiGet<{ unread_count: number }>("/notifications/unread_count/");
+  return data.unread_count;
 }
 
 export function markNotificationRead(id: number): Promise<void> {

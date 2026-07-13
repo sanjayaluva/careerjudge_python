@@ -32,6 +32,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  useToast,
 } from "@/components/ui";
 import {
   type AssessmentDetail,
@@ -73,7 +74,6 @@ export default function AssessmentDetailPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [error, setError] = useState<string | null>(null);
   const [sectionModal, setSectionModal] = useState<{
     open: boolean;
     parent: number | null;
@@ -82,6 +82,7 @@ export default function AssessmentDetailPage() {
   }>({ open: false, parent: null, editSection: null });
   const [sectionToDelete, setSectionToDelete] = useState<AssessmentSection | null>(null);
 
+  const toast = useToast();
   const canManage = ["cj_admin", "corp_admin", "psychometrician"].includes(user?.role ?? "");
 
   const { data: assessment, isLoading } = useQuery({
@@ -96,7 +97,7 @@ export default function AssessmentDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
       void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
     },
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   const startSessionMutation = useMutation({
@@ -105,7 +106,7 @@ export default function AssessmentDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
       navigate(`/assessments/sessions/${data.id}`);
     },
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   // Readiness check — fetches whether the assessment is ready to publish.
@@ -126,7 +127,7 @@ export default function AssessmentDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
       setEditModalOpen(false);
     },
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   const sectionCreateMutation = useMutation({
@@ -141,7 +142,7 @@ export default function AssessmentDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
       setSectionModal({ open: false, parent: null, editSection: null });
     },
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   const sectionUpdateMutation = useMutation({
@@ -159,7 +160,7 @@ export default function AssessmentDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
       setSectionModal({ open: false, parent: null, editSection: null });
     },
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   const sectionDeleteMutation = useMutation({
@@ -169,7 +170,7 @@ export default function AssessmentDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
       setSectionToDelete(null);
     },
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   if (isLoading) {
@@ -208,12 +209,6 @@ export default function AssessmentDetailPage() {
 
   return (
     <div className="space-y-6 p-6">
-      {error && (
-        <Alert variant="error">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
       <div>
         <Link to="/assessments" className="text-sm text-primary-600 hover:underline">
           ← Back to Assessments
@@ -551,7 +546,7 @@ function QuestionAssignmentTab({
   );
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const queryClient = useQueryClient();
 
   // Flatten sections for the dropdown (show level + title)
@@ -611,7 +606,7 @@ function QuestionAssignmentTab({
         queryKey: ["assessment-section-questions", assessmentId, selectedSectionId],
       });
     },
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   const removeMutation = useMutation({
@@ -621,7 +616,7 @@ function QuestionAssignmentTab({
         queryKey: ["assessment-section-questions", assessmentId, selectedSectionId],
       });
     },
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   const assignedIds = new Set((assignedQuestions ?? []).map((q) => q.question));
@@ -640,12 +635,6 @@ function QuestionAssignmentTab({
 
   return (
     <div className="space-y-4">
-      {error && (
-        <Alert variant="error">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
       {/* Section selector */}
       <Card>
         <CardHeader>
