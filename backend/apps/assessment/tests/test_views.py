@@ -55,6 +55,8 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         # cj_admin is a system role — give it assessment module rights
         grant_assessment_perms(self.user)
         self.client.force_authenticate(user=self.user)
+        # Create a confirmed question for publish-readiness tests
+        self.mcq_q = make_mcq_question(self.user)
 
     def test_create_assessment(self):
         resp = self.client.post(
@@ -169,7 +171,12 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert not Assessment.objects.filter(id=a.id).exists()
 
     def test_publish_assessment(self):
+        """A fully configured assessment (with sections + questions) can be published."""
         a = Assessment.objects.create(title="Test 1", status="draft", created_by=self.user)
+        section = AssessmentSection.objects.create(
+            assessment=a, title="Section 1", level=1, order=1
+        )
+        AssessmentQuestion.objects.create(section=section, question=self.mcq_q, order=1)
         resp = self.client.post(f"/api/assessments/{a.id}/publish/")
         assert resp.status_code == status.HTTP_200_OK
         a.refresh_from_db()
@@ -179,6 +186,74 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         resp = self.client.post(f"/api/assessments/{a.id}/publish/")
         assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_cannot_publish_empty_assessment(self):
+        """Cannot publish an assessment with no sections and no questions."""
+        a = Assessment.objects.create(title="Empty", status="draft", created_by=self.user)
+        resp = self.client.post(f"/api/assessments/{a.id}/publish/")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        body = resp.json()["error"]
+        assert body["code"] == "assessment_not_ready"
+        assert any("section" in e.lower() for e in body["details"]["errors"])
+        assert any("question" in e.lower() for e in body["details"]["errors"])
+
+    def test_cannot_publish_assessment_with_sections_but_no_questions(self):
+        """Cannot publish if sections exist but no questions are assigned."""
+        a = Assessment.objects.create(title="No Questions", status="draft", created_by=self.user)
+        AssessmentSection.objects.create(assessment=a, title="S1", level=1, order=1)
+        resp = self.client.post(f"/api/assessments/{a.id}/publish/")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        body = resp.json()["error"]
+        assert body["code"] == "assessment_not_ready"
+        assert body["details"]["question_count"] == 0
+
+    def test_cannot_publish_with_empty_leaf_section(self):
+        """Cannot publish if a leaf section has no questions and no children."""
+        a = Assessment.objects.create(title="Empty Leaf", status="draft", created_by=self.user)
+        # Section with a sub-section (OK — not a leaf)
+        parent = AssessmentSection.objects.create(assessment=a, title="Parent", level=1, order=1)
+        AssessmentSection.objects.create(
+            assessment=a, parent=parent, title="Child", level=2, order=1
+        )
+        # Empty leaf section (no questions, no children)
+        AssessmentSection.objects.create(assessment=a, title="Empty Leaf", level=1, order=2)
+        resp = self.client.post(f"/api/assessments/{a.id}/publish/")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        body = resp.json()["error"]
+        assert any("Empty Leaf" in e for e in body["details"]["errors"])
+
+    def test_readiness_endpoint(self):
+        """GET /api/assessments/<id>/readiness/ returns the readiness checklist."""
+        a = Assessment.objects.create(
+            title="Readiness Test",
+            status="draft",
+            created_by=self.user,
+            objective="Test objective",
+            instructions="Test instructions",
+        )
+        section = AssessmentSection.objects.create(assessment=a, title="S1", level=1, order=1)
+        AssessmentQuestion.objects.create(section=section, question=self.mcq_q, order=1)
+        resp = self.client.get(f"/api/assessments/{a.id}/readiness/")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()["data"]
+        assert data["ready"] is True
+        assert data["section_count"] == 1
+        assert data["question_count"] == 1
+        assert data["has_title"] is True
+        assert data["has_objective"] is True
+        assert data["has_instructions"] is True
+        assert data["errors"] == []
+
+    def test_readiness_endpoint_not_ready(self):
+        """Readiness endpoint reports what's missing."""
+        a = Assessment.objects.create(title="Incomplete", status="draft", created_by=self.user)
+        resp = self.client.get(f"/api/assessments/{a.id}/readiness/")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()["data"]
+        assert data["ready"] is False
+        assert len(data["errors"]) >= 2  # no sections + no questions
+        assert data["section_count"] == 0
+        assert data["question_count"] == 0
 
 
 class TestAssessmentVisibilityFiltering(AssessmentViewTestBase):
@@ -277,6 +352,8 @@ class TestPsychometricianAssessmentAccess(AssessmentViewTestBase):
         # view + add + change + delete on assessment.
         grant_assessment_perms(self.psy, actions=("view", "add", "change", "delete"))
         self.client.force_authenticate(user=self.psy)
+        # Create a confirmed question for publish-readiness tests
+        self.q1 = make_mcq_question(self.psy)
 
     def test_psychometrician_can_create_assessment(self):
         """Psychometrician can create a new assessment."""
@@ -309,8 +386,12 @@ class TestPsychometricianAssessmentAccess(AssessmentViewTestBase):
         assert not Assessment.objects.filter(id=a.id).exists()
 
     def test_psychometrician_can_publish_own_draft_assessment(self):
-        """Psychometrician can publish a draft assessment they created."""
+        """Psychometrician can publish a fully configured draft assessment."""
         a = Assessment.objects.create(title="Psy To Publish", created_by=self.psy)
+        section = AssessmentSection.objects.create(
+            assessment=a, title="S1", level=1, order=1
+        )
+        AssessmentQuestion.objects.create(section=section, question=self.q1, order=1)
         resp = self.client.post(f"/api/assessments/{a.id}/publish/")
         assert resp.status_code == status.HTTP_200_OK
         a.refresh_from_db()

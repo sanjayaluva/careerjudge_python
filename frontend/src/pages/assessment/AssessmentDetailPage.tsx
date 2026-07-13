@@ -35,6 +35,7 @@ import {
 } from "@/components/ui";
 import {
   type AssessmentDetail,
+  type AssessmentReadiness as _AssessmentReadiness,
   type AssessmentSection,
   type AssessmentSession,
   ATTEMPT_RULES,
@@ -43,6 +44,7 @@ import {
   assignQuestion,
   createSection,
   deleteSection,
+  getAssessmentReadiness,
   listMySessions,
   listSectionQuestions,
   publishAssessment,
@@ -90,7 +92,10 @@ export default function AssessmentDetailPage() {
 
   const publishMutation = useMutation({
     mutationFn: () => publishAssessment(aid),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["assessments", aid] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
+      void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
+    },
     onError: (err) => setError(extractApiError(err)),
   });
 
@@ -103,6 +108,14 @@ export default function AssessmentDetailPage() {
     onError: (err) => setError(extractApiError(err)),
   });
 
+  // Readiness check — fetches whether the assessment is ready to publish.
+  // Only for draft assessments (published ones are already live).
+  const { data: readiness } = useQuery({
+    queryKey: ["assessment-readiness", aid],
+    queryFn: () => getAssessmentReadiness(aid),
+    enabled: !Number.isNaN(aid) && assessment?.status === "draft",
+  });
+
   // Edit-assessment modal state. cj_admin can edit any assessment (including
   // published); other roles can only edit draft assessments (backend enforces).
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -110,6 +123,7 @@ export default function AssessmentDetailPage() {
     mutationFn: (payload: Record<string, unknown>) => updateAssessment(aid, payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
+      void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
       setEditModalOpen(false);
     },
     onError: (err) => setError(extractApiError(err)),
@@ -124,6 +138,7 @@ export default function AssessmentDetailPage() {
     }) => createSection(aid, payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
+      void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
       setSectionModal({ open: false, parent: null, editSection: null });
     },
     onError: (err) => setError(extractApiError(err)),
@@ -141,6 +156,7 @@ export default function AssessmentDetailPage() {
     }) => updateSection(aid, payload.sectionId, payload.data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
+      void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
       setSectionModal({ open: false, parent: null, editSection: null });
     },
     onError: (err) => setError(extractApiError(err)),
@@ -150,6 +166,7 @@ export default function AssessmentDetailPage() {
     mutationFn: (sectionId: number) => deleteSection(aid, sectionId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
+      void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
       setSectionToDelete(null);
     },
     onError: (err) => setError(extractApiError(err)),
@@ -298,6 +315,47 @@ export default function AssessmentDetailPage() {
                 </div>
               )}
 
+              {/* Readiness checklist — shows what's missing before publishing.
+                  Only visible on draft assessments for managers. */}
+              {a.status === "draft" && canManage && readiness && (
+                <div
+                  className={`mt-4 rounded-md border p-4 ${
+                    readiness.ready
+                      ? "border-green-200 bg-green-50"
+                      : "border-amber-200 bg-amber-50"
+                  }`}
+                >
+                  <p className="mb-2 text-sm font-semibold text-slate-900">
+                    {readiness.ready
+                      ? "✓ Ready to publish"
+                      : "⚠ Complete the following before publishing:"}
+                  </p>
+                  <ul className="space-y-1 text-xs">
+                    <li className={readiness.has_title ? "text-green-600" : "text-amber-700"}>
+                      {readiness.has_title ? "✓" : "✗"} Title is set
+                    </li>
+                    <li
+                      className={readiness.section_count > 0 ? "text-green-600" : "text-amber-700"}
+                    >
+                      {readiness.section_count > 0 ? "✓" : "✗"} At least 1 section created (
+                      {readiness.section_count} current)
+                    </li>
+                    <li
+                      className={readiness.question_count > 0 ? "text-green-600" : "text-amber-700"}
+                    >
+                      {readiness.question_count > 0 ? "✓" : "✗"} At least 1 question assigned (
+                      {readiness.question_count} current)
+                    </li>
+                    {readiness.errors.length > 0 &&
+                      readiness.errors.map((err: string, i: number) => (
+                        <li key={i} className="text-amber-700">
+                          ✗ {err}
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="mt-6 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
                 {/* Edit button — cj_admin can edit any assessment (including
                     published per SRS §2.2 admin-approval path); other roles
@@ -310,6 +368,12 @@ export default function AssessmentDetailPage() {
                 {a.status === "draft" && canManage && (
                   <Button
                     loading={publishMutation.isPending}
+                    disabled={readiness && !readiness.ready}
+                    title={
+                      readiness && !readiness.ready
+                        ? readiness.errors.join("\n")
+                        : "Publish this assessment so candidates can take it"
+                    }
                     onClick={() => publishMutation.mutate()}
                   >
                     Publish Assessment

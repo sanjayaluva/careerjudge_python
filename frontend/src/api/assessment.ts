@@ -113,6 +113,20 @@ export function publishAssessment(id: number): Promise<{ id: number; status: str
   return apiPost(`${BASE}/${id}/publish/`);
 }
 
+export interface AssessmentReadiness {
+  ready: boolean;
+  errors: string[];
+  section_count: number;
+  question_count: number;
+  has_title: boolean;
+  has_objective: boolean;
+  has_instructions: boolean;
+}
+
+export function getAssessmentReadiness(id: number): Promise<AssessmentReadiness> {
+  return apiGet<AssessmentReadiness>(`${BASE}/${id}/readiness/`);
+}
+
 // ---------------------------------------------------------------------------
 // Sections
 // ---------------------------------------------------------------------------

@@ -72,6 +72,7 @@ class HasAssessmentPermission(HasModulePermission):
         "start_session": "view",
         "submit_session": "view",
         "publish": "change",
+        "readiness": "view",
     }
 
 
@@ -221,7 +222,18 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def publish(self, request, pk=None):
-        """Publish an assessment — makes it available for sessions."""
+        """Publish an assessment — makes it available for sessions.
+
+        Validates that the assessment is fully configured before publishing:
+          - Status must be 'draft'
+          - Must have at least 1 section
+          - Must have at least 1 question assigned across all sections
+          - Must have a title (already enforced by model, but double-check)
+          - Must have an objective (recommended for candidate-facing display)
+
+        Returns a detailed error listing all missing requirements so the
+        author knows exactly what to fix.
+        """
         assessment = self.get_object()
         if assessment.status != "draft":
             return Response(
@@ -234,12 +246,107 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        # ── Readiness validation ──
+        errors = []
+
+        # 1. Title (model enforces non-empty, but check anyway)
+        if not assessment.title or not assessment.title.strip():
+            errors.append("Assessment title is required.")
+
+        # 2. At least one section
+        sections = assessment.sections.all()
+        if not sections.exists():
+            errors.append("At least one section must be created before publishing.")
+
+        # 3. At least one question assigned (across all sections)
+        total_questions = sum(s.questions.count() for s in sections)
+        if total_questions == 0:
+            errors.append("At least one question must be assigned to a section before publishing.")
+
+        # 4. Each leaf section should have at least one question
+        # (A section with subsections but no direct questions is fine —
+        # questions can be on the children. But a leaf section with no
+        # questions and no children is empty.)
+        for s in sections:
+            is_leaf = not s.subsections.exists()
+            if is_leaf and s.questions.count() == 0:
+                errors.append(
+                    f"Section '{s.title}' (L{s.level}) has no questions and no "
+                    "sub-sections. Add questions or sub-sections before publishing."
+                )
+
+        if errors:
+            return Response(
+                {
+                    "error": {
+                        "code": "assessment_not_ready",
+                        "message": (
+                            "Assessment is not ready to publish. Fix the following "
+                            f"{len(errors)} issue(s):\n• " + "\n• ".join(errors)
+                        ),
+                        "details": {
+                            "errors": errors,
+                            "section_count": sections.count(),
+                            "question_count": total_questions,
+                        },
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         assessment.status = "published"
         assessment.save(update_fields=["status", "updated_at"])
         return Response(
             {
                 "message": "Assessment published.",
                 "data": {"id": assessment.id, "status": assessment.status},
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get"])
+    def readiness(self, request, pk=None):
+        """Check if the assessment is ready to publish.
+
+        GET /api/assessments/<id>/readiness/
+        → {message, data: {ready: bool, errors: [...], section_count, question_count}}
+
+        Used by the frontend to enable/disable the Publish button and show
+        a readiness checklist on the detail page.
+        """
+        assessment = self.get_object()
+        sections = assessment.sections.all()
+        total_questions = sum(s.questions.count() for s in sections)
+
+        errors = []
+        if not assessment.title or not assessment.title.strip():
+            errors.append("Assessment title is required.")
+        if not sections.exists():
+            errors.append("At least one section must be created.")
+        if total_questions == 0:
+            errors.append("At least one question must be assigned to a section.")
+        for s in sections:
+            is_leaf = not s.subsections.exists()
+            if is_leaf and s.questions.count() == 0:
+                errors.append(
+                    f"Section '{s.title}' (L{s.level}) has no questions and no sub-sections."
+                )
+
+        return Response(
+            {
+                "message": "OK",
+                "data": {
+                    "ready": len(errors) == 0,
+                    "errors": errors,
+                    "section_count": sections.count(),
+                    "question_count": total_questions,
+                    "has_title": bool(assessment.title and assessment.title.strip()),
+                    "has_objective": bool(assessment.objective and assessment.objective.strip()),
+                    "has_instructions": bool(
+                        assessment.instructions and assessment.instructions.strip()
+                    ),
+                },
             },
             status=status.HTTP_200_OK,
         )
