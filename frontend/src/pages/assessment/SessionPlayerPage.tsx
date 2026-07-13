@@ -145,7 +145,7 @@ export default function SessionPlayerPage() {
   const bookmarkedCount = bookmarked.size;
 
   const handleNext = () => {
-    // Save current answer
+    // Save current answer before navigating
     const currentAnswer = answers[answerKey];
     if (currentAnswer) {
       answerMutation.mutate({
@@ -157,6 +157,14 @@ export default function SessionPlayerPage() {
   };
 
   const handlePrev = () => {
+    // Save current answer before navigating backwards
+    const currentAnswer = answers[answerKey];
+    if (currentAnswer) {
+      answerMutation.mutate({
+        question_id: q.question,
+        raw_answer: currentAnswer,
+      });
+    }
     if (currentIndex > 0) setCurrentIndex((i) => i - 1);
   };
 
@@ -171,14 +179,37 @@ export default function SessionPlayerPage() {
     answerMutation.mutate({ question_id: q.question, bookmark: true });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (
-      confirm(
+      !confirm(
         `Submit assessment? You have answered ${answeredCount} of ${questions.length} questions.`,
       )
     ) {
-      submitMutation.mutate();
+      return;
     }
+
+    // Save ALL answers before submitting. The local `answers` state may have
+    // unsaved changes — especially for the last question (the user answers
+    // it then clicks Submit without clicking Next first). We save every
+    // answer that has data, not just the current one, to catch any previous
+    // save failures.
+    const savePromises: Promise<unknown>[] = [];
+    for (const [key, ans] of Object.entries(answers)) {
+      const [qId, subIdx] = key.split("_");
+      savePromises.push(
+        submitAnswer(sid, {
+          question_id: Number(qId),
+          sub_question_index: Number(subIdx),
+          raw_answer: ans,
+        }).catch(() => {
+          // Ignore individual save errors — the submit will still proceed
+          // and score whatever was saved server-side.
+        }),
+      );
+    }
+    await Promise.all(savePromises);
+
+    submitMutation.mutate();
   };
 
   // Group questions by section for the sidebar navigation tree.
@@ -276,7 +307,17 @@ export default function SessionPlayerPage() {
                     return (
                       <button
                         key={i}
-                        onClick={() => setCurrentIndex(i)}
+                        onClick={() => {
+                          // Save current answer before jumping to a different question
+                          const currentAnswer = answers[answerKey];
+                          if (currentAnswer && i !== currentIndex) {
+                            answerMutation.mutate({
+                              question_id: q.question,
+                              raw_answer: currentAnswer,
+                            });
+                          }
+                          setCurrentIndex(i);
+                        }}
                         title={`Question ${i + 1}`}
                         className={`h-7 w-7 rounded-md text-xs font-medium transition-colors ${
                           isCurrent
