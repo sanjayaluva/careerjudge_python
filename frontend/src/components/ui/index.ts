@@ -23,3 +23,4 @@ export { PageCard } from "./PageCard";
 export { Spinner, type SpinnerProps } from "./Spinner";
 export { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "./Table";
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./Tabs";
+export { ToastProvider, useToast } from "./Toast";

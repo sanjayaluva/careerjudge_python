@@ -11,7 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { Alert, AlertDescription, Button, Label, Spinner } from "@/components/ui";
+import { Alert, AlertDescription, Button, Label, Modal, Spinner, useToast } from "@/components/ui";
 import {
   type SessionQuestion,
   getSessionQuestions,
@@ -27,11 +27,12 @@ export default function SessionPlayerPage() {
   const sid = Number(sessionId);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, Record<string, unknown>>>({});
   const [bookmarked, setBookmarked] = useState<Set<string>>(new Set());
-  const [error, setError] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
   const { data: session, isLoading: sessionLoading } = useQuery({
     queryKey: ["assessment-session", sid],
@@ -88,7 +89,7 @@ export default function SessionPlayerPage() {
       raw_answer?: Record<string, unknown>;
       bookmark?: boolean;
     }) => submitAnswer(sid, payload),
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   const submitMutation = useMutation({
@@ -97,13 +98,13 @@ export default function SessionPlayerPage() {
       void queryClient.invalidateQueries({ queryKey: ["assessment-session", sid] });
       navigate(`/assessments/sessions/${sid}/results`);
     },
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   const suspendMutation = useMutation({
     mutationFn: () => suspendSession(sid),
     onSuccess: () => navigate("/assessments"),
-    onError: (err) => setError(extractApiError(err)),
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   if (sessionLoading || questionsLoading) {
@@ -179,14 +180,12 @@ export default function SessionPlayerPage() {
     answerMutation.mutate({ question_id: q.question, bookmark: true });
   };
 
-  const handleSubmit = async () => {
-    if (
-      !confirm(
-        `Submit assessment? You have answered ${answeredCount} of ${questions.length} questions.`,
-      )
-    ) {
-      return;
-    }
+  const handleSubmit = () => {
+    setShowSubmitConfirm(true);
+  };
+
+  const performSubmit = async () => {
+    setShowSubmitConfirm(false);
 
     // Save ALL answers before submitting. The local `answers` state may have
     // unsaved changes — especially for the last question (the user answers
@@ -201,10 +200,7 @@ export default function SessionPlayerPage() {
           question_id: Number(qId),
           sub_question_index: Number(subIdx),
           raw_answer: ans,
-        }).catch(() => {
-          // Ignore individual save errors — the submit will still proceed
-          // and score whatever was saved server-side.
-        }),
+        }).catch(() => {}),
       );
     }
     await Promise.all(savePromises);
@@ -342,12 +338,6 @@ export default function SessionPlayerPage() {
         {/* Center content — question card */}
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl px-6 py-8">
-            {error && (
-              <Alert variant="error" className="mb-4">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
             <div className="rounded-lg border border-slate-200 bg-white p-6">
               {/* Question type badge + bookmark */}
               <div className="mb-4 flex items-center gap-2">
@@ -426,6 +416,33 @@ export default function SessionPlayerPage() {
           <Button onClick={handleNext}>Next →</Button>
         )}
       </div>
+
+      {/* Submit confirmation modal — replaces the blocking confirm() dialog */}
+      <Modal
+        open={showSubmitConfirm}
+        onClose={() => setShowSubmitConfirm(false)}
+        title="Submit Assessment?"
+        size="sm"
+      >
+        <p className="text-sm text-slate-700">
+          You have answered <strong>{answeredCount}</strong> of <strong>{questions.length}</strong>{" "}
+          questions.
+          {answeredCount < questions.length && (
+            <span className="mt-2 block text-amber-600">
+              ⚠ {questions.length - answeredCount} question(s) are unanswered and will score 0. Are
+              you sure you want to submit?
+            </span>
+          )}
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setShowSubmitConfirm(false)}>
+            Cancel
+          </Button>
+          <Button variant="danger" loading={submitMutation.isPending} onClick={performSubmit}>
+            Submit Assessment
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

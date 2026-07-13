@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AdminRoute } from "@/components/layout/AdminRoute";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { ProtectedRoute, PublicRoute } from "@/components/layout/ProtectedRoute";
+import { ToastProvider } from "@/components/ui";
 import ForgotPasswordPage from "@/pages/auth/ForgotPasswordPage";
 import LoginPage from "@/pages/auth/LoginPage";
 import ResetPasswordPage from "@/pages/auth/ResetPasswordPage";
@@ -51,122 +52,124 @@ function AuthHydrator({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthHydrator>
-          <Routes>
-            {/* Public */}
-            <Route
-              path="/login"
-              element={
-                <PublicRoute>
-                  <LoginPage />
-                </PublicRoute>
-              }
-            />
-            <Route
-              path="/signup"
-              element={
-                <PublicRoute>
-                  <SignupPage />
-                </PublicRoute>
-              }
-            />
-            <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
-            <Route
-              path="/forgot-password"
-              element={
-                <PublicRoute>
-                  <ForgotPasswordPage />
-                </PublicRoute>
-              }
-            />
-            <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+      <ToastProvider>
+        <BrowserRouter>
+          <AuthHydrator>
+            <Routes>
+              {/* Public */}
+              <Route
+                path="/login"
+                element={
+                  <PublicRoute>
+                    <LoginPage />
+                  </PublicRoute>
+                }
+              />
+              <Route
+                path="/signup"
+                element={
+                  <PublicRoute>
+                    <SignupPage />
+                  </PublicRoute>
+                }
+              />
+              <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
+              <Route
+                path="/forgot-password"
+                element={
+                  <PublicRoute>
+                    <ForgotPasswordPage />
+                  </PublicRoute>
+                }
+              />
+              <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
 
-            {/* Protected */}
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <DashboardShell />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard" element={<DashboardPage />} />
-              <Route path="profile" element={<ProfilePage />} />
-              <Route path="settings" element={<SettingsPage />} />
+              {/* Protected */}
               <Route
-                path="admin/users"
+                path="/"
                 element={
-                  <AdminRoute module="users">
-                    <UsersPage />
-                  </AdminRoute>
+                  <ProtectedRoute>
+                    <DashboardShell />
+                  </ProtectedRoute>
                 }
-              />
-              <Route
-                path="admin/users/:id"
-                element={
-                  <AdminRoute module="users">
-                    <UserViewPage />
-                  </AdminRoute>
-                }
-              />
-              <Route
-                path="admin/roles"
-                element={
-                  <AdminRoute module="roles">
-                    <RolesPage />
-                  </AdminRoute>
-                }
-              />
-              <Route
-                path="admin/permissions"
-                element={
-                  <AdminRoute module="roles">
-                    <PermissionsPage />
-                  </AdminRoute>
-                }
-              />
-              {/* Placeholder routes for Phase 2+ modules */}
-              <Route path="organizations" element={<OrganizationsPage />} />
-              <Route path="organizations/:id" element={<OrganizationDetailPage />} />
-              <Route path="question-bank" element={<QuestionBankPage />} />
-              <Route path="question-bank/new" element={<QuestionEditorPage />} />
-              <Route path="question-bank/:id/edit" element={<QuestionEditorPage />} />
-              <Route path="question-bank/:id" element={<QuestionDetailPage />} />
-              <Route path="assessments" element={<AssessmentsPage />} />
-              <Route path="assessments/:id" element={<AssessmentDetailPage />} />
-              <Route
-                path="assessments/sessions/:sessionId/results"
-                element={<SessionResultsPage />}
-              />
-              <Route
-                path="career-profiling"
-                element={<PlaceholderPage title="Career Profiling" />}
-              />
-              <Route path="reports" element={<PlaceholderPage title="Reports" />} />
-              <Route path="training" element={<PlaceholderPage title="Training" />} />
-              <Route path="counseling" element={<PlaceholderPage title="Counseling" />} />
-              <Route path="cms" element={<PlaceholderPage title="CMS" />} />
-            </Route>
+              >
+                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="profile" element={<ProfilePage />} />
+                <Route path="settings" element={<SettingsPage />} />
+                <Route
+                  path="admin/users"
+                  element={
+                    <AdminRoute module="users">
+                      <UsersPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="admin/users/:id"
+                  element={
+                    <AdminRoute module="users">
+                      <UserViewPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="admin/roles"
+                  element={
+                    <AdminRoute module="roles">
+                      <RolesPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="admin/permissions"
+                  element={
+                    <AdminRoute module="roles">
+                      <PermissionsPage />
+                    </AdminRoute>
+                  }
+                />
+                {/* Placeholder routes for Phase 2+ modules */}
+                <Route path="organizations" element={<OrganizationsPage />} />
+                <Route path="organizations/:id" element={<OrganizationDetailPage />} />
+                <Route path="question-bank" element={<QuestionBankPage />} />
+                <Route path="question-bank/new" element={<QuestionEditorPage />} />
+                <Route path="question-bank/:id/edit" element={<QuestionEditorPage />} />
+                <Route path="question-bank/:id" element={<QuestionDetailPage />} />
+                <Route path="assessments" element={<AssessmentsPage />} />
+                <Route path="assessments/:id" element={<AssessmentDetailPage />} />
+                <Route
+                  path="assessments/sessions/:sessionId/results"
+                  element={<SessionResultsPage />}
+                />
+                <Route
+                  path="career-profiling"
+                  element={<PlaceholderPage title="Career Profiling" />}
+                />
+                <Route path="reports" element={<PlaceholderPage title="Reports" />} />
+                <Route path="training" element={<PlaceholderPage title="Training" />} />
+                <Route path="counseling" element={<PlaceholderPage title="Counseling" />} />
+                <Route path="cms" element={<PlaceholderPage title="CMS" />} />
+              </Route>
 
-            {/* Fullscreen session player — outside DashboardShell so the
+              {/* Fullscreen session player — outside DashboardShell so the
                 candidate gets a distraction-free test-taking experience
                 with no app sidebar/topbar. Per SRS 00_question_types_spec.json
                 the layout is three-panel: sidebar + content + footer. */}
-            <Route
-              path="/assessments/sessions/:sessionId"
-              element={
-                <ProtectedRoute>
-                  <SessionPlayerPage />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/assessments/sessions/:sessionId"
+                element={
+                  <ProtectedRoute>
+                    <SessionPlayerPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </AuthHydrator>
-      </BrowserRouter>
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </AuthHydrator>
+        </BrowserRouter>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }
