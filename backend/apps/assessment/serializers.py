@@ -60,6 +60,8 @@ class AssessmentSerializer(serializers.ModelSerializer):
     assessment_type_label = serializers.CharField(
         source="get_assessment_type_display", read_only=True
     )
+    section_count = serializers.IntegerField(source="sections.count", read_only=True)
+    session_count = serializers.IntegerField(source="sessions.count", read_only=True)
 
     class Meta:
         model = Assessment
@@ -80,9 +82,19 @@ class AssessmentSerializer(serializers.ModelSerializer):
             "created_by",
             "created_at",
             "updated_at",
+            "section_count",
+            "session_count",
             "sections",
         ]
-        read_only_fields = ["id", "created_by", "created_at", "updated_at", "sections"]
+        read_only_fields = [
+            "id",
+            "created_by",
+            "created_at",
+            "updated_at",
+            "section_count",
+            "session_count",
+            "sections",
+        ]
 
 
 class AssessmentListSerializer(serializers.ModelSerializer):

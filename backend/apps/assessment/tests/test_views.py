@@ -388,9 +388,7 @@ class TestPsychometricianAssessmentAccess(AssessmentViewTestBase):
     def test_psychometrician_can_publish_own_draft_assessment(self):
         """Psychometrician can publish a fully configured draft assessment."""
         a = Assessment.objects.create(title="Psy To Publish", created_by=self.psy)
-        section = AssessmentSection.objects.create(
-            assessment=a, title="S1", level=1, order=1
-        )
+        section = AssessmentSection.objects.create(assessment=a, title="S1", level=1, order=1)
         AssessmentQuestion.objects.create(section=section, question=self.q1, order=1)
         resp = self.client.post(f"/api/assessments/{a.id}/publish/")
         assert resp.status_code == status.HTTP_200_OK

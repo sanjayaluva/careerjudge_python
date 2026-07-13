@@ -196,6 +196,17 @@ export default function AssessmentDetailPage() {
   // This single variable drives all section/question edit-button visibility.
   const canEdit = canManage && (a.status === "draft" || user?.role === "cj_admin");
 
+  // Count total questions across all sections. For draft assessments, we
+  // use the readiness endpoint's question_count (fetched live). For
+  // published assessments where readiness isn't fetched, we show 0 if
+  // not available (the Questions tab is managers-only anyway).
+  const questionCount = readiness?.question_count ?? 0;
+  // session_count comes from the detail serializer (added to include both
+  // section_count + session_count on the detail endpoint). For candidates,
+  // this shows the total sessions across ALL users; their own sessions
+  // are in the My Sessions tab filtered to their account.
+  const sessionCount = a.session_count ?? 0;
+
   return (
     <div className="space-y-6 p-6">
       {error && (
@@ -228,8 +239,8 @@ export default function AssessmentDetailPage() {
           {/* Questions tab: MANAGERS ONLY. Candidates must NOT see the
               assigned questions before taking the assessment — showing
               question titles/content would let them preview the test. */}
-          {canManage && <TabsTrigger value="questions">Questions</TabsTrigger>}
-          <TabsTrigger value="sessions">My Sessions</TabsTrigger>
+          {canManage && <TabsTrigger value="questions">Questions ({questionCount})</TabsTrigger>}
+          <TabsTrigger value="sessions">My Sessions ({sessionCount})</TabsTrigger>
         </TabsList>
 
         {/* === OVERVIEW TAB === */}
