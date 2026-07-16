@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# Deploy script — runs on the dev VM (GCP CE) via SSH from GitHub Actions.
+# Deploy script — runs on the dev server via SSH from GitHub Actions.
 #
 # Uses VOLUME MOUNTS for the backend so code changes are live instantly
 # without rebuilding the Docker image. Django runserver auto-reloads on
 # Python file changes (<2s).
-#
-# Frontend is served by Vercel (not on this server) — Caddy proxies /* to Vercel.
 #
 # First deploy: builds the Docker image (one-time, ~3 min)
 # Subsequent deploys: NO rebuild — just restart container with new code (~15s)
@@ -33,6 +31,14 @@ else
   sed -i 's|^JWT_ACCESS_TTL_MINUTES=.*|JWT_ACCESS_TTL_MINUTES=60|' "$DEPLOY_DIR/.env.dev"
   sed -i 's|^JWT_REFRESH_TTL_DAYS=.*|JWT_REFRESH_TTL_DAYS=30|' "$DEPLOY_DIR/.env.dev"
 fi
+
+# Ensure the static_collected directory exists and is writable by the
+# container's cj user (UID 1000). Without this, collectstatic fails with
+# PermissionError on fresh deploys because the volume mount makes the host
+# directory read-only for non-root users inside the container.
+echo "→ Ensuring static_collected directory exists…"
+mkdir -p "$DEPLOY_DIR/backend/static_collected"
+chmod 777 "$DEPLOY_DIR/backend/static_collected"
 
 # Check if we need to rebuild the Docker image.
 # Rebuild ONLY if:
@@ -82,6 +88,9 @@ sleep 5
 
 echo "→ Running migrations…"
 docker compose -f "$COMPOSE_FILE" exec -T backend python manage.py migrate --noinput
+
+echo "→ Collecting static files…"
+docker compose -f "$COMPOSE_FILE" exec -T backend python manage.py collectstatic --noinput
 
 echo "→ Re-seeding demo users (idempotent — resets passwords to Demo@1234)…"
 docker compose -f "$COMPOSE_FILE" exec -T backend python manage.py seed_demo

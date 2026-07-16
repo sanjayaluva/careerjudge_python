@@ -1,11 +1,11 @@
-# Dev docker-compose — runs on GCP CE (1 vCPU / 1 GB)
+# Dev docker-compose — runs on cloud VM (1+ vCPU / 1+ GB)
 # DB is external (Neon free tier). Redis skipped (Celery eager).
 # Frontend is OPTIONAL — only built when --profile full-stack is used.
 # Default mode (hybrid with Vercel): backend + caddy only.
 # Full-stack mode (no Vercel): backend + frontend + caddy.
 #
 # Usage:
-#   Hybrid (Vercel + GCP backend):
+#   Hybrid (CDN frontend + cloud backend):
 #     docker compose -f infra/docker/docker-compose.dev.yml up -d --build backend caddy
 #   Full-stack (everything on VM):
 #     docker compose -f infra/docker/docker-compose.dev.yml --profile full-stack up -d --build
