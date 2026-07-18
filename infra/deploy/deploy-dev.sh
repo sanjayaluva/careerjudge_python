@@ -15,9 +15,12 @@ COMPOSE_FILE="$DEPLOY_DIR/infra/docker/docker-compose.dev.yml"
 
 cd "$DEPLOY_DIR"
 
-echo "→ Pulling latest code…"
-git fetch --all --prune
-git reset --hard origin/main
+# The CD workflow (cd-dev.yml) already syncs the latest code via rsync
+# before running this script. So we DON'T need to git fetch/pull here.
+# The git fetch was failing on servers without cached GitHub credentials
+# (private repo requires auth for HTTPS clones). Since rsync handles the
+# code sync, we skip git operations entirely.
+echo "→ Code synced via rsync (skipping git fetch)"
 
 echo "→ Ensuring .env.dev exists…"
 if [ ! -f "$DEPLOY_DIR/.env.dev" ]; then
