@@ -70,6 +70,8 @@ export interface AssessmentSession {
   navigation_rule: string;
   /** Assessment-level display order — exposed via session API for the player. */
   display_order: string;
+  /** Assessment-level timer level — exposed via session API for the player. */
+  timer_level: string;
 }
 
 // ---------------------------------------------------------------------------

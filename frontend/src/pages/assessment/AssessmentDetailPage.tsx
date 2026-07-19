@@ -1234,69 +1234,82 @@ function MySessionsTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mySessions.map((s: AssessmentSession, idx: number) => (
-                <TableRow key={s.id}>
-                  <TableCell className="text-slate-500">{idx + 1}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        s.status === "completed"
-                          ? "success"
-                          : s.status === "active"
-                            ? "primary"
-                            : s.status === "suspended"
-                              ? "warning"
-                              : "default"
-                      }
-                    >
-                      {s.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-slate-500">
-                    {formatDate(s.started_at)}
-                  </TableCell>
-                  <TableCell className="text-xs text-slate-500">
-                    {formatDate(s.completed_at)}
-                  </TableCell>
-                  <TableCell className="text-slate-700">
-                    {s.total_score !== null ? s.total_score.toFixed(1) : "—"}
-                    {s.max_score !== null && (
-                      <span className="text-slate-400"> / {s.max_score.toFixed(1)}</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {s.percentage !== null ? (
-                      <Badge variant={s.percentage >= 40 ? "success" : "warning"}>
-                        {s.percentage.toFixed(1)}%
+              {mySessions.map((s: AssessmentSession, idx: number) => {
+                const completedSessions = mySessions.filter(
+                  (x: AssessmentSession) => x.status === "completed",
+                );
+                const bestPercentage = Math.max(
+                  ...completedSessions.map((x: AssessmentSession) => x.percentage ?? 0),
+                );
+                const isBest =
+                  s.status === "completed" && s.percentage === bestPercentage && bestPercentage > 0;
+                return (
+                  <TableRow key={s.id} className={isBest ? "bg-green-50" : ""}>
+                    <TableCell className="text-slate-500">
+                      Attempt {idx + 1}
+                      {isBest && <span className="ml-1 text-xs text-green-600">★ Best</span>}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          s.status === "completed"
+                            ? "success"
+                            : s.status === "active"
+                              ? "primary"
+                              : s.status === "suspended"
+                                ? "warning"
+                                : "default"
+                        }
+                      >
+                        {s.status}
                       </Badge>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-1">
-                      {(s.status === "active" || s.status === "suspended") && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/assessments/sessions/${s.id}`)}
-                        >
-                          Resume
-                        </Button>
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500">
+                      {formatDate(s.started_at)}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500">
+                      {formatDate(s.completed_at)}
+                    </TableCell>
+                    <TableCell className="text-slate-700">
+                      {s.total_score !== null ? s.total_score.toFixed(1) : "—"}
+                      {s.max_score !== null && (
+                        <span className="text-slate-400"> / {s.max_score.toFixed(1)}</span>
                       )}
-                      {s.status === "completed" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/assessments/sessions/${s.id}/results`)}
-                        >
-                          View Results
-                        </Button>
+                    </TableCell>
+                    <TableCell>
+                      {s.percentage !== null ? (
+                        <Badge variant={s.percentage >= 40 ? "success" : "warning"}>
+                          {s.percentage.toFixed(1)}%
+                        </Badge>
+                      ) : (
+                        "—"
                       )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        {(s.status === "active" || s.status === "suspended") && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => navigate(`/assessments/sessions/${s.id}`)}
+                          >
+                            Resume
+                          </Button>
+                        )}
+                        {s.status === "completed" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => navigate(`/assessments/sessions/${s.id}/results`)}
+                          >
+                            View Results
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}

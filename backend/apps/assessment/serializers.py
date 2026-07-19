@@ -155,6 +155,7 @@ class AssessmentSessionSerializer(serializers.ModelSerializer):
     )
     navigation_rule = serializers.CharField(source="assessment.navigation_rule", read_only=True)
     display_order = serializers.CharField(source="assessment.display_order", read_only=True)
+    timer_level = serializers.CharField(source="assessment.timer_level", read_only=True)
 
     class Meta:
         model = AssessmentSession
@@ -175,6 +176,7 @@ class AssessmentSessionSerializer(serializers.ModelSerializer):
             "total_duration_seconds",
             "navigation_rule",
             "display_order",
+            "timer_level",
         ]
         read_only_fields = [
             "id",

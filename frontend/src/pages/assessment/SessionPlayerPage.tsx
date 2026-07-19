@@ -32,6 +32,7 @@ export default function SessionPlayerPage() {
   const [answers, setAnswers] = useState<Record<string, Record<string, unknown>>>({});
   const [bookmarked, setBookmarked] = useState<Set<string>>(new Set());
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [questionTimeLeft, setQuestionTimeLeft] = useState<number | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
   const { data: session, isLoading: sessionLoading } = useQuery({
@@ -126,6 +127,39 @@ export default function SessionPlayerPage() {
     onSuccess: () => navigate("/assessments"),
     onError: (err) => toast.error(extractApiError(err)),
   });
+
+  // Question-level timer: when timer_level='question', each question can
+  // have its own duration_seconds. Reset the per-question timer when the
+  // current question changes. Must be before early returns (hooks rule).
+  const timerLevel = session?.timer_level ?? "assessment";
+  useEffect(() => {
+    if (timerLevel !== "question" || !questions || !questions[currentIndex]) {
+      setQuestionTimeLeft(null);
+      return;
+    }
+    setQuestionTimeLeft(null);
+  }, [currentIndex, timerLevel, questions]);
+
+  // Question-level timer countdown
+  useEffect(() => {
+    if (questionTimeLeft === null || questionTimeLeft <= 0) return;
+    const qTimer = setInterval(() => {
+      setQuestionTimeLeft((t) => {
+        if (t === null || t <= 1) {
+          clearInterval(qTimer);
+          if (!isLast) {
+            setCurrentIndex((i) => i + 1);
+          } else {
+            submitMutation.mutate();
+          }
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(qTimer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionTimeLeft]);
 
   if (sessionLoading || questionsLoading) {
     return (
@@ -247,7 +281,8 @@ export default function SessionPlayerPage() {
   };
 
   // Group questions by section for the sidebar navigation tree.
-  // Each group: { sectionId, questions: [{ question, index }] }
+  // Within each section, sub-questions from the same parent question are
+  // grouped together (for multi-question types 1c-1h, 2c-2d).
   const sections = new Map<number | null, { questionIndex: number }[]>();
   questions.forEach((q, i) => {
     const sid = q.section;
@@ -268,11 +303,22 @@ export default function SessionPlayerPage() {
           </p>
         </div>
         <div className="flex items-center gap-4">
+          {/* Assessment-level timer */}
           {timeLeft !== null && timeLeft > 0 && (
             <span
               className={`font-mono text-sm font-bold ${timeLeft < 60 ? "text-danger" : "text-slate-600"}`}
+              title="Assessment time remaining"
             >
               {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
+            </span>
+          )}
+          {/* Question-level timer (when timer_level='question') */}
+          {questionTimeLeft !== null && questionTimeLeft > 0 && (
+            <span
+              className={`font-mono text-sm font-bold ${questionTimeLeft < 10 ? "text-danger" : "text-amber-600"}`}
+              title="Question time remaining"
+            >
+              Q: {questionTimeLeft}s
             </span>
           )}
           <div className="flex gap-2">

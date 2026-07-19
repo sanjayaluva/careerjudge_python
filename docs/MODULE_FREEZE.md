@@ -7,7 +7,7 @@ This document tracks which modules are frozen (additive-only) and their current 
 | accounts | 2026-07-01 | v1.1.0 | Phase 1 complete + additive updates (bulk upload, channel_partner, profile fields, scoped deletion) |
 | organizations | 2026-07-02 | v1.0.0 | Phase 2 — multi-tenancy foundation (org CRUD, groups, members) |
 | question_bank | 2026-07-18 | v1.0.0 | Phase 2 — 21 question types, 9 scoring modes, 3-stage review, psychometric categorization |
-| assessment | — | (not frozen) | Phase 2 — pending |
+| assessment | 2026-07-18 | v1.0.0 | Phase 2 — 6 models, 9 scoring modes, session player, hierarchical scores, publish validation |
 | career_profiling | — | (not frozen) | Phase 3 |
 | reporting | — | (not frozen) | Phase 3 |
 | training | — | (not frozen) | Phase 4 |

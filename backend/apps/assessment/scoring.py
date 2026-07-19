@@ -414,17 +414,39 @@ def calculate_session_scores(session):
     attempts = session.question_attempts.select_related("question", "section").all()
 
     # ── Step 1: Score each attempt and aggregate by leaf section ──
+    # Build a lookup of AssessmentQuestion overrides so we can apply
+    # score_override if the author set a custom max score per question.
+    from .models import AssessmentQuestion
+
+    override_map: dict[tuple[int, int], float] = {}
+    for aq in AssessmentQuestion.objects.filter(
+        section__assessment=session.assessment,
+        score_override__isnull=False,
+    ):
+        override_map[(aq.question_id, aq.sub_question_index)] = aq.score_override
+
     leaf_scores: dict[int, dict] = {}  # section_id -> {raw, max}
     total_raw = 0.0
     total_max = 0.0
 
     for attempt in attempts:
+        # Check for score_override on this question
+        override_key = (attempt.question_id, attempt.sub_question_index)
+        override_max = override_map.get(override_key)
+
         if attempt.status != "attempted" or not attempt.raw_answer:
             attempt.score = 0.0
-            attempt.max_score = _get_max_score(attempt.question)
+            attempt.max_score = (
+                override_max if override_max is not None else _get_max_score(attempt.question)
+            )
             attempt.save(update_fields=["score", "max_score"])
         else:
             score, max_score = score_question(attempt.question, attempt.raw_answer)
+            # Apply score_override: if set, use it as the max_score and
+            # scale the raw score proportionally
+            if override_max is not None and max_score > 0:
+                score = round(score * (override_max / max_score), 4)
+                max_score = override_max
             attempt.score = score
             attempt.max_score = max_score
             attempt.save(update_fields=["score", "max_score"])

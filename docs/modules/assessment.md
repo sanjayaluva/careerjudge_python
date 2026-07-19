@@ -1,9 +1,9 @@
-# Assessment Module — v1.0.0 (Active development, not yet frozen)
+# Assessment Module — v1.0.0 (Frozen)
 
-> **Version**: v1.0.0 (pre-freeze)
-> **Phase**: 2 (in progress)
-> **Test coverage**: 76 tests (models, scoring, views); 87% backend coverage overall
-> **Frozen**: No — will freeze at v1.0.0 after end-to-end candidate delivery is validated in staging
+> **Version**: v1.0.0
+> **Phase**: 2 (complete)
+> **Test coverage**: 312 backend tests, 87%+ coverage
+> **Frozen**: Yes — frozen on 2026-07-18. Additive changes only per MODULE_FREEZE.md.
 
 ## Overview
 
