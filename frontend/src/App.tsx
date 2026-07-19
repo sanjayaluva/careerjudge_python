@@ -13,6 +13,7 @@ import SignupPage from "@/pages/auth/SignupPage";
 import VerifyEmailPage from "@/pages/auth/VerifyEmailPage";
 import DashboardPage from "@/pages/dashboard/DashboardPage";
 import NotFoundPage from "@/pages/NotFoundPage";
+import CareerProfilingPage from "@/pages/career-profiling/CareerProfilingPage";
 import PlaceholderPage from "@/pages/PlaceholderPage";
 import ProfilePage from "@/pages/account/ProfilePage";
 import SettingsPage from "@/pages/account/SettingsPage";
@@ -142,10 +143,7 @@ export default function App() {
                   path="assessments/sessions/:sessionId/results"
                   element={<SessionResultsPage />}
                 />
-                <Route
-                  path="career-profiling"
-                  element={<PlaceholderPage title="Career Profiling" />}
-                />
+                <Route path="career-profiling" element={<CareerProfilingPage />} />
                 <Route path="reports" element={<PlaceholderPage title="Reports" />} />
                 <Route path="training" element={<PlaceholderPage title="Training" />} />
                 <Route path="counseling" element={<PlaceholderPage title="Counseling" />} />
