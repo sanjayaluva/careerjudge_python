@@ -14,6 +14,8 @@ import VerifyEmailPage from "@/pages/auth/VerifyEmailPage";
 import DashboardPage from "@/pages/dashboard/DashboardPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 import CareerProfilingPage from "@/pages/career-profiling/CareerProfilingPage";
+import ProfilingSolutionDetailPage from "@/pages/career-profiling/ProfilingSolutionDetailPage";
+import ReportsPage from "@/pages/reporting/ReportsPage";
 import PlaceholderPage from "@/pages/PlaceholderPage";
 import ProfilePage from "@/pages/account/ProfilePage";
 import SettingsPage from "@/pages/account/SettingsPage";
@@ -144,7 +146,8 @@ export default function App() {
                   element={<SessionResultsPage />}
                 />
                 <Route path="career-profiling" element={<CareerProfilingPage />} />
-                <Route path="reports" element={<PlaceholderPage title="Reports" />} />
+                <Route path="career-profiling/:id" element={<ProfilingSolutionDetailPage />} />
+                <Route path="reports" element={<ReportsPage />} />
                 <Route path="training" element={<PlaceholderPage title="Training" />} />
                 <Route path="counseling" element={<PlaceholderPage title="Counseling" />} />
                 <Route path="cms" element={<PlaceholderPage title="CMS" />} />

@@ -2,6 +2,7 @@
  * Career Profiling API client.
  */
 import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { listAssessments } from "./assessment";
 
 const BASE = "/career-profiling";
 
@@ -189,3 +190,6 @@ export const SOLUTION_STATUSES = [
   { value: "published", label: "Published" },
   { value: "archived", label: "Archived" },
 ];
+
+// Re-export for convenience (used by the detail page to list available assessments)
+export { listAssessments };
