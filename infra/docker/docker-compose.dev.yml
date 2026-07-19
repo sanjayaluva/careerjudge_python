@@ -1,18 +1,37 @@
 # Dev docker-compose — runs on cloud VM (1+ vCPU / 1+ GB)
-# DB is external (Neon free tier). Redis skipped (Celery eager).
+# DB: local PostgreSQL in Docker (no external dependency, no bandwidth limits).
+# Redis skipped (Celery runs eager).
 # Frontend is OPTIONAL — only built when --profile full-stack is used.
-# Default mode (hybrid with Vercel): backend + caddy only.
-# Full-stack mode (no Vercel): backend + frontend + caddy.
+# Default mode (hybrid with CDN): backend + db + caddy only.
+# Full-stack mode: backend + db + frontend + caddy.
 #
 # Usage:
 #   Hybrid (CDN frontend + cloud backend):
-#     docker compose -f infra/docker/docker-compose.dev.yml up -d --build backend caddy
+#     docker compose -f infra/docker/docker-compose.dev.yml up -d --build backend db caddy
 #   Full-stack (everything on VM):
 #     docker compose -f infra/docker/docker-compose.dev.yml --profile full-stack up -d --build
 #   Logs:
 #     docker compose -f infra/docker/docker-compose.dev.yml logs -f
 
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: cj-db-dev
+    environment:
+      POSTGRES_USER: cj_user
+      POSTGRES_PASSWORD: CjDevPass2026!
+      POSTGRES_DB: careerjudge
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cj_user -d careerjudge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cj-net
+
   backend:
     build:
       context: ../../backend
@@ -22,6 +41,10 @@ services:
       - ../../.env.dev
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.dev
+      # Override DATABASE_URL to point to the Docker DB service (not the
+      # .env.dev value). This ensures the backend always connects to the
+      # local Docker Postgres, regardless of what .env.dev says.
+      - DATABASE_URL=postgresql://cj_user:CjDevPass2026!@db:5432/careerjudge
     volumes:
       # Mount backend code as volume — changes are live without rebuild
       - ../../backend:/app
@@ -30,6 +53,9 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health/"]
       interval: 30s
@@ -77,5 +103,6 @@ networks:
     driver: bridge
 
 volumes:
+  pgdata:
   caddy_data:
   caddy_config:
