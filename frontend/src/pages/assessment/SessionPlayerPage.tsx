@@ -77,11 +77,31 @@ export default function SessionPlayerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft]);
 
-  const { data: questions, isLoading: questionsLoading } = useQuery({
+  const { data: rawQuestions, isLoading: questionsLoading } = useQuery({
     queryKey: ["assessment-session-questions", sid],
     queryFn: () => getSessionQuestions(sid),
     enabled: !Number.isNaN(sid),
   });
+
+  // Apply random display order if the assessment requests it.
+  // The shuffle is stable per session (seeded by session ID) so the candidate
+  // sees the same order on refresh, but different from the authoring order.
+  const questions = (() => {
+    if (!rawQuestions) return undefined;
+    if (session?.display_order === "RANDOM" && rawQuestions.length > 0) {
+      // Simple shuffle — seeded by session ID for consistency across refreshes
+      // (not cryptographically secure, but sufficient for display ordering)
+      const shuffled = [...rawQuestions];
+      let seed = sid;
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        seed = (seed * 9301 + 49297) % 233280;
+        const j = Math.floor((seed / 233280) * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    }
+    return rawQuestions;
+  })();
 
   const answerMutation = useMutation({
     mutationFn: (payload: {
@@ -144,6 +164,24 @@ export default function SessionPlayerPage() {
   const isLast = currentIndex === questions.length - 1;
   const answeredCount = Object.keys(answers).length;
   const bookmarkedCount = bookmarked.size;
+
+  // Navigation rule enforcement — per SRS 03_assessment_configuration.json:
+  // FREE: free navigation (default, no restrictions)
+  // PREV_SECTION: can only go back to previous section
+  // NO_BACKWARD_SECTION: cannot go back to previous section
+  // NO_BACKWARD_QUESTION: cannot go back to previous question
+  const navRule = session.navigation_rule ?? "FREE";
+  const canGoBack = () => {
+    if (navRule === "NO_BACKWARD_QUESTION") return false;
+    // For section-level rules, check if the previous question is in a
+    // different section
+    if (navRule === "NO_BACKWARD_SECTION" && currentIndex > 0) {
+      const prevSection = questions[currentIndex - 1].section;
+      const currentSection = q.section;
+      if (prevSection !== currentSection) return false;
+    }
+    return true;
+  };
 
   const handleNext = () => {
     // Save current answer before navigating
@@ -383,6 +421,36 @@ export default function SessionPlayerPage() {
                 />
               )}
 
+              {/* Audio player (for MCQ_AUDIO_MULTI 1c) */}
+              {qd.media_files
+                .filter((m) => m.media_type === "audio")
+                .map((media) => (
+                  <div
+                    key={media.id}
+                    className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3"
+                  >
+                    <p className="mb-2 text-xs font-medium text-slate-500">Audio (plays once):</p>
+                    <audio controls src={media.file_url} className="w-full">
+                      Your browser does not support audio playback.
+                    </audio>
+                  </div>
+                ))}
+
+              {/* Video player (for MCQ_VIDEO_MULTI 1d) */}
+              {qd.media_files
+                .filter((m) => m.media_type === "video")
+                .map((media) => (
+                  <div
+                    key={media.id}
+                    className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3"
+                  >
+                    <p className="mb-2 text-xs font-medium text-slate-500">Video:</p>
+                    <video controls src={media.file_url} className="max-h-80 w-full rounded">
+                      Your browser does not support video playback.
+                    </video>
+                  </div>
+                ))}
+
               {/* Question text */}
               <p className="mb-4 text-base font-medium text-slate-900">{qd.question_text_1}</p>
               {qd.question_text_2 && (
@@ -402,7 +470,14 @@ export default function SessionPlayerPage() {
 
       {/* ─── Footer — navigation buttons ─── */}
       <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white px-6 py-3">
-        <Button variant="outline" onClick={handlePrev} disabled={currentIndex === 0}>
+        <Button
+          variant="outline"
+          onClick={handlePrev}
+          disabled={currentIndex === 0 || !canGoBack()}
+          title={
+            !canGoBack() ? "Backward navigation is not allowed for this assessment" : undefined
+          }
+        >
           ← Previous
         </Button>
         <p className="text-xs text-slate-400">
@@ -596,6 +671,123 @@ function AnswerInput({
             </button>
           );
         })}
+        {ranking.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={() => onChange({ ranking: [] })}
+          >
+            Clear ranking
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  // Rank-then-Rate (6b) — rank items first, then rate each
+  if (qType === "RANK_THEN_RATE") {
+    const ranking: number[] = (currentAnswer?.ranking as number[]) || [];
+    const ratings: Record<string, number> =
+      (currentAnswer?.ratings as Record<string, number>) || {};
+    const rankOptions = qd.options.filter((o) => o.option_type === "RANK");
+    const points = qd.rating_scale_points || 5;
+
+    const toggleRank = (optId: number) => {
+      if (ranking.includes(optId)) {
+        const newRanking = ranking.filter((id) => id !== optId);
+        const newRatings = { ...ratings };
+        delete newRatings[String(optId)];
+        onChange({ ranking: newRanking, ratings: newRatings });
+      } else {
+        onChange({ ranking: [...ranking, optId], ratings });
+      }
+    };
+
+    const setRating = (optId: number, rating: number) => {
+      onChange({ ranking, ratings: { ...ratings, [String(optId)]: rating } });
+    };
+
+    const allRanked = ranking.length === rankOptions.length;
+
+    return (
+      <div className="space-y-4">
+        {/* Step 1: Rank items */}
+        <div>
+          <p className="mb-2 text-xs font-medium text-slate-500">
+            Step 1: Click items in order of preference (1 = most preferred):
+          </p>
+          <div className="space-y-2">
+            {rankOptions.map((opt) => {
+              const rank = ranking.indexOf(opt.id) + 1;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => toggleRank(opt.id)}
+                  className={`flex w-full items-center gap-2 rounded-md border px-3 py-2 text-sm ${
+                    rank > 0
+                      ? "border-primary-500 bg-primary-50"
+                      : "border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-medium">
+                    {rank > 0 ? rank : "?"}
+                  </span>
+                  <span>{opt.text_value}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Step 2: Rate each ranked item */}
+        {allRanked && (
+          <div className="border-t border-slate-200 pt-4">
+            <p className="mb-3 text-xs font-medium text-slate-500">
+              Step 2: Rate each item (1 = lowest, {points} = highest):
+            </p>
+            <div className="space-y-3">
+              {ranking.map((optId, rankIdx) => {
+                const opt = rankOptions.find((o) => o.id === optId);
+                if (!opt) return null;
+                const rating = ratings[String(optId)] || 0;
+                return (
+                  <div key={optId} className="rounded-md border border-slate-200 p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-xs font-medium text-white">
+                        {rankIdx + 1}
+                      </span>
+                      <span className="text-sm font-medium text-slate-900">{opt.text_value}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {[...Array(points)].map((_, p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setRating(optId, p + 1)}
+                          className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-medium ${
+                            rating === p + 1
+                              ? "border-primary-600 bg-primary-100 text-primary-700"
+                              : "border-slate-300 text-slate-500 hover:border-primary-300"
+                          }`}
+                        >
+                          {p + 1}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {!allRanked && ranking.length > 0 && (
+          <p className="text-xs text-amber-600">
+            ⚠ Rank all {rankOptions.length} items to proceed to rating. ({ranking.length}/
+            {rankOptions.length} ranked)
+          </p>
+        )}
       </div>
     );
   }

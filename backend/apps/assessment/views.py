@@ -732,6 +732,11 @@ class SessionViewSet(ModelViewSet):
           - sub_question_index: int (default 0)
           - raw_answer: dict (optional — omit to mark as skipped)
           - bookmark: bool (optional — marks as bookmarked)
+
+        Server-side timer enforcement: if the assessment has a duration
+        limit and the elapsed time exceeds it, the session is auto-completed
+        and this endpoint returns 403. This prevents candidates from
+        disabling the client-side JS timer to get extra time.
         """
         session = self.get_object()
         if session.status != "active":
@@ -745,6 +750,32 @@ class SessionViewSet(ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        # ── Server-side timer enforcement ──
+        duration = session.assessment.total_duration_seconds
+        if duration and duration > 0:
+            elapsed = (timezone.now() - session.started_at).total_seconds()
+            if elapsed > duration + 30:  # 30s grace period for network latency
+                # Auto-complete the session (time's up)
+                session.status = "completed"
+                session.completed_at = timezone.now()
+                session.save(update_fields=["status", "completed_at"])
+                from .scoring import calculate_session_scores
+
+                session = calculate_session_scores(session)
+                return Response(
+                    {
+                        "error": {
+                            "code": "time_expired",
+                            "message": "Assessment time has expired. Your session has been auto-submitted.",
+                            "details": {
+                                "elapsed_seconds": int(elapsed),
+                                "duration_seconds": duration,
+                            },
+                        }
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         question_id = request.data.get("question_id")
         sub_question_index = request.data.get("sub_question_index", 0)

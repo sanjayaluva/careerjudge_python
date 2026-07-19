@@ -1,13 +1,27 @@
-# Question Bank Module — v1.0.0 (Active development, not yet frozen)
+# Question Bank Module — v1.0.0 (Frozen)
 
-> **Version**: v1.0.0 (pre-freeze)
-> **Phase**: 2 (in progress)
-> **Test coverage**: 53 tests
-> **Frozen**: No — will freeze at v1.0.0 after assessment module validates the question contract
+> **Version**: v1.0.0
+> **Phase**: 2 (complete)
+> **Test coverage**: 75 tests (models, editors, review workflow, psychometric categorization)
+> **Frozen**: Yes — frozen on 2026-07-18. Additive changes only per MODULE_FREEZE.md.
 
 ## Overview
 
 The question bank module is the core content authoring system. It supports 21 question types, 9 scoring modes, a 3-stage review workflow (SME → Reviewer → Psychometrician), and full media management (images, audio, video, flash items, hotspot areas).
+
+## Frozen Contract
+
+The following are frozen and cannot be changed without a versioned migration:
+
+- All 21 question type codes (MCQ_TEXT_IMAGE through FORCED_CHOICE_TWO_LEVEL)
+- All 9 scoring type codes (BINARY through FORCED_CHOICE_RATED)
+- The PSYCHOMETRIC_QUESTION_TYPES set (5 types)
+- The 3-stage review workflow statuses (draft → pending_content_review → content_reviewed → pending_psychometric_review → confirmed)
+- The Question.is_psychometric and Question.question_category properties
+- All API endpoints under /api/question-bank/
+- The QuestionListSerializer and QuestionDetailSerializer field lists
+
+Additive changes allowed: new question types, new scoring modes, new optional fields, new permissions.
 
 ## Version History
 

@@ -17,8 +17,8 @@
 
 | Module | Version | Status | Tests | Docs |
 |---|---|---|---|---|
-| Question Bank | v1.0.0-pre | 🔧 Active | 53 tests | [question_bank.md](modules/question_bank.md) |
-| Assessment | v1.0.0-pre | 🔧 Active | 76 tests | [assessment.md](modules/assessment.md) |
+| Question Bank | v1.0.0 | ✅ Frozen | 75 tests | [question_bank.md](modules/question_bank.md) |
+| Assessment | v1.0.0-pre | 🔧 Active | 312 tests | [assessment.md](modules/assessment.md) |
 | Career Profiling | — | 📋 Planned | — | — |
 | Reporting | — | 📋 Planned | — | — |
 

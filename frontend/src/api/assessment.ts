@@ -66,6 +66,10 @@ export interface AssessmentSession {
   percentage: number | null;
   /** Assessment-level total duration (seconds) — exposed via session API for the player timer. */
   total_duration_seconds: number | null;
+  /** Assessment-level navigation rule — exposed via session API for the player. */
+  navigation_rule: string;
+  /** Assessment-level display order — exposed via session API for the player. */
+  display_order: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +298,12 @@ export interface SessionQuestion {
       is_correct: boolean;
       radius: number | null;
       points: { x: number; y: number }[] | null;
+    }[];
+    media_files: {
+      id: number;
+      media_type: string;
+      file_url: string;
+      order: number;
     }[];
     flash_interval_ms: number | null;
     flash_display_count: number | null;

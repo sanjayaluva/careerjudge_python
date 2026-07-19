@@ -153,6 +153,8 @@ class AssessmentSessionSerializer(serializers.ModelSerializer):
     total_duration_seconds = serializers.IntegerField(
         source="assessment.total_duration_seconds", read_only=True
     )
+    navigation_rule = serializers.CharField(source="assessment.navigation_rule", read_only=True)
+    display_order = serializers.CharField(source="assessment.display_order", read_only=True)
 
     class Meta:
         model = AssessmentSession
@@ -171,6 +173,8 @@ class AssessmentSessionSerializer(serializers.ModelSerializer):
             "max_score",
             "percentage",
             "total_duration_seconds",
+            "navigation_rule",
+            "display_order",
         ]
         read_only_fields = [
             "id",
