@@ -289,8 +289,7 @@ export default function QuestionDetailPage() {
             <AlertDescription>
               <div className="font-semibold">
                 Configuration incomplete — {q.validation_warnings.length} issue
-                {q.validation_warnings.length === 1 ? "" : "s"} to fix before
-                submitting for review:
+                {q.validation_warnings.length === 1 ? "" : "s"} to fix before submitting for review:
               </div>
               <ul className="mt-1 list-disc pl-5 text-sm">
                 {q.validation_warnings.map((w, i) => (
