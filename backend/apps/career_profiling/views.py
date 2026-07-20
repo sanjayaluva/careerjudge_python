@@ -43,6 +43,7 @@ class HasProfilingPermission(HasModulePermission):
         "partial_update": "change",
         "destroy": "delete",
         "publish": "change",
+        "compute": "view",  # any user with view permission may compute (admins for any candidate, others for self)
     }
 
 
@@ -191,3 +192,66 @@ class ProfilingSolutionViewSet(ModelViewSet):
         indices = solution.match_indices.select_related("candidate").all()
         serializer = MatchIndexSerializer(indices, many=True)
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def compute(self, request, pk=None):
+        """Compute MatchIndex records for a candidate against every career in
+        this solution.
+
+        Triggers the SRS §5.1-5.3 algorithm:
+          mapping_score → VMI → PMI → FMI
+
+        Permissions:
+          - cj_admin / psychometrician: may pass `candidate_id` in the body to
+            compute for any user. Otherwise computes for the authenticated user.
+          - Other roles: may only compute for themselves (candidate_id is
+            ignored and the authenticated user is used).
+
+        Returns the list of created/updated MatchIndex records. Records are
+        skipped (and omitted from the response) when the candidate has no
+        completed session for any of the solution's assessments, or when a
+        career has no scorable variables.
+
+        POST /api/career-profiling/solutions/<id>/compute/
+          body: {"candidate_id": 42}   # optional for admins
+        """
+        from .engine import compute_match_indices
+
+        solution = self.get_object()
+        if solution.status != "published":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": (
+                            f"Solution must be 'published' before computing match "
+                            f"indices. Current status: '{solution.status}'."
+                        ),
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Determine target candidate
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_admin = user_role_name in ("cj_admin", "psychometrician")
+        candidate_id = request.data.get("candidate_id")
+        if candidate_id and is_admin:
+            from django.contrib.auth import get_user_model
+
+            User = get_user_model()
+            from django.shortcuts import get_object_or_404 as _get_obj_or_404
+
+            candidate = _get_obj_or_404(User, pk=candidate_id)
+        else:
+            candidate = request.user
+
+        match_indices = compute_match_indices(solution, candidate)
+        serializer = MatchIndexSerializer(match_indices, many=True)
+        return Response(
+            {
+                "message": f"Computed {len(match_indices)} match index record(s).",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )

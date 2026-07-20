@@ -26,6 +26,11 @@ urlpatterns = [
         "api/",
         include("apps.assessment.urls", namespace="assessment"),
     ),
+    path(
+        "api/career-profiling/",
+        include("apps.career_profiling.urls", namespace="career_profiling"),
+    ),
+    path("api/reporting/", include("apps.reporting.urls", namespace="reporting")),
     path("api/notifications/", include("apps.notifications.urls", namespace="notifications")),
     # Schema
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
