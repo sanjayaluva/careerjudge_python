@@ -40,8 +40,13 @@ import {
   computeSolution,
   createBandDefinition,
   createCriterion,
+  createPolarMatchRule,
+  createRankDefinition,
+  deleteRankDefinition,
   listAssessments,
   listMatchIndices,
+  listPolarMatchRules,
+  listRankDefinitions,
   publishSolution,
   retrieveSolution,
   type MatchIndex,
@@ -116,6 +121,10 @@ export default function ProfilingSolutionDetailPage() {
             Assessments ({solution.selected_assessments?.length ?? 0})
           </TabsTrigger>
           <TabsTrigger value="bands">Bands</TabsTrigger>
+          <TabsTrigger value="rank-chart">Rank Chart</TabsTrigger>
+          {solution.has_polar_assessment && (
+            <TabsTrigger value="polar-rules">Polar Match Rules</TabsTrigger>
+          )}
           <TabsTrigger value="criteria">Criteria</TabsTrigger>
           <TabsTrigger value="match-indices">Match Indices</TabsTrigger>
         </TabsList>
@@ -203,6 +212,18 @@ export default function ProfilingSolutionDetailPage() {
         <TabsContent value="criteria">
           <CriteriaTab solutionId={sid} canManage={canManage} />
         </TabsContent>
+
+        {/* Rank Chart Tab — SRS §4.1.3 + §4.2.3 */}
+        <TabsContent value="rank-chart">
+          <RankChartTab solutionId={sid} solution={solution} canManage={canManage} />
+        </TabsContent>
+
+        {/* Polar Match Rules Tab — SRS §4.2.2 (polar solutions only) */}
+        {solution.has_polar_assessment && (
+          <TabsContent value="polar-rules">
+            <PolarMatchRulesTab solutionId={sid} canManage={canManage} />
+          </TabsContent>
+        )}
 
         {/* Match Indices Tab — view computed results per candidate */}
         <TabsContent value="match-indices">
@@ -988,5 +1009,628 @@ function MatchIndexDetailsModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Rank Chart Tab — SRS §4.1.3 (standard) + §4.2.3 (polar)
+// ---------------------------------------------------------------------------
+
+function RankChartTab({
+  solutionId,
+  solution,
+  canManage,
+}: {
+  solutionId: number;
+  solution: ProfilingSolution;
+  canManage: boolean;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: rankDefs, isLoading } = useQuery({
+    queryKey: ["career-profiling", "solutions", solutionId, "rank-definitions"],
+    queryFn: () => listRankDefinitions(solutionId),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (rdId: number) => deleteRankDefinition(solutionId, rdId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["career-profiling", "solutions", solutionId, "rank-definitions"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["career-profiling", "solutions", solutionId],
+      });
+      toast.success("Rank chart deleted.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (isLoading) return <Spinner />;
+
+  const list = rankDefs ?? [];
+  const selectedAssessments = solution.selected_assessments ?? [];
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Rank Order Chart (SRS §4.1.3 + §4.2.3)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-slate-600">
+            A rank chart assigns a weight (rank value) to each variable's rank order. Rank1 receives
+            the max value; RankN receives the lowest. For polar assessments, the chart is
+            2-dimensional: each (match_code, rank_order) pair has its own value — note that for LM
+            (Low Match), the value increases with rank order (opposite of HM).
+          </p>
+          {list.length === 0 ? (
+            <p className="py-4 text-center text-sm text-slate-500">
+              No rank charts defined yet. Use the buttons below to create one per selected
+              assessment.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {list.map((rd) => {
+                const sa = selectedAssessments.find((s) => s.id === rd.selected_assessment);
+                return (
+                  <div key={rd.id} className="rounded-md border border-slate-200 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-semibold text-slate-900">
+                          {sa?.label ?? `Assessment ${rd.selected_assessment}`}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {rd.is_polar ? "Polar mode (2D chart)" : "Standard mode (1D chart)"}
+                        </div>
+                      </div>
+                      {canManage && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => deleteMutation.mutate(rd.id)}
+                          loading={deleteMutation.isPending}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </div>
+                    {!rd.is_polar ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Rank order</TableHead>
+                            <TableHead>Rank value (weight)</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {rd.rank_values.map((rv) => (
+                            <TableRow key={rv.id}>
+                              <TableCell className="font-medium">Rank{rv.rank_order}</TableCell>
+                              <TableCell>{rv.rank_value}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Match code</TableHead>
+                            <TableHead>Rank order</TableHead>
+                            <TableHead>Rank value (weight)</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {rd.polar_rank_values.map((pv) => (
+                            <TableRow key={pv.id}>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    pv.match_code === "HM"
+                                      ? "success"
+                                      : pv.match_code === "MM"
+                                        ? "warning"
+                                        : "danger"
+                                  }
+                                >
+                                  {pv.match_code}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-medium">Rank{pv.rank_order}</TableCell>
+                              <TableCell>{pv.rank_value}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {canManage && (
+            <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+              {selectedAssessments.map((sa) => (
+                <RankChartCreateButton
+                  key={sa.id}
+                  solutionId={solutionId}
+                  selectedAssessmentId={sa.id}
+                  selectedAssessmentLabel={sa.label}
+                  isPolar={sa.is_polar || solution.has_polar_assessment}
+                  hasExisting={list.some((rd) => rd.selected_assessment === sa.id)}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function RankChartCreateButton({
+  solutionId,
+  selectedAssessmentId,
+  selectedAssessmentLabel,
+  isPolar,
+  hasExisting,
+}: {
+  solutionId: number;
+  selectedAssessmentId: number;
+  selectedAssessmentLabel: string;
+  isPolar: boolean;
+  hasExisting: boolean;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+
+  // Standard mode: dynamic list of rank values
+  const [rankValues, setRankValues] = useState<{ rank_order: number; rank_value: string }[]>([
+    { rank_order: 1, rank_value: "2.0" },
+    { rank_order: 2, rank_value: "1.8" },
+  ]);
+  // Polar mode: dynamic list of (match_code, rank_order, rank_value)
+  const [polarValues, setPolarValues] = useState<
+    { match_code: "HM" | "MM" | "LM"; rank_order: number; rank_value: string }[]
+  >([
+    { match_code: "HM", rank_order: 1, rank_value: "7.0" },
+    { match_code: "MM", rank_order: 1, rank_value: "7.0" },
+    { match_code: "LM", rank_order: 1, rank_value: "3.0" },
+  ]);
+
+  const createMutation = useMutation({
+    mutationFn: () => {
+      if (!isPolar) {
+        return createRankDefinition(solutionId, {
+          selected_assessment: selectedAssessmentId,
+          is_polar: false,
+          rank_values: rankValues.map((rv) => ({
+            rank_order: rv.rank_order,
+            rank_value: Number(rv.rank_value),
+          })),
+        });
+      }
+      return createRankDefinition(solutionId, {
+        selected_assessment: selectedAssessmentId,
+        is_polar: true,
+        polar_rank_values: polarValues.map((pv) => ({
+          match_code: pv.match_code,
+          rank_order: pv.rank_order,
+          rank_value: Number(pv.rank_value),
+        })),
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["career-profiling", "solutions", solutionId, "rank-definitions"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["career-profiling", "solutions", solutionId],
+      });
+      toast.success("Rank chart created.");
+      setOpen(false);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (hasExisting) {
+    return null; // hide the button if a chart already exists for this assessment
+  }
+
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        + Rank chart for {selectedAssessmentLabel}
+      </Button>
+      {open && (
+        <Modal
+          open
+          onClose={() => setOpen(false)}
+          title={`Rank chart — ${selectedAssessmentLabel}`}
+          description={isPolar ? "Polar mode (2D chart)" : "Standard mode (1D chart)"}
+          size="lg"
+        >
+          <div className="space-y-4">
+            {!isPolar ? (
+              <>
+                <div className="space-y-2">
+                  {rankValues.map((rv, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="w-20 text-sm text-slate-600">Rank{rv.rank_order}</span>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={rv.rank_value}
+                        onChange={(e) => {
+                          const next = [...rankValues];
+                          next[i] = { ...rv, rank_value: e.target.value };
+                          setRankValues(next);
+                        }}
+                        className="max-w-[120px]"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setRankValues(rankValues.filter((_, idx) => idx !== i))}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setRankValues([
+                      ...rankValues,
+                      { rank_order: rankValues.length + 1, rank_value: "1.0" },
+                    ])
+                  }
+                >
+                  + Add rank
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  {polarValues.map((pv, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <select
+                        className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm"
+                        value={pv.match_code}
+                        onChange={(e) => {
+                          const next = [...polarValues];
+                          next[i] = {
+                            ...pv,
+                            match_code: e.target.value as "HM" | "MM" | "LM",
+                          };
+                          setPolarValues(next);
+                        }}
+                      >
+                        <option value="HM">HM</option>
+                        <option value="MM">MM</option>
+                        <option value="LM">LM</option>
+                      </select>
+                      <span className="text-sm text-slate-600">Rank</span>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={pv.rank_order}
+                        onChange={(e) => {
+                          const next = [...polarValues];
+                          next[i] = { ...pv, rank_order: Number(e.target.value) };
+                          setPolarValues(next);
+                        }}
+                        className="max-w-[80px]"
+                      />
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={pv.rank_value}
+                        onChange={(e) => {
+                          const next = [...polarValues];
+                          next[i] = { ...pv, rank_value: e.target.value };
+                          setPolarValues(next);
+                        }}
+                        className="max-w-[120px]"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPolarValues(polarValues.filter((_, idx) => idx !== i))}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setPolarValues([
+                      ...polarValues,
+                      { match_code: "HM", rank_order: 1, rank_value: "1.0" },
+                    ])
+                  }
+                >
+                  + Add entry
+                </Button>
+              </>
+            )}
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => createMutation.mutate()} loading={createMutation.isPending}>
+                Create rank chart
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Polar Match Rules Tab — SRS §4.2.2 (polar solutions only)
+// ---------------------------------------------------------------------------
+
+function PolarMatchRulesTab({ solutionId, canManage }: { solutionId: number; canManage: boolean }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: rules, isLoading } = useQuery({
+    queryKey: ["career-profiling", "solutions", solutionId, "polar-match-rules"],
+    queryFn: () => listPolarMatchRules(solutionId),
+  });
+
+  // Also fetch band definitions so we can show the variable name per rule
+  const { data: solution } = useQuery({
+    queryKey: ["career-profiling", "solutions", solutionId],
+    queryFn: () => retrieveSolution(solutionId),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (payload: {
+      band_definition: number;
+      criterion_band_code: string;
+      user_band_code: string;
+      match_code: "HM" | "MM" | "LM";
+      match_value: number;
+    }) => createPolarMatchRule(solutionId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["career-profiling", "solutions", solutionId, "polar-match-rules"],
+      });
+      toast.success("Polar match rule created.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (isLoading) return <Spinner />;
+
+  const list = rules ?? [];
+
+  // Build a map of band_definition_id -> (variable name, band codes)
+  const bandDefs =
+    solution?.selected_assessments?.flatMap((sa) =>
+      sa.band_definitions.map((bd) => ({
+        id: bd.id,
+        label: `${sa.label} > ${bd.section_title}`,
+        bandCodes: bd.bands.map((b) => b.band_code),
+      })),
+    ) ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Polar Match Rules (SRS §4.2.2)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-slate-600">
+          For polar assessments, the mapping value is NOT band-distance based. Instead, the
+          psychometrician defines a rule table mapping (criterion_band_code, user_band_code) →
+          (match_code, match_value): HM = High Match (5), MM = Moderate Match (3), LM = Low Match
+          (1).
+        </p>
+
+        {list.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">
+            No polar match rules defined yet. Use the form below to add one.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Variable</TableHead>
+                <TableHead>Criterion band</TableHead>
+                <TableHead>User band</TableHead>
+                <TableHead>Match code</TableHead>
+                <TableHead>Match value</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {list.map((r) => {
+                const bd = bandDefs.find((b) => b.id === r.band_definition);
+                return (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-medium text-slate-900">
+                      {bd?.label ?? `BandDef ${r.band_definition}`}
+                    </TableCell>
+                    <TableCell className="text-slate-500">{r.criterion_band_code}</TableCell>
+                    <TableCell className="text-slate-500">{r.user_band_code}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          r.match_code === "HM"
+                            ? "success"
+                            : r.match_code === "MM"
+                              ? "warning"
+                              : "danger"
+                        }
+                      >
+                        {r.match_code}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-900">{r.match_value}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+
+        {canManage && bandDefs.length > 0 && (
+          <PolarMatchRuleForm
+            bandDefs={bandDefs}
+            loading={createMutation.isPending}
+            onSubmit={(payload) => createMutation.mutate(payload)}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PolarMatchRuleForm({
+  bandDefs,
+  loading,
+  onSubmit,
+}: {
+  bandDefs: { id: number; label: string; bandCodes: string[] }[];
+  loading: boolean;
+  onSubmit: (payload: {
+    band_definition: number;
+    criterion_band_code: string;
+    user_band_code: string;
+    match_code: "HM" | "MM" | "LM";
+    match_value: number;
+  }) => void;
+}) {
+  const [bdId, setBdId] = useState("");
+  const [criterionBand, setCriterionBand] = useState("");
+  const [userBand, setUserBand] = useState("");
+  const [matchCode, setMatchCode] = useState<"HM" | "MM" | "LM">("HM");
+  const [matchValue, setMatchValue] = useState("5");
+
+  const selectedBd = bandDefs.find((b) => b.id === Number(bdId));
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!bdId || !criterionBand || !userBand) return;
+        onSubmit({
+          band_definition: Number(bdId),
+          criterion_band_code: criterionBand,
+          user_band_code: userBand,
+          match_code: matchCode,
+          match_value: Number(matchValue),
+        });
+      }}
+      className="space-y-3 border-t border-slate-100 pt-4"
+    >
+      <div className="text-sm font-semibold text-slate-900">Add a polar match rule</div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+        <div>
+          <Label htmlFor="bd" required>
+            Variable
+          </Label>
+          <select
+            id="bd"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+            value={bdId}
+            onChange={(e) => {
+              setBdId(e.target.value);
+              setCriterionBand("");
+              setUserBand("");
+            }}
+            required
+          >
+            <option value="">Select...</option>
+            {bandDefs.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="cb" required>
+            Criterion band
+          </Label>
+          <select
+            id="cb"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+            value={criterionBand}
+            onChange={(e) => setCriterionBand(e.target.value)}
+            required
+            disabled={!selectedBd}
+          >
+            <option value="">Select...</option>
+            {selectedBd?.bandCodes.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="ub" required>
+            User band
+          </Label>
+          <select
+            id="ub"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+            value={userBand}
+            onChange={(e) => setUserBand(e.target.value)}
+            required
+            disabled={!selectedBd}
+          >
+            <option value="">Select...</option>
+            {selectedBd?.bandCodes.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="mc">Match code</Label>
+          <select
+            id="mc"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+            value={matchCode}
+            onChange={(e) => setMatchCode(e.target.value as "HM" | "MM" | "LM")}
+          >
+            <option value="HM">HM (High Match)</option>
+            <option value="MM">MM (Moderate Match)</option>
+            <option value="LM">LM (Low Match)</option>
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="mv">Match value</Label>
+          <Input
+            id="mv"
+            type="number"
+            min="0"
+            max="5"
+            value={matchValue}
+            onChange={(e) => setMatchValue(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <Button type="submit" loading={loading} disabled={!bdId || !criterionBand || !userBand}>
+          Add rule
+        </Button>
+      </div>
+    </form>
   );
 }

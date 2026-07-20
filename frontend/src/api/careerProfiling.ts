@@ -259,6 +259,60 @@ export function computeSolution(solutionId: number, candidateId?: number): Promi
 }
 
 // ---------------------------------------------------------------------------
+// Rank Definitions (SRS §4.1.3 + §4.2.3)
+// ---------------------------------------------------------------------------
+
+export function listRankDefinitions(solutionId: number): Promise<RankDefinition[]> {
+  return apiGet<RankDefinition[]>(`${BASE}/solutions/${solutionId}/rank_definitions/`);
+}
+
+export function createRankDefinition(
+  solutionId: number,
+  payload:
+    | {
+        selected_assessment: number;
+        is_polar: false;
+        rank_values: { rank_order: number; rank_value: number }[];
+      }
+    | {
+        selected_assessment: number;
+        is_polar: true;
+        polar_rank_values: {
+          match_code: "HM" | "MM" | "LM";
+          rank_order: number;
+          rank_value: number;
+        }[];
+      },
+): Promise<RankDefinition> {
+  return apiPost<RankDefinition>(`${BASE}/solutions/${solutionId}/rank_definitions/`, payload);
+}
+
+export function deleteRankDefinition(solutionId: number, rdId: number): Promise<void> {
+  return apiDelete(`${BASE}/solutions/${solutionId}/rank_definitions_delete/?rd_id=${rdId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Polar Match Rules (SRS §4.2.2)
+// ---------------------------------------------------------------------------
+
+export function listPolarMatchRules(solutionId: number): Promise<PolarMatchRule[]> {
+  return apiGet<PolarMatchRule[]>(`${BASE}/solutions/${solutionId}/polar_match_rules/`);
+}
+
+export function createPolarMatchRule(
+  solutionId: number,
+  payload: {
+    band_definition: number;
+    criterion_band_code: string;
+    user_band_code: string;
+    match_code: "HM" | "MM" | "LM";
+    match_value: number;
+  },
+): Promise<PolarMatchRule> {
+  return apiPost<PolarMatchRule>(`${BASE}/solutions/${solutionId}/polar_match_rules/`, payload);
+}
+
+// ---------------------------------------------------------------------------
 // Match Indices
 // ---------------------------------------------------------------------------
 

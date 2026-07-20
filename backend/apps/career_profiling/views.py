@@ -27,8 +27,10 @@ from .serializers import (
     BandDefinitionSerializer,
     MappingCriterionSerializer,
     MatchIndexSerializer,
+    PolarMatchRuleSerializer,
     ProfilingSolutionListSerializer,
     ProfilingSolutionSerializer,
+    RankDefinitionSerializer,
     SelectedAssessmentSerializer,
 )
 
@@ -44,6 +46,9 @@ class HasProfilingPermission(HasModulePermission):
         "destroy": "delete",
         "publish": "change",
         "compute": "view",  # any user with view permission may compute (admins for any candidate, others for self)
+        "rank_definitions": "change",
+        "rank_definitions_delete": "change",
+        "polar_match_rules": "change",
     }
 
 
@@ -167,6 +172,200 @@ class ProfilingSolutionViewSet(ModelViewSet):
                 {"message": "Band definition created.", "data": serializer.data},
                 status=status.HTTP_201_CREATED,
             )
+
+    @action(detail=True, methods=["get", "post"])
+    def rank_definitions(self, request, pk=None):
+        """List or create RankDefinitions (SRS §4.1.3 + §4.2.3) for the
+        solution's selected_assessments.
+
+        GET /solutions/<id>/rank_definitions/
+          -> list of all rank definitions in the solution (with nested
+             rank_values for standard mode or polar_rank_values for polar mode)
+
+        POST /solutions/<id>/rank_definitions/
+          body: {
+            "selected_assessment": 42,
+            "is_polar": false,
+            "rank_values": [
+              {"rank_order": 1, "rank_value": 2.0},
+              {"rank_order": 2, "rank_value": 1.8},
+              ...
+            ]
+            // OR for polar:
+            // "polar_rank_values": [
+            //   {"match_code": "HM", "rank_order": 1, "rank_value": 7.0},
+            //   {"match_code": "MM", "rank_order": 1, "rank_value": 7.0},
+            //   {"match_code": "LM", "rank_order": 1, "rank_value": 3.0},
+            //   ...
+            // ]
+          }
+        """
+        solution = self.get_object()
+        if request.method == "GET":
+            from .models import RankDefinition
+
+            rank_defs = RankDefinition.objects.filter(
+                selected_assessment__solution=solution
+            ).select_related("selected_assessment")
+            serializer = RankDefinitionSerializer(rank_defs, many=True)
+            return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+        # POST: create a rank definition with nested values
+        from .models import PolarRankValue, RankDefinition, RankValue
+
+        sa_id = request.data.get("selected_assessment")
+        is_polar = bool(request.data.get("is_polar", False))
+        # Validate the selected_assessment belongs to this solution
+        sa = solution.selected_assessments.filter(id=sa_id).first()
+        if not sa:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": (f"selected_assessment {sa_id} not found in this solution."),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Reject if a rank definition already exists for this assessment
+        if hasattr(sa, "rank_definition"):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": (
+                            f"Selected assessment '{sa.label}' already has a rank definition. "
+                            "Delete it first to replace."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        rank_values_data = request.data.get("rank_values") or []
+        polar_rank_values_data = request.data.get("polar_rank_values") or []
+        if not is_polar and not rank_values_data:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "rank_values (non-empty list) is required for standard mode.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if is_polar and not polar_rank_values_data:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": (
+                            "polar_rank_values (non-empty list) is required for polar mode."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        rd = RankDefinition.objects.create(selected_assessment=sa, is_polar=is_polar)
+        if not is_polar:
+            for rv in rank_values_data:
+                RankValue.objects.create(
+                    rank_definition=rd,
+                    rank_order=rv["rank_order"],
+                    rank_value=rv["rank_value"],
+                )
+        else:
+            for pv in polar_rank_values_data:
+                PolarRankValue.objects.create(
+                    rank_definition=rd,
+                    match_code=pv["match_code"],
+                    rank_order=pv["rank_order"],
+                    rank_value=pv["rank_value"],
+                )
+
+        serializer = RankDefinitionSerializer(rd)
+        return Response(
+            {"message": "Rank definition created.", "data": serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["delete"])
+    def rank_definitions_delete(self, request, pk=None):
+        """Delete a RankDefinition by ID (cascades to its rank values).
+
+        DELETE /solutions/<id>/rank_definitions_delete/?rd_id=42
+        """
+        from .models import RankDefinition
+
+        solution = self.get_object()
+        rd_id = request.query_params.get("rd_id")
+        if not rd_id:
+            return Response(
+                {"error": {"code": "validation_error", "message": "rd_id query param required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        rd = RankDefinition.objects.filter(id=rd_id, selected_assessment__solution=solution).first()
+        if not rd:
+            return Response(
+                {"error": {"code": "not_found", "message": "Rank definition not found."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rd.delete()
+        return Response(
+            {"message": "Rank definition deleted.", "data": {}},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get", "post"])
+    def polar_match_rules(self, request, pk=None):
+        """List or create PolarMatchRules (SRS §4.2.2) for the solution's
+        band_definitions.
+
+        GET /solutions/<id>/polar_match_rules/
+          -> list of all polar match rules in the solution
+
+        POST /solutions/<id>/polar_match_rules/
+          body: {
+            "band_definition": 42,
+            "criterion_band_code": "SRC1",
+            "user_band_code": "SRC1",
+            "match_code": "HM",
+            "match_value": 5
+          }
+        """
+        solution = self.get_object()
+        if request.method == "GET":
+            from .models import PolarMatchRule
+
+            rules = PolarMatchRule.objects.filter(
+                band_definition__selected_assessment__solution=solution
+            ).select_related("band_definition")
+            serializer = PolarMatchRuleSerializer(rules, many=True)
+            return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+        from .models import BandDefinition, PolarMatchRule
+
+        bd_id = request.data.get("band_definition")
+        bd = BandDefinition.objects.filter(id=bd_id, selected_assessment__solution=solution).first()
+        if not bd:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": f"band_definition {bd_id} not found in this solution.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = PolarMatchRuleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {"message": "Polar match rule created.", "data": serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=["get", "post"])
     def criteria(self, request, pk=None):
