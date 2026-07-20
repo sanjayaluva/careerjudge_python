@@ -224,6 +224,8 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     is_psychometric = serializers.BooleanField(read_only=True)
     question_category = serializers.CharField(read_only=True)
+    validation_warnings = serializers.SerializerMethodField()
+    ready_for_review = serializers.SerializerMethodField()
 
     class Meta:
         model = Question
@@ -274,6 +276,8 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
             "flash_items",
             "hotspot_areas",
             "reviews",
+            "validation_warnings",
+            "ready_for_review",
         ]
         read_only_fields = [
             "id",
@@ -293,6 +297,16 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
     def get_reviews(self, obj):
         reviews = obj.reviews.select_related("reviewer").all()
         return QuestionReviewSerializer(reviews, many=True).data
+
+    def get_validation_warnings(self, obj):
+        from .validation import validate_question_config
+
+        return validate_question_config(obj)
+
+    def get_ready_for_review(self, obj):
+        from .validation import question_is_ready_for_review
+
+        return question_is_ready_for_review(obj)
 
 
 class QuestionCreateSerializer(serializers.ModelSerializer):

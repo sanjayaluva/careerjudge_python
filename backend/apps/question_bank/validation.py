@@ -56,12 +56,10 @@ def validate_question_config(question: Question) -> list[str]:
                     )
                     break
         # Audio/Video types need media files
-        if qtype == "MCQ_AUDIO_MULTI":
-            if not q.media_files.filter(media_type="audio").exists():
-                errors.append("MCQ Audio requires at least 1 audio file.")
-        if qtype == "MCQ_VIDEO_MULTI":
-            if not q.media_files.filter(media_type="video").exists():
-                errors.append("MCQ Video requires at least 1 video file.")
+        if qtype == "MCQ_AUDIO_MULTI" and not q.media_files.filter(media_type="audio").exists():
+            errors.append("MCQ Audio requires at least 1 audio file.")
+        if qtype == "MCQ_VIDEO_MULTI" and not q.media_files.filter(media_type="video").exists():
+            errors.append("MCQ Video requires at least 1 video file.")
         # Flash types need flash items
         if qtype in ("MCQ_WORD_FLASH_MULTI", "MCQ_IMAGE_FLASH_MULTI"):
             if not q.flash_items.exists():
@@ -75,9 +73,8 @@ def validate_question_config(question: Question) -> list[str]:
             if not q.passage_body or not q.passage_body.strip():
                 errors.append("Passage MCQ requires passage body text.")
         # Image display type needs image
-        if qtype == "MCQ_IMAGE_DISPLAY_MULTI":
-            if not q.image:
-                errors.append("Image Display MCQ requires a question image.")
+        if qtype == "MCQ_IMAGE_DISPLAY_MULTI" and not q.image:
+            errors.append("Image Display MCQ requires a question image.")
 
     # --- FITB types (2a-2d) ---
     elif qtype.startswith("FITB_"):
@@ -147,9 +144,8 @@ def validate_question_config(question: Question) -> list[str]:
         rank_options = q.options.filter(option_type="RANK").count()
         if rank_options < 2:
             errors.append(f"Rank requires at least 2 options (has {rank_options}).")
-        if qtype == "RANK_THEN_RATE":
-            if not q.rating_scale_points or q.rating_scale_points < 2:
-                errors.append("Rank-then-Rate requires rating_scale_points ≥ 2.")
+        if qtype == "RANK_THEN_RATE" and (not q.rating_scale_points or q.rating_scale_points < 2):
+            errors.append("Rank-then-Rate requires rating_scale_points ≥ 2.")
 
     # --- Rating (7) ---
     elif qtype == "STANDARD_RATING_SCALE":
@@ -169,9 +165,10 @@ def validate_question_config(question: Question) -> list[str]:
                 errors.append(f"Option '{o.text_value}' is missing a predefined_score.")
                 break
         # Two-level needs rating_scale_points
-        if qtype == "FORCED_CHOICE_TWO_LEVEL":
-            if not q.rating_scale_points or q.rating_scale_points < 2:
-                errors.append("Forced-Choice Two-Level requires rating_scale_points ≥ 2.")
+        if qtype == "FORCED_CHOICE_TWO_LEVEL" and (
+            not q.rating_scale_points or q.rating_scale_points < 2
+        ):
+            errors.append("Forced-Choice Two-Level requires rating_scale_points ≥ 2.")
 
     return errors
 

@@ -279,6 +279,34 @@ export default function QuestionDetailPage() {
           {q.difficulty_level && <Badge variant="outline">Difficulty: {q.difficulty_level}</Badge>}
           {q.cognitive_level && <Badge variant="outline">Cognitive: {q.cognitive_level}</Badge>}
         </div>
+
+        {/* Server-side config validation warnings — surfaced when the question
+            is missing required fields for its type (e.g. hotspot with no areas,
+            MCQ with <2 options, FITB with no correct answers). Empty array =
+            ready for review. */}
+        {q.validation_warnings && q.validation_warnings.length > 0 && (
+          <Alert variant="error" className="mt-3">
+            <AlertDescription>
+              <div className="font-semibold">
+                Configuration incomplete — {q.validation_warnings.length} issue
+                {q.validation_warnings.length === 1 ? "" : "s"} to fix before
+                submitting for review:
+              </div>
+              <ul className="mt-1 list-disc pl-5 text-sm">
+                {q.validation_warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+        {q.ready_for_review && q.status === "draft" && (
+          <Alert variant="success" className="mt-3">
+            <AlertDescription>
+              ✓ All required configuration is in place. Ready to submit for review.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       <Tabs defaultValue="details">

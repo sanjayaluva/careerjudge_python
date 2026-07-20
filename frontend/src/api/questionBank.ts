@@ -113,6 +113,10 @@ export interface QuestionDetail extends QuestionListItem {
     rating: number | null;
     created_at: string;
   }[];
+  /** Server-side validation warnings (empty array = ready for review). */
+  validation_warnings: string[];
+  /** True when validation_warnings is empty — question may be submitted for review. */
+  ready_for_review: boolean;
 }
 
 export interface QuestionReview {
