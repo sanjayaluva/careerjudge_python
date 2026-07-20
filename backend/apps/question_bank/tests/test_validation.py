@@ -132,7 +132,34 @@ def test_hotspot_single_without_correct_area_is_invalid():
     assert any("correct hotspot" in e.lower() for e in errors)
 
 
-def test_hotspot_single_with_one_correct_area_is_valid():
+def test_hotspot_single_with_only_one_correct_area_is_invalid():
+    """Regression: a single hotspot area (which defaults to is_correct=True)
+    must fail validation because the candidate has no distractor to avoid.
+    Without a distractor, clicking anywhere inside the area = correct and
+    clicking anywhere outside = wrong — the question has zero discrimination.
+    """
+    from apps.question_bank.models import HotspotArea
+
+    q = _make_question(
+        question_type="HOTSPOT_SINGLE",
+        image="http://example.com/img.png",
+        image_width=800,
+        image_height=600,
+    )
+    HotspotArea.objects.create(
+        question=q,
+        x=10,
+        y=10,
+        width_px=50,
+        height_px=50,
+        is_correct=True,  # default
+    )
+    errors = validate_question_config(q)
+    assert any("distractor" in e.lower() for e in errors)
+    assert question_is_ready_for_review(q) is False
+
+
+def test_hotspot_single_with_one_correct_and_one_distractor_is_valid():
     from apps.question_bank.models import HotspotArea
 
     q = _make_question(
@@ -149,7 +176,16 @@ def test_hotspot_single_with_one_correct_area_is_valid():
         height_px=50,
         is_correct=True,
     )
+    HotspotArea.objects.create(
+        question=q,
+        x=200,
+        y=200,
+        width_px=50,
+        height_px=50,
+        is_correct=False,
+    )
     assert validate_question_config(q) == []
+    assert question_is_ready_for_review(q) is True
 
 
 def test_hotspot_multi_requires_two_correct_areas():
@@ -170,7 +206,26 @@ def test_hotspot_multi_requires_two_correct_areas():
         is_correct=True,
     )
     errors = validate_question_config(q)
+    # 1 correct, 0 incorrect — should produce BOTH errors
     assert any("2 correct" in e for e in errors)
+    assert any("distractor" in e.lower() for e in errors)
+
+
+def test_hotspot_multi_with_two_correct_and_one_distractor_is_valid():
+    from apps.question_bank.models import HotspotArea
+
+    q = _make_question(
+        question_type="HOTSPOT_MULTI",
+        image="http://example.com/img.png",
+        image_width=800,
+        image_height=600,
+    )
+    HotspotArea.objects.create(question=q, x=10, y=10, width_px=50, height_px=50, is_correct=True)
+    HotspotArea.objects.create(question=q, x=100, y=100, width_px=50, height_px=50, is_correct=True)
+    HotspotArea.objects.create(
+        question=q, x=200, y=200, width_px=50, height_px=50, is_correct=False
+    )
+    assert validate_question_config(q) == []
 
 
 def test_hotspot_without_image_is_invalid():

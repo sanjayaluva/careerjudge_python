@@ -11,8 +11,10 @@ Validation rules per question type:
   FITB (2a-2d): ≥1 option with correct_answers, question_text_1
   Match (3): ≥2 MATCH_A options + ≥2 MATCH_B options, all with match_pair_id
   Grid (4): grid_rows ≥1, grid_cols ≥1, ≥1 DRAG_POOL option
-  Hotspot (5a/5b): image required, ≥1 hotspot_area with is_correct=True
-                   5a: ≥1 correct area, 5b: ≥2 correct areas
+  Hotspot (5a/5b): image required, ≥1 hotspot_area with is_correct=True,
+                   ≥1 hotspot_area with is_correct=False (distractor)
+                   5a: ≥1 correct + ≥1 distractor (≥2 areas total)
+                   5b: ≥2 correct + ≥1 distractor (≥3 areas total)
   Rank (6a/6b): ≥2 RANK options
   Rating (7): rating_scale_points ≥2
   Forced Choice (8a/8b): ≥2 FORCED_CHOICE options with predefined_score
@@ -130,6 +132,8 @@ def validate_question_config(question: Question) -> list[str]:
         if len(areas) < 1:
             errors.append("Hotspot requires at least 1 hotspot area to be defined.")
         correct_areas = [a for a in areas if a.is_correct]
+        incorrect_areas = [a for a in areas if not a.is_correct]
+        # Correct-area requirements
         if qtype == "HOTSPOT_SINGLE":
             if len(correct_areas) < 1:
                 errors.append("Hotspot Single requires at least 1 correct hotspot area.")
@@ -138,6 +142,16 @@ def validate_question_config(question: Question) -> list[str]:
                 errors.append(
                     f"Hotspot Multi requires at least 2 correct hotspot areas (has {len(correct_areas)})."
                 )
+        # Distractor requirement — a hotspot with only correct areas gives the
+        # candidate no way to be wrong, so the question has zero discrimination.
+        # HotspotArea.is_correct defaults to True, so authors commonly end up
+        # with all-correct areas unless they explicitly toggle one to False.
+        if len(incorrect_areas) < 1:
+            errors.append(
+                f"{qtype.replace('_', ' ').title()} requires at least 1 distractor "
+                "(incorrect) hotspot area so the candidate has a meaningful choice. "
+                "Toggle one area's 'is_correct' to False to mark it as a distractor."
+            )
 
     # --- Rank (6a/6b) ---
     elif qtype in ("RANK_SIMPLE", "RANK_THEN_RATE"):
