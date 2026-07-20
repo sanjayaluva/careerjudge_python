@@ -26,7 +26,7 @@ PyJWT==2.8.0
 python-dateutil==2.9.0
 pydantic==2.7.4
 structlog==24.2.0
-sentry-sdk==2.6.0
+sentry-sdk==2.66.0
 
 # PDF
 weasyprint==62.1
