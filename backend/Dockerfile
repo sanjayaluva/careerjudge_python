@@ -1,7 +1,7 @@
 # Backend Dockerfile — multi-stage build for smaller image
 # Uses psycopg2-binary (no libpq build needed) and skips WeasyPrint in Phase 1
 # (PDF report generation is Phase 3 — we'll add cairo/pango deps when we need them)
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -25,7 +25,7 @@ RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install -r requirements.txt
 
 # ----------
-FROM python:3.12-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
