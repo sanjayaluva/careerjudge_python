@@ -12,8 +12,10 @@ Endpoints:
   GET/POST  /api/reporting/reports/<id>/codes/          — list/add typological codes
   GET/POST  /api/reporting/reports/<id>/polar/          — list/add polar variables
   GET       /api/reporting/generated/<id>/              — retrieve a generated report
+  GET       /api/reporting/generated/<id>/pdf/          — download PDF
 """
 
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import action
@@ -29,12 +31,14 @@ from .models import (
     GeneratedReport,
     Report,
 )
+from .pdf import render_report_pdf
 from .serializers import (
     GeneratedReportSerializer,
     PolarVariableSerializer,
     ReportBandSerializer,
     ReportCutoffSerializer,
     ReportListSerializer,
+    ReportSectionSerializer,
     ReportSerializer,
     TypologicalCodeSerializer,
 )
@@ -57,6 +61,9 @@ class HasReportingPermission(HasModulePermission):
         "bands": "change",
         "codes": "change",
         "polar": "change",
+        "sections": "change",  # report layout editor (SRS §3_layout)
+        "sections_reorder": "change",
+        "pdf": "view",  # PDF download for generated reports
     }
 
 
@@ -494,6 +501,70 @@ class ReportViewSet(ActionSerializerMixin, ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(detail=True, methods=["get", "post"])
+    def sections(self, request, pk=None):
+        """List or add report layout sections (SRS §3_layout).
+
+        GET /reports/<id>/sections/
+          -> list of ReportSection rows ordered by 'order'
+
+        POST /reports/<id>/sections/
+          body: {
+            "section_type": "narrative" | "header" | "score_summary" | ...,
+            "title": "My Section",
+            "content": "free text or JSON config",
+            "order": 1,
+            "is_visible": true
+          }
+        """
+        report = self.get_object()
+        if request.method == "GET":
+            sections = report.sections.order_by("order").all()
+            return Response(
+                {"message": "OK", "data": ReportSectionSerializer(sections, many=True).data},
+                status=status.HTTP_200_OK,
+            )
+        serializer = ReportSectionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(report=report)
+        return Response(
+            {"message": "Section created.", "data": serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["patch"])
+    def sections_reorder(self, request, pk=None):
+        """Reorder report layout sections (SRS §3_layout drag-drop).
+
+        PATCH /reports/<id>/sections_reorder/
+          body: {"ordered_ids": [3, 1, 2, 4]}
+          -> updates the 'order' field of each section to match the index
+        """
+        report = self.get_object()
+        ordered_ids = request.data.get("ordered_ids") or []
+        if not isinstance(ordered_ids, list):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "ordered_ids (list) is required.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from .models import ReportSection
+
+        for index, sid in enumerate(ordered_ids):
+            ReportSection.objects.filter(id=sid, report=report).update(order=index)
+        sections = report.sections.order_by("order").all()
+        return Response(
+            {
+                "message": f"Reordered {len(ordered_ids)} section(s).",
+                "data": ReportSectionSerializer(sections, many=True).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 class GeneratedReportViewSet(ModelViewSet):
     """Retrieve generated reports."""
@@ -507,3 +578,45 @@ class GeneratedReportViewSet(ModelViewSet):
         instance = self.get_object()
         serializer = self.get_serializer(instance)
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["get"])
+    def pdf(self, request, pk=None):
+        """Download the generated report as a PDF.
+
+        GET /api/reporting/generated/<id>/pdf/
+          -> application/pdf file download
+
+        Renders the GeneratedReport.rendered_data JSON into a PDF using
+        WeasyPrint. Returns 404 if the report hasn't been generated yet,
+        or 400 if generation had failed (no rendered_data).
+        """
+        instance = self.get_object()
+        if instance.status != "generated" or not instance.rendered_data:
+            return Response(
+                {
+                    "error": {
+                        "code": "not_ready",
+                        "message": (
+                            f"Report status is '{instance.status}'. "
+                            "PDF can only be downloaded for successfully generated reports."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            pdf_bytes = render_report_pdf(instance.rendered_data)
+        except Exception as e:
+            return Response(
+                {"error": {"code": "pdf_failed", "message": str(e)}},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        # Build a friendly filename from the report title + candidate
+        title = instance.report.title if instance.report else "report"
+        candidate = instance.candidate.email if instance.candidate else "candidate"
+        safe_title = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in title)[:60]
+        filename = f"{safe_title}_{candidate}.pdf"
+        resp = HttpResponse(pdf_bytes, content_type="application/pdf")
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+        resp["Content-Length"] = str(len(pdf_bytes))
+        return resp

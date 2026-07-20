@@ -100,6 +100,149 @@ export function retrieveGeneratedReport(id: number): Promise<GeneratedReport> {
 }
 
 // ---------------------------------------------------------------------------
+// PDF Download (SRS mentions downloadable PDFs)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the URL for downloading a generated report as a PDF.
+ * Use this as the `href` of an <a> tag (the browser will handle the
+ * download automatically). Requires an auth token via cookie or query
+ * param if the API enforces it.
+ */
+export function generatedReportPdfUrl(id: number): string {
+  return `${BASE}/generated/${id}/pdf/`;
+}
+
+// ---------------------------------------------------------------------------
+// Report Config: Cutoffs / Bands / Codes / Polar / Sections
+// ---------------------------------------------------------------------------
+
+export interface ReportCutoff {
+  id: number;
+  report: number;
+  section: number;
+  section_title: string;
+  cutoff_score: number;
+  cutoff_label: string;
+  above_description: string;
+  below_description: string;
+}
+
+export interface ReportBand {
+  id: number;
+  report: number;
+  section: number;
+  section_title: string;
+  band_number: number;
+  range_min: number;
+  range_max: number;
+  band_label: string;
+  description: string;
+  colour_code: string;
+}
+
+export interface TypologicalCode {
+  id: number;
+  report: number;
+  section: number;
+  section_title: string;
+  code: string;
+  top_n: number;
+}
+
+export interface PolarVariable {
+  id: number;
+  report: number;
+  section: number;
+  section_title: string;
+  opposite_name: string;
+}
+
+export interface ReportSection {
+  id: number;
+  report: number;
+  section_type: string;
+  title: string;
+  content: string;
+  table_graph_config: Record<string, unknown> | null;
+  order: number;
+  is_visible: boolean;
+}
+
+export function listCutoffs(reportId: number): Promise<ReportCutoff[]> {
+  return apiGet<ReportCutoff[]>(`${BASE}/reports/${reportId}/cutoffs/`);
+}
+export function createCutoff(
+  reportId: number,
+  payload: Omit<ReportCutoff, "id" | "report" | "section_title">,
+): Promise<ReportCutoff> {
+  return apiPost<ReportCutoff>(`${BASE}/reports/${reportId}/cutoffs/`, payload);
+}
+
+export function listBands(reportId: number): Promise<ReportBand[]> {
+  return apiGet<ReportBand[]>(`${BASE}/reports/${reportId}/bands/`);
+}
+export function createBand(
+  reportId: number,
+  payload: Omit<ReportBand, "id" | "report" | "section_title">,
+): Promise<ReportBand> {
+  return apiPost<ReportBand>(`${BASE}/reports/${reportId}/bands/`, payload);
+}
+
+export function listCodes(reportId: number): Promise<TypologicalCode[]> {
+  return apiGet<TypologicalCode[]>(`${BASE}/reports/${reportId}/codes/`);
+}
+export function createCode(
+  reportId: number,
+  payload: Omit<TypologicalCode, "id" | "report" | "section_title">,
+): Promise<TypologicalCode> {
+  return apiPost<TypologicalCode>(`${BASE}/reports/${reportId}/codes/`, payload);
+}
+
+export function listPolarVariables(reportId: number): Promise<PolarVariable[]> {
+  return apiGet<PolarVariable[]>(`${BASE}/reports/${reportId}/polar/`);
+}
+export function createPolarVariable(
+  reportId: number,
+  payload: Omit<PolarVariable, "id" | "report" | "section_title">,
+): Promise<PolarVariable> {
+  return apiPost<PolarVariable>(`${BASE}/reports/${reportId}/polar/`, payload);
+}
+
+export function listSections(reportId: number): Promise<ReportSection[]> {
+  return apiGet<ReportSection[]>(`${BASE}/reports/${reportId}/sections/`);
+}
+export function createSection(
+  reportId: number,
+  payload: Omit<ReportSection, "id" | "report">,
+): Promise<ReportSection> {
+  return apiPost<ReportSection>(`${BASE}/reports/${reportId}/sections/`, payload);
+}
+export function reorderSections(reportId: number, orderedIds: number[]): Promise<ReportSection[]> {
+  return apiPatch<ReportSection[]>(`${BASE}/reports/${reportId}/sections_reorder/`, {
+    ordered_ids: orderedIds,
+  });
+}
+
+export const SECTION_TYPES = [
+  { value: "header", label: "Header (title + logo)" },
+  { value: "score_summary", label: "Score Summary" },
+  { value: "section_breakdown", label: "Section Breakdown" },
+  { value: "question_analysis", label: "Question Analysis" },
+  { value: "chart", label: "Chart" },
+  { value: "narrative", label: "Narrative Text" },
+  { value: "cutoff_table", label: "Cutoff Table (descriptive)" },
+  { value: "type_profile", label: "Type Profile (typological)" },
+  { value: "band_table", label: "Band Table (interpretative)" },
+  { value: "fmi_report", label: "FMI Report (profiling)" },
+  { value: "pmi_report", label: "PMI Report (profiling)" },
+  { value: "vmi_report", label: "VMI Report (profiling)" },
+  { value: "recommendation", label: "Recommendations" },
+  { value: "footer", label: "Footer" },
+  { value: "custom", label: "Custom Content" },
+];
+
+// ---------------------------------------------------------------------------
 // Group Report (SRS 04 — corporate managers view aggregated employee performance)
 // ---------------------------------------------------------------------------
 
