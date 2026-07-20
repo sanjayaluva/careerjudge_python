@@ -1,7 +1,7 @@
 # Project Status — CareerJudge
 
 > **Last updated**: 2026-07-20
-> **Current phase**: Phase 3 (Career Profiling + Reporting — backend complete, frontend in progress)
+> **Current phase**: Phase 3 complete — ready for Phase 4
 
 ## Completed Modules
 
@@ -21,12 +21,13 @@
 | Question Bank | v1.0.0 | ✅ Frozen | 96 tests (incl. psychometrics) | [question_bank.md](modules/question_bank.md) |
 | Assessment | v1.0.0 | ✅ Frozen | 312 tests | [assessment.md](modules/assessment.md) |
 
-### Phase 3 — Profiling & Reporting (Backend Complete)
+### Phase 3 — Profiling & Reporting (Complete)
 
 | Module | Version | Status | Tests | Docs |
 |---|---|---|---|---|
-| Career Profiling | v1.0.0-pre | 🔧 Backend complete | 26 tests (engine + API) | — |
-| Reporting | v1.0.0-pre | 🔧 Backend complete | 13 tests (group + HFMI/LFMI) | — |
+| Career Profiling | v1.0.0 | ✅ Complete | 26 tests (engine + API + ranked/polar) | — |
+| Reporting | v1.0.0 | ✅ Complete | 22 tests (group + HFMI/LFMI + PDF) | — |
+| Psychometric Analysis | v1.0.0 | ✅ Complete | 14 tests (all 4 SRS 02 analyses) | — |
 
 ### Phase 4 — Delivery & Services (Planned)
 
@@ -79,20 +80,21 @@
 - ✅ Candidate isolation (users see only their own sessions)
 - ✅ 76 backend tests (models, scoring, views)
 
-### Career Profiling (Phase 3 — backend complete)
+### Career Profiling (Phase 3 — complete)
 - ✅ ProfilingSolution, SelectedAssessment, BandDefinition, Band, MappingCriterion models
 - ✅ MatchIndex computation engine implementing SRS §5.1-5.3 (3 modes):
   - Standard unranked: weight = criterion.weight (default 1.0)
   - Standard ranked (SRS §4.1.3): weight = RankValue looked up by rank_order
   - Polar (SRS §4.2): match_value from PolarMatchRule, weight from PolarRankValue by (match_code, rank_order)
-- ✅ RankDefinition + RankValue models (Rank Order Chart per assessment)
-- ✅ PolarMatchRule + PolarRankValue models (2D rank chart for polar assessments)
+- ✅ RankDefinition + RankValue models (Rank Order Chart per assessment) + UI editor
+- ✅ PolarMatchRule + PolarRankValue models (2D rank chart for polar assessments) + UI editor
 - ✅ Career metadata (stream, code, description) on MappingCriterion + denormalised on MatchIndex
 - ✅ POST /api/career-profiling/solutions/<id>/compute/ endpoint (admin vs non-admin auth matrix)
 - ✅ Idempotent computation (update_or_create on (solution, candidate, career_title, career_code))
-- ✅ 26 backend tests (engine + API)
+- ✅ Match Indices tab in UI: compute button + per-candidate results + details modal
+- ✅ 26 backend tests (engine + API + ranked/polar modes)
 
-### Reporting (Phase 3 — backend complete)
+### Reporting (Phase 3 — complete)
 - ✅ Report, ReportSection, ReportCutoff, ReportBand, TypologicalCode, PolarVariable, GeneratedReport models
 - ✅ 4 report types: Descriptive, Typological, Interpretative, Group (SRS §3)
 - ✅ 4 data input levels + 4 statistical conversions (Percentage, Percentile, STEN, STENINE)
@@ -101,7 +103,12 @@
 - ✅ POST /api/reporting/reports/<id>/generate-group/ endpoint
 - ✅ HFMI/LFMI data selection (SRS 06 §2.2): user-initiated (FMI range + manual selection) + system-initiated (top-N categories × top-N careers)
 - ✅ POST /api/reporting/reports/<id>/select_data/ endpoint
-- ✅ 13 backend tests (group report + HFMI/LFMI)
+- ✅ Report layout editor (SRS §3_layout): create/reorder ReportSection rows via up/down buttons
+- ✅ POST /api/reporting/reports/<id>/sections/ + PATCH /sections_reorder/ endpoints
+- ✅ PDF generation (WeasyPrint): GET /api/reporting/generated/<id>/pdf/ returns downloadable PDF
+  - Renders all report types + profiling data + custom narrative sections
+  - Styled with A4 page setup, page numbers, color-coded badges, distribution buckets
+- ✅ 22 backend tests (group report + HFMI/LFMI + PDF rendering for all report types)
 
 ### Psychometric Analysis (Phase 3 — backend complete)
 - ✅ Question model extended with IDI/TDI/BDI/DDI/item_total_correlation fields
@@ -145,9 +152,8 @@
 
 ## Next Priorities
 
-1. **Frontend UI for Phase 3 modules** — Career Profiling solution editor (rank chart, polar match rules), Reporting module (group report viewer, HFMI/LFMI selector, psychometric analysis dashboard)
-2. **PDF generation** — currently reports are JSON via GeneratedReport.rendered_data; add WeasyPrint-based PDF rendering for downloadable reports
-3. **Report Layout drag-drop editor** (SRS §3_layout) — ReportSection has order field but no drag-drop UI
+1. **Phase 4 — Training module** (SRS 07): training setup, assignments, progress tracking
+2. **Phase 4 — Counseling module** (SRS 08): session scheduling, counselor notes, matching
+3. **Phase 4 — CMS module**: content management (pages, banners)
 4. **Production deployment** — provision prod cloud VM + CI/CD pipeline
-5. **End-to-end staging validation** — exercise all 21 question types through the assessment player
-6. **Phase 4 modules** — Training, Counseling, CMS
+5. **End-to-end staging validation** — exercise all 21 question types + profiling + reporting flows
