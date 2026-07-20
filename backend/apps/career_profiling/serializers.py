@@ -9,7 +9,11 @@ from .models import (
     BandDefinition,
     MappingCriterion,
     MatchIndex,
+    PolarMatchRule,
+    PolarRankValue,
     ProfilingSolution,
+    RankDefinition,
+    RankValue,
     SelectedAssessment,
 )
 
@@ -45,9 +49,56 @@ class BandDefinitionSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "bands", "section_title"]
 
 
+class RankValueSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RankValue
+        fields = ["id", "rank_definition", "rank_order", "rank_value"]
+        read_only_fields = ["id"]
+
+
+class PolarRankValueSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PolarRankValue
+        fields = ["id", "rank_definition", "match_code", "rank_order", "rank_value"]
+        read_only_fields = ["id"]
+
+
+class RankDefinitionSerializer(serializers.ModelSerializer):
+    rank_values = RankValueSerializer(many=True, read_only=True)
+    polar_rank_values = PolarRankValueSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = RankDefinition
+        fields = [
+            "id",
+            "selected_assessment",
+            "is_polar",
+            "rank_values",
+            "polar_rank_values",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at", "rank_values", "polar_rank_values"]
+
+
+class PolarMatchRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PolarMatchRule
+        fields = [
+            "id",
+            "band_definition",
+            "criterion_band_code",
+            "user_band_code",
+            "match_code",
+            "match_value",
+        ]
+        read_only_fields = ["id"]
+
+
 class SelectedAssessmentSerializer(serializers.ModelSerializer):
     assessment_detail = AssessmentListSerializer(source="assessment", read_only=True)
     band_definitions = BandDefinitionSerializer(many=True, read_only=True)
+    rank_definition = RankDefinitionSerializer(read_only=True)
 
     class Meta:
         model = SelectedAssessment
@@ -60,8 +111,9 @@ class SelectedAssessmentSerializer(serializers.ModelSerializer):
             "is_polar",
             "order",
             "band_definitions",
+            "rank_definition",
         ]
-        read_only_fields = ["id", "assessment_detail", "band_definitions"]
+        read_only_fields = ["id", "assessment_detail", "band_definitions", "rank_definition"]
 
 
 class ProfilingSolutionSerializer(serializers.ModelSerializer):
@@ -124,10 +176,14 @@ class MappingCriterionSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "solution",
+            "career_stream",
             "career_title",
+            "career_code",
+            "career_description",
             "section",
             "section_title",
             "criterion_band_code",
+            "rank_order",
             "weight",
         ]
         read_only_fields = ["id", "section_title"]
@@ -145,7 +201,9 @@ class MatchIndexSerializer(serializers.ModelSerializer):
             "solution",
             "candidate",
             "candidate_name",
+            "career_stream",
             "career_title",
+            "career_code",
             "variable_mapping_index",
             "final_match_index",
             "variable_details",
@@ -154,6 +212,7 @@ class MatchIndexSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "candidate",
+            "career_stream",
             "variable_mapping_index",
             "final_match_index",
             "variable_details",

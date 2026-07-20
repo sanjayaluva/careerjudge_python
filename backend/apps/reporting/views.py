@@ -24,7 +24,7 @@ from rest_framework.viewsets import ModelViewSet
 from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
 
-from .generation import generate_report_data
+from .generation import generate_group_report_data, generate_report_data, select_profiling_data
 from .models import (
     GeneratedReport,
     Report,
@@ -51,6 +51,8 @@ class HasReportingPermission(HasModulePermission):
         "destroy": "delete",
         "publish": "change",
         "generate": "view",
+        "generate_group": "view",
+        "select_data": "view",
         "cutoffs": "change",
         "bands": "change",
         "codes": "change",
@@ -232,6 +234,191 @@ class ReportViewSet(ActionSerializerMixin, ModelViewSet):
         gen_reports = report.generated_reports.select_related("candidate", "session").all()
         serializer = GeneratedReportSerializer(gen_reports, many=True)
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def generate_group(self, request, pk=None):
+        """Generate a group report aggregating multiple completed sessions.
+
+        Per SRS 04 group report: corporate managers view their employees'
+        performance on the assessment.
+
+        Payload:
+            {"session_ids": [1, 2, 3, ...]}
+
+        Returns the aggregated group data (candidate_count, average_score,
+        average_percentage, pass_rate, section_averages, distribution,
+        candidates list). Does NOT persist a GeneratedReport row (group
+        reports span multiple sessions, so they're computed on demand).
+        """
+        report = self.get_object()
+        if report.status != "published":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Report must be published before generating.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if report.report_type != "group":
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": (
+                            f"generate_group is only for group reports. "
+                            f"This report's type is '{report.report_type}'."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        session_ids = request.data.get("session_ids") or []
+        if not session_ids or not isinstance(session_ids, list):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "session_ids (list of ints) is required.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from apps.assessment.models import AssessmentSession
+
+        sessions = list(
+            AssessmentSession.objects.filter(id__in=session_ids, status="completed")
+            .select_related("candidate", "assessment")
+            .prefetch_related("section_scores__section")
+        )
+        # Validate every requested session was found and completed
+        found_ids = {s.id for s in sessions}
+        missing = set(session_ids) - found_ids
+        if missing:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": (
+                            f"These session IDs were not found or not completed: "
+                            f"{sorted(missing)}"
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # All sessions should belong to the same assessment as the report
+        if report.assessment_id:
+            wrong = [s for s in sessions if s.assessment_id != report.assessment_id]
+            if wrong:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": (
+                                f"Sessions {[s.id for s in wrong]} belong to a different "
+                                f"assessment than the report."
+                            ),
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        rendered_data = generate_group_report_data(report, sessions)
+        return Response(
+            {"message": "Group report generated.", "data": rendered_data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"])
+    def select_data(self, request, pk=None):
+        """HFMI / LFMI data selection for profiling reports (SRS 06 SRS 2.2).
+
+        Payload:
+            {
+                "candidate_id": 42,                    # required
+                "data_type": "HFMI" | "LFMI",          # required
+                "extraction_mode": "user" | "system",  # required
+                "fmi_range": [85, 100],                # user mode only
+                "n_categories": 3,                     # system mode only
+                "n_criterions": 5,                     # system mode only
+                "selected_career_titles": ["..."]      # user mode, optional
+            }
+
+        Returns the filtered/sorted MatchIndex list. For user-initiated
+        selection without selected_career_titles, returns the filtered list
+        so the UI can present it for the user to choose from.
+        """
+        report = self.get_object()
+        if report.scope != "profiling" or not report.profiling_solution:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "select_data is only for profiling reports.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        candidate_id = request.data.get("candidate_id")
+        data_type = request.data.get("data_type", "HFMI")
+        extraction_mode = request.data.get("extraction_mode", "system")
+        fmi_range = request.data.get("fmi_range")
+        n_categories = int(request.data.get("n_categories", 0))
+        n_criterions = int(request.data.get("n_criterions", 0))
+        selected_career_titles = request.data.get("selected_career_titles")
+
+        if not candidate_id:
+            return Response(
+                {"error": {"code": "validation_error", "message": "candidate_id is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if data_type not in ("HFMI", "LFMI"):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "data_type must be 'HFMI' or 'LFMI'.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if extraction_mode not in ("user", "system"):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "extraction_mode must be 'user' or 'system'.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from apps.career_profiling.models import MatchIndex
+
+        match_indices = list(
+            MatchIndex.objects.filter(
+                solution=report.profiling_solution,
+                candidate_id=candidate_id,
+            ).exclude(final_match_index__isnull=True)
+        )
+
+        fmi_range_tuple = tuple(fmi_range) if fmi_range and len(fmi_range) == 2 else None
+        result = select_profiling_data(
+            match_indices,
+            data_type=data_type,
+            extraction_mode=extraction_mode,
+            fmi_range=fmi_range_tuple,
+            n_categories=n_categories,
+            n_criterions=n_criterions,
+            selected_career_titles=selected_career_titles,
+        )
+        return Response({"message": "OK", "data": result}, status=status.HTTP_200_OK)
 
     # --- Nested config endpoints ---
 

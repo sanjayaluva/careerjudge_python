@@ -1,20 +1,33 @@
 """Career Profiling computation engine.
 
-Implements the SRS §5.1-5.3 algorithm:
-  1. Mapping Score per variable (5 = exact band match, decreasing for distance)
-  2. Variable Mapping Index (VMI) per variable = (product_score / max_product) x 100
-  3. Profile Match Index (PMI) per assessment per career
-     = (sum_product / (max_product + max_product/100)) x 100
-  4. Final Match Index (FMI) per career = average of PMIs across assessments
+Implements the SRS §5.1-5.3 algorithm with three modes:
 
-Two modes per SRS §5.1.1:
-  - WITHOUT ranking: every variable's weight (rank_value) = 1.0
-                     → product_score = mapping_score, max_product = 5 x n_vars
-  - WITH ranking:    each variable has a rank_value (stored as MappingCriterion.weight)
-                     → product_score = mapping_score x rank_value
-                     → max_product = sum(5 x rank_value) across variables
+  STANDARD UNRANKED (SRS §4.1, no RankDefinition):
+    - mapping_score = max(0, MAX_MAPPING_SCORE - band_distance)
+    - weight        = MappingCriterion.weight (default 1.0)
+    - product_score = mapping_score x weight
+    - max_product   = MAX_MAPPING_SCORE x weight
+    - VMI           = (product_score / max_product) x 100
 
-Reference: specs/05_profiling_configuration.json sections 5.1.1, 5.1.2, 5.3
+  STANDARD RANKED (SRS §4.1.3 + §4.1.4, RankDefinition without is_polar):
+    - mapping_score = max(0, MAX_MAPPING_SCORE - band_distance)  [same as unranked]
+    - weight        = RankValue.rank_value looked up by criterion.rank_order
+    - product_score = mapping_score x weight
+    - max_product   = MAX_MAPPING_SCORE x weight
+    - VMI           = (product_score / max_product) x 100
+
+  POLAR (SRS §4.2, RankDefinition with is_polar=True; PolarMatchRule table required):
+    - match_value   = PolarMatchRule.match_value for (criterion_band, user_band)
+                      [HM=5, MM=3, LM=1 — NOT band-distance based]
+    - weight        = PolarRankValue.rank_value looked up by (match_code, rank_order)
+    - product_score = match_value x weight
+    - max_product   = MAX_POLAR_MATCH_VALUE x weight
+    - VMI           = (product_score / max_product) x 100
+
+PMI per assessment = (sum_product / (max_product + max_product/100)) x 100
+FMI per career     = mean(PMI) across assessments
+
+Reference: specs/05_profiling_configuration.json sections 4.1, 4.2, 5.1, 5.2, 5.3
 """
 
 from __future__ import annotations
@@ -32,39 +45,55 @@ from .models import (
     BandDefinition,
     MappingCriterion,
     MatchIndex,
+    PolarMatchRule,
+    PolarRankValue,
     ProfilingSolution,
+    RankDefinition,
     SelectedAssessment,
 )
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
-# Per SRS §5.1.1: mapping score is 5 for an exact band match and decreases
-# by 1 for each band of distance between the candidate's band and the
-# criterion band. Minimum is 0.
+# Standard mode: 5 = exact band match, decreasing by 1 per band of distance.
 MAX_MAPPING_SCORE = 5
+# Polar mode: HM=5 is the max possible match_value.
+MAX_POLAR_MATCH_VALUE = 5
 
 
 # ---------------------------------------------------------------------------
-# Data classes (for transparent intermediate state — easy to test)
+# Data classes (transparent intermediate state — easy to test)
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class VariableResult:
-    """Per-variable computation result for one (assessment, career) pair."""
+    """Per-variable computation result for one (assessment, career) pair.
+
+    Fields are unioned across the three modes so the dataclass can represent
+    any of them. mode-specific fields:
+      standard (unranked/ranked): mapping_score, criterion_band_number,
+                                  candidate_band_number, distance
+      polar:                     match_code, match_value
+    """
 
     variable: str
     assessment_label: str
+    mode: str  # "standard_unranked" | "standard_ranked" | "polar"
     criterion_band: str
     candidate_band: str
-    criterion_band_number: int
-    candidate_band_number: int
-    distance: int
-    mapping_score: int
-    weight: float
-    product_score: float
-    vmi: float  # 0-100
+    # Standard-mode fields (None for polar)
+    criterion_band_number: int | None = None
+    candidate_band_number: int | None = None
+    distance: int | None = None
+    mapping_score: int | None = None
+    # Polar-mode fields (None for standard)
+    match_code: str | None = None
+    match_value: int | None = None
+    # Common aggregation fields
+    weight: float = 1.0
+    product_score: float = 0.0
+    vmi: float = 0.0  # 0-100
 
 
 @dataclass
@@ -83,6 +112,8 @@ class CareerResult:
     """Per-career aggregation across all selected assessments."""
 
     career_title: str
+    career_stream: str = ""
+    career_code: str = ""
     assessments: list[AssessmentResult] = field(default_factory=list)
     fmi: float | None = None  # 0-100, None if no PMIs computed
     vmi_overall: float | None = None  # mean of per-variable VMIs
@@ -97,41 +128,33 @@ def compute_match_indices(solution: ProfilingSolution, candidate: User) -> list[
     """Compute and persist MatchIndex records for a candidate against every
     career defined in the solution's mapping_criteria.
 
-    Algorithm (SRS §5.1-5.3):
-      For each career in mapping_criteria:
-        For each selected_assessment:
-          For each variable (section) that has both a band_definition and a
-          mapping_criterion for this career:
-            - Find the candidate's completed session for this assessment
-            - Get the candidate's percentage score for this section
-            - Find which band of the band_definition contains that percentage
-            - Find the criterion band (by band_code) for this career+section
-            - mapping_score = max(0, 5 - |criterion_band_num - candidate_band_num|)
-            - product_score = mapping_score x weight (rank_value)
-            - VMI = product_score / (5 x weight) x 100
-          PMI = sum(product_scores) / (max_product + max_product/100) x 100
-        FMI = average(PMIs across assessments)
-
-    Upserts one MatchIndex per (solution, candidate, career_title) with the
-    final VMI, FMI, and the per-variable breakdown stored as JSON.
-
-    Returns the list of saved MatchIndex records.
+    Returns the list of saved MatchIndex records. Records are skipped (and
+    omitted from the response) when no variable is scorable for that career.
     """
+    # Each criterion row carries (career_title, career_stream, career_code).
+    # Group by (career_title, career_stream, career_code) so the same title in
+    # different streams is treated as separate careers.
     careers = (
-        solution.mapping_criteria.values_list("career_title", flat=True)
+        solution.mapping_criteria.values("career_title", "career_stream", "career_code")
         .distinct()
-        .order_by("career_title")
+        .order_by("career_stream", "career_title")
     )
     saved: list[MatchIndex] = []
     for career in careers:
-        result = _compute_for_career(solution, candidate, career)
+        result = _compute_for_career(
+            solution,
+            candidate,
+            career["career_title"],
+            career["career_stream"],
+            career["career_code"],
+        )
         if result.fmi is None:
             logger.info(
                 "Skipping MatchIndex for solution=%s candidate=%s career=%r — "
                 "no scorable variables (no completed sessions or missing config).",
                 solution.id,
                 candidate.id,
-                career,
+                career["career_title"],
             )
             continue
         mi = _upsert_match_index(solution, candidate, result)
@@ -145,7 +168,11 @@ def compute_match_indices(solution: ProfilingSolution, candidate: User) -> list[
 
 
 def _compute_for_career(
-    solution: ProfilingSolution, candidate: User, career_title: str
+    solution: ProfilingSolution,
+    candidate: User,
+    career_title: str,
+    career_stream: str = "",
+    career_code: str = "",
 ) -> CareerResult:
     """Compute VMI, PMI per assessment, then FMI as average of PMIs."""
     criteria_qs = (
@@ -153,21 +180,33 @@ def _compute_for_career(
         .select_related("section")
         .order_by("section__level", "section__order")
     )
-    result = CareerResult(career_title=career_title)
+    result = CareerResult(
+        career_title=career_title,
+        career_stream=career_stream,
+        career_code=career_code,
+    )
 
     for sa in solution.selected_assessments.all().order_by("order"):
         ar = AssessmentResult(assessment_label=sa.label)
         session = _get_completed_session(sa.assessment_id, candidate.id)
 
+        # Preload the RankDefinition (if any) once per selected_assessment.
+        rank_def: RankDefinition | None = getattr(sa, "rank_definition", None)
+        rank_values_by_order: dict[int, float] = {}
+        if rank_def and not rank_def.is_polar:
+            rank_values_by_order = {
+                rv.rank_order: rv.rank_value for rv in rank_def.rank_values.all()
+            }
+
         for criterion in criteria_qs:
-            vr = _compute_variable(sa, session, criterion)
+            vr = _compute_variable(sa, session, criterion, rank_def, rank_values_by_order)
             if vr is not None:
                 ar.variables.append(vr)
 
         # Aggregate PMI for this assessment
         if ar.variables:
             ar.sum_product = sum(v.product_score for v in ar.variables)
-            ar.max_product = sum(MAX_MAPPING_SCORE * v.weight for v in ar.variables)
+            ar.max_product = sum(_max_product_for(v) for v in ar.variables)
             if ar.max_product > 0:
                 adjusted_max = ar.max_product + (ar.max_product / 100)
                 ar.pmi = round((ar.sum_product / adjusted_max) * 100, 2)
@@ -188,19 +227,27 @@ def _compute_for_career(
     return result
 
 
+def _max_product_for(v: VariableResult) -> float:
+    """Return the maximum possible product_score for a variable.
+
+    For standard modes: MAX_MAPPING_SCORE x weight.
+    For polar mode:     MAX_POLAR_MATCH_VALUE x weight.
+    """
+    base = MAX_POLAR_MATCH_VALUE if v.mode == "polar" else MAX_MAPPING_SCORE
+    return base * v.weight
+
+
 def _compute_variable(
     sa: SelectedAssessment,
     session: AssessmentSession | None,
     criterion: MappingCriterion,
+    rank_def: RankDefinition | None,
+    rank_values_by_order: dict[int, float],
 ) -> VariableResult | None:
     """Compute the per-variable mapping score, product, and VMI.
 
-    Returns None when the variable can't be scored for any of:
-      - No band_definition for this assessment + section
-      - No completed session for the candidate on this assessment
-      - No SectionScore recorded for this section
-      - No band contains the candidate's percentage (gap in config)
-      - No band with the criterion's band_code exists
+    Dispatches to _compute_standard_variable or _compute_polar_variable based
+    on whether the selected_assessment has a polar RankDefinition.
     """
     band_def = sa.band_definitions.filter(section=criterion.section).first()
     if not band_def:
@@ -213,13 +260,48 @@ def _compute_variable(
     candidate_band = _find_band_for_percentage(band_def, ss.percentage)
     if candidate_band is None:
         return None
+
+    if rank_def is not None and rank_def.is_polar:
+        return _compute_polar_variable(sa, band_def, criterion, candidate_band, rank_def)
+    return _compute_standard_variable(
+        sa, band_def, criterion, candidate_band, rank_def, rank_values_by_order
+    )
+
+
+# ---------------------------------------------------------------------------
+# Standard mode (unranked + ranked)
+# ---------------------------------------------------------------------------
+
+
+def _compute_standard_variable(
+    sa: SelectedAssessment,
+    band_def: BandDefinition,
+    criterion: MappingCriterion,
+    candidate_band: Band,
+    rank_def: RankDefinition | None,
+    rank_values_by_order: dict[int, float],
+) -> VariableResult | None:
+    """Standard mode: mapping_score from band-number distance, weight from
+    RankValue (ranked) or criterion.weight (unranked)."""
     criterion_band = band_def.bands.filter(band_code=criterion.criterion_band_code).first()
     if criterion_band is None:
         return None
 
     distance = abs(criterion_band.band_number - candidate_band.band_number)
     mapping_score = max(0, MAX_MAPPING_SCORE - distance)
-    weight = float(criterion.weight) if criterion.weight else 1.0
+
+    # Ranked mode: look up rank_value from chart by rank_order
+    if rank_def is not None and criterion.rank_order is not None:
+        weight = rank_values_by_order.get(criterion.rank_order)
+        if weight is None:
+            # rank_order out of range — misconfiguration, skip
+            return None
+        mode = "standard_ranked"
+    else:
+        # Unranked: use legacy weight field
+        weight = float(criterion.weight) if criterion.weight else 1.0
+        mode = "standard_unranked"
+
     product_score = mapping_score * weight
     max_product = MAX_MAPPING_SCORE * weight
     vmi = round((product_score / max_product) * 100, 2) if max_product > 0 else 0.0
@@ -227,12 +309,69 @@ def _compute_variable(
     return VariableResult(
         variable=criterion.section.title,
         assessment_label=sa.label,
+        mode=mode,
         criterion_band=criterion_band.band_code,
         candidate_band=candidate_band.band_code,
         criterion_band_number=criterion_band.band_number,
         candidate_band_number=candidate_band.band_number,
         distance=distance,
         mapping_score=mapping_score,
+        weight=weight,
+        product_score=product_score,
+        vmi=vmi,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Polar mode (SRS §4.2)
+# ---------------------------------------------------------------------------
+
+
+def _compute_polar_variable(
+    sa: SelectedAssessment,
+    band_def: BandDefinition,
+    criterion: MappingCriterion,
+    candidate_band: Band,
+    rank_def: RankDefinition,
+) -> VariableResult | None:
+    """Polar mode: match_value from PolarMatchRule table, weight from
+    PolarRankValue by (match_code, rank_order)."""
+    # 1. Find the match rule for (criterion_band_code, user_band_code)
+    rule = PolarMatchRule.objects.filter(
+        band_definition=band_def,
+        criterion_band_code=criterion.criterion_band_code,
+        user_band_code=candidate_band.band_code,
+    ).first()
+    if rule is None:
+        # No rule defined for this band combination — config incomplete
+        return None
+
+    # 2. Look up rank_value from the 2D polar chart
+    if criterion.rank_order is None:
+        # Polar mode requires rank_order on every criterion (SRS §4.2.3 says
+        # polar ranking is NOT optional)
+        return None
+    polar_rv = PolarRankValue.objects.filter(
+        rank_definition=rank_def,
+        match_code=rule.match_code,
+        rank_order=criterion.rank_order,
+    ).first()
+    if polar_rv is None:
+        return None
+
+    weight = float(polar_rv.rank_value)
+    product_score = rule.match_value * weight
+    max_product = MAX_POLAR_MATCH_VALUE * weight
+    vmi = round((product_score / max_product) * 100, 2) if max_product > 0 else 0.0
+
+    return VariableResult(
+        variable=criterion.section.title,
+        assessment_label=sa.label,
+        mode="polar",
+        criterion_band=criterion.criterion_band_code,
+        candidate_band=candidate_band.band_code,
+        match_code=rule.match_code,
+        match_value=rule.match_value,
         weight=weight,
         product_score=product_score,
         vmi=vmi,
@@ -255,12 +394,15 @@ def _upsert_match_index(
                 {
                     "variable": v.variable,
                     "assessment": v.assessment_label,
+                    "mode": v.mode,
                     "criterion_band": v.criterion_band,
                     "candidate_band": v.candidate_band,
                     "criterion_band_number": v.criterion_band_number,
                     "candidate_band_number": v.candidate_band_number,
                     "distance": v.distance,
                     "mapping_score": v.mapping_score,
+                    "match_code": v.match_code,
+                    "match_value": v.match_value,
                     "weight": v.weight,
                     "product_score": v.product_score,
                     "vmi": v.vmi,
@@ -272,7 +414,9 @@ def _upsert_match_index(
         solution=solution,
         candidate=candidate,
         career_title=result.career_title,
+        career_code=result.career_code,
         defaults={
+            "career_stream": result.career_stream,
             "variable_mapping_index": result.vmi_overall,
             "final_match_index": result.fmi,
             "variable_details": variable_details,
