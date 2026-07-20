@@ -1,7 +1,7 @@
 # Project Status — CareerJudge
 
 > **Last updated**: 2026-07-20
-> **Current phase**: Phase 3 complete — ready for Phase 4
+> **Current phase**: Phase 4 (Training + Counseling + CMS — in progress)
 
 ## Completed Modules
 
@@ -29,13 +29,13 @@
 | Reporting | v1.0.0 | ✅ Complete | 22 tests (group + HFMI/LFMI + PDF) | — |
 | Psychometric Analysis | v1.0.0 | ✅ Complete | 14 tests (all 4 SRS 02 analyses) | — |
 
-### Phase 4 — Delivery & Services (Planned)
+### Phase 4 — Delivery & Services (In Progress)
 
-| Module | Version | Status |
-|---|---|---|
-| Training | — | 📋 Planned |
-| Counseling | — | 📋 Planned |
-| CMS | — | 📋 Planned |
+| Module | Version | Status | Tests | Docs |
+|---|---|---|---|---|
+| Training | v1.0.0-pre | 🔧 Backend + frontend complete | 20 tests | — |
+| Counseling | — | 📋 Planned (SRS 08) | — | — |
+| CMS | — | 📋 Planned | — | — |
 
 ## Key Features Implemented
 
@@ -123,6 +123,22 @@
 - ✅ Results persisted on Question model + psychometric_analyzed_at timestamp
 - ✅ 14 backend tests covering MCQ + non-MCQ paths, edge cases (no variance, all correct, insufficient data)
 
+### Training (Phase 4 — backend + frontend complete, SRS 07)
+- ✅ 12 models: TrainingCategory, TrainingCourse, CourseLesson, LessonTopic, TopicSession, SessionContent, Assignment, CourseAssessment, LiveSession, CourseCompletionParameter, CourseRegistration, CourseProgress
+- ✅ 3 course types: Online-Standard (media-based), Online-Live (Zoom), Offline-Live (classroom)
+- ✅ Hierarchical course structure: lessons → topics → sessions → contents/assignments (SRS §2.2-2.3)
+- ✅ Session content: video/audio/text formats (SRS §2.3.1)
+- ✅ Assignments with optional report submission (SRS §2.3.2)
+- ✅ Course assessments at 5 levels: during/end-of session/topic/lesson/course (SRS §2.4)
+- ✅ Live sessions: online (Zoom) + offline (classroom) with scheduling (SRS §2.5)
+- ✅ Course completion parameters (mandatory content flags, SRS §2.6)
+- ✅ Student registration: published courses only, idempotent, scheduled courses set started_at (SRS §6)
+- ✅ Progress tracking: per-content completion + time spent + last accessed (SRS §6)
+- ✅ Admin-only course deletion (SRS §5)
+- ✅ POST /api/training/courses/<id>/register/ + /my_courses/ + /registrations/<id>/progress/ endpoints
+- ✅ Frontend: Training list page (Browse + My Courses tabs) + detail page (Overview, Structure, Live Sessions, Assessments, Registrations tabs)
+- ✅ 20 backend tests (category CRUD, course CRUD, publish, registration, progress, filters)
+
 ### Infrastructure
 - ✅ Django 5 + DRF + SimpleJWT backend
 - ✅ React 18 + Vite + TypeScript + Tailwind frontend
@@ -152,8 +168,7 @@
 
 ## Next Priorities
 
-1. **Phase 4 — Training module** (SRS 07): training setup, assignments, progress tracking
-2. **Phase 4 — Counseling module** (SRS 08): session scheduling, counselor notes, matching
-3. **Phase 4 — CMS module**: content management (pages, banners)
-4. **Production deployment** — provision prod cloud VM + CI/CD pipeline
-5. **End-to-end staging validation** — exercise all 21 question types + profiling + reporting flows
+1. **Phase 4 — Counseling module** (SRS 08): session booking, counselor profiles, timeslots, notes
+2. **Phase 4 — CMS module**: content management (pages, banners)
+3. **Production deployment** — provision prod cloud VM + CI/CD pipeline
+4. **End-to-end staging validation** — exercise all 21 question types + profiling + reporting + training flows
