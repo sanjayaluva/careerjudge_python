@@ -37,13 +37,16 @@ WORKDIR /app
 # Runtime deps: libpq5 (psycopg2 runtime), curl (healthcheck),
 # plus WeasyPrint system deps (libpango, libcairo, libgobject) for PDF
 # report generation (Phase 3 — SRS 04/06 reporting).
+# Note: libgdk-pixbuf2.0-0 is intentionally omitted — it's optional for
+# WeasyPrint (only needed for some image formats) and the package name
+# changed in Debian Trixie (python:3.12-slim base). We only render text
+# and tables in PDFs, so it's not needed.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     libcairo2 \
-    libgdk-pixbuf2.0-0 \
     libglib2.0-0 \
     shared-mime-info \
     fonts-liberation \

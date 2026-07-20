@@ -32,7 +32,11 @@ def test_minimal_report_renders_pdf():
         "scope": "general",
         "assessment_title": "Test Assessment",
         "candidate": {"id": 1, "name": "Jane Doe", "email": "jane@test.com"},
-        "session": {"id": 1, "started_at": "2026-07-20T10:00:00", "completed_at": "2026-07-20T11:00:00"},
+        "session": {
+            "id": 1,
+            "started_at": "2026-07-20T10:00:00",
+            "completed_at": "2026-07-20T11:00:00",
+        },
         "scores": {"total_score": 7, "max_score": 10, "percentage": 70.0},
     }
     pdf = render_report_pdf(data)
@@ -155,8 +159,22 @@ def test_group_report_renders():
                 "above_avg (80-100)": 2,
             },
             "candidates": [
-                {"id": 1, "name": "Alice", "email": "a@t.com", "total_score": 9.5, "percentage": 95.0, "session_id": 1},
-                {"id": 2, "name": "Bob", "email": "b@t.com", "total_score": 4.0, "percentage": 40.0, "session_id": 2},
+                {
+                    "id": 1,
+                    "name": "Alice",
+                    "email": "a@t.com",
+                    "total_score": 9.5,
+                    "percentage": 95.0,
+                    "session_id": 1,
+                },
+                {
+                    "id": 2,
+                    "name": "Bob",
+                    "email": "b@t.com",
+                    "total_score": 4.0,
+                    "percentage": 40.0,
+                    "session_id": 2,
+                },
             ],
         },
     }
