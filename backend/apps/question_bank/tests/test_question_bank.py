@@ -296,6 +296,17 @@ class TestQuestionCRUD:
             format="json",
         )
         qid = create_resp.json()["data"]["id"]
+        # Add options so submit_for_review validation passes
+        from apps.question_bank.models import Question as QModel
+        from apps.question_bank.models import ResponseOption
+
+        q = QModel.objects.get(id=qid)
+        ResponseOption.objects.create(
+            question=q, option_type="TEXT", text_value="A", is_correct=True, order=1
+        )
+        ResponseOption.objects.create(
+            question=q, option_type="TEXT", text_value="B", is_correct=False, order=2
+        )
         # Submit for review
         sme_client.post(f"/api/question-bank/questions/{qid}/submit_for_review/")
         # Try to edit
@@ -393,6 +404,16 @@ class TestReviewWorkflow:
             format="json",
         )
         qid = create_resp.json()["data"]["id"]
+        # Add options so the question passes validation
+        from apps.question_bank.models import Question, ResponseOption
+
+        q = Question.objects.get(id=qid)
+        ResponseOption.objects.create(
+            question=q, option_type="TEXT", text_value="A", is_correct=True, order=1
+        )
+        ResponseOption.objects.create(
+            question=q, option_type="TEXT", text_value="B", is_correct=False, order=2
+        )
         sme_client.post(f"/api/question-bank/questions/{qid}/submit_for_review/")
         return qid
 
@@ -408,6 +429,17 @@ class TestReviewWorkflow:
             format="json",
         )
         qid = create_resp.json()["data"]["id"]
+        # Add options so validation passes
+        from apps.question_bank.models import Question as QModel
+        from apps.question_bank.models import ResponseOption
+
+        q = QModel.objects.get(id=qid)
+        ResponseOption.objects.create(
+            question=q, option_type="TEXT", text_value="A", is_correct=True, order=1
+        )
+        ResponseOption.objects.create(
+            question=q, option_type="TEXT", text_value="B", is_correct=False, order=2
+        )
         resp = sme_client.post(f"/api/question-bank/questions/{qid}/submit_for_review/")
         assert resp.status_code == 200
         assert resp.json()["data"]["status"] == "pending_content_review"
@@ -424,8 +456,19 @@ class TestReviewWorkflow:
             format="json",
         )
         qid = create_resp.json()["data"]["id"]
+        # Add options so the first submission succeeds
+        from apps.question_bank.models import Question as QModel
+        from apps.question_bank.models import ResponseOption
+
+        q = QModel.objects.get(id=qid)
+        ResponseOption.objects.create(
+            question=q, option_type="TEXT", text_value="A", is_correct=True, order=1
+        )
+        ResponseOption.objects.create(
+            question=q, option_type="TEXT", text_value="B", is_correct=False, order=2
+        )
         sme_client.post(f"/api/question-bank/questions/{qid}/submit_for_review/")
-        # Try to submit again
+        # Try to submit again — should fail with 403 (already pending)
         resp = sme_client.post(f"/api/question-bank/questions/{qid}/submit_for_review/")
         assert resp.status_code == 403
 

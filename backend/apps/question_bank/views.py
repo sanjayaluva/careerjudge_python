@@ -264,7 +264,10 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         """SME submits question for content review.
 
         Changes status from 'draft' or 'sent_back' to 'pending_content_review'.
+        Validates that the question is fully configured before allowing submission.
         """
+        from .validation import validate_question_config
+
         question = self.get_object()
         if question.status not in ("draft", "sent_back"):
             return Response(
@@ -278,6 +281,22 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        # Validate configuration before submission
+        errors = validate_question_config(question)
+        if errors:
+            return Response(
+                {
+                    "error": {
+                        "code": "question_not_ready",
+                        "message": "Question is not ready for review. Fix the following:\n• "
+                        + "\n• ".join(errors),
+                        "details": {"errors": errors},
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         question.status = "pending_content_review"
         question.save(update_fields=["status", "updated_at"])
         return Response(
@@ -288,9 +307,29 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=True, methods=["get"])
+    def validate_config(self, request, pk=None):
+        """Check if a question is fully configured for review submission.
 
-# ---------------------------------------------------------------------------
-# Question Review View (UC014, UC015)
+        GET /api/question-bank/questions/<id>/validate_config/
+        → {message, data: {valid: bool, errors: [...]}}
+        """
+        from .validation import validate_question_config
+
+        question = self.get_object()
+        errors = validate_question_config(question)
+        return Response(
+            {
+                "message": "OK",
+                "data": {
+                    "valid": len(errors) == 0,
+                    "errors": errors,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 # ---------------------------------------------------------------------------
 
 
