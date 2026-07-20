@@ -173,7 +173,7 @@ All documentation lives in the [`docs/`](docs/) folder. Key documents:
 
 | Layer | Tooling | Count | Coverage |
 |---|---|---|---|
-| Backend unit tests | pytest + pytest-django + factory_boy | 247 tests | 87% |
+| Backend unit tests | pytest + pytest-django + factory_boy | 312 tests | 87% |
 | Frontend unit tests | Vitest + React Testing Library | 30 tests | — |
 | Frontend E2E | Playwright (specs in `frontend/e2e/`) | auth-login, auth-signup, auth-logout | — |
 | Lint | ruff + black (backend); eslint + tsc (frontend) | — | — |

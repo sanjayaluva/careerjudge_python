@@ -1,7 +1,7 @@
 # Project Status — CareerJudge
 
-> **Last updated**: 2026-07-11
-> **Current phase**: Phase 2 (Question Bank + Assessment — in progress)
+> **Last updated**: 2026-07-20
+> **Current phase**: Phase 3 (Career Profiling + Reporting — in progress)
 
 ## Completed Modules
 
@@ -12,24 +12,29 @@
 | Accounts | v1.1.0 | ✅ Frozen | 83 tests, 84% coverage | [accounts.md](modules/accounts.md) |
 | Organizations | v1.0.0 | ✅ Frozen | 82% coverage | [organizations.md](modules/organizations.md) |
 | Infrastructure | — | ✅ Complete | — | [infrastructure](infrastructure/) |
+| Notifications | — | ✅ Active | Signal-based, bell icon, 8 event types | — |
 
-### Phase 2 — Content Authoring (In Progress)
+### Phase 2 — Content Authoring (Complete)
 
 | Module | Version | Status | Tests | Docs |
 |---|---|---|---|---|
 | Question Bank | v1.0.0 | ✅ Frozen | 75 tests | [question_bank.md](modules/question_bank.md) |
 | Assessment | v1.0.0 | ✅ Frozen | 312 tests | [assessment.md](modules/assessment.md) |
-| Career Profiling | — | 📋 Planned | — | — |
-| Reporting | — | 📋 Planned | — | — |
 
-### Phase 3 — Delivery & Services (Planned)
+### Phase 3 — Profiling & Reporting (In Progress)
+
+| Module | Version | Status | Tests | Docs |
+|---|---|---|---|---|
+| Career Profiling | v1.0.0-pre | 🔧 Active | — | — |
+| Reporting | v1.0.0-pre | 🔧 Active | — | — |
+
+### Phase 4 — Delivery & Services (Planned)
 
 | Module | Version | Status |
 |---|---|---|
 | Training | — | 📋 Planned |
 | Counseling | — | 📋 Planned |
 | CMS | — | 📋 Planned |
-| Notifications | — | 📋 Planned |
 
 ## Key Features Implemented
 

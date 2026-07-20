@@ -28,6 +28,11 @@ def score_question(question: Question, raw_answer: dict[str, Any] | None) -> tup
     if not raw_answer:
         return 0.0, _get_max_score(question)
 
+    # Hotspot questions need special handling — they use clicks, not options.
+    # Route them to the hotspot scorer regardless of their scoring_type.
+    if question.question_type in ("HOTSPOT_SINGLE", "HOTSPOT_MULTI"):
+        return _score_hotspot(question, raw_answer)
+
     scorer = SCORERS.get(question.scoring_type)
     if not scorer:
         # Default to binary
@@ -374,6 +379,82 @@ def _score_forced_choice_rated(question: Question, raw_answer: dict) -> tuple[fl
             return float(opt.predefined_score * rating), max_score
 
     return 0.0, max_score
+
+
+# ---------------------------------------------------------------------------
+# HOTSPOT: click-based scoring for image hotspot questions
+# Used by: Hotspot Single (5a) and Hotspot Multi (5b)
+# ---------------------------------------------------------------------------
+
+
+def _score_hotspot(question: Question, raw_answer: dict) -> tuple[float, float]:
+    """Score hotspot questions based on candidate clicks.
+
+    For HOTSPOT_SINGLE (5a, BINARY scoring):
+      - If any click falls within a correct hotspot area → 1.0
+      - Otherwise → 0.0
+
+    For HOTSPOT_MULTI (5b, NEGATIVE scoring):
+      - Each correct click → +1/n (where n = number of correct areas)
+      - Each wrong click → -0.25/n
+      - Floor at 0
+
+    The candidate's answer format is:
+      {"clicks": [{"x": 142, "y": 159}, ...]}
+    """
+
+    max_score = 1.0
+    clicks = raw_answer.get("clicks", [])
+    if not clicks:
+        return 0.0, max_score
+
+    # Get all hotspot areas for this question
+    areas = list(question.hotspot_areas.all())
+    if not areas:
+        return 0.0, max_score
+
+    correct_areas = [a for a in areas if a.is_correct]
+    if not correct_areas:
+        # No correct areas defined → can't score
+        return 0.0, max_score
+
+    is_multi = question.question_type == "HOTSPOT_MULTI"
+
+    if not is_multi:
+        # Single answer (5a): correct if ANY click is within a correct area
+        for click in clicks:
+            cx = click.get("x", 0)
+            cy = click.get("y", 0)
+            for area in correct_areas:
+                if area.contains_point(cx, cy):
+                    return 1.0, max_score
+        return 0.0, max_score
+    else:
+        # Multi answer (5b): NEGATIVE scoring
+        # Correct clicks count, wrong clicks get negative
+        correct_clicks = 0
+        wrong_clicks = 0
+        total_correct_areas = len(correct_areas)
+
+        for click in clicks:
+            cx = click.get("x", 0)
+            cy = click.get("y", 0)
+            is_correct_click = False
+            for area in correct_areas:
+                if area.contains_point(cx, cy):
+                    is_correct_click = True
+                    break
+            if is_correct_click:
+                correct_clicks += 1
+            else:
+                wrong_clicks += 1
+
+        # Score: correct clicks give +1/total, wrong clicks give -0.25/total
+        # Floor at 0
+        positive = correct_clicks / total_correct_areas
+        negative = (wrong_clicks * 0.25) / total_correct_areas
+        score = max(0.0, positive - negative)
+        return round(score, 4), max_score
 
 
 # ---------------------------------------------------------------------------
