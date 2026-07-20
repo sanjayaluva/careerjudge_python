@@ -17,11 +17,17 @@ export interface Report {
   assessment_title: string | null;
   profiling_solution: number | null;
   profiling_solution_title: string | null;
+  data_input_level: string;
+  stat_conversion: string;
   include_score_summary: boolean;
   include_section_breakdown: boolean;
   include_question_analysis: boolean;
   include_charts: boolean;
   include_recommendations: boolean;
+  include_raw_summary: boolean;
+  include_fmi: boolean;
+  include_pmi: boolean;
+  include_vmi: boolean;
   header_text: string;
   footer_text: string;
   logo: string | null;
@@ -97,11 +103,28 @@ export const REPORT_TYPES = [
   { value: "descriptive", label: "Descriptive Report" },
   { value: "typological", label: "Typological Report" },
   { value: "interpretative", label: "Interpretative Report" },
+  { value: "group", label: "Group Report" },
 ];
 
 export const REPORT_SCOPES = [
   { value: "general", label: "General (single assessment)" },
   { value: "profiling", label: "Profiling (multiple assessments)" },
+];
+
+export const DATA_INPUT_LEVELS = [
+  { value: "level0", label: "Level 0 (entire assessment)" },
+  { value: "level1", label: "Level 1 (all L1 variables)" },
+  { value: "level2", label: "Level 2 (all L2 variables)" },
+  { value: "level3", label: "Level 3 (all L3 variables)" },
+  { value: "level4", label: "Level 4 (all L4 variables)" },
+  { value: "question", label: "Question Level" },
+];
+
+export const STAT_CONVERSIONS = [
+  { value: "percentage", label: "Percentage Score" },
+  { value: "percentile", label: "Percentile Score" },
+  { value: "sten", label: "STEN Score" },
+  { value: "stenine", label: "STENINE Score" },
 ];
 
 export const REPORT_STATUSES = [

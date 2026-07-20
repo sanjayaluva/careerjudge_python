@@ -21,7 +21,15 @@ import {
   TableRow,
   useToast,
 } from "@/components/ui";
-import { createReport, listReports, REPORT_STATUSES, REPORT_TYPES } from "@/api/reporting";
+import {
+  createReport,
+  listReports,
+  REPORT_STATUSES,
+  REPORT_TYPES,
+  DATA_INPUT_LEVELS,
+  STAT_CONVERSIONS,
+} from "@/api/reporting";
+import { listAssessments } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -172,6 +180,14 @@ function CreateReportModal({
   const [objective, setObjective] = useState("");
   const [reportType, setReportType] = useState("descriptive");
   const [scope, setScope] = useState("general");
+  const [assessmentId, setAssessmentId] = useState("");
+  const [dataInputLevel, setDataInputLevel] = useState("level1");
+  const [statConversion, setStatConversion] = useState("percentage");
+
+  const { data: assessments } = useQuery({
+    queryKey: ["assessments", "for-report"],
+    queryFn: () => listAssessments({ status: "published" }),
+  });
 
   return (
     <Modal
@@ -184,7 +200,18 @@ function CreateReportModal({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          onSubmit({ title, objective, report_type: reportType, scope });
+          const payload: Record<string, unknown> = {
+            title,
+            objective,
+            report_type: reportType,
+            scope,
+            data_input_level: dataInputLevel,
+            stat_conversion: statConversion,
+          };
+          if (scope === "general" && assessmentId) {
+            payload.assessment = Number(assessmentId);
+          }
+          onSubmit(payload);
         }}
         className="space-y-4"
       >
@@ -236,6 +263,59 @@ function CreateReportModal({
             >
               <option value="general">General (single assessment)</option>
               <option value="profiling">Profiling (multiple assessments)</option>
+            </select>
+          </div>
+        </div>
+        {scope === "general" && (
+          <div>
+            <Label htmlFor="r-assessment" required>
+              Assessment
+            </Label>
+            <select
+              id="r-assessment"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={assessmentId}
+              onChange={(e) => setAssessmentId(e.target.value)}
+              required
+            >
+              <option value="">Select an assessment...</option>
+              {(assessments?.results ?? []).map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="r-level">Data input level</Label>
+            <select
+              id="r-level"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={dataInputLevel}
+              onChange={(e) => setDataInputLevel(e.target.value)}
+            >
+              {DATA_INPUT_LEVELS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label htmlFor="r-conv">Statistical conversion</Label>
+            <select
+              id="r-conv"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={statConversion}
+              onChange={(e) => setStatConversion(e.target.value)}
+            >
+              {STAT_CONVERSIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>
