@@ -37,11 +37,14 @@ import {
 import {
   type ProfilingSolution,
   addSolutionAssessment,
+  computeSolution,
   createBandDefinition,
   createCriterion,
   listAssessments,
+  listMatchIndices,
   publishSolution,
   retrieveSolution,
+  type MatchIndex,
 } from "@/api/careerProfiling";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -114,6 +117,7 @@ export default function ProfilingSolutionDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="bands">Bands</TabsTrigger>
           <TabsTrigger value="criteria">Criteria</TabsTrigger>
+          <TabsTrigger value="match-indices">Match Indices</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -198,6 +202,11 @@ export default function ProfilingSolutionDetailPage() {
         {/* Criteria Tab */}
         <TabsContent value="criteria">
           <CriteriaTab solutionId={sid} canManage={canManage} />
+        </TabsContent>
+
+        {/* Match Indices Tab — view computed results per candidate */}
+        <TabsContent value="match-indices">
+          <MatchIndicesTab solutionId={sid} canManage={canManage} />
         </TabsContent>
       </Tabs>
     </div>
@@ -759,6 +768,225 @@ function CreateCriterionModal({
           </Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Match Indices Tab — view computed results per candidate + recompute button
+// ---------------------------------------------------------------------------
+
+function MatchIndicesTab({ solutionId, canManage }: { solutionId: number; canManage: boolean }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [selectedCandidate, setSelectedCandidate] = useState<MatchIndex | null>(null);
+
+  const { data: indices, isLoading } = useQuery({
+    queryKey: ["career-profiling", "solutions", solutionId, "match-indices"],
+    queryFn: () => listMatchIndices(solutionId),
+  });
+
+  const computeMutation = useMutation({
+    mutationFn: () => computeSolution(solutionId),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["career-profiling", "solutions", solutionId, "match-indices"],
+      });
+      toast.success(`Computed ${data.length} match index record(s).`);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (isLoading) return <Spinner />;
+
+  const list = indices ?? [];
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Match Indices — Computed Results</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Once the solution is published, compute the match indices for the authenticated user.
+            For admins (cj_admin / psychometrician), use the API directly with{" "}
+            <code className="rounded bg-slate-100 px-1">candidate_id</code> in the body to compute
+            for other users.
+          </p>
+          {canManage && (
+            <div className="flex justify-end">
+              <Button onClick={() => computeMutation.mutate()} loading={computeMutation.isPending}>
+                Compute match indices for me
+              </Button>
+            </div>
+          )}
+          {list.length === 0 ? (
+            <p className="py-4 text-center text-sm text-slate-500">
+              No match indices computed yet.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Candidate</TableHead>
+                  <TableHead>Career stream</TableHead>
+                  <TableHead>Career</TableHead>
+                  <TableHead>FMI</TableHead>
+                  <TableHead>VMI</TableHead>
+                  <TableHead>Computed</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {list.map((mi) => (
+                  <TableRow key={mi.id}>
+                    <TableCell className="font-medium text-slate-900">
+                      {mi.candidate_name ?? `User ${mi.candidate}`}
+                    </TableCell>
+                    <TableCell className="text-slate-500">{mi.career_stream || "—"}</TableCell>
+                    <TableCell className="text-slate-900">{mi.career_title}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          mi.final_match_index != null && mi.final_match_index >= 75
+                            ? "success"
+                            : mi.final_match_index != null && mi.final_match_index >= 50
+                              ? "warning"
+                              : "default"
+                        }
+                      >
+                        {mi.final_match_index != null ? mi.final_match_index.toFixed(2) : "—"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-500">
+                      {mi.variable_mapping_index != null
+                        ? mi.variable_mapping_index.toFixed(2)
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-slate-500">
+                      {new Date(mi.computed_at).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => setSelectedCandidate(mi)}>
+                        Details
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {selectedCandidate && (
+        <MatchIndexDetailsModal
+          matchIndex={selectedCandidate}
+          onClose={() => setSelectedCandidate(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function MatchIndexDetailsModal({
+  matchIndex,
+  onClose,
+}: {
+  matchIndex: MatchIndex;
+  onClose: () => void;
+}) {
+  const details = matchIndex.variable_details ?? [];
+  return (
+    <Modal open onClose={onClose} title={`VMI breakdown — ${matchIndex.career_title}`} size="lg">
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Final Match Index
+            </div>
+            <div className="mt-1 text-lg font-bold text-slate-900">
+              {matchIndex.final_match_index != null ? matchIndex.final_match_index.toFixed(2) : "—"}
+            </div>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Variable Mapping Index
+            </div>
+            <div className="mt-1 text-lg font-bold text-slate-900">
+              {matchIndex.variable_mapping_index != null
+                ? matchIndex.variable_mapping_index.toFixed(2)
+                : "—"}
+            </div>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Variables
+            </div>
+            <div className="mt-1 text-lg font-bold text-slate-900">{details.length}</div>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Candidate
+            </div>
+            <div className="mt-1 text-sm font-semibold text-slate-900">
+              {matchIndex.candidate_name ?? `User ${matchIndex.candidate}`}
+            </div>
+          </div>
+        </div>
+
+        {details.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">
+            No per-variable breakdown available.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Variable</TableHead>
+                <TableHead>Assessment</TableHead>
+                <TableHead>Mode</TableHead>
+                <TableHead>Criterion</TableHead>
+                <TableHead>Candidate</TableHead>
+                <TableHead>Score</TableHead>
+                <TableHead>Weight</TableHead>
+                <TableHead>Product</TableHead>
+                <TableHead>VMI</TableHead>
+                <TableHead>PMI</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {details.map((v, i) => (
+                <TableRow key={i}>
+                  <TableCell className="font-medium text-slate-900">{v.variable}</TableCell>
+                  <TableCell className="text-slate-500">{v.assessment}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{v.mode}</Badge>
+                  </TableCell>
+                  <TableCell className="text-slate-500">{v.criterion_band}</TableCell>
+                  <TableCell className="text-slate-500">{v.candidate_band}</TableCell>
+                  <TableCell className="text-slate-500">
+                    {v.mapping_score ?? v.match_value ?? "—"}
+                  </TableCell>
+                  <TableCell className="text-slate-500">{v.weight.toFixed(2)}</TableCell>
+                  <TableCell className="text-slate-500">{v.product_score.toFixed(2)}</TableCell>
+                  <TableCell className="text-slate-900">{v.vmi.toFixed(2)}</TableCell>
+                  <TableCell className="text-slate-500">
+                    {v.pmi != null ? v.pmi.toFixed(2) : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+
+        <div className="flex justify-end border-t border-slate-100 pt-4">
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
     </Modal>
   );
 }

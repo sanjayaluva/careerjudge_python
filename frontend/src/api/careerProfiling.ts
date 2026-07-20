@@ -40,6 +40,7 @@ export interface SelectedAssessment {
   is_polar: boolean;
   order: number;
   band_definitions: BandDefinition[];
+  rank_definition: RankDefinition | null;
 }
 
 export interface BandDefinition {
@@ -63,11 +64,49 @@ export interface Band {
 export interface MappingCriterion {
   id: number;
   solution: number;
+  career_stream: string;
   career_title: string;
+  career_code: string;
+  career_description: string;
   section: number;
   section_title: string;
   criterion_band_code: string;
+  rank_order: number | null;
   weight: number;
+}
+
+export interface RankValue {
+  id: number;
+  rank_definition: number;
+  rank_order: number;
+  rank_value: number;
+}
+
+export interface PolarRankValue {
+  id: number;
+  rank_definition: number;
+  match_code: "HM" | "MM" | "LM";
+  rank_order: number;
+  rank_value: number;
+}
+
+export interface RankDefinition {
+  id: number;
+  selected_assessment: number;
+  is_polar: boolean;
+  rank_values: RankValue[];
+  polar_rank_values: PolarRankValue[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PolarMatchRule {
+  id: number;
+  band_definition: number;
+  criterion_band_code: string;
+  user_band_code: string;
+  match_code: "HM" | "MM" | "LM";
+  match_value: number;
 }
 
 export interface MatchIndex {
@@ -75,10 +114,30 @@ export interface MatchIndex {
   solution: number;
   candidate: number;
   candidate_name: string | null;
+  career_stream: string;
   career_title: string;
+  career_code: string;
   variable_mapping_index: number | null;
   final_match_index: number | null;
-  variable_details: Record<string, unknown> | null;
+  variable_details:
+    | {
+        variable: string;
+        assessment: string;
+        mode: "standard_unranked" | "standard_ranked" | "polar";
+        criterion_band: string;
+        candidate_band: string;
+        criterion_band_number: number | null;
+        candidate_band_number: number | null;
+        distance: number | null;
+        mapping_score: number | null;
+        match_code: string | null;
+        match_value: number | null;
+        weight: number;
+        product_score: number;
+        vmi: number;
+        pmi: number | null;
+      }[]
+    | null;
   computed_at: string;
 }
 
@@ -168,9 +227,35 @@ export function listCriteria(solutionId: number): Promise<MappingCriterion[]> {
 
 export function createCriterion(
   solutionId: number,
-  payload: { career_title: string; section: number; criterion_band_code: string; weight?: number },
+  payload: {
+    career_stream?: string;
+    career_title: string;
+    career_code?: string;
+    career_description?: string;
+    section: number;
+    criterion_band_code: string;
+    rank_order?: number | null;
+    weight?: number;
+  },
 ): Promise<MappingCriterion> {
   return apiPost<MappingCriterion>(`${BASE}/solutions/${solutionId}/criteria/`, payload);
+}
+
+// ---------------------------------------------------------------------------
+// Compute Match Indices (SRS §5.1-5.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Trigger the match index computation engine for a candidate.
+ *
+ * Permissions:
+ *  - cj_admin / psychometrician: may pass candidateId to compute for anyone
+ *  - Other roles: candidateId is ignored; computes for the authenticated user
+ */
+export function computeSolution(solutionId: number, candidateId?: number): Promise<MatchIndex[]> {
+  const body: Record<string, unknown> = {};
+  if (candidateId !== undefined) body.candidate_id = candidateId;
+  return apiPost<MatchIndex[]>(`${BASE}/solutions/${solutionId}/compute/`, body);
 }
 
 // ---------------------------------------------------------------------------

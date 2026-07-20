@@ -16,6 +16,7 @@ import NotFoundPage from "@/pages/NotFoundPage";
 import CareerProfilingPage from "@/pages/career-profiling/CareerProfilingPage";
 import ProfilingSolutionDetailPage from "@/pages/career-profiling/ProfilingSolutionDetailPage";
 import ReportsPage from "@/pages/reporting/ReportsPage";
+import ReportDetailPage from "@/pages/reporting/ReportDetailPage";
 import PlaceholderPage from "@/pages/PlaceholderPage";
 import ProfilePage from "@/pages/account/ProfilePage";
 import SettingsPage from "@/pages/account/SettingsPage";
@@ -148,6 +149,7 @@ export default function App() {
                 <Route path="career-profiling" element={<CareerProfilingPage />} />
                 <Route path="career-profiling/:id" element={<ProfilingSolutionDetailPage />} />
                 <Route path="reports" element={<ReportsPage />} />
+                <Route path="reports/:id" element={<ReportDetailPage />} />
                 <Route path="training" element={<PlaceholderPage title="Training" />} />
                 <Route path="counseling" element={<PlaceholderPage title="Counseling" />} />
                 <Route path="cms" element={<PlaceholderPage title="CMS" />} />

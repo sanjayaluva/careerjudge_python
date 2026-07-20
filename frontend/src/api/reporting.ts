@@ -99,6 +99,100 @@ export function retrieveGeneratedReport(id: number): Promise<GeneratedReport> {
   return apiGet<GeneratedReport>(`${BASE}/generated/${id}/`);
 }
 
+// ---------------------------------------------------------------------------
+// Group Report (SRS 04 — corporate managers view aggregated employee performance)
+// ---------------------------------------------------------------------------
+
+export interface GroupReportCandidate {
+  id: number;
+  name: string;
+  email: string;
+  total_score: number | null;
+  percentage: number | null;
+  session_id: number;
+}
+
+export interface GroupReportSectionAverage {
+  section_id: number;
+  section_title: string;
+  average_percentage: number;
+  min_percentage: number;
+  max_percentage: number;
+  candidate_count: number;
+}
+
+export interface GroupReportData {
+  report_title: string;
+  report_type: string;
+  assessment_title: string;
+  candidate_count: number;
+  average_score: number;
+  average_percentage: number;
+  min_score: number;
+  max_score: number;
+  min_percentage: number;
+  max_percentage: number;
+  pass_threshold: number;
+  pass_rate: number;
+  pass_count: number;
+  section_averages: GroupReportSectionAverage[];
+  distribution: {
+    "fail (0-40)": number;
+    "below_avg (40-60)": number;
+    "average (60-80)": number;
+    "above_avg (80-100)": number;
+  };
+  candidates: GroupReportCandidate[];
+}
+
+export function generateGroupReport(
+  reportId: number,
+  sessionIds: number[],
+): Promise<GroupReportData> {
+  return apiPost<GroupReportData>(`${BASE}/reports/${reportId}/generate_group/`, {
+    session_ids: sessionIds,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// HFMI / LFMI Data Selection (SRS 06 §2.2)
+// ---------------------------------------------------------------------------
+
+export interface ProfilingSelectionCareer {
+  id: number;
+  career_stream: string;
+  career_title: string;
+  career_code: string;
+  fmi: number | null;
+  vmi: number | null;
+}
+
+export interface ProfilingSelectionResult {
+  data_type: "HFMI" | "LFMI";
+  extraction_mode: "user" | "system";
+  total_available: number;
+  selected_count: number;
+  selected: ProfilingSelectionCareer[];
+  fmi_range?: number[] | null;
+  n_categories?: number;
+  n_criterions?: number;
+}
+
+export function selectProfilingData(
+  reportId: number,
+  payload: {
+    candidate_id: number;
+    data_type: "HFMI" | "LFMI";
+    extraction_mode: "user" | "system";
+    fmi_range?: [number, number];
+    n_categories?: number;
+    n_criterions?: number;
+    selected_career_titles?: string[];
+  },
+): Promise<ProfilingSelectionResult> {
+  return apiPost<ProfilingSelectionResult>(`${BASE}/reports/${reportId}/select_data/`, payload);
+}
+
 export const REPORT_TYPES = [
   { value: "descriptive", label: "Descriptive Report" },
   { value: "typological", label: "Typological Report" },
