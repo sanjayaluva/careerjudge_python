@@ -209,6 +209,18 @@ class SessionContent(models.Model):
     text_content = models.TextField(_("text content"), blank=True, default="")
     duration_seconds = models.PositiveIntegerField(_("duration (seconds)"), null=True, blank=True)
     order = models.PositiveIntegerField(_("order"), default=0)
+    # Per SRS §2.4.1.1 (Interlinking contents and assessments): contents
+    # and assessments can be sequentially interlinked. This field controls
+    # the playback sequence when interlinking is enabled. Null = use the
+    # default 'order' field.
+    sequence_order = models.PositiveIntegerField(
+        _("sequence order"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Override order for interlinked playback (SRS §2.4.1.1). Null = use default order."
+        ),
+    )
 
     class Meta:
         ordering = ["order"]
@@ -451,3 +463,97 @@ class CourseProgress(models.Model):
             f"{self.registration.student.email} > {self.content_type}#{self.content_id} "
             f"({'done' if self.is_completed else 'in progress'})"
         )
+
+
+class AssignmentReport(models.Model):
+    """A student's report submission for an assignment (SRS §2.3.2).
+
+    Per SRS §2.3.2 rule: "When end-user (student) submits the report, a
+    notification is sent to the trainer. Trainer can open and view the
+    report, give a score/rating, and enter feedback."
+
+    Created when a student submits a report for an Assignment that has
+    report_submission_enabled=True. The trainer then reviews it and
+    fills in score + feedback.
+    """
+
+    STATUS_CHOICES = [
+        ("submitted", "Submitted (awaiting trainer review)"),
+        ("reviewed", "Reviewed by trainer"),
+        ("resubmitted", "Resubmitted by student (after trainer feedback)"),
+    ]
+
+    assignment = models.ForeignKey(Assignment, on_delete=models.CASCADE, related_name="reports")
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="assignment_reports",
+    )
+    # The report content — either text or a file URL
+    report_text = models.TextField(_("report text"), blank=True, default="")
+    report_file_url = models.TextField(
+        _("report file URL"),
+        blank=True,
+        default="",
+        help_text=_("URL or base64 data URL of the uploaded report file"),
+    )
+
+    # Trainer review fields (filled when status moves to 'reviewed')
+    status = models.CharField(
+        _("status"), max_length=20, choices=STATUS_CHOICES, default="submitted"
+    )
+    trainer_score = models.FloatField(
+        _("trainer score"), null=True, blank=True, help_text=_("Score given by trainer (0-100)")
+    )
+    trainer_feedback = models.TextField(_("trainer feedback"), blank=True, default="")
+    reviewed_at = models.DateTimeField(_("reviewed at"), null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_assignment_reports",
+    )
+
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-submitted_at"]
+        verbose_name = _("assignment report")
+        verbose_name_plural = _("assignment reports")
+        unique_together = [("assignment", "student")]
+
+    def __str__(self) -> str:
+        return f"{self.student.email} > {self.assignment.title} ({self.status})"
+
+
+class CourseMessage(models.Model):
+    """A message between a student and trainer about a course (SRS §5).
+
+    Per SRS §5 daily management tasks: "Check messages from end-users
+    and respond." Messages are scoped to a CourseRegistration so they're
+    tied to a specific student-course pair. Either the student or the
+    trainer can send; the other party receives.
+    """
+
+    registration = models.ForeignKey(
+        CourseRegistration, on_delete=models.CASCADE, related_name="messages"
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sent_training_messages"
+    )
+    # The recipient is inferred from the registration + sender:
+    #   - if sender is the student -> recipient is the course's trainer (created_by)
+    #   - if sender is the trainer -> recipient is the student
+    body = models.TextField(_("message body"))
+    is_read = models.BooleanField(_("read by recipient"), default=False)
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sent_at"]
+        verbose_name = _("course message")
+        verbose_name_plural = _("course messages")
+
+    def __str__(self) -> str:
+        return f"{self.sender.email} -> {self.registration.course.title} ({self.sent_at:%Y-%m-%d %H:%M})"

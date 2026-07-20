@@ -6,9 +6,11 @@ from apps.assessment.serializers import AssessmentListSerializer
 
 from .models import (
     Assignment,
+    AssignmentReport,
     CourseAssessment,
     CourseCompletionParameter,
     CourseLesson,
+    CourseMessage,
     CourseProgress,
     CourseRegistration,
     LessonTopic,
@@ -41,6 +43,7 @@ class SessionContentSerializer(serializers.ModelSerializer):
             "text_content",
             "duration_seconds",
             "order",
+            "sequence_order",
         ]
         read_only_fields = ["id"]
 
@@ -258,4 +261,75 @@ class TrainingCourseSerializer(serializers.ModelSerializer):
             "live_sessions",
             "assessments",
             "registration_count",
+        ]
+
+
+class AssignmentReportSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source="student.full_name", read_only=True, default=None)
+    student_email = serializers.CharField(source="student.email", read_only=True)
+    assignment_title = serializers.CharField(source="assignment.title", read_only=True)
+    reviewed_by_name = serializers.CharField(
+        source="reviewed_by.full_name", read_only=True, default=None
+    )
+
+    class Meta:
+        model = AssignmentReport
+        fields = [
+            "id",
+            "assignment",
+            "assignment_title",
+            "student",
+            "student_name",
+            "student_email",
+            "report_text",
+            "report_file_url",
+            "status",
+            "trainer_score",
+            "trainer_feedback",
+            "reviewed_at",
+            "reviewed_by",
+            "reviewed_by_name",
+            "submitted_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "student",
+            "student_name",
+            "student_email",
+            "assignment_title",
+            "status",
+            "reviewed_at",
+            "reviewed_by",
+            "reviewed_by_name",
+            "submitted_at",
+            "updated_at",
+        ]
+
+
+class CourseMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.CharField(source="sender.full_name", read_only=True, default=None)
+    sender_email = serializers.CharField(source="sender.email", read_only=True)
+    course_title = serializers.CharField(source="registration.course.title", read_only=True)
+
+    class Meta:
+        model = CourseMessage
+        fields = [
+            "id",
+            "registration",
+            "course_title",
+            "sender",
+            "sender_name",
+            "sender_email",
+            "body",
+            "is_read",
+            "sent_at",
+        ]
+        read_only_fields = [
+            "id",
+            "sender",
+            "sender_name",
+            "sender_email",
+            "course_title",
+            "sent_at",
         ]

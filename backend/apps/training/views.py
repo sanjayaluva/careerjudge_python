@@ -27,7 +27,9 @@ from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
 
 from .models import (
+    AssignmentReport,
     CourseLesson,
+    CourseMessage,
     CourseProgress,
     CourseRegistration,
     LessonTopic,
@@ -36,9 +38,11 @@ from .models import (
     TrainingCourse,
 )
 from .serializers import (
+    AssignmentReportSerializer,
     AssignmentSerializer,
     CourseAssessmentSerializer,
     CourseLessonSerializer,
+    CourseMessageSerializer,
     CourseProgressSerializer,
     CourseRegistrationSerializer,
     LessonTopicSerializer,
@@ -68,6 +72,10 @@ class HasTrainingPermission(HasModulePermission):
         "registrations": "view",
         "progress": "change",
         "my_courses": "view",
+        "progress_summary": "view",
+        "messages": "add",  # student + trainer can send messages
+        "assignment_reports": "add",  # student submits
+        "review_report": "change",  # trainer reviews
     }
 
 
@@ -204,13 +212,32 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
 
     @action(detail=True, methods=["get", "post"])
     def lessons(self, request, pk=None):
-        """List or add lessons to a course (SRS §2.2)."""
+        """List or add lessons to a course (SRS §2.2).
+
+        Per SRS §5: course structure modification is admin-only. Trainers
+        can view but not create/modify lessons, topics, or sessions.
+        """
         course = self.get_object()
         if request.method == "GET":
             lessons = course.lessons.all()
             return Response(
                 {"message": "OK", "data": CourseLessonSerializer(lessons, many=True).data},
                 status=status.HTTP_200_OK,
+            )
+        # POST: admin-only (SRS §5)
+        user_role_name = request.user.role.name if request.user.role_id else None
+        if user_role_name != "cj_admin":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": (
+                            "Course structure can only be modified by CJ Admin (SRS §5). "
+                            "Trainers may modify assignments and main session contents only."
+                        ),
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
         serializer = CourseLessonSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -400,6 +427,266 @@ class CourseRegistrationViewSet(ModelViewSet):
         )
         return Response(
             {"message": "Progress updated.", "data": CourseProgressSerializer(progress).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get"])
+    def progress_summary(self, request, pk=None):
+        """Aggregated progress for a registration (SRS §6: 'Course Completion
+        Status, Time Tracker, Score report, Option to resume from where
+        last left').
+
+        Returns:
+            {
+                "completion_percentage": 65.0,
+                "total_time_spent_seconds": 7200,
+                "total_time_allowed_seconds": 864000,  # null for non-scheduled
+                "time_left_seconds": 856800,
+                "completed_count": 13,
+                "total_count": 20,
+                "last_accessed_at": "2026-07-20T...",
+                "last_content": {"content_type": "session_content", "content_id": 42},
+                "completion_status": "in_progress",
+                "started_at": "2026-07-15T...",
+                "is_expired": false
+            }
+        """
+        reg = self.get_object()
+        progress_records = list(reg.progress_records.all())
+        completed = [p for p in progress_records if p.is_completed]
+        total_time_spent = sum(p.time_spent_seconds for p in progress_records)
+        last_accessed = max(
+            (p.last_accessed_at for p in progress_records if p.last_accessed_at),
+            default=None,
+        )
+        # Find the last content the student accessed (for resume)
+        last_content = None
+        if progress_records:
+            last_record = max(
+                progress_records,
+                key=lambda p: p.last_accessed_at or reg.registered_at,
+            )
+            last_content = {
+                "content_type": last_record.content_type,
+                "content_id": last_record.content_id,
+            }
+
+        # Time tracking for scheduled courses
+
+        from django.utils import timezone
+
+        total_time_allowed = None
+        time_left = None
+        is_expired = False
+        if reg.course.schedule_type == "scheduled" and reg.course.duration_days:
+            total_time_allowed = reg.course.duration_days * 86400
+            if reg.started_at:
+                elapsed = (timezone.now() - reg.started_at).total_seconds()
+                time_left = max(0, total_time_allowed - int(elapsed))
+                is_expired = time_left == 0
+
+        completion_pct = (
+            round((len(completed) / len(progress_records)) * 100, 1) if progress_records else 0.0
+        )
+
+        return Response(
+            {
+                "message": "OK",
+                "data": {
+                    "completion_percentage": completion_pct,
+                    "completed_count": len(completed),
+                    "total_count": len(progress_records),
+                    "total_time_spent_seconds": total_time_spent,
+                    "total_time_allowed_seconds": total_time_allowed,
+                    "time_left_seconds": time_left,
+                    "is_expired": is_expired,
+                    "last_accessed_at": last_accessed.isoformat() if last_accessed else None,
+                    "last_content": last_content,
+                    "completion_status": reg.completion_status,
+                    "started_at": reg.started_at.isoformat() if reg.started_at else None,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get", "post"])
+    def messages(self, request, pk=None):
+        """List or send messages for a registration (SRS §5: 'Check messages
+        from end-users and respond').
+
+        POST body: {"body": "message text"}
+        The sender is the authenticated user. The recipient is inferred:
+          - if sender is the student -> recipient is the course's trainer
+          - if sender is the trainer -> recipient is the student
+        """
+        reg = self.get_object()
+        if request.method == "GET":
+            messages = reg.messages.select_related("sender").all()
+            return Response(
+                {"message": "OK", "data": CourseMessageSerializer(messages, many=True).data},
+                status=status.HTTP_200_OK,
+            )
+        # POST: send a message
+        body = request.data.get("body", "").strip()
+        if not body:
+            return Response(
+                {"error": {"code": "validation_error", "message": "body is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Validate sender is either the student or the course trainer
+        user = request.user
+        is_student = reg.student_id == user.id
+        is_trainer = reg.course.created_by_id == user.id
+        user_role_name = user.role.name if user.role_id else None
+        is_admin = user_role_name == "cj_admin"
+        if not (is_student or is_trainer or is_admin):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the registered student, course trainer, or admin can send messages.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        msg = CourseMessage.objects.create(
+            registration=reg,
+            sender=user,
+            body=body,
+        )
+        return Response(
+            {"message": "Message sent.", "data": CourseMessageSerializer(msg).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["get", "post"])
+    def assignment_reports(self, request, pk=None):
+        """List or submit assignment reports for a registration (SRS §2.3.2).
+
+        GET: trainer views all reports for this registration
+        POST: student submits a report for an assignment
+            body: {"assignment": 42, "report_text": "...", "report_file_url": "..."}
+
+        Per SRS §2.3.2 rule: when a student submits, a notification is
+        sent to the trainer (notification wired via signals).
+        """
+        reg = self.get_object()
+        if request.method == "GET":
+            # Trainer/admin can view all reports; student views only their own
+            user = request.user
+            user_role_name = user.role.name if user.role_id else None
+            is_trainer_or_admin = (
+                reg.course.created_by_id == user.id or user_role_name == "cj_admin"
+            )
+            if not is_trainer_or_admin and reg.student_id != user.id:
+                return Response(
+                    {"error": {"code": "forbidden", "message": "Not authorized."}},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            # Get all reports for assignments in this course where the student matches
+            reports = AssignmentReport.objects.filter(
+                student=reg.student,
+                assignment__session__topic__lesson__course=reg.course,
+            ).select_related("student", "assignment", "reviewed_by")
+            return Response(
+                {"message": "OK", "data": AssignmentReportSerializer(reports, many=True).data},
+                status=status.HTTP_200_OK,
+            )
+        # POST: student submits a report
+        if reg.student_id != request.user.id:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the registered student can submit reports.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        assignment_id = request.data.get("assignment")
+        if not assignment_id:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "assignment (ID) is required.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from .models import Assignment
+
+        assignment = Assignment.objects.filter(
+            id=assignment_id,
+            session__topic__lesson__course=reg.course,
+            report_submission_enabled=True,
+        ).first()
+        if not assignment:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "Assignment not found or report submission not enabled.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        report, created = AssignmentReport.objects.update_or_create(
+            assignment=assignment,
+            student=request.user,
+            defaults={
+                "report_text": request.data.get("report_text", ""),
+                "report_file_url": request.data.get("report_file_url", ""),
+                "status": "submitted",
+            },
+        )
+        return Response(
+            {"message": "Report submitted.", "data": AssignmentReportSerializer(report).data},
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="review-report")
+    def review_report(self, request, pk=None):
+        """Trainer reviews an assignment report (SRS §2.3.2 + §5).
+
+        POST body: {"report_id": 42, "trainer_score": 85, "trainer_feedback": "Good work"}
+        Sets the report status to 'reviewed' and records the trainer + timestamp.
+        """
+        reg = self.get_object()
+        user = request.user
+        user_role_name = user.role.name if user.role_id else None
+        is_trainer_or_admin = reg.course.created_by_id == user.id or user_role_name == "cj_admin"
+        if not is_trainer_or_admin:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the course trainer or admin can review reports.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        report_id = request.data.get("report_id")
+        report = AssignmentReport.objects.filter(
+            id=report_id,
+            student=reg.student,
+            assignment__session__topic__lesson__course=reg.course,
+        ).first()
+        if not report:
+            return Response(
+                {"error": {"code": "not_found", "message": "Report not found."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        from django.utils import timezone
+
+        report.trainer_score = request.data.get("trainer_score")
+        report.trainer_feedback = request.data.get("trainer_feedback", "")
+        report.reviewed_by = user
+        report.reviewed_at = timezone.now()
+        report.status = "reviewed"
+        report.save()
+        return Response(
+            {"message": "Report reviewed.", "data": AssignmentReportSerializer(report).data},
             status=status.HTTP_200_OK,
         )
 

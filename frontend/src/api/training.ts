@@ -165,6 +165,51 @@ export interface CourseProgress {
   last_accessed_at: string | null;
 }
 
+export interface ProgressSummary {
+  completion_percentage: number;
+  completed_count: number;
+  total_count: number;
+  total_time_spent_seconds: number;
+  total_time_allowed_seconds: number | null;
+  time_left_seconds: number | null;
+  is_expired: boolean;
+  last_accessed_at: string | null;
+  last_content: { content_type: string; content_id: number } | null;
+  completion_status: string;
+  started_at: string | null;
+}
+
+export interface CourseMessage {
+  id: number;
+  registration: number;
+  course_title: string;
+  sender: number;
+  sender_name: string | null;
+  sender_email: string;
+  body: string;
+  is_read: boolean;
+  sent_at: string;
+}
+
+export interface AssignmentReport {
+  id: number;
+  assignment: number;
+  assignment_title: string;
+  student: number;
+  student_name: string | null;
+  student_email: string;
+  report_text: string;
+  report_file_url: string;
+  status: string;
+  trainer_score: number | null;
+  trainer_feedback: string;
+  reviewed_at: string | null;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  submitted_at: string;
+  updated_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Category API
 // ---------------------------------------------------------------------------
@@ -294,6 +339,50 @@ export function updateProgress(
   },
 ): Promise<CourseProgress> {
   return apiPost<CourseProgress>(`${BASE}/registrations/${registrationId}/progress/`, payload);
+}
+
+export function getProgressSummary(registrationId: number): Promise<ProgressSummary> {
+  return apiGet<ProgressSummary>(`${BASE}/registrations/${registrationId}/progress_summary/`);
+}
+
+// ---------------------------------------------------------------------------
+// Messaging API (SRS §5)
+// ---------------------------------------------------------------------------
+
+export function listMessages(registrationId: number): Promise<CourseMessage[]> {
+  return apiGet<CourseMessage[]>(`${BASE}/registrations/${registrationId}/messages/`);
+}
+
+export function sendMessage(registrationId: number, body: string): Promise<CourseMessage> {
+  return apiPost<CourseMessage>(`${BASE}/registrations/${registrationId}/messages/`, { body });
+}
+
+// ---------------------------------------------------------------------------
+// Assignment Reports API (SRS §2.3.2)
+// ---------------------------------------------------------------------------
+
+export function listAssignmentReports(registrationId: number): Promise<AssignmentReport[]> {
+  return apiGet<AssignmentReport[]>(`${BASE}/registrations/${registrationId}/assignment_reports/`);
+}
+
+export function submitAssignmentReport(
+  registrationId: number,
+  payload: { assignment: number; report_text?: string; report_file_url?: string },
+): Promise<AssignmentReport> {
+  return apiPost<AssignmentReport>(
+    `${BASE}/registrations/${registrationId}/assignment_reports/`,
+    payload,
+  );
+}
+
+export function reviewAssignmentReport(
+  registrationId: number,
+  payload: { report_id: number; trainer_score?: number; trainer_feedback?: string },
+): Promise<AssignmentReport> {
+  return apiPost<AssignmentReport>(
+    `${BASE}/registrations/${registrationId}/review-report/`,
+    payload,
+  );
 }
 
 // ---------------------------------------------------------------------------
