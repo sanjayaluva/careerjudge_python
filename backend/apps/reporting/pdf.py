@@ -22,12 +22,23 @@ we render a clean standard layout that includes all configured data.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from weasyprint import HTML
-
 logger = logging.getLogger(__name__)
+
+
+def _get_weasyprint_html():
+    """Lazy-import WeasyPrint so a missing system library (libgobject,
+    libpango, libcairo) doesn't crash the whole app at module load time.
+
+    The import is deferred to the first PDF render request. If the
+    native deps are missing, the error is reported on that specific
+    request rather than breaking every URL in the app.
+    """
+    from weasyprint import HTML
+
+    return HTML
 
 
 def _esc(value: Any) -> str:
@@ -60,6 +71,7 @@ def render_report_pdf(rendered_data: dict[str, Any]) -> bytes:
     application/pdf and Content-Disposition headers appropriately.
     """
     html_content = _build_html(rendered_data)
+    HTML = _get_weasyprint_html()
     pdf_bytes = HTML(string=html_content).write_pdf()
     return pdf_bytes
 
@@ -230,7 +242,7 @@ def _build_html(data: dict[str, Any]) -> str:
     <div><strong>Assessment:</strong> {assessment_title}</div>
     <div><strong>Report type:</strong> {report_type} &nbsp;|&nbsp; <strong>Scope:</strong> {scope}</div>
     <div><strong>Session started:</strong> {started_at} &nbsp;|&nbsp; <strong>Completed:</strong> {completed_at}</div>
-    <div><strong>Generated:</strong> {_fmt_date(datetime.now(timezone.utc).isoformat())}</div>
+    <div><strong>Generated:</strong> {_fmt_date(datetime.now(UTC).isoformat())}</div>
   </div>
 
   {_build_score_summary_html(scores, score_summary)}

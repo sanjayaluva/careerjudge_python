@@ -34,11 +34,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Runtime deps: libpq5 (psycopg2 runtime), curl (healthcheck)
-# WeasyPrint + cairo/pango NOT included — will add in Phase 3 when PDF reports ship
+# Runtime deps: libpq5 (psycopg2 runtime), curl (healthcheck),
+# plus WeasyPrint system deps (libpango, libcairo, libgobject) for PDF
+# report generation (Phase 3 — SRS 04/06 reporting).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libcairo2 \
+    libgdk-pixbuf2.0-0 \
+    libglib2.0-0 \
+    shared-mime-info \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1000 cj
 
