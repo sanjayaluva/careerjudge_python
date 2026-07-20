@@ -33,6 +33,8 @@ class HasQuestionBankPermission(HasModulePermission):
         "destroy": "delete",
         "tree": "view",
         "submit_for_review": "change",
+        "validate_config": "view",
+        "psychometric_analysis": "change",  # psychometrician-only: computes indices
     }
 
 
@@ -312,7 +314,7 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         """Check if a question is fully configured for review submission.
 
         GET /api/question-bank/questions/<id>/validate_config/
-        → {message, data: {valid: bool, errors: [...]}}
+        -> {message, data: {valid: bool, errors: [...]}}
         """
         from .validation import validate_question_config
 
@@ -325,6 +327,112 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
                     "valid": len(errors) == 0,
                     "errors": errors,
                 },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"])
+    def psychometric_analysis(self, request):
+        """Run psychometric analysis on one or more questions (SRS 02).
+
+        Triggered by the Psychometrician. Computes per-question:
+          - Item Difficulty Index (IDI, TDI, BDI, DDI) for all questions
+          - Item Discrimination Index for MCQ questions
+          - Item-Total Correlation Index for non-MCQ questions
+
+        Results are persisted on each Question (item_difficulty_index,
+        top_group_difficulty_index, etc.) and returned in the response.
+
+        Payload:
+            {
+                "question_ids": [1, 2, 3],         # required, list of question IDs
+                "date_from": "2026-01-01",         # optional, ISO date
+                "date_to": "2026-12-31",           # optional, ISO date
+                "assessment_id": 42                # optional, filter by assessment
+            }
+
+        Returns:
+            {
+                "message": "Analysed N question(s).",
+                "data": [
+                    {
+                        "question_id": 1,
+                        "n_candidates": 50,
+                        "item_difficulty_index": 0.62,
+                        "top_group_difficulty_index": 0.85,
+                        "bottom_group_difficulty_index": 0.32,
+                        "difference_difficulty_index": 0.53,
+                        "discrimination_index": 0.41,    # MCQ only, null otherwise
+                        "item_total_correlation": null,  # non-MCQ only, null otherwise
+                        "error": null                    # set if computation failed
+                    },
+                    ...
+                ]
+            }
+        """
+        from .psychometrics import run_psychometric_analysis
+
+        question_ids = request.data.get("question_ids") or []
+        if not question_ids or not isinstance(question_ids, list):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "question_ids (list of ints) is required.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        questions = list(Question.objects.filter(id__in=question_ids).select_related("category"))
+        found_ids = {q.id for q in questions}
+        missing = set(question_ids) - found_ids
+        if missing:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": f"Question IDs not found: {sorted(missing)}",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Parse optional filters
+        date_from = request.data.get("date_from")
+        date_to = request.data.get("date_to")
+        assessment_id = request.data.get("assessment_id")
+        from datetime import datetime as _dt
+
+        date_from_dt = _dt.fromisoformat(date_from) if date_from else None
+        date_to_dt = _dt.fromisoformat(date_to) if date_to else None
+
+        results = []
+        for q in questions:
+            r = run_psychometric_analysis(
+                q,
+                date_from=date_from_dt,
+                date_to=date_to_dt,
+                assessment_id=assessment_id,
+            )
+            results.append(
+                {
+                    "question_id": r.question_id,
+                    "n_candidates": r.n_candidates,
+                    "item_difficulty_index": r.item_difficulty_index,
+                    "top_group_difficulty_index": r.top_group_difficulty_index,
+                    "bottom_group_difficulty_index": r.bottom_group_difficulty_index,
+                    "difference_difficulty_index": r.difference_difficulty_index,
+                    "discrimination_index": r.discrimination_index,
+                    "item_total_correlation": r.item_total_correlation,
+                    "error": r.error,
+                }
+            )
+
+        return Response(
+            {
+                "message": f"Analysed {len(results)} question(s).",
+                "data": results,
             },
             status=status.HTTP_200_OK,
         )

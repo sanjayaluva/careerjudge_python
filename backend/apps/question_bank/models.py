@@ -278,6 +278,59 @@ class Question(models.Model):
         help_text="How well the question discriminates between high/low performers (-1 to 1)",
     )
 
+    # --- Psychometric analysis results (SRS 02 — computed by the
+    #     psychometric_analysis engine, not entered manually) ---
+    # IDI/TDI/BDI/DDI are Item Difficulty Index values per SRS 02 §2/§3.
+    # IDI = total-group difficulty (0-1, higher = easier)
+    # TDI = top-27% group difficulty (0-1)
+    # BDI = bottom-27% group difficulty (0-1)
+    # DDI = TDI - BDI (positive = good discrimination)
+    item_difficulty_index = models.FloatField(
+        _("item difficulty index (IDI)"),
+        null=True,
+        blank=True,
+        help_text=_("Total-group Item Difficulty Index (0-1). Computed by psychometric analysis."),
+    )
+    top_group_difficulty_index = models.FloatField(
+        _("top-group difficulty index (TDI)"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Top-27% group Item Difficulty Index (0-1). Computed by psychometric analysis."
+        ),
+    )
+    bottom_group_difficulty_index = models.FloatField(
+        _("bottom-group difficulty index (BDI)"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Bottom-27% group Item Difficulty Index (0-1). Computed by psychometric analysis."
+        ),
+    )
+    difference_difficulty_index = models.FloatField(
+        _("difference difficulty index (DDI)"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "TDI - BDI. Positive = good discrimination. Computed by psychometric analysis."
+        ),
+    )
+    item_total_correlation = models.FloatField(
+        _("item total correlation"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Item-Total Correlation Index for non-MCQ questions (-1 to 1). "
+            "Computed by psychometric analysis."
+        ),
+    )
+    psychometric_analyzed_at = models.DateTimeField(
+        _("psychometric analyzed at"),
+        null=True,
+        blank=True,
+        help_text=_("When psychometric analysis was last run on this question."),
+    )
+
     # --- Audit ---
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
