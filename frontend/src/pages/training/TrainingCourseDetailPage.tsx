@@ -9,7 +9,7 @@
  * - Registrations: trainer views student registrations
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import {
   Alert,
@@ -36,6 +36,7 @@ import {
 import {
   COURSE_TYPES,
   listCourseRegistrations,
+  notifyLiveSessionStudents,
   publishCourse,
   registerForCourse,
   retrieveCourse,
@@ -43,6 +44,7 @@ import {
 } from "@/api/training";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
+import { LiveSessionConsentModal } from "./LiveSessionConsentModal";
 
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
   draft: "default",
@@ -57,11 +59,26 @@ export default function TrainingCourseDetailPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const canManage = ["cj_admin", "trainer"].includes(user?.role ?? "");
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const { data: course, isLoading } = useQuery({
     queryKey: ["training", "courses", cid],
     queryFn: () => retrieveCourse(cid),
     enabled: !Number.isNaN(cid),
+  });
+
+  // Live session consent modal — shown when ?live_session=ID is in the URL
+  const liveSessionId = searchParams.get("live_session");
+  const consentLiveSession = liveSessionId
+    ? course?.live_sessions.find((ls) => ls.id === Number(liveSessionId))
+    : null;
+
+  const notifyMutation = useMutation({
+    mutationFn: (lsId: number) => notifyLiveSessionStudents(lsId),
+    onSuccess: (data) => {
+      toast.success(`Notified ${data.notified_count} student(s).`);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
   });
 
   const publishMutation = useMutation({
@@ -247,6 +264,20 @@ export default function TrainingCourseDetailPage() {
                                           {session.assignments.length !== 1 ? "s" : ""})
                                         </span>
                                       )}
+                                      {/* Show interactive question badges */}
+                                      {session.contents.some(
+                                        (c) => c.interactive_questions?.length > 0,
+                                      ) && (
+                                        <span className="ml-2 text-amber-600">
+                                          (
+                                          {session.contents.reduce(
+                                            (sum, c) =>
+                                              sum + (c.interactive_questions?.length ?? 0),
+                                            0,
+                                          )}{" "}
+                                          interactive Q)
+                                        </span>
+                                      )}
                                     </div>
                                   ))}
                                 </div>
@@ -270,6 +301,21 @@ export default function TrainingCourseDetailPage() {
               <CardTitle>Live Sessions</CardTitle>
             </CardHeader>
             <CardContent>
+              {canManage && (
+                <div className="mb-3 rounded-md bg-blue-50 p-3 text-xs text-blue-800">
+                  <strong>Zoom integration:</strong> Create a meeting at{" "}
+                  <a
+                    href="https://zoom.us/start/videomeeting"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    zoom.us/start
+                  </a>{" "}
+                  and paste the join URL into the meeting_url field when adding a live session.
+                  Students will see a "Join Zoom meeting" link and can consent to attend.
+                </div>
+              )}
               {course.live_sessions.length === 0 ? (
                 <p className="py-4 text-center text-sm text-slate-500">
                   No live sessions scheduled.
@@ -284,6 +330,7 @@ export default function TrainingCourseDetailPage() {
                       <TableHead>Duration</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Link</TableHead>
+                      {canManage && <TableHead>Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -326,6 +373,18 @@ export default function TrainingCourseDetailPage() {
                             "—"
                           )}
                         </TableCell>
+                        {canManage && (
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => notifyMutation.mutate(s.id)}
+                              loading={notifyMutation.isPending}
+                            >
+                              Notify
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -387,6 +446,17 @@ export default function TrainingCourseDetailPage() {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* Live session consent modal — shown when ?live_session=ID is in URL */}
+      {consentLiveSession && (
+        <LiveSessionConsentModal
+          liveSession={consentLiveSession}
+          onClose={() => {
+            searchParams.delete("live_session");
+            setSearchParams(searchParams);
+          }}
+        />
+      )}
     </div>
   );
 }

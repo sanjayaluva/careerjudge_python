@@ -27,6 +27,8 @@ export interface SessionContent {
   text_content: string;
   duration_seconds: number | null;
   order: number;
+  sequence_order: number | null;
+  interactive_questions: InteractiveQuestion[];
 }
 
 export interface Assignment {
@@ -210,6 +212,34 @@ export interface AssignmentReport {
   updated_at: string;
 }
 
+export interface LiveSessionConsent {
+  id: number;
+  live_session: number;
+  live_session_title: string;
+  student: number;
+  student_name: string | null;
+  student_email: string;
+  status: "consented" | "declined";
+  consented_at: string;
+}
+
+export interface InteractiveQuestionOption {
+  id: number;
+  text: string;
+  is_correct: boolean;
+}
+
+export interface InteractiveQuestion {
+  id: number;
+  session_content: number;
+  question_text: string;
+  trigger_timestamp: number;
+  options: InteractiveQuestionOption[];
+  correct_jump_to: number;
+  incorrect_jump_to: number;
+  order: number;
+}
+
 // ---------------------------------------------------------------------------
 // Category API
 // ---------------------------------------------------------------------------
@@ -381,6 +411,55 @@ export function reviewAssignmentReport(
 ): Promise<AssignmentReport> {
   return apiPost<AssignmentReport>(
     `${BASE}/registrations/${registrationId}/review-report/`,
+    payload,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Live Session Consent API (SRS §5)
+// ---------------------------------------------------------------------------
+
+export function consentToLiveSession(
+  liveSessionId: number,
+  status: "consented" | "declined",
+): Promise<LiveSessionConsent> {
+  return apiPost<LiveSessionConsent>(`${BASE}/live-sessions/${liveSessionId}/consent/`, {
+    status,
+  });
+}
+
+export function listLiveSessionConsents(liveSessionId: number): Promise<LiveSessionConsent[]> {
+  return apiGet<LiveSessionConsent[]>(`${BASE}/live-sessions/${liveSessionId}/consents/`);
+}
+
+export function notifyLiveSessionStudents(
+  liveSessionId: number,
+): Promise<{ notified_count: number }> {
+  return apiPost<{ notified_count: number }>(
+    `${BASE}/live-sessions/${liveSessionId}/notify_students/`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Interactive Questions API (SRS §2.3.1 Timeliner)
+// ---------------------------------------------------------------------------
+
+export function listInteractiveQuestions(contentId: number): Promise<InteractiveQuestion[]> {
+  return apiGet<InteractiveQuestion[]>(`${BASE}/contents/${contentId}/interactive_questions/`);
+}
+
+export function createInteractiveQuestion(
+  contentId: number,
+  payload: {
+    question_text: string;
+    trigger_timestamp: number;
+    options: InteractiveQuestionOption[];
+    correct_jump_to: number;
+    incorrect_jump_to: number;
+  },
+): Promise<InteractiveQuestion> {
+  return apiPost<InteractiveQuestion>(
+    `${BASE}/contents/${contentId}/interactive_questions/`,
     payload,
   );
 }

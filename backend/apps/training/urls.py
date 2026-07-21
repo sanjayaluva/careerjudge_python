@@ -7,6 +7,8 @@ from .views import (
     CourseLessonViewSet,
     CourseRegistrationViewSet,
     LessonTopicViewSet,
+    LiveSessionViewSet,
+    SessionContentViewSet,
     TopicSessionViewSet,
     TrainingCategoryViewSet,
     TrainingCourseViewSet,
@@ -21,6 +23,8 @@ router.register("registrations", CourseRegistrationViewSet, basename="registrati
 router.register("lessons", CourseLessonViewSet, basename="lesson")
 router.register("topics", LessonTopicViewSet, basename="topic")
 router.register("sessions", TopicSessionViewSet, basename="session")
+router.register("contents", SessionContentViewSet, basename="content")
+router.register("live-sessions", LiveSessionViewSet, basename="live-session")
 
 urlpatterns = [
     path("", include(router.urls)),

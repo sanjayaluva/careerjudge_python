@@ -13,8 +13,10 @@ from .models import (
     CourseMessage,
     CourseProgress,
     CourseRegistration,
+    InteractiveQuestion,
     LessonTopic,
     LiveSession,
+    LiveSessionConsent,
     SessionContent,
     TopicSession,
     TrainingCategory,
@@ -31,7 +33,25 @@ class TrainingCategorySerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "course_count"]
 
 
+class InteractiveQuestionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InteractiveQuestion
+        fields = [
+            "id",
+            "session_content",
+            "question_text",
+            "trigger_timestamp",
+            "options",
+            "correct_jump_to",
+            "incorrect_jump_to",
+            "order",
+        ]
+        read_only_fields = ["id", "session_content"]
+
+
 class SessionContentSerializer(serializers.ModelSerializer):
+    interactive_questions = InteractiveQuestionSerializer(many=True, read_only=True)
+
     class Meta:
         model = SessionContent
         fields = [
@@ -44,8 +64,9 @@ class SessionContentSerializer(serializers.ModelSerializer):
             "duration_seconds",
             "order",
             "sequence_order",
+            "interactive_questions",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "interactive_questions"]
 
 
 class AssignmentSerializer(serializers.ModelSerializer):
@@ -332,4 +353,31 @@ class CourseMessageSerializer(serializers.ModelSerializer):
             "sender_email",
             "course_title",
             "sent_at",
+        ]
+
+
+class LiveSessionConsentSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source="student.full_name", read_only=True, default=None)
+    student_email = serializers.CharField(source="student.email", read_only=True)
+    live_session_title = serializers.CharField(source="live_session.title", read_only=True)
+
+    class Meta:
+        model = LiveSessionConsent
+        fields = [
+            "id",
+            "live_session",
+            "live_session_title",
+            "student",
+            "student_name",
+            "student_email",
+            "status",
+            "consented_at",
+        ]
+        read_only_fields = [
+            "id",
+            "student",
+            "student_name",
+            "student_email",
+            "live_session_title",
+            "consented_at",
         ]

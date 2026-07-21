@@ -557,3 +557,98 @@ class CourseMessage(models.Model):
 
     def __str__(self) -> str:
         return f"{self.sender.email} -> {self.registration.course.title} ({self.sent_at:%Y-%m-%d %H:%M})"
+
+
+class LiveSessionConsent(models.Model):
+    """Tracks whether a student has consented to attend a live session (SRS §5).
+
+    Per SRS §5 scheduler_process note: "When student opens course page,
+    a popup notification about upcoming event (Live Session) appears with
+    meeting link. When student clicks 'Consent' button, notification goes
+    back to trainer about student participation."
+
+    This model records the student's consent/decline for each live session.
+    The trainer can view the consent list to see who's attending.
+    """
+
+    STATUS_CHOICES = [
+        ("consented", "Consented (will attend)"),
+        ("declined", "Declined (will not attend)"),
+    ]
+
+    live_session = models.ForeignKey(LiveSession, on_delete=models.CASCADE, related_name="consents")
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="live_session_consents",
+    )
+    status = models.CharField(
+        _("status"), max_length=10, choices=STATUS_CHOICES, default="consented"
+    )
+    consented_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-consented_at"]
+        verbose_name = _("live session consent")
+        verbose_name_plural = _("live session consents")
+        unique_together = [("live_session", "student")]
+
+    def __str__(self) -> str:
+        return f"{self.student.email} -> {self.live_session.title} ({self.status})"
+
+
+class InteractiveQuestion(models.Model):
+    """A question embedded in a video/audio at a specific timestamp (SRS §2.3.1).
+
+    Per SRS §2.3.1 Timeliner: the trainer sets a timeline marker for when
+    a question should appear during video/audio playback. The student
+    answers, and the system branches:
+      - if correct  -> jump to correct_jump_to timestamp
+      - if incorrect -> jump to incorrect_jump_to timestamp
+    Then playback continues from the new position.
+
+    The options field stores MCQ options as JSON:
+      [{"id": 1, "text": "Option A", "is_correct": true}, ...]
+    """
+
+    session_content = models.ForeignKey(
+        SessionContent, on_delete=models.CASCADE, related_name="interactive_questions"
+    )
+    question_text = models.TextField(_("question text"))
+    # When in the media (seconds) this question should appear
+    trigger_timestamp = models.FloatField(
+        _("trigger timestamp (seconds)"),
+        help_text=_("Seconds into the media when this question should appear"),
+    )
+    # MCQ options stored as JSON
+    options = models.JSONField(
+        _("options"),
+        default=list,
+        help_text=_('List of {"id": int, "text": str, "is_correct": bool} objects'),
+    )
+    # Branching: where to jump based on answer
+    correct_jump_to = models.FloatField(
+        _("correct answer jump-to (seconds)"),
+        help_text=_("Timestamp to jump to if answered correctly"),
+    )
+    incorrect_jump_to = models.FloatField(
+        _("incorrect answer jump-to (seconds)"),
+        help_text=_("Timestamp to jump to if answered incorrectly"),
+    )
+    order = models.PositiveIntegerField(_("order"), default=0)
+
+    class Meta:
+        ordering = ["trigger_timestamp"]
+        verbose_name = _("interactive question")
+        verbose_name_plural = _("interactive questions")
+
+    def __str__(self) -> str:
+        return f"{self.session_content.title} @ {self.trigger_timestamp}s"
+
+    @property
+    def correct_option_id(self) -> int | None:
+        """Return the ID of the correct option (first one with is_correct=True)."""
+        for opt in self.options:
+            if opt.get("is_correct"):
+                return opt.get("id")
+        return None

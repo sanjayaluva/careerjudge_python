@@ -33,6 +33,9 @@ from .models import (
     CourseProgress,
     CourseRegistration,
     LessonTopic,
+    LiveSession,
+    LiveSessionConsent,
+    SessionContent,
     TopicSession,
     TrainingCategory,
     TrainingCourse,
@@ -45,7 +48,9 @@ from .serializers import (
     CourseMessageSerializer,
     CourseProgressSerializer,
     CourseRegistrationSerializer,
+    InteractiveQuestionSerializer,
     LessonTopicSerializer,
+    LiveSessionConsentSerializer,
     LiveSessionSerializer,
     SessionContentSerializer,
     TopicSessionSerializer,
@@ -76,6 +81,10 @@ class HasTrainingPermission(HasModulePermission):
         "messages": "add",  # student + trainer can send messages
         "assignment_reports": "add",  # student submits
         "review_report": "change",  # trainer reviews
+        "consent": "add",  # student consents to live session
+        "consents": "view",  # trainer views consent list
+        "interactive_questions": "change",  # trainer adds questions to content
+        "notify_students": "change",  # trainer triggers notification manually
     }
 
 
@@ -788,5 +797,177 @@ class TopicSessionViewSet(ModelViewSet):
         serializer.save(session=session)
         return Response(
             {"message": "Assignment created.", "data": serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Live Session ViewSet (consent + notify — SRS §5)
+# ---------------------------------------------------------------------------
+
+
+class LiveSessionViewSet(ModelViewSet):
+    """CRUD for live sessions + consent tracking (SRS §5).
+
+    Per SRS §5 scheduler_process: trainer schedules a Zoom/classroom
+    session, students get notified, students click 'Consent', trainer
+    sees who's attending.
+    """
+
+    queryset = LiveSession.objects.select_related("course", "course__created_by")
+    permission_classes = [IsAuthenticated, HasTrainingPermission]
+    serializer_class = LiveSessionSerializer
+    http_method_names = ["get", "head", "options", "patch", "post"]
+
+    @action(detail=True, methods=["post"])
+    def consent(self, request, pk=None):
+        """Student consents or declines to attend a live session (SRS §5).
+
+        POST /api/training/live-sessions/<id>/consent/
+        body: {"status": "consented" | "declined"}
+
+        Creates a LiveSessionConsent record. A notification is sent to the
+        trainer via the post_save signal (apps/training/signals.py).
+        """
+        live_session = self.get_object()
+        status_val = request.data.get("status", "consented")
+        if status_val not in ("consented", "declined"):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "status must be 'consented' or 'declined'.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        consent, _ = LiveSessionConsent.objects.update_or_create(
+            live_session=live_session,
+            student=request.user,
+            defaults={"status": status_val},
+        )
+        return Response(
+            {
+                "message": f"You have {status_val} to this session.",
+                "data": LiveSessionConsentSerializer(consent).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get"])
+    def consents(self, request, pk=None):
+        """Trainer views the consent list for a live session (SRS §5)."""
+        live_session = self.get_object()
+        # Only the course trainer or admin can view consents
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_trainer_or_admin = (
+            live_session.course.created_by_id == request.user.id or user_role_name == "cj_admin"
+        )
+        if not is_trainer_or_admin:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the trainer or admin can view consents.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        consents = live_session.consents.select_related("student").all()
+        return Response(
+            {"message": "OK", "data": LiveSessionConsentSerializer(consents, many=True).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"])
+    def notify_students(self, request, pk=None):
+        """Trainer manually triggers a notification to all registered students
+        about an upcoming live session (SRS §5).
+
+        This is useful for reminding students about an existing session
+        (the automatic signal only fires on creation).
+        """
+        from apps.notifications.models import notify_user
+
+        live_session = self.get_object()
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_trainer_or_admin = (
+            live_session.course.created_by_id == request.user.id or user_role_name == "cj_admin"
+        )
+        if not is_trainer_or_admin:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the trainer or admin can notify students.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        regs = CourseRegistration.objects.filter(
+            course=live_session.course, payment_status="paid"
+        ).select_related("student")
+        scheduled_str = live_session.scheduled_at.strftime("%Y-%m-%d %H:%M")
+        count = 0
+        for reg in regs:
+            notify_user(
+                reg.student,
+                f"Live session reminder: {live_session.title}",
+                f"Starting on {scheduled_str}. Duration: {live_session.duration_minutes} min. "
+                f"Mode: {live_session.mode}.",
+                "session",
+                f"/training/{live_session.course_id}?live_session={live_session.id}",
+            )
+            count += 1
+        return Response(
+            {"message": f"Notified {count} student(s).", "data": {"notified_count": count}},
+            status=status.HTTP_200_OK,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Session Content → Interactive Questions (SRS §2.3.1 Timeliner)
+# ---------------------------------------------------------------------------
+
+
+class SessionContentViewSet(ModelViewSet):
+    """CRUD for session content + interactive questions (Timeliner)."""
+
+    queryset = SessionContent.objects.select_related("session")
+    permission_classes = [IsAuthenticated, HasTrainingPermission]
+    serializer_class = SessionContentSerializer
+
+    @action(detail=True, methods=["get", "post"])
+    def interactive_questions(self, request, pk=None):
+        """List or add interactive questions to a session content (SRS §2.3.1).
+
+        GET /api/training/contents/<id>/interactive_questions/
+          -> list of questions ordered by trigger_timestamp
+
+        POST /api/training/contents/<id>/interactive_questions/
+          body: {
+            "question_text": "What is 2+2?",
+            "trigger_timestamp": 30.5,
+            "options": [
+              {"id": 1, "text": "3", "is_correct": false},
+              {"id": 2, "text": "4", "is_correct": true},
+              {"id": 3, "text": "5", "is_correct": false}
+            ],
+            "correct_jump_to": 60.0,
+            "incorrect_jump_to": 15.0
+          }
+        """
+        content = self.get_object()
+        if request.method == "GET":
+            questions = content.interactive_questions.all()
+            return Response(
+                {"message": "OK", "data": InteractiveQuestionSerializer(questions, many=True).data},
+                status=status.HTTP_200_OK,
+            )
+        serializer = InteractiveQuestionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(session_content=content)
+        return Response(
+            {"message": "Interactive question created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
         )
