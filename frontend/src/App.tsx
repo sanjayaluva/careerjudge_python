@@ -19,6 +19,7 @@ import ReportsPage from "@/pages/reporting/ReportsPage";
 import ReportDetailPage from "@/pages/reporting/ReportDetailPage";
 import TrainingPage from "@/pages/training/TrainingPage";
 import TrainingCourseDetailPage from "@/pages/training/TrainingCourseDetailPage";
+import TrainingCourseEditorPage from "@/pages/training/TrainingCourseEditorPage";
 import PlaceholderPage from "@/pages/PlaceholderPage";
 import ProfilePage from "@/pages/account/ProfilePage";
 import SettingsPage from "@/pages/account/SettingsPage";
@@ -153,7 +154,9 @@ export default function App() {
                 <Route path="reports" element={<ReportsPage />} />
                 <Route path="reports/:id" element={<ReportDetailPage />} />
                 <Route path="training" element={<TrainingPage />} />
+                <Route path="training/new" element={<TrainingCourseEditorPage />} />
                 <Route path="training/:id" element={<TrainingCourseDetailPage />} />
+                <Route path="training/:id/edit" element={<TrainingCourseEditorPage />} />
                 <Route path="counseling" element={<PlaceholderPage title="Counseling" />} />
                 <Route path="cms" element={<PlaceholderPage title="CMS" />} />
               </Route>

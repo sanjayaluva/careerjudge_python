@@ -66,7 +66,7 @@ export default function TrainingPage() {
   return (
     <div className="space-y-6">
       <PageCard>
-        <div className="flex items-center justify-between p-6">
+        <div className="flex items-center justify-between p-6 pb-4">
           <div>
             <h1 className="text-lg font-bold text-slate-900">Training</h1>
             <p className="text-sm text-slate-500">
@@ -81,13 +81,15 @@ export default function TrainingPage() {
         </div>
 
         <Tabs defaultValue="browse">
-          <TabsList className="px-6">
-            <TabsTrigger value="browse">Browse Courses</TabsTrigger>
-            <TabsTrigger value="my-courses">My Courses ({myRegs.length})</TabsTrigger>
-          </TabsList>
+          <div className="px-6">
+            <TabsList>
+              <TabsTrigger value="browse">Browse Courses</TabsTrigger>
+              <TabsTrigger value="my-courses">My Courses ({myRegs.length})</TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* === Browse Tab === */}
-          <TabsContent value="browse" className="p-6 pt-4">
+          <TabsContent value="browse" className="px-6 py-4">
             <Input
               type="search"
               placeholder="Search courses..."
@@ -153,7 +155,7 @@ export default function TrainingPage() {
           </TabsContent>
 
           {/* === My Courses Tab === */}
-          <TabsContent value="my-courses" className="p-6 pt-4">
+          <TabsContent value="my-courses" className="px-6 py-4">
             {myRegs.length === 0 ? (
               <p className="py-8 text-center text-sm text-slate-500">
                 You haven&apos;t registered for any courses yet.
