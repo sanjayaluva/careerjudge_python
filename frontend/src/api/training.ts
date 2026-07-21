@@ -378,6 +378,83 @@ export function addAssignment(
   return apiPost<Assignment>(`${BASE}/sessions/${sessionId}/assignments/`, payload);
 }
 
+// ---------------------------------------------------------------------------
+// Edit / Delete nested resources
+// ---------------------------------------------------------------------------
+
+export function updateLesson(
+  lessonId: number,
+  payload: Record<string, unknown>,
+): Promise<CourseLesson> {
+  return apiPatch<CourseLesson>(`${BASE}/lessons/${lessonId}/`, payload);
+}
+
+export function deleteLesson(lessonId: number): Promise<void> {
+  return apiDelete(`${BASE}/lessons/${lessonId}/`);
+}
+
+export function updateTopic(
+  topicId: number,
+  payload: Record<string, unknown>,
+): Promise<LessonTopic> {
+  return apiPatch<LessonTopic>(`${BASE}/topics/${topicId}/`, payload);
+}
+
+export function deleteTopic(topicId: number): Promise<void> {
+  return apiDelete(`${BASE}/topics/${topicId}/`);
+}
+
+export function updateSession(
+  sessionId: number,
+  payload: Record<string, unknown>,
+): Promise<TopicSession> {
+  return apiPatch<TopicSession>(`${BASE}/sessions/${sessionId}/`, payload);
+}
+
+export function deleteSession(sessionId: number): Promise<void> {
+  return apiDelete(`${BASE}/sessions/${sessionId}/`);
+}
+
+export function updateContent(
+  contentId: number,
+  payload: Record<string, unknown>,
+): Promise<SessionContent> {
+  return apiPatch<SessionContent>(`${BASE}/contents/${contentId}/`, payload);
+}
+
+export function deleteContent(contentId: number): Promise<void> {
+  return apiDelete(`${BASE}/contents/${contentId}/`);
+}
+
+export function updateAssignment(
+  assignmentId: number,
+  payload: Record<string, unknown>,
+): Promise<Assignment> {
+  return apiPatch<Assignment>(
+    `${BASE}/sessions/${assignmentId}/assignments/${assignmentId}/`,
+    payload,
+  );
+}
+
+export function deleteAssignment(assignmentId: number): Promise<void> {
+  return apiDelete(`${BASE}/sessions/${assignmentId}/assignments/${assignmentId}/`);
+}
+
+export function updateLiveSession(
+  liveSessionId: number,
+  payload: Record<string, unknown>,
+): Promise<LiveSession> {
+  return apiPatch<LiveSession>(`${BASE}/live-sessions/${liveSessionId}/`, payload);
+}
+
+export function deleteLiveSession(liveSessionId: number): Promise<void> {
+  return apiDelete(`${BASE}/live-sessions/${liveSessionId}/`);
+}
+
+export function deleteCategory(categoryId: number): Promise<void> {
+  return apiDelete(`${BASE}/categories/${categoryId}/`);
+}
+
 export function listLiveSessions(courseId: number): Promise<LiveSession[]> {
   return apiGet<LiveSession[]>(`${BASE}/courses/${courseId}/live_sessions/`);
 }

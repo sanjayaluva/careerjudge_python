@@ -66,7 +66,7 @@ class SessionContentSerializer(serializers.ModelSerializer):
             "sequence_order",
             "interactive_questions",
         ]
-        read_only_fields = ["id", "interactive_questions"]
+        read_only_fields = ["id", "interactive_questions", "session"]
 
 
 class AssignmentSerializer(serializers.ModelSerializer):
@@ -82,7 +82,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
             "report_instructions",
             "order",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "session"]
 
 
 class TopicSessionSerializer(serializers.ModelSerializer):
@@ -92,7 +92,7 @@ class TopicSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = TopicSession
         fields = ["id", "topic", "title", "description", "order", "contents", "assignments"]
-        read_only_fields = ["id", "contents", "assignments"]
+        read_only_fields = ["id", "contents", "assignments", "topic"]
 
 
 class LessonTopicSerializer(serializers.ModelSerializer):
@@ -101,7 +101,7 @@ class LessonTopicSerializer(serializers.ModelSerializer):
     class Meta:
         model = LessonTopic
         fields = ["id", "lesson", "title", "description", "order", "sessions"]
-        read_only_fields = ["id", "sessions"]
+        read_only_fields = ["id", "sessions", "lesson"]
 
 
 class CourseLessonSerializer(serializers.ModelSerializer):

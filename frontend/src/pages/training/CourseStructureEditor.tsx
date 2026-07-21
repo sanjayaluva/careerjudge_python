@@ -14,11 +14,101 @@ import {
   addLesson,
   addSession,
   addTopic,
+  deleteLesson,
+  deleteTopic,
+  deleteSession,
+  deleteContent,
+  deleteAssignment,
+  updateLesson,
+  updateTopic,
+  updateSession,
   type CourseLesson,
   type LessonTopic,
   type TopicSession,
 } from "@/api/training";
 import { extractApiError } from "@/api/client";
+
+// Hook: refresh all course data after a mutation
+function useRefreshCourse() {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: ["training", "courses"] });
+  };
+}
+
+// Generic delete button
+function DeleteButton({ onDelete }: { onDelete: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => setConfirming(true)}
+        className="text-danger-600 hover:bg-danger-50"
+      >
+        ✕
+      </Button>
+    );
+  }
+  return (
+    <div className="flex gap-1">
+      <Button
+        size="sm"
+        variant="danger"
+        onClick={() => {
+          onDelete();
+          setConfirming(false);
+        }}
+      >
+        Delete?
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => setConfirming(false)}>
+        No
+      </Button>
+    </div>
+  );
+}
+
+// Inline editable title
+function EditableTitle({ title, onSave }: { title: string; onSave: (newTitle: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(title);
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="text-left hover:underline"
+        title="Click to edit"
+      >
+        {title}
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="h-8 text-sm"
+        autoFocus
+      />
+      <Button
+        size="sm"
+        onClick={() => {
+          onSave(value);
+          setEditing(false);
+        }}
+      >
+        ✓
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
+        ✕
+      </Button>
+    </div>
+  );
+}
 
 export function CourseStructureEditor({
   courseId,
@@ -72,24 +162,54 @@ function LessonTree({
   canManage: boolean;
   courseId: number;
 }) {
+  const toast = useToast();
+  const refresh = useRefreshCourse();
   const [expanded, setExpanded] = useState(true);
   const [showAddTopic, setShowAddTopic] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteLesson(lesson.id),
+    onSuccess: () => {
+      refresh();
+      toast.success("Lesson deleted.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: (newTitle: string) => updateLesson(lesson.id, { title: newTitle }),
+    onSuccess: () => {
+      refresh();
+      toast.success("Lesson updated.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
 
   return (
     <div className="rounded-md border border-slate-200 p-4">
       <div className="flex items-center justify-between">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-2 text-left"
-        >
-          <span className="text-sm text-slate-400">{expanded ? "▼" : "▶"}</span>
-          <span className="font-semibold text-slate-900">{lesson.title}</span>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setExpanded(!expanded)}>
+            <span className="text-sm text-slate-400">{expanded ? "▼" : "▶"}</span>
+          </button>
+          <span className="font-semibold text-slate-900">
+            {canManage ? (
+              <EditableTitle title={lesson.title} onSave={(t) => editMutation.mutate(t)} />
+            ) : (
+              lesson.title
+            )}
+          </span>
           <span className="text-xs text-slate-500">(Week {lesson.week_number})</span>
-        </button>
-        {canManage && expanded && (
-          <Button size="sm" variant="outline" onClick={() => setShowAddTopic(!showAddTopic)}>
-            + Topic
-          </Button>
+        </div>
+        {canManage && (
+          <div className="flex items-center gap-1">
+            {expanded && (
+              <Button size="sm" variant="outline" onClick={() => setShowAddTopic(!showAddTopic)}>
+                + Topic
+              </Button>
+            )}
+            <DeleteButton onDelete={() => deleteMutation.mutate()} />
+          </div>
         )}
       </div>
 
@@ -119,23 +239,57 @@ function TopicTree({
   canManage: boolean;
   courseId: number;
 }) {
+  const toast = useToast();
+  const refresh = useRefreshCourse();
   const [expanded, setExpanded] = useState(true);
   const [showAddSession, setShowAddSession] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteTopic(topic.id),
+    onSuccess: () => {
+      refresh();
+      toast.success("Topic deleted.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: (newTitle: string) => updateTopic(topic.id, { title: newTitle }),
+    onSuccess: () => {
+      refresh();
+      toast.success("Topic updated.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
 
   return (
     <div className="border-l-2 border-slate-100 pl-3">
       <div className="flex items-center justify-between">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-2 text-left"
-        >
-          <span className="text-xs text-slate-400">{expanded ? "▼" : "▶"}</span>
-          <span className="text-sm font-medium text-slate-700">{topic.title}</span>
-        </button>
-        {canManage && expanded && (
-          <Button size="sm" variant="outline" onClick={() => setShowAddSession(!showAddSession)}>
-            + Session
-          </Button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setExpanded(!expanded)}>
+            <span className="text-xs text-slate-400">{expanded ? "▼" : "▶"}</span>
+          </button>
+          <span className="text-sm font-medium text-slate-700">
+            {canManage ? (
+              <EditableTitle title={topic.title} onSave={(t) => editMutation.mutate(t)} />
+            ) : (
+              topic.title
+            )}
+          </span>
+        </div>
+        {canManage && (
+          <div className="flex items-center gap-1">
+            {expanded && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowAddSession(!showAddSession)}
+              >
+                + Session
+              </Button>
+            )}
+            <DeleteButton onDelete={() => deleteMutation.mutate()} />
+          </div>
         )}
       </div>
 
@@ -158,38 +312,90 @@ function TopicTree({
 }
 
 function SessionTree({ session, canManage }: { session: TopicSession; canManage: boolean }) {
+  const toast = useToast();
+  const refresh = useRefreshCourse();
   const [expanded, setExpanded] = useState(false);
   const [showAddContent, setShowAddContent] = useState(false);
   const [showAddAssignment, setShowAddAssignment] = useState(false);
 
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteSession(session.id),
+    onSuccess: () => {
+      refresh();
+      toast.success("Session deleted.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: (newTitle: string) => updateSession(session.id, { title: newTitle }),
+    onSuccess: () => {
+      refresh();
+      toast.success("Session updated.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const deleteContentMutation = useMutation({
+    mutationFn: (contentId: number) => deleteContent(contentId),
+    onSuccess: () => {
+      refresh();
+      toast.success("Content deleted.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const deleteAssignmentMutation = useMutation({
+    mutationFn: (assignmentId: number) => deleteAssignment(assignmentId),
+    onSuccess: () => {
+      refresh();
+      toast.success("Assignment deleted.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   return (
     <div className="rounded border border-slate-100 p-2">
       <div className="flex items-center justify-between">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-2 text-left"
-        >
-          <span className="text-xs text-slate-400">{expanded ? "▼" : "▶"}</span>
-          <span className="text-xs font-medium text-slate-700">{session.title}</span>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setExpanded(!expanded)}>
+            <span className="text-xs text-slate-400">{expanded ? "▼" : "▶"}</span>
+          </button>
+          <span className="text-xs font-medium text-slate-700">
+            {canManage ? (
+              <EditableTitle title={session.title} onSave={(t) => editMutation.mutate(t)} />
+            ) : (
+              session.title
+            )}
+          </span>
           <span className="text-xs text-slate-400">
             ({session.contents.length} content, {session.assignments.length} assignment)
           </span>
           {session.contents.some((c) => c.interactive_questions?.length > 0) && (
             <Badge variant="warning">interactive</Badge>
           )}
-        </button>
-        {canManage && expanded && (
-          <div className="flex gap-1">
-            <Button size="sm" variant="outline" onClick={() => setShowAddContent(!showAddContent)}>
-              + Content
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowAddAssignment(!showAddAssignment)}
-            >
-              + Assignment
-            </Button>
+        </div>
+        {canManage && (
+          <div className="flex items-center gap-1">
+            {expanded && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowAddContent(!showAddContent)}
+                >
+                  + Content
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowAddAssignment(!showAddAssignment)}
+                >
+                  + Assignment
+                </Button>
+              </>
+            )}
+            <DeleteButton onDelete={() => deleteMutation.mutate()} />
           </div>
         )}
       </div>
@@ -201,15 +407,16 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
             <div>
               <div className="text-xs font-medium uppercase text-slate-400">Contents</div>
               {session.contents.map((c) => (
-                <div key={c.id} className="ml-2 text-xs text-slate-600">
+                <div key={c.id} className="ml-2 flex items-center gap-1 text-xs text-slate-600">
                   <Badge variant="outline">{c.content_format}</Badge> {c.title}
                   {c.duration_seconds && (
-                    <span className="ml-1 text-slate-400">({c.duration_seconds}s)</span>
+                    <span className="text-slate-400">({c.duration_seconds}s)</span>
                   )}
                   {c.interactive_questions?.length > 0 && (
-                    <span className="ml-1 text-amber-600">
-                      ({c.interactive_questions.length} Q)
-                    </span>
+                    <span className="text-amber-600">({c.interactive_questions.length} Q)</span>
+                  )}
+                  {canManage && (
+                    <DeleteButton onDelete={() => deleteContentMutation.mutate(c.id)} />
                   )}
                 </div>
               ))}
@@ -221,9 +428,12 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
             <div>
               <div className="text-xs font-medium uppercase text-slate-400">Assignments</div>
               {session.assignments.map((a) => (
-                <div key={a.id} className="ml-2 text-xs text-slate-600">
+                <div key={a.id} className="ml-2 flex items-center gap-1 text-xs text-slate-600">
                   {a.title}
                   {a.report_submission_enabled && <Badge variant="primary">report</Badge>}
+                  {canManage && (
+                    <DeleteButton onDelete={() => deleteAssignmentMutation.mutate(a.id)} />
+                  )}
                 </div>
               ))}
             </div>
