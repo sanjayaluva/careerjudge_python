@@ -63,9 +63,14 @@ export default function TrainingPage() {
 
   const registerMutation = useMutation({
     mutationFn: (courseId: number) => registerForCourse(courseId),
-    onSuccess: () => {
+    onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["training", "my-courses"] });
-      toast.success("Registered for course. Payment pending.");
+      void queryClient.invalidateQueries({ queryKey: TRAINING_KEY });
+      toast.success(
+        data.payment_status === "paid"
+          ? "Registered! You can start the course now."
+          : "Registered for course. Payment pending.",
+      );
     },
     onError: (err) => toast.error(extractApiError(err)),
   });

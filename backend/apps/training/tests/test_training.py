@@ -184,7 +184,9 @@ def test_publish_rejects_non_draft(trainer_client, trainer_user):
 
 
 def test_student_can_register_for_published_course(student_client, individual_user, trainer_user):
-    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    course = TrainingCourse.objects.create(
+        title="C", created_by=trainer_user, status="published", price="99.99"
+    )
     resp = student_client.post(f"/api/training/courses/{course.id}/register/")
     assert resp.status_code == 201, f"Got {resp.status_code}: {resp.data}"
     reg = CourseRegistration.objects.get(course=course, student=individual_user)
@@ -684,3 +686,27 @@ def test_progress_summary_non_scheduled_no_time_limit(
     assert data["total_time_allowed_seconds"] is None
     assert data["time_left_seconds"] is None
     assert data["is_expired"] is False
+
+
+def test_free_course_auto_paid_on_register(student_client, individual_user, trainer_user):
+    """Free courses (price=0) should auto-set payment_status='paid'."""
+    course = TrainingCourse.objects.create(
+        title="Free Course", created_by=trainer_user, status="published", price="0"
+    )
+    resp = student_client.post(f"/api/training/courses/{course.id}/register/")
+    assert resp.status_code == 201
+    reg = CourseRegistration.objects.get(course=course, student=individual_user)
+    assert reg.payment_status == "paid"
+    assert reg.completion_status == "in_progress"
+
+
+def test_paid_course_stays_pending(student_client, individual_user, trainer_user):
+    """Paid courses (price>0) should stay payment_status='pending'."""
+    course = TrainingCourse.objects.create(
+        title="Paid Course", created_by=trainer_user, status="published", price="99.99"
+    )
+    resp = student_client.post(f"/api/training/courses/{course.id}/register/")
+    assert resp.status_code == 201
+    reg = CourseRegistration.objects.get(course=course, student=individual_user)
+    assert reg.payment_status == "pending"
+    assert reg.completion_status == "not_started"

@@ -322,12 +322,12 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
     def register(self, request, pk=None):
         """Student registers for a course (SRS §6).
 
-        Creates a CourseRegistration with payment_status='pending' (the
-        payment gateway integration is a separate step). For scheduled
-        courses, started_at is set immediately per SRS §6 rule: 'If
-        training course is scheduled, course duration starts from this
-        time'. For non-scheduled, started_at stays null until the
-        student first accesses course content.
+        Creates a CourseRegistration. For free courses (price=0), payment
+        is auto-completed. For paid courses, payment_status='pending'
+        (the payment gateway integration is a separate step). For
+        scheduled courses, started_at is set immediately per SRS §6
+        rule: 'If training course is scheduled, course duration starts
+        from this time'.
         """
         from django.utils import timezone
 
@@ -342,12 +342,18 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        # Free courses (price == 0) are auto-paid — no payment gateway needed
+        is_free = float(course.price) == 0
+        payment_status = "paid" if is_free else "pending"
+        completion_status = "in_progress" if is_free else "not_started"
+
         reg, created = CourseRegistration.objects.get_or_create(
             course=course,
             student=request.user,
             defaults={
-                "payment_status": "pending",
-                "completion_status": "not_started",
+                "payment_status": payment_status,
+                "completion_status": completion_status,
                 "started_at": timezone.now() if course.schedule_type == "scheduled" else None,
             },
         )
@@ -360,7 +366,10 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 status=status.HTTP_200_OK,
             )
         return Response(
-            {"message": "Registration created.", "data": CourseRegistrationSerializer(reg).data},
+            {
+                "message": f"Registration created. {'You can start the course now.' if is_free else 'Payment pending.'}",
+                "data": CourseRegistrationSerializer(reg).data,
+            },
             status=status.HTTP_201_CREATED,
         )
 
