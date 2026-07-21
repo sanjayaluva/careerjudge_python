@@ -182,6 +182,18 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    def update(self, request, *args, **kwargs):
+        """Override to return wrapped envelope (matching create/retrieve)."""
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {"message": "Course updated.", "data": TrainingCourseSerializer(instance).data},
+            status=status.HTTP_200_OK,
+        )
+
     def destroy(self, request, *args, **kwargs):
         """Per SRS §5: 'Deleting a course is the right of Admin only'."""
         user_role_name = request.user.role.name if request.user.role_id else None

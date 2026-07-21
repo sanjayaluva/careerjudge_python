@@ -20,6 +20,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   Alert,
   AlertDescription,
+  Badge,
   Button,
   Card,
   CardContent,
@@ -33,12 +34,14 @@ import {
 import {
   COURSE_TYPES,
   SCHEDULE_TYPES,
+  createCategory,
   createCourse,
   listCategories,
   retrieveCourse,
   updateCourse,
 } from "@/api/training";
 import { extractApiError } from "@/api/client";
+import { useAuth } from "@/hooks/useAuth";
 
 const TRAINING_KEY = ["training", "courses"];
 
@@ -49,6 +52,8 @@ export default function TrainingCourseEditorPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canManage = ["cj_admin", "trainer"].includes(user?.role ?? "");
 
   // Load categories for the dropdown
   const { data: categories } = useQuery({
@@ -107,7 +112,79 @@ export default function TrainingCourseEditorPage() {
         loading={saveMutation.isPending}
         onSubmit={(payload) => saveMutation.mutate(payload)}
       />
+
+      {canManage && <CategoryManager />}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Category Manager — create new training categories inline
+// ---------------------------------------------------------------------------
+
+function CategoryManager() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [newCategory, setNewCategory] = useState("");
+
+  const { data: categories } = useQuery({
+    queryKey: ["training", "categories"],
+    queryFn: () => listCategories(),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () => createCategory({ name: newCategory }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["training", "categories"] });
+      toast.success("Category created.");
+      setNewCategory("");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Categories</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-slate-500">
+          Manage training categories. Courses are organized under these categories.
+        </p>
+        {(categories ?? []).length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {(categories ?? []).map((c) => (
+              <Badge key={c.id} variant="outline">
+                {c.name}
+              </Badge>
+            ))}
+          </div>
+        )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            createMutation.mutate();
+          }}
+          className="flex items-end gap-2"
+        >
+          <div className="flex-1">
+            <Label htmlFor="new-cat" required>
+              New category name
+            </Label>
+            <Input
+              id="new-cat"
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              placeholder="e.g., Leadership"
+              required
+            />
+          </div>
+          <Button type="submit" loading={createMutation.isPending} disabled={!newCategory}>
+            Add category
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
