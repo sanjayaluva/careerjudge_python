@@ -41,7 +41,7 @@ import {
   retrieveCourse,
   updateCourse,
 } from "@/api/training";
-import { extractApiError } from "@/api/client";
+import { extractApiError, apiPatch } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 
 const TRAINING_KEY = ["training", "courses"];
@@ -153,6 +153,17 @@ function CategoryManager() {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  const renameCatMutation = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) =>
+      apiPatch(`/training/categories/${id}/`, { name }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["training", "categories"] });
+      void queryClient.invalidateQueries({ queryKey: ["training", "courses"] });
+      toast.success("Category renamed.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   return (
     <Card>
       <CardHeader>
@@ -166,14 +177,11 @@ function CategoryManager() {
           <div className="flex flex-wrap gap-2">
             {(categories ?? []).map((c) => (
               <span key={c.id} className="inline-flex items-center gap-1">
-                <Badge variant="outline">{c.name}</Badge>
-                <button
-                  onClick={() => deleteCatMutation.mutate(c.id)}
-                  className="text-xs text-danger-600 hover:text-danger-800"
-                  title="Delete category"
-                >
-                  ✕
-                </button>
+                <CategoryBadge
+                  category={c}
+                  onDelete={() => deleteCatMutation.mutate(c.id)}
+                  onRename={(newName) => renameCatMutation.mutate({ id: c.id, name: newName })}
+                />
               </span>
             ))}
           </div>
@@ -399,5 +407,67 @@ function CourseForm({
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CategoryBadge — inline renameable + deletable category badge
+// ---------------------------------------------------------------------------
+
+function CategoryBadge({
+  category,
+  onDelete,
+  onRename,
+}: {
+  category: { id: number; name: string };
+  onDelete: () => void;
+  onRename: (newName: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(category.name);
+
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <Input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="h-7 w-28 text-xs"
+          autoFocus
+        />
+        <Button
+          size="sm"
+          onClick={() => {
+            onRename(value);
+            setEditing(false);
+          }}
+        >
+          ✓
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
+          ✕
+        </Button>
+      </span>
+    );
+  }
+
+  return (
+    <>
+      <Badge
+        variant="outline"
+        className="cursor-pointer hover:bg-slate-100"
+        onClick={() => setEditing(true)}
+        title="Click to rename"
+      >
+        {category.name} ✎
+      </Badge>
+      <button
+        onClick={onDelete}
+        className="text-xs text-danger-600 hover:text-danger-800"
+        title="Delete category"
+      >
+        ✕
+      </button>
+    </>
   );
 }
