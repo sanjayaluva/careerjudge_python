@@ -487,6 +487,17 @@ export function addCourseAssessment(
   return apiPost<CourseAssessment>(`${BASE}/courses/${courseId}/assessments/`, payload);
 }
 
+export function updateCourseAssessment(
+  assessmentId: number,
+  payload: Record<string, unknown>,
+): Promise<CourseAssessment> {
+  return apiPatch<CourseAssessment>(`${BASE}/course-assessments/${assessmentId}/`, payload);
+}
+
+export function deleteCourseAssessment(assessmentId: number): Promise<void> {
+  return apiDelete(`${BASE}/course-assessments/${assessmentId}/`);
+}
+
 // ---------------------------------------------------------------------------
 // Progress API
 // ---------------------------------------------------------------------------

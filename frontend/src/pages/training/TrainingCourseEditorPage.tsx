@@ -36,6 +36,7 @@ import {
   SCHEDULE_TYPES,
   createCategory,
   createCourse,
+  deleteCategory,
   listCategories,
   retrieveCourse,
   updateCourse,
@@ -142,6 +143,16 @@ function CategoryManager() {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  const deleteCatMutation = useMutation({
+    mutationFn: (catId: number) => deleteCategory(catId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["training", "categories"] });
+      void queryClient.invalidateQueries({ queryKey: ["training", "courses"] });
+      toast.success("Category deleted.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   return (
     <Card>
       <CardHeader>
@@ -154,9 +165,16 @@ function CategoryManager() {
         {(categories ?? []).length > 0 && (
           <div className="flex flex-wrap gap-2">
             {(categories ?? []).map((c) => (
-              <Badge key={c.id} variant="outline">
-                {c.name}
-              </Badge>
+              <span key={c.id} className="inline-flex items-center gap-1">
+                <Badge variant="outline">{c.name}</Badge>
+                <button
+                  onClick={() => deleteCatMutation.mutate(c.id)}
+                  className="text-xs text-danger-600 hover:text-danger-800"
+                  title="Delete category"
+                >
+                  ✕
+                </button>
+              </span>
             ))}
           </div>
         )}

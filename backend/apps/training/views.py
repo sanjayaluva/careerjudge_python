@@ -28,6 +28,7 @@ from core.permissions import HasModulePermission
 
 from .models import (
     AssignmentReport,
+    CourseAssessment,
     CourseLesson,
     CourseMessage,
     CourseProgress,
@@ -996,3 +997,21 @@ class SessionContentViewSet(ModelViewSet):
             {"message": "Interactive question created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
         )
+
+
+# ---------------------------------------------------------------------------
+# Course Assessment ViewSet (edit/delete linked assessments — SRS §2.4)
+# ---------------------------------------------------------------------------
+
+
+class CourseAssessmentViewSet(ModelViewSet):
+    """CRUD for course assessments (SRS §2.4).
+
+    Allows trainers to update and delete linked assessments, not just
+    add them.
+    """
+
+    queryset = CourseAssessment.objects.select_related("course", "assessment", "session")
+    permission_classes = [IsAuthenticated, HasTrainingPermission]
+    serializer_class = CourseAssessmentSerializer
+    http_method_names = ["get", "head", "options", "patch", "delete", "post"]

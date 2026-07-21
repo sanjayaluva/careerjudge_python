@@ -40,6 +40,8 @@ import {
   addCourseAssessment,
   addLiveSession,
   COURSE_TYPES,
+  deleteCourseAssessment,
+  deleteLiveSession,
   listCourseRegistrations,
   notifyLiveSessionStudents,
   publishCourse,
@@ -324,14 +326,17 @@ export default function TrainingCourseDetailPage() {
                         </TableCell>
                         {canManage && (
                           <TableCell>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => notifyMutation.mutate(s.id)}
-                              loading={notifyMutation.isPending}
-                            >
-                              Notify
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => notifyMutation.mutate(s.id)}
+                                loading={notifyMutation.isPending}
+                              >
+                                Notify
+                              </Button>
+                              <DeleteLiveSessionButton liveSessionId={s.id} courseId={cid} />
+                            </div>
                           </TableCell>
                         )}
                       </TableRow>
@@ -361,6 +366,7 @@ export default function TrainingCourseDetailPage() {
                       <TableHead>Level</TableHead>
                       <TableHead>Assessment</TableHead>
                       <TableHead>Scored</TableHead>
+                      {canManage && <TableHead>Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -378,6 +384,11 @@ export default function TrainingCourseDetailPage() {
                             {a.is_scored ? "scored" : "unscored"}
                           </Badge>
                         </TableCell>
+                        {canManage && (
+                          <TableCell>
+                            <DeleteAssessmentButton assessmentId={a.id} courseId={cid} />
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -750,5 +761,109 @@ function AddAssessmentForm({ courseId }: { courseId: number }) {
         </Button>
       </div>
     </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Delete buttons for Live Sessions + Assessments
+// ---------------------------------------------------------------------------
+
+function DeleteLiveSessionButton({
+  liveSessionId,
+  courseId,
+}: {
+  liveSessionId: number;
+  courseId: number;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteLiveSession(liveSessionId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["training", "courses", courseId] });
+      toast.success("Live session deleted.");
+      setConfirming(false);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (!confirming) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => setConfirming(true)}
+        className="text-danger-600 hover:bg-danger-50"
+      >
+        ✕
+      </Button>
+    );
+  }
+  return (
+    <div className="flex gap-1">
+      <Button
+        size="sm"
+        variant="danger"
+        onClick={() => deleteMutation.mutate()}
+        loading={deleteMutation.isPending}
+      >
+        Delete?
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => setConfirming(false)}>
+        No
+      </Button>
+    </div>
+  );
+}
+
+function DeleteAssessmentButton({
+  assessmentId,
+  courseId,
+}: {
+  assessmentId: number;
+  courseId: number;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteCourseAssessment(assessmentId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["training", "courses", courseId] });
+      toast.success("Assessment removed from course.");
+      setConfirming(false);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (!confirming) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => setConfirming(true)}
+        className="text-danger-600 hover:bg-danger-50"
+      >
+        ✕
+      </Button>
+    );
+  }
+  return (
+    <div className="flex gap-1">
+      <Button
+        size="sm"
+        variant="danger"
+        onClick={() => deleteMutation.mutate()}
+        loading={deleteMutation.isPending}
+      >
+        Delete?
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => setConfirming(false)}>
+        No
+      </Button>
+    </div>
   );
 }
