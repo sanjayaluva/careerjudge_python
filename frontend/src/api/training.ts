@@ -397,6 +397,19 @@ export function addLiveSession(
   return apiPost<LiveSession>(`${BASE}/courses/${courseId}/live_sessions/`, payload);
 }
 
+export function addCourseAssessment(
+  courseId: number,
+  payload: {
+    assessment: number;
+    level: string;
+    title: string;
+    is_scored?: boolean;
+    session?: number;
+  },
+): Promise<CourseAssessment> {
+  return apiPost<CourseAssessment>(`${BASE}/courses/${courseId}/assessments/`, payload);
+}
+
 // ---------------------------------------------------------------------------
 // Progress API
 // ---------------------------------------------------------------------------

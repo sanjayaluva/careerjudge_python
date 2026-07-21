@@ -37,6 +37,7 @@ import {
   useToast,
 } from "@/components/ui";
 import {
+  addCourseAssessment,
   addLiveSession,
   COURSE_TYPES,
   listCourseRegistrations,
@@ -47,6 +48,7 @@ import {
   SCHEDULE_TYPES,
 } from "@/api/training";
 import { extractApiError } from "@/api/client";
+import { listAssessments } from "@/api/assessment";
 import { useAuth } from "@/hooks/useAuth";
 import { LiveSessionConsentModal } from "./LiveSessionConsentModal";
 import { CourseStructureEditor } from "./CourseStructureEditor";
@@ -381,11 +383,10 @@ export default function TrainingCourseDetailPage() {
                   </TableBody>
                 </Table>
               )}
+              {canManage && <AddAssessmentForm courseId={cid} />}
             </CardContent>
           </Card>
         </TabsContent>
-
-        {/* === REGISTRATIONS TAB (trainer/admin only) === */}
         {canManage && (
           <TabsContent value="registrations">
             <RegistrationsTab courseId={cid} />
@@ -607,6 +608,142 @@ function AddLiveSessionForm({ courseId }: { courseId: number }) {
           disabled={!title || !scheduledAt}
         >
           Add session
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={() => setShow(false)}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Add Assessment Form (SRS §2.4)
+// ---------------------------------------------------------------------------
+
+function AddAssessmentForm({ courseId }: { courseId: number }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [show, setShow] = useState(false);
+  const [title, setTitle] = useState("");
+  const [assessmentId, setAssessmentId] = useState("");
+  const [level, setLevel] = useState("end_of_session");
+  const [isScored, setIsScored] = useState(true);
+
+  // Load available assessments from the assessment module
+  const { data: assessmentsData } = useQuery({
+    queryKey: ["assessment", "for-training", "published"],
+    queryFn: () => listAssessments({ status: "published" }),
+  });
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      addCourseAssessment(courseId, {
+        assessment: Number(assessmentId),
+        level,
+        title,
+        is_scored: isScored,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["training", "courses", courseId] });
+      toast.success("Assessment linked to course.");
+      setTitle("");
+      setAssessmentId("");
+      setShow(false);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (!show) {
+    return (
+      <div className="mt-4 border-t border-slate-100 pt-3">
+        <Button variant="outline" size="sm" onClick={() => setShow(true)}>
+          + Link assessment
+        </Button>
+      </div>
+    );
+  }
+
+  const assessments = assessmentsData?.results ?? [];
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        mutation.mutate();
+      }}
+      className="mt-4 space-y-3 border-t border-slate-100 pt-4"
+    >
+      <div className="text-sm font-semibold text-slate-900">Link Assessment to Course</div>
+      <p className="text-xs text-slate-500">
+        Select a published assessment from the Assessment module. It will be embedded at the
+        specified level (during session, end of session/topic/lesson/course).
+      </p>
+      <div>
+        <Label htmlFor="as-title" required>
+          Title (shown to students)
+        </Label>
+        <Input
+          id="as-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g., Lesson 1 Quiz"
+          required
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label htmlFor="as-assessment" required>
+            Assessment
+          </Label>
+          <select
+            id="as-assessment"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            value={assessmentId}
+            onChange={(e) => setAssessmentId(e.target.value)}
+            required
+          >
+            <option value="">Select an assessment...</option>
+            {assessments.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.title}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="as-level">Level</Label>
+          <select
+            id="as-level"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            value={level}
+            onChange={(e) => setLevel(e.target.value)}
+          >
+            <option value="during_session">During Session</option>
+            <option value="end_of_session">End of Session</option>
+            <option value="end_of_topic">End of Topic</option>
+            <option value="end_of_lesson">End of Lesson</option>
+            <option value="end_of_course">End of Course</option>
+          </select>
+        </div>
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={isScored}
+          onChange={(e) => setIsScored(e.target.checked)}
+          className="h-4 w-4"
+        />
+        Scored assessment (affects course completion)
+      </label>
+      <div className="flex gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          loading={mutation.isPending}
+          disabled={!title || !assessmentId}
+        >
+          Link assessment
         </Button>
         <Button type="button" size="sm" variant="outline" onClick={() => setShow(false)}>
           Cancel

@@ -73,19 +73,32 @@ class HasTrainingPermission(HasModulePermission):
         "lessons": "change",
         "live_sessions": "change",
         "assessments": "change",
-        "register": "add",  # student self-registers
+        "register": "add",
         "registrations": "view",
         "progress": "change",
         "my_courses": "view",
         "progress_summary": "view",
-        "messages": "add",  # student + trainer can send messages
-        "assignment_reports": "add",  # student submits
-        "review_report": "change",  # trainer reviews
-        "consent": "add",  # student consents to live session
-        "consents": "view",  # trainer views consent list
-        "interactive_questions": "change",  # trainer adds questions to content
-        "notify_students": "change",  # trainer triggers notification manually
+        "messages": "add",
+        "assignment_reports": "add",
+        "review_report": "change",
+        "consent": "add",
+        "consents": "view",
+        "interactive_questions": "change",
+        "notify_students": "change",
+        # Nested resource actions (CourseLessonViewSet, LessonTopicViewSet, etc.)
+        "topics": "change",
+        "sessions": "change",
+        "contents": "change",
+        "assignments": "change",
+        # Also allow 'view' for GET on nested resources
+        "categories": "view",
     }
+
+
+def _next_order(queryset, field="order"):
+    """Get the next order value for a new item in the queryset."""
+    last = queryset.order_by(f"-{field}").first()
+    return (getattr(last, field, -1) + 1) if last else 0
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +275,7 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
             )
         serializer = CourseLessonSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(course=course)
+        serializer.save(course=course, order=_next_order(course.lessons))
         return Response(
             {"message": "Lesson created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
@@ -736,7 +749,7 @@ class CourseLessonViewSet(ModelViewSet):
             )
         serializer = LessonTopicSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(lesson=lesson)
+        serializer.save(lesson=lesson, order=_next_order(lesson.topics))
         return Response(
             {"message": "Topic created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
@@ -762,7 +775,7 @@ class LessonTopicViewSet(ModelViewSet):
             )
         serializer = TopicSessionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(topic=topic)
+        serializer.save(topic=topic, order=_next_order(topic.sessions))
         return Response(
             {"message": "Session created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
@@ -788,7 +801,7 @@ class TopicSessionViewSet(ModelViewSet):
             )
         serializer = SessionContentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(session=session)
+        serializer.save(session=session, order=_next_order(session.contents))
         return Response(
             {"message": "Content created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
@@ -806,7 +819,7 @@ class TopicSessionViewSet(ModelViewSet):
             )
         serializer = AssignmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(session=session)
+        serializer.save(session=session, order=_next_order(session.assignments))
         return Response(
             {"message": "Assignment created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
