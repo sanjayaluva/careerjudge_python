@@ -46,6 +46,16 @@ export default function TrainingPage() {
       }),
   });
 
+  // Trainers see ALL their courses (including drafts) in a separate tab
+  const { data: myCoursesData } = useQuery({
+    queryKey: [...TRAINING_KEY, debouncedSearch, "all"],
+    queryFn: () =>
+      listCourses({
+        ...(debouncedSearch ? { search: debouncedSearch } : {}),
+      }),
+    enabled: canManage,
+  });
+
   const { data: myCourses } = useQuery({
     queryKey: ["training", "my-courses"],
     queryFn: () => listMyCourses(),
@@ -61,6 +71,7 @@ export default function TrainingPage() {
   });
 
   const courses = data?.results ?? [];
+  const allCourses = myCoursesData?.results ?? [];
   const myRegs = myCourses ?? [];
 
   return (
@@ -84,7 +95,10 @@ export default function TrainingPage() {
           <div className="px-6">
             <TabsList>
               <TabsTrigger value="browse">Browse Courses</TabsTrigger>
-              <TabsTrigger value="my-courses">My Courses ({myRegs.length})</TabsTrigger>
+              {canManage && (
+                <TabsTrigger value="manage">Manage Courses ({allCourses.length})</TabsTrigger>
+              )}
+              <TabsTrigger value="my-courses">My Sessions ({myRegs.length})</TabsTrigger>
             </TabsList>
           </div>
 
@@ -154,7 +168,77 @@ export default function TrainingPage() {
             )}
           </TabsContent>
 
-          {/* === My Courses Tab === */}
+          {/* === Manage Courses Tab (trainers/admins only) === */}
+          {canManage && (
+            <TabsContent value="manage" className="px-6 py-4">
+              {allCourses.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-500">
+                  No courses yet. Click &quot;Create course&quot; to get started.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Title</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Registrations</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allCourses.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-medium text-slate-900">
+                          <Link
+                            to={`/training/${c.id}`}
+                            className="text-primary-600 hover:underline"
+                          >
+                            {c.title}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {COURSE_TYPES.find((t) => t.value === c.course_type)?.label ??
+                              c.course_type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              c.status === "published"
+                                ? "success"
+                                : c.status === "archived"
+                                  ? "warning"
+                                  : "default"
+                            }
+                          >
+                            {c.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-slate-500">${c.price}</TableCell>
+                        <TableCell className="text-slate-500">{c.registration_count}</TableCell>
+                        <TableCell className="text-slate-500">
+                          {new Date(c.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <Link to={`/training/${c.id}/edit`}>
+                            <Button size="sm" variant="outline">
+                              Edit
+                            </Button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </TabsContent>
+          )}
+
+          {/* === My Sessions Tab === */}
           <TabsContent value="my-courses" className="px-6 py-4">
             {myRegs.length === 0 ? (
               <p className="py-8 text-center text-sm text-slate-500">

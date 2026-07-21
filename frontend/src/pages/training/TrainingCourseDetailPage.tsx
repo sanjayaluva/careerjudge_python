@@ -9,6 +9,7 @@
  * - Registrations: trainer views student registrations
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import {
@@ -20,6 +21,8 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Input,
+  Label,
   Spinner,
   Table,
   TableBody,
@@ -34,6 +37,7 @@ import {
   useToast,
 } from "@/components/ui";
 import {
+  addLiveSession,
   COURSE_TYPES,
   listCourseRegistrations,
   notifyLiveSessionStudents,
@@ -45,6 +49,7 @@ import {
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { LiveSessionConsentModal } from "./LiveSessionConsentModal";
+import { CourseStructureEditor } from "./CourseStructureEditor";
 
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
   draft: "default",
@@ -194,6 +199,11 @@ export default function TrainingCourseDetailPage() {
               )}
 
               <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
+                {canManage && (
+                  <Link to={`/training/${cid}/edit`}>
+                    <Button variant="outline">Edit course</Button>
+                  </Link>
+                )}
                 {canManage && course.status === "draft" && (
                   <Button
                     onClick={() => publishMutation.mutate()}
@@ -222,74 +232,11 @@ export default function TrainingCourseDetailPage() {
               <CardTitle>Course Structure</CardTitle>
             </CardHeader>
             <CardContent>
-              {course.lessons.length === 0 ? (
-                <p className="py-4 text-center text-sm text-slate-500">No lessons defined yet.</p>
-              ) : (
-                <div className="space-y-4">
-                  {course.lessons.map((lesson) => (
-                    <div key={lesson.id} className="rounded-md border border-slate-200 p-4">
-                      <div className="font-semibold text-slate-900">
-                        {lesson.title}{" "}
-                        <span className="ml-2 text-xs font-normal text-slate-500">
-                          (Week {lesson.week_number})
-                        </span>
-                      </div>
-                      {lesson.topics.length === 0 ? (
-                        <p className="mt-1 text-xs text-slate-500">No topics.</p>
-                      ) : (
-                        <div className="mt-2 space-y-2">
-                          {lesson.topics.map((topic) => (
-                            <div key={topic.id} className="ml-4 border-l border-slate-200 pl-3">
-                              <div className="text-sm font-medium text-slate-700">
-                                {topic.title}
-                              </div>
-                              {topic.sessions.length === 0 ? (
-                                <p className="ml-2 text-xs text-slate-500">No sessions.</p>
-                              ) : (
-                                <div className="mt-1 space-y-1">
-                                  {topic.sessions.map((session) => (
-                                    <div key={session.id} className="ml-2 text-xs">
-                                      <span className="font-medium text-slate-700">
-                                        {session.title}
-                                      </span>
-                                      {session.contents.length > 0 && (
-                                        <span className="ml-2 text-slate-500">
-                                          ({session.contents.length} content
-                                          {session.contents.length !== 1 ? "s" : ""})
-                                        </span>
-                                      )}
-                                      {session.assignments.length > 0 && (
-                                        <span className="ml-2 text-slate-500">
-                                          ({session.assignments.length} assignment
-                                          {session.assignments.length !== 1 ? "s" : ""})
-                                        </span>
-                                      )}
-                                      {/* Show interactive question badges */}
-                                      {session.contents.some(
-                                        (c) => c.interactive_questions?.length > 0,
-                                      ) && (
-                                        <span className="ml-2 text-amber-600">
-                                          (
-                                          {session.contents.reduce(
-                                            (sum, c) =>
-                                              sum + (c.interactive_questions?.length ?? 0),
-                                            0,
-                                          )}{" "}
-                                          interactive Q)
-                                        </span>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              <CourseStructureEditor
+                courseId={cid}
+                lessons={course.lessons}
+                canManage={canManage}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -390,11 +337,10 @@ export default function TrainingCourseDetailPage() {
                   </TableBody>
                 </Table>
               )}
+              {canManage && <AddLiveSessionForm courseId={cid} />}
             </CardContent>
           </Card>
         </TabsContent>
-
-        {/* === ASSESSMENTS TAB === */}
         <TabsContent value="assessments">
           <Card>
             <CardHeader>
@@ -526,5 +472,146 @@ function RegistrationsTab({ courseId }: { courseId: number }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Add Live Session Form (SRS §2.5)
+// ---------------------------------------------------------------------------
+
+function AddLiveSessionForm({ courseId }: { courseId: number }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [show, setShow] = useState(false);
+  const [title, setTitle] = useState("");
+  const [mode, setMode] = useState<"online" | "offline">("online");
+  const [meetingUrl, setMeetingUrl] = useState("");
+  const [venue, setVenue] = useState("");
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [duration, setDuration] = useState("60");
+  const [description, setDescription] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      addLiveSession(courseId, {
+        title,
+        mode,
+        meeting_url: meetingUrl,
+        venue,
+        scheduled_at: new Date(scheduledAt).toISOString(),
+        duration_minutes: Number(duration),
+        description,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["training", "courses", courseId] });
+      toast.success("Live session added.");
+      setTitle("");
+      setMeetingUrl("");
+      setVenue("");
+      setScheduledAt("");
+      setDuration("60");
+      setDescription("");
+      setShow(false);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (!show) {
+    return (
+      <div className="mt-4 border-t border-slate-100 pt-3">
+        <Button variant="outline" size="sm" onClick={() => setShow(true)}>
+          + Add live session
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        mutation.mutate();
+      }}
+      className="mt-4 space-y-3 border-t border-slate-100 pt-4"
+    >
+      <div className="text-sm font-semibold text-slate-900">Add Live Session</div>
+      <Input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Session title (e.g., Week 1 Q&A)"
+        required
+      />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label htmlFor="ls-mode">Mode</Label>
+          <select
+            id="ls-mode"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as "online" | "offline")}
+          >
+            <option value="online">Online (Zoom)</option>
+            <option value="offline">Offline (Classroom)</option>
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="ls-time" required>
+            Scheduled at
+          </Label>
+          <Input
+            id="ls-time"
+            type="datetime-local"
+            value={scheduledAt}
+            onChange={(e) => setScheduledAt(e.target.value)}
+            required
+          />
+        </div>
+      </div>
+      {mode === "online" ? (
+        <Input
+          value={meetingUrl}
+          onChange={(e) => setMeetingUrl(e.target.value)}
+          placeholder="Zoom meeting URL (https://zoom.us/j/...)"
+        />
+      ) : (
+        <Input
+          value={venue}
+          onChange={(e) => setVenue(e.target.value)}
+          placeholder="Venue address"
+        />
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label htmlFor="ls-dur">Duration (minutes)</Label>
+          <Input
+            id="ls-dur"
+            type="number"
+            min="15"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+          />
+        </div>
+      </div>
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Description (optional)"
+        rows={2}
+        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+      />
+      <div className="flex gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          loading={mutation.isPending}
+          disabled={!title || !scheduledAt}
+        >
+          Add session
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={() => setShow(false)}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }

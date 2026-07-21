@@ -332,6 +332,52 @@ export function addLesson(
   return apiPost<CourseLesson>(`${BASE}/courses/${courseId}/lessons/`, payload);
 }
 
+// ---------------------------------------------------------------------------
+// Nested structure: topics, sessions, contents, assignments
+// ---------------------------------------------------------------------------
+
+export function addTopic(
+  lessonId: number,
+  payload: { title: string; order?: number; description?: string },
+): Promise<LessonTopic> {
+  return apiPost<LessonTopic>(`${BASE}/lessons/${lessonId}/topics/`, payload);
+}
+
+export function addSession(
+  topicId: number,
+  payload: { title: string; order?: number; description?: string },
+): Promise<TopicSession> {
+  return apiPost<TopicSession>(`${BASE}/topics/${topicId}/sessions/`, payload);
+}
+
+export function addContent(
+  sessionId: number,
+  payload: {
+    title: string;
+    content_format: "video" | "audio" | "text";
+    content_url?: string;
+    text_content?: string;
+    duration_seconds?: number;
+    order?: number;
+  },
+): Promise<SessionContent> {
+  return apiPost<SessionContent>(`${BASE}/sessions/${sessionId}/contents/`, payload);
+}
+
+export function addAssignment(
+  sessionId: number,
+  payload: {
+    title: string;
+    description?: string;
+    resource_url?: string;
+    report_submission_enabled?: boolean;
+    report_instructions?: string;
+    order?: number;
+  },
+): Promise<Assignment> {
+  return apiPost<Assignment>(`${BASE}/sessions/${sessionId}/assignments/`, payload);
+}
+
 export function listLiveSessions(courseId: number): Promise<LiveSession[]> {
   return apiGet<LiveSession[]>(`${BASE}/courses/${courseId}/live_sessions/`);
 }
