@@ -182,6 +182,12 @@ ROLE_PERMISSIONS = {
     "individual": [
         ("assessment", "view"),  # can take assessments
         ("reporting", "view"),  # can view own reports
+        ("training", "view"),  # can browse + register for courses
+        ("training", "add"),  # can register (register action = 'add')
+        ("training", "change"),  # can track progress (progress action = 'change')
+        ("counseling", "view"),  # can browse counsellors
+        ("counseling", "add"),  # can book sessions
+        ("counseling", "change"),  # can submit feedback
     ],
 }
 
