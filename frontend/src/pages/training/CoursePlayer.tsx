@@ -111,7 +111,12 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
     );
   }
 
-  if (registration.payment_status !== "paid") {
+  // For free courses (price=0), don't block on payment_status — the
+  // backend auto-marks them as 'paid', but existing registrations from
+  // before the fix may still have 'pending'. For paid courses, block
+  // until payment is confirmed.
+  const isFreeCourse = parseFloat(course.price) === 0;
+  if (!isFreeCourse && registration.payment_status !== "paid") {
     return (
       <Alert variant="warning">
         <AlertDescription>
