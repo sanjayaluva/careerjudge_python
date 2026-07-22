@@ -54,6 +54,7 @@ import { listAssessments } from "@/api/assessment";
 import { useAuth } from "@/hooks/useAuth";
 import { LiveSessionConsentModal } from "./LiveSessionConsentModal";
 import { CourseStructureEditor } from "./CourseStructureEditor";
+import { CoursePlayer } from "./CoursePlayer";
 
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
   draft: "default",
@@ -149,6 +150,7 @@ export default function TrainingCourseDetailPage() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          {!canManage && <TabsTrigger value="learn">📖 Learn</TabsTrigger>}
           <TabsTrigger value="structure">Structure ({course.lessons.length} lessons)</TabsTrigger>
           <TabsTrigger value="live-sessions">
             Live Sessions ({course.live_sessions.length})
@@ -228,6 +230,13 @@ export default function TrainingCourseDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* === LEARN TAB (students only — course delivery player) === */}
+        {!canManage && (
+          <TabsContent value="learn">
+            <CoursePlayer course={course} />
+          </TabsContent>
+        )}
 
         {/* === STRUCTURE TAB === */}
         <TabsContent value="structure">
