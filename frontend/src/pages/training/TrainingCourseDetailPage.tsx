@@ -43,6 +43,7 @@ import {
   deleteCourseAssessment,
   deleteLiveSession,
   listCourseRegistrations,
+  listMyCourses,
   notifyLiveSessionStudents,
   publishCourse,
   registerForCourse,
@@ -91,6 +92,14 @@ export default function TrainingCourseDetailPage() {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  // Student's registration for this course (to show correct button state)
+  const { data: myCourses } = useQuery({
+    queryKey: ["training", "my-courses"],
+    queryFn: () => listMyCourses(),
+    enabled: !canManage,
+  });
+  const myRegistration = myCourses?.find((r) => r.course === cid);
+
   const publishMutation = useMutation({
     mutationFn: () => publishCourse(cid),
     onSuccess: () => {
@@ -102,9 +111,14 @@ export default function TrainingCourseDetailPage() {
 
   const registerMutation = useMutation({
     mutationFn: () => registerForCourse(cid),
-    onSuccess: () => {
+    onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["training", "my-courses"] });
-      toast.success("Registered! Payment pending.");
+      void queryClient.invalidateQueries({ queryKey: ["training", "courses"] });
+      toast.success(
+        data.payment_status === "paid"
+          ? "Registered! You can start the course now."
+          : "Registered for course. Payment pending.",
+      );
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -147,7 +161,7 @@ export default function TrainingCourseDetailPage() {
         )}
       </div>
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue={myRegistration ? "learn" : "overview"}>
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           {!canManage && <TabsTrigger value="learn">📖 Learn</TabsTrigger>}
@@ -218,13 +232,20 @@ export default function TrainingCourseDetailPage() {
                     Publish course
                   </Button>
                 )}
-                {!canManage && course.status === "published" && (
+                {!canManage && course.status === "published" && !myRegistration && (
                   <Button
                     onClick={() => registerMutation.mutate()}
                     loading={registerMutation.isPending}
                   >
-                    Register for ${course.price}
+                    {parseFloat(course.price) === 0
+                      ? "Enroll for free"
+                      : `Register for $${course.price}`}
                   </Button>
+                )}
+                {!canManage && myRegistration && (
+                  <Badge variant={myRegistration.payment_status === "paid" ? "success" : "warning"}>
+                    {myRegistration.payment_status === "paid" ? "✓ Enrolled" : "Payment pending"}
+                  </Badge>
                 )}
               </div>
             </CardContent>

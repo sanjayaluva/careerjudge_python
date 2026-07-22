@@ -157,14 +157,18 @@ export default function TrainingPage() {
                       <TableCell className="text-slate-500">${c.price}</TableCell>
                       <TableCell className="text-slate-500">{c.registration_count}</TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => registerMutation.mutate(c.id)}
-                          loading={registerMutation.isPending}
-                        >
-                          Register
-                        </Button>
+                        {myRegs.some((r) => r.course === c.id) ? (
+                          <Badge variant="success">Registered</Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => registerMutation.mutate(c.id)}
+                            loading={registerMutation.isPending}
+                          >
+                            Register
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
