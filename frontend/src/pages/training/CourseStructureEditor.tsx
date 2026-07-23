@@ -27,6 +27,7 @@ import {
   type TopicSession,
 } from "@/api/training";
 import { extractApiError } from "@/api/client";
+import { TimelinerEditor } from "./TimelinerEditor";
 
 // Hook: refresh all course data after a mutation
 function useRefreshCourse() {
@@ -317,6 +318,11 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
   const [expanded, setExpanded] = useState(false);
   const [showAddContent, setShowAddContent] = useState(false);
   const [showAddAssignment, setShowAddAssignment] = useState(false);
+  const [timelinerContent, setTimelinerContent] = useState<{
+    id: number;
+    url: string;
+    title: string;
+  } | null>(null);
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteSession(session.id),
@@ -415,6 +421,17 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
                   {c.interactive_questions?.length > 0 && (
                     <span className="text-amber-600">({c.interactive_questions.length} Q)</span>
                   )}
+                  {canManage && c.content_format === "video" && c.content_url && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setTimelinerContent({ id: c.id, url: c.content_url, title: c.title })
+                      }
+                    >
+                      🎬 Timeliner
+                    </Button>
+                  )}
                   {canManage && (
                     <DeleteButton onDelete={() => deleteContentMutation.mutate(c.id)} />
                   )}
@@ -446,6 +463,15 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
             <AddAssignmentForm sessionId={session.id} onDone={() => setShowAddAssignment(false)} />
           )}
         </div>
+      )}
+
+      {timelinerContent && (
+        <TimelinerEditor
+          contentId={timelinerContent.id}
+          contentUrl={timelinerContent.url}
+          title={timelinerContent.title}
+          onClose={() => setTimelinerContent(null)}
+        />
       )}
     </div>
   );

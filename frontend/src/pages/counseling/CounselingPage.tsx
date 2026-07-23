@@ -6,6 +6,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
+  Alert,
+  AlertDescription,
   Badge,
   Button,
   Input,
@@ -31,12 +33,21 @@ import {
   listMySessions,
   bookSession,
   listCounsellorTimeslots,
+  confirmFollowup,
+  declineFollowup,
+  listFollowups,
+  submitSessionFeedback,
   type CounsellorProfile,
   type TimeSlot,
+  type CounselingSession,
 } from "@/api/counseling";
 import { extractApiError } from "@/api/client";
+import { useAuth } from "@/hooks/useAuth";
+import { CounsellorDashboard } from "./CounsellorDashboard";
 
 export default function CounselingPage() {
+  const { user } = useAuth();
+  const isCounsellor = user?.role === "counsellor";
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -73,6 +84,7 @@ export default function CounselingPage() {
           <div className="px-6">
             <TabsList>
               <TabsTrigger value="browse">Browse Counsellors ({counsellors.length})</TabsTrigger>
+              {isCounsellor && <TabsTrigger value="dashboard">My Dashboard</TabsTrigger>}
               <TabsTrigger value="my-sessions">My Sessions ({sessions.length})</TabsTrigger>
             </TabsList>
           </div>
@@ -152,6 +164,13 @@ export default function CounselingPage() {
             )}
           </TabsContent>
 
+          {/* === Counsellor Dashboard Tab === */}
+          {isCounsellor && (
+            <TabsContent value="dashboard" className="px-6 py-4">
+              <CounsellorDashboardWrapper />
+            </TabsContent>
+          )}
+
           {/* === My Sessions Tab === */}
           <TabsContent value="my-sessions" className="px-6 py-4">
             {sessions.length === 0 ? (
@@ -167,6 +186,7 @@ export default function CounselingPage() {
                     <TableHead>Scheduled</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Fee</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -197,6 +217,9 @@ export default function CounselingPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-500">${s.fee}</TableCell>
+                      <TableCell>
+                        <SessionActionsForCounselee session={s} />
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -338,5 +361,175 @@ function BookingModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CounsellorDashboardWrapper — finds the counsellor's profile and renders dashboard
+// ---------------------------------------------------------------------------
+
+function CounsellorDashboardWrapper() {
+  const { user } = useAuth();
+  const { data: counsellors } = useQuery({
+    queryKey: ["counseling", "counsellors", "me"],
+    queryFn: () => listCounsellors({ search: user?.email ?? "" }),
+  });
+
+  const myProfile = counsellors?.results?.find((c) => c.user_email === user?.email);
+
+  if (!myProfile) {
+    return (
+      <Alert variant="warning">
+        <AlertDescription>
+          You don&apos;t have a counsellor profile yet. Please contact an admin to set up your
+          profile.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return <CounsellorDashboard counsellorId={myProfile.id} />;
+}
+
+// ---------------------------------------------------------------------------
+// Post-session actions for counselees — feedback + follow-up confirmation
+// ---------------------------------------------------------------------------
+
+function SessionActionsForCounselee({ session }: { session: CounselingSession }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [rating, setRating] = useState("5");
+  const [feedbackText, setFeedbackText] = useState("");
+
+  const { data: followups } = useQuery({
+    queryKey: ["counseling", "followups", session.id],
+    queryFn: () => listFollowups(session.id),
+    enabled: session.status === "completed",
+  });
+
+  const feedbackMut = useMutation({
+    mutationFn: () =>
+      submitSessionFeedback(session.id, {
+        rating: Number(rating),
+        experience_text: feedbackText,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["counseling", "my-sessions"] });
+      toast.success("Feedback submitted.");
+      setFeedbackOpen(false);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const confirmFuMut = useMutation({
+    mutationFn: (fuId: number) => confirmFollowup(fuId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["counseling"] });
+      toast.success("Follow-up confirmed! A new session has been created.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const declineFuMut = useMutation({
+    mutationFn: (fuId: number) => declineFollowup(fuId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["counseling"] });
+      toast.success("Follow-up declined.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const pendingFollowups = (followups ?? []).filter((f) => f.status === "proposed");
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Feedback button for completed sessions */}
+      {session.status === "completed" && (
+        <Button size="sm" variant="outline" onClick={() => setFeedbackOpen(true)}>
+          Give Feedback
+        </Button>
+      )}
+
+      {/* Follow-up proposals */}
+      {pendingFollowups.length > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-2">
+          <div className="text-xs font-medium text-amber-800">Follow-up proposed:</div>
+          {pendingFollowups.map((fu) => (
+            <div key={fu.id} className="mt-1 flex items-center gap-2">
+              <span className="text-xs text-amber-700">
+                {new Date(fu.proposed_time).toLocaleString()}
+              </span>
+              <Button
+                size="sm"
+                onClick={() => confirmFuMut.mutate(fu.id)}
+                loading={confirmFuMut.isPending}
+              >
+                Confirm
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => declineFuMut.mutate(fu.id)}
+                loading={declineFuMut.isPending}
+              >
+                Decline
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Feedback modal */}
+      {feedbackOpen && (
+        <Modal open onClose={() => setFeedbackOpen(false)} title="Session Feedback" size="sm">
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="rating" required>
+                Rating (1-5)
+              </Label>
+              <select
+                id="rating"
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                value={rating}
+                onChange={(e) => setRating(e.target.value)}
+              >
+                <option value="5">★★★★★ Excellent</option>
+                <option value="4">★★★★☆ Good</option>
+                <option value="3">★★★☆☆ Average</option>
+                <option value="2">★★☆☆☆ Below average</option>
+                <option value="1">★☆☆☆☆ Poor</option>
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="feedback" required>
+                Your experience
+              </Label>
+              <textarea
+                id="feedback"
+                rows={3}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                placeholder="How was your counselling experience?"
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+              <Button variant="outline" onClick={() => setFeedbackOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => feedbackMut.mutate()}
+                loading={feedbackMut.isPending}
+                disabled={!feedbackText}
+              >
+                Submit feedback
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
   );
 }
