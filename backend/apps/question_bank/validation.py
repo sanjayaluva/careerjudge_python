@@ -58,9 +58,9 @@ def validate_question_config(question: Question) -> list[str]:
                     )
                     break
         # Audio/Video types need media files
-        if qtype == "MCQ_AUDIO_MULTI" and not q.media_files.filter(media_type="audio").exists():
+        if qtype == "MCQ_AUDIO_MULTI" and not q.media_files.filter(media_type="AUDIO").exists():
             errors.append("MCQ Audio requires at least 1 audio file.")
-        if qtype == "MCQ_VIDEO_MULTI" and not q.media_files.filter(media_type="video").exists():
+        if qtype == "MCQ_VIDEO_MULTI" and not q.media_files.filter(media_type="VIDEO").exists():
             errors.append("MCQ Video requires at least 1 video file.")
         # Flash types need flash items
         if qtype in ("MCQ_WORD_FLASH_MULTI", "MCQ_IMAGE_FLASH_MULTI"):

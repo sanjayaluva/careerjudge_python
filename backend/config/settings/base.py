@@ -7,6 +7,12 @@ import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
+# Allow large media uploads (video/audio files as base64 in JSON).
+# Default Django limit is 2.5MB which is too small for video files.
+# 100MB allows most training videos; base64 encoding adds ~33% overhead.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024  # 100MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024  # 100MB
+
 env = environ.Env(
     DJANGO_SETTINGS_MODULE=(str, "config.settings.dev"),
     SECRET_KEY=(str, "dev-secret-key-change-in-prod"),

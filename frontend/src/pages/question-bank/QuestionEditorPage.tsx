@@ -524,7 +524,12 @@ export default function QuestionEditorPage() {
         }
       }
 
-      return question;
+      // Refetch the question so validation_warnings reflect the newly
+      // created media files / options / hotspots / flash items. Without
+      // this, the detail page shows stale warnings from the initial
+      // save response (before child resources were created).
+      const freshQuestion = await retrieveQuestion(question.id);
+      return freshQuestion;
     },
     onSuccess: (question) => {
       void queryClient.invalidateQueries({ queryKey: QB_KEY });

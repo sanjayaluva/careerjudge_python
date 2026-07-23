@@ -18,19 +18,22 @@
 careerjudge.pp.ua {
         encode gzip zstd
 
+        # Allow large request bodies for video/audio file uploads (base64 in JSON)
+        request_body {
+                max_size 120MB
+        }
+
         # Backend API — use `handle` (not `handle_path`) to preserve the /api prefix
         # Django's urls.py expects /api/auth/login, /api/me/, /api/accounts/, etc.
         handle /api/* {
                 reverse_proxy backend:8000 {
                         header_up X-Forwarded-Proto {scheme}
                         header_up X-Forwarded-Host {host}
-                        # Increase timeouts for large payloads (base64 images in JSON)
+                        # Increase timeouts for large payloads (base64 video/audio in JSON)
                         # and slow DB operations (bulk options save with transaction).
-                        # Default Caddy transport timeout is 30s which is too short
-                        # for question saves with multiple base64 images.
                         transport http {
-                                read_timeout 120s
-                                write_timeout 120s
+                                read_timeout 300s
+                                write_timeout 300s
                                 dial_timeout 10s
                         }
                 }
