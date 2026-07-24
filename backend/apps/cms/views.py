@@ -123,7 +123,11 @@ class PageViewSet(ActionSerializerMixin, ModelViewSet):
 
 
 class BannerViewSet(ActionSerializerMixin, ModelViewSet):
-    """CRUD for CMS banners."""
+    """CRUD for CMS banners.
+
+    GET (list) is public — anyone can view active banners.
+    All other actions require auth.
+    """
 
     queryset = Banner.objects.select_related("created_by").all()
     permission_classes = [IsAuthenticated, HasCMSPermission]
@@ -132,6 +136,12 @@ class BannerViewSet(ActionSerializerMixin, ModelViewSet):
     search_fields = ["title", "subtitle", "body"]
     ordering_fields = ["order", "created_at"]
     ordering = ["order", "-created_at"]
+
+    def get_permissions(self):
+        """List + retrieve are public (for public homepage rendering)."""
+        if self.action in ("list", "retrieve"):
+            return []
+        return super().get_permissions()
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -177,7 +187,10 @@ class BannerViewSet(ActionSerializerMixin, ModelViewSet):
 
 
 class MenuItemViewSet(ModelViewSet):
-    """CRUD for CMS menu items."""
+    """CRUD for CMS menu items.
+
+    GET (list) is public — anyone can view the navigation menu.
+    """
 
     queryset = MenuItem.objects.all()
     permission_classes = [IsAuthenticated, HasCMSPermission]
@@ -185,6 +198,12 @@ class MenuItemViewSet(ModelViewSet):
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["location", "order"]
     ordering = ["location", "order"]
+
+    def get_permissions(self):
+        """List is public (for rendering navigation on public pages)."""
+        if self.action == "list":
+            return []
+        return super().get_permissions()
 
     def get_queryset(self):
         qs = super().get_queryset()

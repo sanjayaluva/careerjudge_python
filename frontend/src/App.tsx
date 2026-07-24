@@ -24,6 +24,7 @@ import CounselingPage from "@/pages/counseling/CounselingPage";
 import CMSPage from "@/pages/cms/CMSPage";
 import CMSPageViewer from "@/pages/cms/CMSPageViewer";
 import { PaymentSuccessPage, PaymentCancelPage } from "@/pages/payments/PaymentResultPages";
+import { PublicHomepage } from "@/pages/PublicHomepage";
 import ProfilePage from "@/pages/account/ProfilePage";
 import SettingsPage from "@/pages/account/SettingsPage";
 import PermissionsPage from "@/pages/admin/PermissionsPage";
@@ -178,12 +179,15 @@ export default function App() {
                 }
               />
 
+              {/* Public homepage (landing page) */}
+              <Route path="/" element={<PublicHomepage />} />
+
               {/* CMS page catch-all — tries to render a CMS page by slug
                   before falling back to 404. This makes /about-us work
                   without needing /page/about-us prefix. */}
               <Route path="/:slug" element={<CMSPageViewer />} />
 
-              {/* Payment result pages (after Stripe redirect) */}
+              {/* Payment result pages (after Stripe/Razorpay redirect) */}
               <Route path="/payments/success" element={<PaymentSuccessPage />} />
               <Route path="/payments/cancel" element={<PaymentCancelPage />} />
 
