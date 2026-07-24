@@ -656,28 +656,49 @@ function AnswerInput({
   }
 
   // FITB types — text inputs
+  // Per SRS feedback Issue 6: do NOT show "Field N" labels (unnecessary detail).
+  // Per SRS feedback Issue 11: For FITB Flash Image/Word, allow candidate to add
+  // up to N answer fields where N = number of flash items.
   if (qType.startsWith("FITB_")) {
     const answers: string[] = (currentAnswer?.answers as string[]) || [];
+    const isFlashFitb = qType === "FITB_IMAGE_FLASH_MULTI" || qType === "FITB_WORD_FLASH_MULTI";
     const fields = qd.options.filter((o) => o.option_type === "TEXT");
+    const maxFields = isFlashFitb
+      ? Math.max(fields.length, qd.flash_items?.length || 0)
+      : fields.length;
+    const visibleFields = isFlashFitb ? Math.max(answers.length, fields.length, 1) : fields.length;
 
     return (
       <div className="space-y-2">
-        {fields.map((opt, i) => (
-          <div key={opt.id}>
-            <Label className="text-xs text-slate-500">Field {i + 1}</Label>
-            <input
-              type="text"
-              value={answers[i] || ""}
-              onChange={(e) => {
-                const newAnswers = [...answers];
-                newAnswers[i] = e.target.value;
-                onChange({ answers: newAnswers });
-              }}
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              placeholder="Type your answer..."
-            />
-          </div>
+        {Array.from({ length: isFlashFitb ? visibleFields : fields.length }).map((_, i) => (
+          <input
+            key={i}
+            type="text"
+            value={answers[i] || ""}
+            onChange={(e) => {
+              const newAnswers = [...answers];
+              newAnswers[i] = e.target.value;
+              onChange({ answers: newAnswers });
+            }}
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            placeholder="Type your answer..."
+          />
         ))}
+        {isFlashFitb && visibleFields < maxFields && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onChange({ answers: [...answers, ""] })}
+          >
+            + Add answer field ({visibleFields} / {maxFields})
+          </Button>
+        )}
+        {isFlashFitb && (
+          <p className="text-xs text-slate-500">
+            Enter each item you remember from the flash presentation. Each correct answer gets +1
+            point (any order).
+          </p>
+        )}
       </div>
     );
   }
@@ -1114,7 +1135,9 @@ function AnswerInput({
     );
   }
 
-  // Grid — checkbox grid
+  // Grid — checkbox grid with numbered buttons (SRS feedback Issue 14)
+  // Hides row/column names (they're backend metadata, not for the candidate).
+  // Uses numbered-button grid style per SRS recommendation.
   if (qType === "GRID_LIST_SELECTION") {
     const selectedCells: { r: number; c: number }[] =
       (currentAnswer?.selected_cells as { r: number; c: number }[]) || [];
@@ -1132,53 +1155,31 @@ function AnswerInput({
       }
     };
 
-    const isCellSelected = (r: number, c: number) =>
-      selectedCells.some((cell) => cell.r === r && cell.c === c);
-
     // Get cell content from DRAG_POOL options
     const dragPoolOptions = qd.options.filter((o) => o.option_type === "DRAG_POOL");
 
     return (
       <div>
         <p className="mb-3 text-xs text-slate-500">
-          Select the correct cells by checking the boxes:
+          Click on a numbered button to view its content. Tick the checkbox to mark it as correct.
+          Each correct cell = +1, each incorrect = −1, minimum 0.
         </p>
         <table className="w-full text-sm">
-          <thead>
-            <tr>
-              <th className="border border-slate-200 p-2"></th>
-              {Array.from({ length: cols }).map((_, c) => (
-                <th
-                  key={c}
-                  className="border border-slate-200 p-2 text-center text-xs text-slate-600"
-                >
-                  Col {c + 1}
-                </th>
-              ))}
-            </tr>
-          </thead>
           <tbody>
             {Array.from({ length: rows }).map((_, r) => (
               <tr key={r}>
-                <td className="border border-slate-200 p-2 text-xs font-medium text-slate-600">
-                  Row {r + 1}
-                </td>
                 {Array.from({ length: cols }).map((_, c) => {
-                  const cellOpt = dragPoolOptions[r * cols + c];
+                  const cellIndex = r * cols + c;
+                  const cellOpt = dragPoolOptions[cellIndex];
+                  const selected = selectedCells.some((cell) => cell.r === r && cell.c === c);
                   return (
-                    <td key={c} className="border border-slate-200 p-2 text-center">
-                      {cellOpt?.image_file ? (
-                        <img src={cellOpt.image_file} alt="" className="mx-auto mb-1 max-h-10" />
-                      ) : cellOpt?.text_value ? (
-                        <div className="mb-1 text-xs">{cellOpt.text_value}</div>
-                      ) : null}
-                      <input
-                        type="checkbox"
-                        checked={isCellSelected(r, c)}
-                        onChange={() => toggleCell(r, c)}
-                        className="h-4 w-4"
-                      />
-                    </td>
+                    <GridCell
+                      key={c}
+                      cellIndex={cellIndex}
+                      cellOpt={cellOpt}
+                      selected={selected}
+                      onToggle={() => toggleCell(r, c)}
+                    />
                   );
                 })}
               </tr>
@@ -1435,5 +1436,98 @@ function PassageDisplay({
       </div>
       {body && <p className="mt-1 text-sm leading-relaxed text-slate-700">{body}</p>}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// GridCell — numbered-button cell for Grid Selection questions.
+// Click the number to view the cell's content in a popup (SRS feedback Issue 14).
+// Tick the checkbox to mark the cell as correct/incorrect.
+// ---------------------------------------------------------------------------
+
+interface GridCellOption {
+  text_value?: string;
+  image_file?: string | null;
+}
+
+function GridCell({
+  cellIndex,
+  cellOpt,
+  selected,
+  onToggle,
+}: {
+  cellIndex: number;
+  cellOpt: GridCellOption | undefined;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  const [popupOpen, setPopupOpen] = useState(false);
+
+  return (
+    <td className="border border-slate-200 p-1 text-center align-top">
+      <div
+        className={`flex flex-col items-center gap-1 rounded-md p-1 ${
+          selected ? "bg-green-50 ring-1 ring-green-300" : "bg-white"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => setPopupOpen(true)}
+          className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-bold ${
+            selected ? "bg-green-500 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+          }`}
+          aria-label={`View cell ${cellIndex + 1}`}
+        >
+          {cellIndex + 1}
+        </button>
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          className="h-4 w-4"
+          aria-label={`Select cell ${cellIndex + 1}`}
+        />
+      </div>
+      {popupOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setPopupOpen(false)}
+        >
+          <div
+            className="max-w-md rounded-md bg-white p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold">Cell {cellIndex + 1}</p>
+              <button
+                type="button"
+                onClick={() => setPopupOpen(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+            {cellOpt?.image_file ? (
+              <img src={cellOpt.image_file} alt="" className="mx-auto mb-2 max-h-60" />
+            ) : null}
+            {cellOpt?.text_value ? (
+              <p className="text-sm text-slate-700">{cellOpt.text_value}</p>
+            ) : null}
+            <div className="mt-3 flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant={selected ? "outline" : "primary"}
+                onClick={() => {
+                  onToggle();
+                  setPopupOpen(false);
+                }}
+              >
+                {selected ? "Unmark" : "Mark Correct"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </td>
   );
 }

@@ -200,6 +200,38 @@ def _score_partial(question: Question, raw_answer: dict) -> tuple[float, float]:
     # For FITB multi-field: raw_answer = {"answers": ["ans1", "ans2", ...]}
     answers = raw_answer.get("answers", [])
     if answers:
+        # For FITB Flash (image/word) types: candidate can enter answers in
+        # ANY order. Each correctly entered answer gets +1 (SRS feedback §11).
+        # Match each candidate answer against the UNION of all options'
+        # correct_answers, with each correct answer counted at most once.
+        is_flash_fitb = question.question_type in (
+            "FITB_IMAGE_FLASH_MULTI",
+            "FITB_WORD_FLASH_MULTI",
+        )
+        if is_flash_fitb:
+            # Build the set of all correct answers across all options
+            all_correct = set()
+            for opt in options:
+                for ca in opt.correct_answers.all():
+                    val = ca.answer_text.strip()
+                    if not question.case_sensitive:
+                        val = val.lower()
+                    all_correct.add(val)
+            max_score = float(len(all_correct))
+            matched_correct = set()
+            score = 0.0
+            for ans in answers:
+                candidate = (ans or "").strip()
+                if not candidate:
+                    continue
+                if not question.case_sensitive:
+                    candidate = candidate.lower()
+                if candidate in all_correct and candidate not in matched_correct:
+                    score += 1.0
+                    matched_correct.add(candidate)
+            return score, max_score
+
+        # Standard FITB multi-field: positional match (answer[i] ↔ option[i])
         score = 0.0
         for i, opt in enumerate(options):
             if i < len(answers):
