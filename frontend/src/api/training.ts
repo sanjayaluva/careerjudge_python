@@ -455,6 +455,22 @@ export function deleteCategory(categoryId: number): Promise<void> {
   return apiDelete(`${BASE}/categories/${categoryId}/`);
 }
 
+// ---------------------------------------------------------------------------
+// Zoom API (optional auto-create meetings)
+// ---------------------------------------------------------------------------
+
+export function getZoomConfig(): Promise<{ is_configured: boolean }> {
+  return apiGet<{ is_configured: boolean }>(`${BASE}/zoom_config/`);
+}
+
+export function createZoomMeeting(payload: {
+  topic: string;
+  start_time: string;
+  duration_minutes?: number;
+}): Promise<{ join_url: string; meeting_id: string; password: string }> {
+  return apiPost(`${BASE}/zoom_create_meeting/`, payload);
+}
+
 export function listLiveSessions(courseId: number): Promise<LiveSession[]> {
   return apiGet<LiveSession[]>(`${BASE}/courses/${courseId}/live_sessions/`);
 }

@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     "apps.training",
     "apps.counseling",
     "apps.cms",
+    "apps.payments",
     "apps.notifications",
 ]
 

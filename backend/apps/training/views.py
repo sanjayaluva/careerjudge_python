@@ -86,6 +86,8 @@ class HasTrainingPermission(HasModulePermission):
         "consents": "view",
         "interactive_questions": "change",
         "notify_students": "change",
+        "zoom_config": "view",
+        "zoom_create_meeting": "change",
         # Nested resource actions (CourseLessonViewSet, LessonTopicViewSet, etc.)
         "topics": "change",
         "sessions": "change",
@@ -394,6 +396,77 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         return Response(
             {"message": "OK", "data": CourseRegistrationSerializer(regs, many=True).data},
             status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["get"])
+    def zoom_config(self, request):
+        """Check if Zoom API is configured (for auto-create meeting feature).
+
+        Returns { is_configured: bool }. If true, the frontend shows an
+        'Auto-create Zoom Meeting' option in the Live Session form. If false,
+        the form falls back to manual URL entry.
+        """
+        from .zoom import is_zoom_configured
+
+        return Response(
+            {"message": "OK", "data": {"is_configured": is_zoom_configured()}},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"])
+    def zoom_create_meeting(self, request):
+        """Create a Zoom meeting via the API (requires Zoom credentials in env).
+
+        Body:
+            { "topic": "Q&A Session", "start_time": "2026-08-01T10:00:00Z",
+              "duration_minutes": 60 }
+
+        Returns:
+            { "join_url": "https://zoom.us/j/...", "meeting_id": "123", "password": "abc" }
+            or 400 if Zoom is not configured.
+        """
+        from .zoom import create_zoom_meeting, is_zoom_configured
+
+        if not is_zoom_configured():
+            return Response(
+                {
+                    "error": {
+                        "code": "not_configured",
+                        "message": (
+                            "Zoom API is not configured. Set ZOOM_ACCOUNT_ID, "
+                            "ZOOM_CLIENT_ID, and ZOOM_CLIENT_SECRET environment "
+                            "variables to enable auto-create. Alternatively, "
+                            "enter the meeting URL manually."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        topic = request.data.get("topic", "Training Session")
+        start_time = request.data.get("start_time")
+        duration = int(request.data.get("duration_minutes", 60))
+
+        if not start_time:
+            return Response(
+                {"error": {"code": "validation_error", "message": "start_time is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        result = create_zoom_meeting(topic, start_time, duration)
+        if result:
+            return Response(
+                {"message": "Zoom meeting created.", "data": result},
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(
+            {
+                "error": {
+                    "code": "zoom_error",
+                    "message": "Failed to create Zoom meeting. Check server logs.",
+                }
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 

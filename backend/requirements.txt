@@ -52,3 +52,4 @@ pip-audit==2.7.3
 
 # Production server
 gunicorn==22.0.0
+stripe==10.0.0
