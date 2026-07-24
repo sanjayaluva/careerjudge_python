@@ -33,9 +33,10 @@ class Payment(models.Model):
         ("free", "Free (no payment required)"),
     ]
     PROVIDER_CHOICES = [
-        ("stripe", "Stripe"),
-        ("razorpay", "Razorpay"),
-        ("manual", "Manual (offline)"),
+        ("razorpay", "Razorpay (Primary)"),
+        ("stripe", "Stripe (Optional)"),
+        ("paytm", "Paytm (Optional)"),
+        ("manual", "Manual (no gateway)"),
         ("free", "Free"),
     ]
 
@@ -89,16 +90,26 @@ class PaymentSettings(models.Model):
     """
 
     PROVIDER_CHOICES = [
-        ("stripe", "Stripe"),
-        ("razorpay", "Razorpay"),
+        ("razorpay", "Razorpay (Primary)"),
+        ("stripe", "Stripe (Optional)"),
+        ("paytm", "Paytm (Optional)"),
         ("manual", "Manual (no gateway)"),
     ]
 
     active_provider = models.CharField(
-        _("active provider"), max_length=20, choices=PROVIDER_CHOICES, default="manual"
+        _("active provider"), max_length=20, choices=PROVIDER_CHOICES, default="razorpay"
     )
 
-    # Stripe
+    # Razorpay (Primary)
+    razorpay_key_id = models.CharField(_("Razorpay key ID"), max_length=255, blank=True, default="")
+    razorpay_key_secret = models.CharField(
+        _("Razorpay key secret"), max_length=255, blank=True, default=""
+    )
+    razorpay_webhook_secret = models.CharField(
+        _("Razorpay webhook secret"), max_length=255, blank=True, default=""
+    )
+
+    # Stripe (Optional)
     stripe_secret_key = models.CharField(
         _("Stripe secret key"), max_length=255, blank=True, default=""
     )
@@ -109,10 +120,12 @@ class PaymentSettings(models.Model):
         _("Stripe webhook secret"), max_length=255, blank=True, default=""
     )
 
-    # Razorpay
-    razorpay_key_id = models.CharField(_("Razorpay key ID"), max_length=255, blank=True, default="")
-    razorpay_key_secret = models.CharField(
-        _("Razorpay key secret"), max_length=255, blank=True, default=""
+    # Paytm (Optional)
+    paytm_merchant_id = models.CharField(
+        _("Paytm merchant ID"), max_length=255, blank=True, default=""
+    )
+    paytm_merchant_key = models.CharField(
+        _("Paytm merchant key"), max_length=255, blank=True, default=""
     )
 
     currency = models.CharField(_("currency"), max_length=3, default="USD")

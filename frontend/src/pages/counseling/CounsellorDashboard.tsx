@@ -35,14 +35,15 @@ import {
   useToast,
 } from "@/components/ui";
 import {
-  confirmSession,
   cancelSession,
   completeSession,
-  getSessionSummary,
-  saveSessionSummary,
-  proposeFollowup,
+  confirmSession,
   createTimeSlot,
+  getSessionSummary,
   listCounsellorTimeslots,
+  listSessions,
+  proposeFollowup,
+  saveSessionSummary,
   type CounselingSession,
 } from "@/api/counseling";
 import { extractApiError } from "@/api/client";
@@ -69,24 +70,15 @@ export function CounsellorDashboard({ counsellorId }: { counsellorId: number }) 
 // Sessions Tab — list + confirm/cancel/complete + summary + follow-up
 // ---------------------------------------------------------------------------
 
-function SessionsTab({ counsellorId }: { counsellorId: number }) {
+function SessionsTab({ counsellorId: _cid }: { counsellorId: number }) {
   // We can't directly list sessions by counsellor from the API, so we
   // use the counsellor's session data. In practice the API returns all
   // sessions for the authenticated counsellor via the sessions endpoint.
   // For now, we'll use a query that lists all sessions (the backend
   // filters by the counsellor's profile automatically).
   const { data: sessionsData, isLoading } = useQuery({
-    queryKey: ["counseling", "sessions", "counsellor", counsellorId],
-    queryFn: async () => {
-      // The API filters sessions by the authenticated user's role
-      const resp = await fetch("/api/counseling/sessions/", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
-      const data = await resp.json();
-      return data.data as CounselingSession[];
-    },
+    queryKey: ["counseling", "sessions"],
+    queryFn: () => listSessions(),
   });
 
   if (isLoading) return <Spinner />;

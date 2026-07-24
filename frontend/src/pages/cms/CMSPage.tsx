@@ -39,6 +39,17 @@ import {
   type PageListItem,
 } from "@/api/cms";
 import { extractApiError } from "@/api/client";
+import { WysiwygEditor } from "@/components/ui/WysiwygEditor";
+
+// Helper: slugify a title
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
 
 const CMS_KEY = ["cms"];
 
@@ -222,7 +233,19 @@ function PageEditor({ page, onClose }: { page: PageListItem | null; onClose: () 
             <Label htmlFor="p-title" required>
               Title
             </Label>
-            <Input id="p-title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+            <Input
+              id="p-title"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                // Auto-generate slug from title (only if slug is empty or
+                // was auto-generated from previous title)
+                if (!slug || slug === slugify(title)) {
+                  setSlug(slugify(e.target.value));
+                }
+              }}
+              required
+            />
           </div>
           <div>
             <Label htmlFor="p-slug" required>
@@ -232,24 +255,15 @@ function PageEditor({ page, onClose }: { page: PageListItem | null; onClose: () 
               id="p-slug"
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
-              placeholder="about"
+              placeholder="about-us"
               required
             />
+            <p className="mt-1 text-xs text-slate-400">Accessible at /{slug || "slug"}</p>
           </div>
         </div>
         <div>
-          <Label htmlFor="p-body" required>
-            Body (HTML)
-          </Label>
-          <textarea
-            id="p-body"
-            rows={10}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-sm"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="<h1>About Us</h1><p>Content here...</p>"
-            required
-          />
+          <Label required>Body content</Label>
+          <WysiwygEditor value={body} onChange={setBody} minHeight={300} />
         </div>
         <div>
           <Label htmlFor="p-status">Status</Label>
@@ -439,14 +453,8 @@ function BannerEditor({ banner, onClose }: { banner: Banner | null; onClose: () 
           <Input id="b-subtitle" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} />
         </div>
         <div>
-          <Label htmlFor="b-body">Body text</Label>
-          <textarea
-            id="b-body"
-            rows={3}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-          />
+          <Label>Body text</Label>
+          <WysiwygEditor value={body} onChange={setBody} minHeight={120} />
         </div>
         <div>
           <Label htmlFor="b-image">Image URL</Label>
