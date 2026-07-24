@@ -68,6 +68,10 @@ export interface QuestionDetail extends QuestionListItem {
   case_sensitive: boolean;
   pct_match_threshold: number | null;
   display_duration_seconds: number | null;
+  display_mode: "timed" | "unlimited";
+  replay_mode: "permitted" | "not_permitted";
+  option_layout: "1" | "2" | "3";
+  hotspot_visibility: "transparent" | "visible";
   flash_interval_ms: number | null;
   flash_display_count: number | null;
   flash_order: string;
