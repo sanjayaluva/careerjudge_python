@@ -22,6 +22,7 @@ import TrainingCourseDetailPage from "@/pages/training/TrainingCourseDetailPage"
 import TrainingCourseEditorPage from "@/pages/training/TrainingCourseEditorPage";
 import CounselingPage from "@/pages/counseling/CounselingPage";
 import CMSPage from "@/pages/cms/CMSPage";
+import CMSPageViewer from "@/pages/cms/CMSPageViewer";
 import ProfilePage from "@/pages/account/ProfilePage";
 import SettingsPage from "@/pages/account/SettingsPage";
 import PermissionsPage from "@/pages/admin/PermissionsPage";
@@ -160,6 +161,7 @@ export default function App() {
                 <Route path="training/:id/edit" element={<TrainingCourseEditorPage />} />
                 <Route path="counseling" element={<CounselingPage />} />
                 <Route path="cms" element={<CMSPage />} />
+                <Route path="page/:slug" element={<CMSPageViewer />} />
               </Route>
 
               {/* Fullscreen session player — outside DashboardShell so the
@@ -174,6 +176,11 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
+
+              {/* CMS page catch-all — tries to render a CMS page by slug
+                  before falling back to 404. This makes /about-us work
+                  without needing /page/about-us prefix. */}
+              <Route path="/:slug" element={<CMSPageViewer />} />
 
               <Route path="*" element={<NotFoundPage />} />
             </Routes>

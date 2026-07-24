@@ -83,6 +83,10 @@ export function retrievePage(id: number): Promise<Page> {
   return apiGet<Page>(`${BASE}/pages/${id}/`);
 }
 
+export function retrievePageBySlug(slug: string): Promise<Page> {
+  return apiGet<Page>(`${BASE}/pages/slug/${slug}/`);
+}
+
 export function createPage(payload: {
   title: string;
   slug: string;

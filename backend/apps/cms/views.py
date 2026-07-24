@@ -56,6 +56,13 @@ class PageViewSet(ActionSerializerMixin, ModelViewSet):
     ordering_fields = ["order", "title", "created_at", "updated_at"]
     ordering = ["order", "title"]
 
+    def get_permissions(self):
+        """The 'by_slug' action is public (no auth required) so unauthenticated
+        users can view published CMS pages like About, Privacy, Terms."""
+        if self.action == "by_slug":
+            return []
+        return super().get_permissions()
+
     def get_queryset(self):
         qs = super().get_queryset()
         if status_filter := self.request.query_params.get("status"):
@@ -98,7 +105,11 @@ class PageViewSet(ActionSerializerMixin, ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="slug/(?P<slug>[^/]+)")
     def by_slug(self, request, slug=None):
-        """Retrieve a published page by its slug (public endpoint)."""
+        """Retrieve a published page by its slug (public endpoint — no auth required).
+
+        This allows CMS pages to be viewed by unauthenticated users, which is
+        needed for public pages like About, Privacy Policy, Terms, etc.
+        """
         page = Page.objects.filter(slug=slug, status="published").first()
         if not page:
             return Response(

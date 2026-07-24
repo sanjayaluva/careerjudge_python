@@ -118,7 +118,16 @@ function PagesTab() {
             {pages.map((p) => (
               <TableRow key={p.id}>
                 <TableCell className="font-medium text-slate-900">{p.title}</TableCell>
-                <TableCell className="text-slate-500">/{p.slug}</TableCell>
+                <TableCell className="text-slate-500">
+                  <a
+                    href={`/${p.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary-600 hover:underline"
+                  >
+                    /{p.slug} ↗
+                  </a>
+                </TableCell>
                 <TableCell>
                   <Badge
                     variant={
