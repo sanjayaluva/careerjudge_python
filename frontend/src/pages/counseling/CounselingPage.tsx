@@ -46,7 +46,7 @@ import {
   type TimeSlot,
   type CounselingSession,
 } from "@/api/counseling";
-import { extractApiError } from "@/api/client";
+import { extractApiError, apiPatch } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { CounsellorDashboard } from "./CounsellorDashboard";
 
@@ -380,7 +380,6 @@ function CounsellorDashboardWrapper() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [fullName, setFullName] = useState(user?.full_name ?? "");
   const [bio, setBio] = useState("");
-  const [qualifications, setQualifications] = useState("");
   const [hourlyRate, setHourlyRate] = useState("50");
 
   const { data: counsellors } = useQuery({
@@ -391,14 +390,18 @@ function CounsellorDashboardWrapper() {
   const myProfile = counsellors?.results?.find((c) => c.user_email === user?.email);
 
   const createMut = useMutation({
-    mutationFn: () =>
-      createCounsellorProfile({
-        full_name: fullName,
+    mutationFn: async () => {
+      // Step 1: Update UserProfile with counsellor-specific fields
+      await apiPatch("/me/profile/", {
         bio,
-        qualifications,
-        hourly_rate: hourlyRate,
-        is_available: true,
-      }),
+        hourly_rate: parseFloat(hourlyRate),
+        is_available_for_counseling: true,
+      });
+      // Step 2: Create CounsellorProfile (lightweight — just links user + categories)
+      return createCounsellorProfile({
+        full_name: fullName,
+      });
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["counseling", "counsellors"] });
       toast.success("Profile created! You can now manage sessions.");
@@ -455,15 +458,6 @@ function CounsellorDashboardWrapper() {
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 placeholder="Brief introduction about your counselling experience..."
-              />
-            </div>
-            <div>
-              <Label htmlFor="cp-qual">Qualifications</Label>
-              <Input
-                id="cp-qual"
-                value={qualifications}
-                onChange={(e) => setQualifications(e.target.value)}
-                placeholder="M.A. Psychology, Certified Counsellor"
               />
             </div>
             <div>

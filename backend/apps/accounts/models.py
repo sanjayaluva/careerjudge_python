@@ -407,6 +407,30 @@ class UserProfile(models.Model):
     )
     contract_period = models.CharField(_("contract period"), max_length=2, blank=True)
 
+    # --- Counsellor-specific fields (shown only when role='counsellor') ---
+    hourly_rate = models.DecimalField(
+        _("hourly rate"),
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text=_("Counselling hourly rate in USD"),
+    )
+    meeting_url = models.URLField(
+        _("meeting URL"),
+        blank=True,
+        default="",
+        help_text=_("Default Zoom/Meet link for counselling sessions"),
+    )
+    is_available_for_counseling = models.BooleanField(
+        _("available for counseling"),
+        default=True,
+    )
+    cancellation_count = models.PositiveIntegerField(
+        _("cancellation count"),
+        default=0,
+        help_text=_("Tracks how often this counsellor cancels sessions (SRS §3.2)"),
+    )
+
     class Meta:
         verbose_name = _("user profile")
         verbose_name_plural = _("user profiles")

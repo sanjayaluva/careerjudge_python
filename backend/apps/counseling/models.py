@@ -50,8 +50,18 @@ class CounselingCategory(models.Model):
 class CounsellorProfile(models.Model):
     """A counsellor's professional profile (SRS §3).
 
-    Created when a user with the 'counsellor' role sets up their profile.
-    Contains the info shown to counselees when choosing a counsellor.
+    This is a lightweight model that links to the user's UserProfile for
+    common fields (bio, name, contact info). Only counseling-specific
+    data lives here: categories + availability toggle.
+
+    The hourly_rate, meeting_url, is_available, and cancellation_count
+    fields now live on UserProfile directly (added in migration) so the
+    counsellor manages everything from one profile page.
+
+    This model exists primarily for:
+    1. The many-to-many relationship with CounselingCategory
+    2. A queryable 'counsellor' entity for the counseling module
+    3. Backward compatibility with existing TimeSlot/Session FKs
     """
 
     user = models.OneToOneField(
@@ -59,30 +69,56 @@ class CounsellorProfile(models.Model):
         on_delete=models.CASCADE,
         related_name="counsellor_profile",
     )
-    full_name = models.CharField(_("full name"), max_length=255)
-    bio = models.TextField(_("bio"), blank=True, default="")
-    qualifications = models.TextField(_("qualifications"), blank=True, default="")
-    # Hourly rate in USD
-    hourly_rate = models.DecimalField(_("hourly rate"), max_digits=10, decimal_places=2, default=50)
-    # Meeting URL for online sessions (Zoom/Google Meet)
-    meeting_url = models.URLField(
-        _("meeting URL"), blank=True, default="", help_text=_("Zoom/Meet link for sessions")
-    )
     categories = models.ManyToManyField(CounselingCategory, blank=True, related_name="counsellors")
-    is_available = models.BooleanField(_("available for booking"), default=True)
-    # Cancellation frequency tracking (SRS §3.2 note)
-    cancellation_count = models.PositiveIntegerField(_("cancellation count"), default=0)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["full_name"]
+        ordering = ["user__full_name"]
         verbose_name = _("counsellor profile")
         verbose_name_plural = _("counsellor profiles")
 
     def __str__(self) -> str:
-        return self.full_name
+        return self.user.full_name or self.user.email
+
+    # --- Proxy properties (read from UserProfile so there's one source of truth) ---
+
+    @property
+    def full_name(self) -> str:
+        return self.user.full_name or self.user.email
+
+    @property
+    def bio(self) -> str:
+        return getattr(self.user.profile, "bio", "") if hasattr(self.user, "profile") else ""
+
+    @property
+    def hourly_rate(self):
+        return (
+            getattr(self.user.profile, "hourly_rate", 50) if hasattr(self.user, "profile") else 50
+        )
+
+    @property
+    def meeting_url(self) -> str:
+        return (
+            getattr(self.user.profile, "meeting_url", "") if hasattr(self.user, "profile") else ""
+        )
+
+    @property
+    def is_available(self) -> bool:
+        return (
+            getattr(self.user.profile, "is_available_for_counseling", True)
+            if hasattr(self.user, "profile")
+            else True
+        )
+
+    @property
+    def cancellation_count(self) -> int:
+        return (
+            getattr(self.user.profile, "cancellation_count", 0)
+            if hasattr(self.user, "profile")
+            else 0
+        )
 
 
 class TimeSlot(models.Model):

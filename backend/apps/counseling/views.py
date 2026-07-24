@@ -112,15 +112,15 @@ class CounselingCategoryViewSet(ActionSerializerMixin, ModelViewSet):
 
 
 class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
-    queryset = CounsellorProfile.objects.select_related("user").prefetch_related(
+    queryset = CounsellorProfile.objects.select_related("user", "user__profile").prefetch_related(
         "categories", "timeslots"
     )
     permission_classes = [IsAuthenticated, HasCounselingPermission]
     serializer_class = CounsellorProfileSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ["full_name", "bio", "qualifications"]
-    ordering_fields = ["full_name", "hourly_rate", "created_at"]
-    ordering = ["full_name"]
+    search_fields = ["user__full_name", "user__email", "user__profile__bio"]
+    ordering_fields = ["created_at", "user__full_name"]
+    ordering = ["user__full_name"]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -408,9 +408,10 @@ class CounselingSessionViewSet(ModelViewSet):
 
         # Track counsellor cancellation frequency (SRS §3.2 note)
         if cancelled_by == "counsellor":
-            counsellor = session.counsellor
-            counsellor.cancellation_count += 1
-            counsellor.save(update_fields=["cancellation_count"])
+            # cancellation_count lives on UserProfile now
+            profile = session.counsellor.user.profile
+            profile.cancellation_count += 1
+            profile.save(update_fields=["cancellation_count"])
 
         return Response(
             {

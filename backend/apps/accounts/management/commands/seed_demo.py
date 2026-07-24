@@ -245,16 +245,15 @@ class Command(BaseCommand):
 
         counsellor_user = User.objects.filter(email="counsellor@demo.careerjudge.pp.ua").first()
         if counsellor_user:
-            profile, created = CounsellorProfile.objects.get_or_create(
-                user=counsellor_user,
-                defaults={
-                    "full_name": "Demo Counsellor",
-                    "bio": "Experienced career counsellor with expertise in aptitude assessment and career guidance.",
-                    "qualifications": "M.A. Psychology, Certified Career Counsellor",
-                    "hourly_rate": "50.00",
-                    "is_available": True,
-                },
-            )
+            # Set counsellor-specific fields on UserProfile
+            up, _ = UserProfile.objects.get_or_create(user=counsellor_user)
+            up.bio = "Experienced career counsellor with expertise in aptitude assessment and career guidance."
+            up.hourly_rate = 50
+            up.is_available_for_counseling = True
+            up.save()
+
+            # Create the CounsellorProfile (links user + categories M2M)
+            cp, created = CounsellorProfile.objects.get_or_create(user=counsellor_user)
             if created:
                 self.stdout.write(self.style.SUCCESS("  ✓ Created counsellor profile"))
             else:

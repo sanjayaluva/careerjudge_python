@@ -23,6 +23,24 @@ class CounselingCategorySerializer(serializers.ModelSerializer):
 
 class CounsellorProfileSerializer(serializers.ModelSerializer):
     user_email = serializers.CharField(source="user.email", read_only=True)
+    full_name = serializers.CharField(source="user.full_name", read_only=True)
+    bio = serializers.CharField(source="user.profile.bio", read_only=True, default="")
+    hourly_rate = serializers.DecimalField(
+        source="user.profile.hourly_rate",
+        max_digits=10,
+        decimal_places=2,
+        read_only=True,
+        default=50,
+    )
+    meeting_url = serializers.CharField(
+        source="user.profile.meeting_url", read_only=True, default=""
+    )
+    is_available = serializers.BooleanField(
+        source="user.profile.is_available_for_counseling", read_only=True, default=True
+    )
+    cancellation_count = serializers.IntegerField(
+        source="user.profile.cancellation_count", read_only=True, default=0
+    )
     category_names = serializers.SerializerMethodField()
     upcoming_slot_count = serializers.SerializerMethodField()
 
@@ -34,7 +52,6 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
             "user_email",
             "full_name",
             "bio",
-            "qualifications",
             "hourly_rate",
             "meeting_url",
             "categories",
@@ -49,8 +66,14 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
             "id",
             "user",
             "user_email",
+            "full_name",
+            "bio",
+            "hourly_rate",
+            "meeting_url",
+            "is_available",
             "cancellation_count",
             "upcoming_slot_count",
+            "category_names",
             "created_at",
             "updated_at",
         ]

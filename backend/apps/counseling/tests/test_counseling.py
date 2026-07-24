@@ -94,15 +94,26 @@ def counselee_client(db, counselee_user):
 
 
 def _make_counsellor(user, **overrides):
-    """Create a counsellor profile + return it."""
-    defaults = {
-        "user": user,
-        "full_name": "Dr. Smith",
-        "bio": "Experienced counsellor",
-        "hourly_rate": "100.00",
-    }
-    defaults.update(overrides)
-    return CounsellorProfile.objects.create(**defaults)
+    """Create a counsellor profile + return it.
+
+    CounsellorProfile no longer stores full_name/bio/hourly_rate directly —
+    those live on UserProfile. The CounsellorProfile is just a link to the
+    user + categories M2M.
+    """
+    from apps.accounts.models import UserProfile
+
+    # Set counsellor-specific fields on UserProfile
+    up, _ = UserProfile.objects.get_or_create(user=user)
+    up.bio = overrides.pop("bio", "Experienced counsellor")
+    up.hourly_rate = overrides.pop("hourly_rate", 100)
+    up.is_available_for_counseling = True
+    up.save()
+
+    # Set full_name on the User model
+    user.full_name = overrides.pop("full_name", "Dr. Smith")
+    user.save()
+
+    return CounsellorProfile.objects.create(user=user)
 
 
 def _make_timeslot(counsellor, hours_from_now=48, **overrides):
@@ -154,7 +165,7 @@ def test_list_categories(admin_client):
 def test_create_counsellor_profile(counsellor_client, counsellor_user):
     resp = counsellor_client.post(
         "/api/counseling/counsellors/",
-        {"full_name": "Dr. Smith", "bio": "Expert", "hourly_rate": "100.00"},
+        {},
         format="json",
     )
     assert resp.status_code == 201, f"Got {resp.status_code}: {resp.data}"
@@ -206,7 +217,8 @@ def test_counselee_books_session(counselee_client, counselee_user, counsellor_us
     session = CounselingSession.objects.get(id=resp.data["data"]["id"])
     assert session.counselee == counselee_user
     assert session.status == "pending"
-    assert str(session.fee) == str(counsellor.hourly_rate)
+    # fee is set from counsellor's hourly_rate (now on UserProfile)
+    assert float(session.fee) == float(counsellor.user.profile.hourly_rate)
     timeslot.refresh_from_db()
     assert timeslot.status == "booked"
 
@@ -373,8 +385,9 @@ def test_counsellor_cancellation_increments_count(
         {"cancelled_by": "counsellor", "reason": "Emergency"},
         format="json",
     )
-    counsellor.refresh_from_db()
-    assert counsellor.cancellation_count == 1
+    # cancellation_count now lives on UserProfile
+    counsellor.user.profile.refresh_from_db()
+    assert counsellor.user.profile.cancellation_count == 1
 
 
 # ---------------------------------------------------------------------------
