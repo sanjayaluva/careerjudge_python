@@ -239,6 +239,27 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(f"  → Exists (password reset): {email}")
 
+        # Create a CounsellorProfile for the demo counsellor user
+        self.stdout.write(self.style.MIGRATE_HEADING("→ Creating counsellor profile…"))
+        from apps.counseling.models import CounsellorProfile
+
+        counsellor_user = User.objects.filter(email="counsellor@demo.careerjudge.pp.ua").first()
+        if counsellor_user:
+            profile, created = CounsellorProfile.objects.get_or_create(
+                user=counsellor_user,
+                defaults={
+                    "full_name": "Demo Counsellor",
+                    "bio": "Experienced career counsellor with expertise in aptitude assessment and career guidance.",
+                    "qualifications": "M.A. Psychology, Certified Career Counsellor",
+                    "hourly_rate": "50.00",
+                    "is_available": True,
+                },
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS("  ✓ Created counsellor profile"))
+            else:
+                self.stdout.write("  → Counsellor profile exists")
+
         self.stdout.write(self.style.MIGRATE_HEADING("→ Creating superuser…"))
         superuser, created = User.objects.get_or_create(
             email="superuser@careerjudge.pp.ua",

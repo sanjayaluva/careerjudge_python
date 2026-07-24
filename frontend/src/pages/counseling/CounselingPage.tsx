@@ -10,6 +10,10 @@ import {
   AlertDescription,
   Badge,
   Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
   Input,
   Label,
   Modal,
@@ -29,6 +33,7 @@ import {
 } from "@/components/ui";
 import {
   COUNSELING_CATEGORIES,
+  createCounsellorProfile,
   listCounsellors,
   listMySessions,
   bookSession,
@@ -370,6 +375,14 @@ function BookingModal({
 
 function CounsellorDashboardWrapper() {
   const { user } = useAuth();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [fullName, setFullName] = useState(user?.full_name ?? "");
+  const [bio, setBio] = useState("");
+  const [qualifications, setQualifications] = useState("");
+  const [hourlyRate, setHourlyRate] = useState("50");
+
   const { data: counsellors } = useQuery({
     queryKey: ["counseling", "counsellors", "me"],
     queryFn: () => listCounsellors({ search: user?.email ?? "" }),
@@ -377,16 +390,111 @@ function CounsellorDashboardWrapper() {
 
   const myProfile = counsellors?.results?.find((c) => c.user_email === user?.email);
 
-  if (!myProfile) {
+  const createMut = useMutation({
+    mutationFn: () =>
+      createCounsellorProfile({
+        full_name: fullName,
+        bio,
+        qualifications,
+        hourly_rate: hourlyRate,
+        is_available: true,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["counseling", "counsellors"] });
+      toast.success("Profile created! You can now manage sessions.");
+      setShowCreateForm(false);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (!myProfile && !showCreateForm) {
     return (
-      <Alert variant="warning">
-        <AlertDescription>
-          You don&apos;t have a counsellor profile yet. Please contact an admin to set up your
-          profile.
-        </AlertDescription>
-      </Alert>
+      <div className="space-y-4">
+        <Alert variant="warning">
+          <AlertDescription>
+            You don&apos;t have a counsellor profile yet. Create one to start receiving session
+            bookings.
+          </AlertDescription>
+        </Alert>
+        <Button onClick={() => setShowCreateForm(true)}>Create my profile</Button>
+      </div>
     );
   }
+
+  if (!myProfile && showCreateForm) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Create Counsellor Profile</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              createMut.mutate();
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <Label htmlFor="cp-name" required>
+                Full name
+              </Label>
+              <Input
+                id="cp-name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="cp-bio">Bio</Label>
+              <textarea
+                id="cp-bio"
+                rows={3}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="Brief introduction about your counselling experience..."
+              />
+            </div>
+            <div>
+              <Label htmlFor="cp-qual">Qualifications</Label>
+              <Input
+                id="cp-qual"
+                value={qualifications}
+                onChange={(e) => setQualifications(e.target.value)}
+                placeholder="M.A. Psychology, Certified Counsellor"
+              />
+            </div>
+            <div>
+              <Label htmlFor="cp-rate" required>
+                Hourly rate (USD)
+              </Label>
+              <Input
+                id="cp-rate"
+                type="number"
+                min="0"
+                step="0.01"
+                value={hourlyRate}
+                onChange={(e) => setHourlyRate(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" loading={createMut.isPending} disabled={!fullName}>
+                Create profile
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!myProfile) return null;
 
   return <CounsellorDashboard counsellorId={myProfile.id} />;
 }
