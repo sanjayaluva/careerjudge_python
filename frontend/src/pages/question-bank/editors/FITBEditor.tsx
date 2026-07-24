@@ -3,7 +3,7 @@
  * Handles: single/multiple fields, correct answers (up to 5 per field),
  * fuzzy match config, flash items + flash config for 2c/2d
  */
-import { Input, Label } from "@/components/ui";
+import { Input, Label, WysiwygEditorLite } from "@/components/ui";
 import { SCORING_TYPES } from "@/api/questionBank";
 import {
   AddOptionButton,
@@ -18,6 +18,7 @@ interface FITBEditorProps {
   questionType: string;
   data: {
     question_text_1: string;
+    question_text_2: string;
     scoring_type: string;
     case_sensitive: boolean;
     pct_match_threshold: string;
@@ -64,13 +65,22 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
         <Label htmlFor="qtext1" required>
           Question text
         </Label>
-        <textarea
-          id="qtext1"
-          rows={3}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+        <WysiwygEditorLite
           value={data.question_text_1}
-          onChange={(e) => onChange({ ...data, question_text_1: e.target.value })}
-          placeholder="Enter the question. Use ____ for blank(s)..."
+          onChange={(html) => onChange({ ...data, question_text_1: html })}
+          minHeight={80}
+          placeholder="Enter the question. Use ____ for blank(s)…"
+        />
+      </div>
+
+      {/* Additional text (SRS feedback §9 Issue 1 — second question text field) */}
+      <div>
+        <Label htmlFor="qtext2">Additional text (optional)</Label>
+        <WysiwygEditorLite
+          value={data.question_text_2}
+          onChange={(html) => onChange({ ...data, question_text_2: html })}
+          minHeight={60}
+          placeholder="Secondary context or hint for the candidate…"
         />
       </div>
 

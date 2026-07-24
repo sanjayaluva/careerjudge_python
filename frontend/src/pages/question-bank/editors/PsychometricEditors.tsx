@@ -8,7 +8,7 @@
  * NOT multiple rows of statements — that's a different pattern.
  * This is a single-row rating field.
  */
-import { Input, Label } from "@/components/ui";
+import { Input, Label, WysiwygEditorLite } from "@/components/ui";
 import { createEmptyOption, type OptionData } from "./shared";
 
 interface RatingScaleEditorProps {
@@ -63,13 +63,11 @@ export function RatingEditor({ data, onChange }: RatingScaleEditorProps) {
         <Label htmlFor="qtext1" required>
           Statement / Question
         </Label>
-        <textarea
-          id="qtext1"
-          rows={3}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+        <WysiwygEditorLite
           value={data.question_text_1}
-          onChange={(e) => onChange({ ...data, question_text_1: e.target.value })}
-          placeholder="Enter the statement to rate..."
+          onChange={(html) => onChange({ ...data, question_text_1: html })}
+          minHeight={80}
+          placeholder="Enter the statement to rate…"
         />
       </div>
 
@@ -195,13 +193,11 @@ export function RankEditor({ data, onChange }: RankEditorProps) {
         <Label htmlFor="qtext1" required>
           Question text
         </Label>
-        <textarea
-          id="qtext1"
-          rows={3}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+        <WysiwygEditorLite
           value={data.question_text_1}
-          onChange={(e) => onChange({ ...data, question_text_1: e.target.value })}
-          placeholder="Rank the following items from highest (1) to lowest..."
+          onChange={(html) => onChange({ ...data, question_text_1: html })}
+          minHeight={80}
+          placeholder="Rank the following items from highest (1) to lowest…"
         />
       </div>
       <div className="space-y-2">
@@ -292,13 +288,11 @@ export function RankRateEditor({ data, onChange }: RankRateEditorProps) {
         <Label htmlFor="qtext1" required>
           Question text
         </Label>
-        <textarea
-          id="qtext1"
-          rows={3}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+        <WysiwygEditorLite
           value={data.question_text_1}
-          onChange={(e) => onChange({ ...data, question_text_1: e.target.value })}
-          placeholder="Rank and rate the following items..."
+          onChange={(html) => onChange({ ...data, question_text_1: html })}
+          minHeight={80}
+          placeholder="Rank and rate the following items…"
         />
       </div>
       <div>
@@ -412,13 +406,11 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
         <Label htmlFor="qtext1" required>
           Question text
         </Label>
-        <textarea
-          id="qtext1"
-          rows={3}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+        <WysiwygEditorLite
           value={data.question_text_1}
-          onChange={(e) => onChange({ ...data, question_text_1: e.target.value })}
-          placeholder={isTwoLevel ? "Select one option and rate it..." : "Select one option..."}
+          onChange={(html) => onChange({ ...data, question_text_1: html })}
+          minHeight={80}
+          placeholder={isTwoLevel ? "Select one option and rate it…" : "Select one option…"}
         />
       </div>
       {isTwoLevel && (

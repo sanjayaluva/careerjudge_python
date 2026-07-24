@@ -25,3 +25,4 @@ export { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableR
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./Tabs";
 export { ToastProvider, useToast } from "./Toast";
 export { WysiwygEditor } from "./WysiwygEditor";
+export { WysiwygEditorLite } from "./WysiwygEditorLite";

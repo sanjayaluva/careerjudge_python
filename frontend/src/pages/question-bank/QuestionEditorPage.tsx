@@ -119,6 +119,9 @@ export default function QuestionEditorPage() {
     "transparent",
   );
   const [dummyOptions, setDummyOptions] = useState<OptionData[]>([]);
+  // Multi-sub-question pooling (SRS feedback C-CFG-1)
+  const [subQuestionCount, setSubQuestionCount] = useState(1);
+  const [activeSubQuestion, setActiveSubQuestion] = useState(0);
   const [imageWidth, setImageWidth] = useState(0);
   const [imageHeight, setImageHeight] = useState(0);
   const [gridRows, setGridRows] = useState("3");
@@ -718,10 +721,13 @@ export default function QuestionEditorPage() {
     flashIntervalMs: flashInterval,
     flashDisplayCount: flashCount,
     flashOrder,
+    sub_question_count: subQuestionCount,
+    active_sub_question: activeSubQuestion,
   };
 
   const fitbData = {
     question_text_1: questionText1,
+    question_text_2: questionText2,
     scoring_type: scoringType,
     case_sensitive: caseSensitive,
     pct_match_threshold: pctThreshold,
@@ -741,6 +747,7 @@ export default function QuestionEditorPage() {
 
   const gridData = {
     question_text_1: questionText1,
+    question_text_2: questionText2,
     grid_rows: gridRows,
     grid_cols: gridCols,
     rowLabels,
@@ -933,6 +940,12 @@ export default function QuestionEditorPage() {
                   setFlashInterval(d.flashIntervalMs);
                   setFlashCount(d.flashDisplayCount);
                   setFlashOrder(d.flashOrder);
+                  if (d.sub_question_count !== undefined) {
+                    setSubQuestionCount(d.sub_question_count);
+                  }
+                  if (d.active_sub_question !== undefined) {
+                    setActiveSubQuestion(d.active_sub_question);
+                  }
                 }}
               />
             )}
@@ -942,6 +955,7 @@ export default function QuestionEditorPage() {
                 data={fitbData}
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
+                  setQuestionText2(d.question_text_2);
                   setScoringType(d.scoring_type);
                   setCaseSensitive(d.case_sensitive);
                   setPctThreshold(d.pct_match_threshold);
@@ -968,6 +982,7 @@ export default function QuestionEditorPage() {
                 data={gridData}
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
+                  setQuestionText2(d.question_text_2);
                   setGridRows(d.grid_rows);
                   setGridCols(d.grid_cols);
                   setRowLabels(d.rowLabels);

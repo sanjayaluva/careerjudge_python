@@ -3,7 +3,7 @@
  * Handles: text/image options, single vs multiple correct, passage/image config, media,
  *          flash items for 1e (word flash) and 1f (image flash)
  */
-import { Input, Label, MediaManager } from "@/components/ui";
+import { Input, Label, MediaManager, WysiwygEditorLite } from "@/components/ui";
 import { SCORING_TYPES } from "@/api/questionBank";
 import { AddOptionButton, createEmptyOption, type FlashItemData, type OptionData } from "./shared";
 import { FlashItemsEditor } from "./FlashItemsEditor";
@@ -29,6 +29,12 @@ interface MCQEditorProps {
     flashIntervalMs: string;
     flashDisplayCount: string;
     flashOrder: string;
+    /** Number of sub-questions pooled under one media (SRS feedback C-CFG-1).
+     *  1 = single question (default). >1 = multiple sub-questions sharing
+     *  the same audio/video/passage/image. */
+    sub_question_count?: number;
+    /** Currently active sub-question tab (0-indexed). */
+    active_sub_question?: number;
   };
   onChange: (data: MCQEditorProps["data"]) => void;
 }
@@ -86,25 +92,22 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
         <Label htmlFor="qtext1" required>
           Question text
         </Label>
-        <textarea
-          id="qtext1"
-          rows={3}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+        <WysiwygEditorLite
           value={data.question_text_1}
-          onChange={(e) => onChange({ ...data, question_text_1: e.target.value })}
-          placeholder="Enter the main question..."
+          onChange={(html) => onChange({ ...data, question_text_1: html })}
+          minHeight={80}
+          placeholder="Enter the main question or instructions…"
         />
       </div>
 
       {/* Additional text */}
       <div>
         <Label htmlFor="qtext2">Additional text (optional)</Label>
-        <textarea
-          id="qtext2"
-          rows={2}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+        <WysiwygEditorLite
           value={data.question_text_2}
-          onChange={(e) => onChange({ ...data, question_text_2: e.target.value })}
+          onChange={(html) => onChange({ ...data, question_text_2: html })}
+          minHeight={60}
+          placeholder="Secondary text — typically the actual question based on the media above…"
         />
       </div>
 
@@ -164,13 +167,11 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
           </div>
           <div>
             <Label htmlFor="pbody">Passage body</Label>
-            <textarea
-              id="pbody"
-              rows={5}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            <WysiwygEditorLite
               value={data.passage_body}
-              onChange={(e) => onChange({ ...data, passage_body: e.target.value })}
-              placeholder="Enter the passage text..."
+              onChange={(html) => onChange({ ...data, passage_body: html })}
+              minHeight={160}
+              placeholder="Enter the passage text. Use subtitle / list / bold formatting for lengthy passages…"
             />
           </div>
           <div>
@@ -271,6 +272,60 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
           Use multi-column layout when there are many options to avoid scrolling.
         </p>
       </div>
+
+      {/* Multi-sub-question pooling (SRS feedback C-CFG-1).
+          For audio/video/passage/image-display types, the author can pool
+          multiple sub-questions under the same media. Each sub-question has
+          its own Text 2 + options; the media is shared. */}
+      {isMultiSubQuestion && (
+        <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3">
+          <Label htmlFor="subq_count">Number of Sub-Questions (pooled under one media)</Label>
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              id="subq_count"
+              type="number"
+              min={1}
+              max={10}
+              value={data.sub_question_count ?? 1}
+              onChange={(e) => {
+                const n = Math.max(1, Math.min(10, Number(e.target.value) || 1));
+                onChange({ ...data, sub_question_count: n });
+              }}
+              className="h-10 w-24 rounded-md border border-slate-200 bg-white px-3 text-sm"
+            />
+            <span className="text-xs text-slate-500">
+              {data.sub_question_count && data.sub_question_count > 1
+                ? `${data.sub_question_count} sub-questions share the same media above. Use the tabs below to edit each.`
+                : "1 = single question (default). Increase to pool multiple questions under the same media."}
+            </span>
+          </div>
+          {data.sub_question_count && data.sub_question_count > 1 && (
+            <div className="mt-3">
+              <Label className="text-xs">Active Sub-Question</Label>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {Array.from({ length: data.sub_question_count }).map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => onChange({ ...data, active_sub_question: i })}
+                    className={`h-8 w-8 rounded-md text-xs font-bold ${
+                      (data.active_sub_question ?? 0) === i
+                        ? "bg-primary-600 text-white"
+                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                The Text 2 and options below belong to sub-question{" "}
+                {(data.active_sub_question ?? 0) + 1}. Switch tabs to edit other sub-questions.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Answer type toggle */}
       <div className="flex items-center gap-4">

@@ -8,7 +8,7 @@
  * Route: /assessments/sessions/:sessionId
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Alert, AlertDescription, Button, Label, Modal, Spinner, useToast } from "@/components/ui";
@@ -34,6 +34,14 @@ export default function SessionPlayerPage() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [questionTimeLeft, setQuestionTimeLeft] = useState<number | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  // Tracks question IDs the candidate has already viewed (visited + navigated
+  // away from). Used to lock flash/passage/image replay on revisit
+  // (SRS feedback Common Issue 5).
+  const [viewedQuestions, setViewedQuestions] = useState<Set<number>>(new Set());
+  // Tracks question IDs where the timed presentation (flash/passage/image)
+  // has finished. Used to gate Question Text 2 + answer options until the
+  // presentation is over (SRS feedback Common Issue 4).
+  const [presentationDone, setPresentationDone] = useState<Set<number>>(new Set());
 
   const { data: session, isLoading: sessionLoading } = useQuery({
     queryKey: ["assessment-session", sid],
@@ -199,6 +207,20 @@ export default function SessionPlayerPage() {
   const answeredCount = Object.keys(answers).length;
   const bookmarkedCount = bookmarked.size;
 
+  // Determine whether this question has a timed presentation that should
+  // gate Question Text 2 + answer options (SRS feedback Common Issue 4).
+  // Gate is active when:
+  //   - Question has flash items (flash types 1e, 1f, 2c, 2d)
+  //   - Question has a passage with display_mode='timed' (1g)
+  //   - Question is Image Display (1h) with display_duration_seconds set
+  // AND the presentation has not yet finished for this question.
+  const hasTimedPresentation =
+    qd.flash_items.length > 0 ||
+    (qd.passage_title != null && (qd.display_mode ?? "timed") === "timed") ||
+    (qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" && qd.display_duration_seconds != null);
+  const presentationActive =
+    hasTimedPresentation && !presentationDone.has(qd.id) && !viewedQuestions.has(qd.id);
+
   // Navigation rule enforcement — per SRS 03_assessment_configuration.json:
   // FREE: free navigation (default, no restrictions)
   // PREV_SECTION: can only go back to previous section
@@ -226,6 +248,10 @@ export default function SessionPlayerPage() {
         raw_answer: currentAnswer,
       });
     }
+    // Mark current question as viewed (locks replay on revisit)
+    if (q?.question) {
+      setViewedQuestions((prev) => new Set(prev).add(q.question));
+    }
     if (!isLast) setCurrentIndex((i) => i + 1);
   };
 
@@ -237,6 +263,10 @@ export default function SessionPlayerPage() {
         question_id: q.question,
         raw_answer: currentAnswer,
       });
+    }
+    // Mark current question as viewed (locks replay on revisit)
+    if (q?.question) {
+      setViewedQuestions((prev) => new Set(prev).add(q.question));
     }
     if (currentIndex > 0) setCurrentIndex((i) => i - 1);
   };
@@ -447,83 +477,138 @@ export default function SessionPlayerPage() {
               </div>
 
               {/* Question Text1 — ABOVE media (serves as instructions per
-                  SRS feedback Common Issue 2) */}
+                  SRS feedback Common Issue 2).
+                  Rendered as HTML to support rich-text formatting
+                  (bold/italic/lists/subtitle) per SRS feedback Common Issue 2. */}
               {qd.question_text_1 && (
-                <p className="mb-4 text-base font-medium text-slate-900">{qd.question_text_1}</p>
+                <div
+                  className="prose prose-sm mb-4 max-w-none text-base font-medium text-slate-900"
+                  dangerouslySetInnerHTML={{ __html: qd.question_text_1 }}
+                />
               )}
 
-              {/* Flash items — interactive simulation */}
+              {/* Flash items — interactive simulation.
+                  key={qd.id} forces re-mount when the question changes,
+                  fixing the flash-content-not-changing-between-questions bug
+                  (SRS feedback Common Issue 8). */}
               {qd.flash_items.length > 0 && (
                 <FlashSimulation
+                  key={qd.id}
                   items={qd.flash_items}
                   intervalMs={qd.flash_interval_ms ?? 1000}
                   displayCount={qd.flash_display_count ?? qd.flash_items.length}
                   order={qd.flash_order}
+                  replayMode={qd.replay_mode ?? "not_permitted"}
+                  hasBeenViewed={viewedQuestions.has(qd.id)}
+                  onPresentationEnd={() => setPresentationDone((prev) => new Set(prev).add(qd.id))}
                 />
               )}
 
               {/* Passage — collapsible panel */}
               {qd.passage_title && (
                 <PassageDisplay
+                  key={`passage-${qd.id}`}
                   title={qd.passage_title}
                   body={qd.passage_body}
                   displayDurationSeconds={qd.display_duration_seconds ?? null}
                   displayMode={qd.display_mode ?? "timed"}
                   replayMode={qd.replay_mode ?? "not_permitted"}
+                  hasBeenViewed={viewedQuestions.has(qd.id)}
+                  onPresentationEnd={() => setPresentationDone((prev) => new Set(prev).add(qd.id))}
                 />
               )}
 
-              {/* Question image — larger per SRS feedback Common Issue 6 */}
-              {qd.image && (
+              {/* Question image — larger per SRS feedback Common Issue 6.
+                  For Image Display (1h) questions with a display_duration,
+                  render the timed play button variant (SRS feedback §8 Issue 1+3). */}
+              {qd.image &&
+              qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" &&
+              qd.display_duration_seconds ? (
+                <ImageDisplayTimed
+                  key={`img-${qd.id}`}
+                  imageUrl={qd.image}
+                  durationSeconds={qd.display_duration_seconds}
+                  replayMode={qd.replay_mode ?? "not_permitted"}
+                  hasBeenViewed={viewedQuestions.has(qd.id)}
+                  onPresentationEnd={() => setPresentationDone((prev) => new Set(prev).add(qd.id))}
+                />
+              ) : qd.image ? (
                 <img
                   src={qd.image}
                   alt="Question"
                   className="mb-4 max-h-[500px] w-full rounded-md border border-slate-200 object-contain"
                 />
-              )}
+              ) : null}
 
-              {/* Audio player (for MCQ_AUDIO_MULTI 1c) */}
+              {/* Audio player (for MCQ_AUDIO_MULTI 1c).
+                  Respects replay_mode: if 'not_permitted', audio can only be
+                  played once. On revisit (Previous button), audio is locked.
+                  SRS feedback §3 Issue 2 + Recommendation 2. */}
               {qd.media_files
                 .filter((m) => m.media_type === "audio")
                 .map((media) => (
-                  <div
-                    key={media.id}
-                    className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3"
-                  >
-                    <p className="mb-2 text-xs font-medium text-slate-500">Audio (plays once):</p>
-                    <audio controls src={media.file_url} className="w-full">
-                      Your browser does not support audio playback.
-                    </audio>
-                  </div>
+                  <AudioPlayerControlled
+                    key={`audio-${media.id}`}
+                    fileUrl={media.file_url}
+                    replayMode={qd.replay_mode ?? "not_permitted"}
+                    hasBeenViewed={viewedQuestions.has(qd.id)}
+                    onPresentationEnd={() =>
+                      setPresentationDone((prev) => new Set(prev).add(qd.id))
+                    }
+                  />
                 ))}
 
-              {/* Video player (for MCQ_VIDEO_MULTI 1d) */}
+              {/* Video player (for MCQ_VIDEO_MULTI 1d).
+                  Same replay controls as audio. */}
               {qd.media_files
                 .filter((m) => m.media_type === "video")
                 .map((media) => (
-                  <div
-                    key={media.id}
-                    className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3"
-                  >
-                    <p className="mb-2 text-xs font-medium text-slate-500">Video:</p>
-                    <video controls src={media.file_url} className="max-h-80 w-full rounded">
-                      Your browser does not support video playback.
-                    </video>
-                  </div>
+                  <VideoPlayerControlled
+                    key={`video-${media.id}`}
+                    fileUrl={media.file_url}
+                    replayMode={qd.replay_mode ?? "not_permitted"}
+                    hasBeenViewed={viewedQuestions.has(qd.id)}
+                    onPresentationEnd={() =>
+                      setPresentationDone((prev) => new Set(prev).add(qd.id))
+                    }
+                  />
                 ))}
 
               {/* Question Text2 — BELOW media (the actual question based on
-                  the audio/video/passage/image per SRS feedback Common Issue 2) */}
-              {qd.question_text_2 && (
-                <p className="mb-4 mt-4 text-sm text-slate-600">{qd.question_text_2}</p>
+                  the audio/video/passage/image per SRS feedback Common Issue 2).
+                  Rendered as HTML to support rich-text formatting.
+                  GATED: hidden until the timed presentation is over
+                  (SRS feedback Common Issue 4). */}
+              {qd.question_text_2 && !presentationActive && (
+                <div
+                  className="prose prose-sm mb-4 mt-4 max-w-none text-sm text-slate-600"
+                  dangerouslySetInnerHTML={{ __html: qd.question_text_2 }}
+                />
+              )}
+              {qd.question_text_2 && presentationActive && (
+                <div className="mb-4 mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-center">
+                  <p className="text-sm text-amber-700">
+                    The question and answer options will appear after the presentation is over.
+                  </p>
+                </div>
               )}
 
-              {/* Answer input area — by question type */}
-              <AnswerInput
-                question={q}
-                currentAnswer={answers[answerKey]}
-                onChange={(ans) => setAnswers({ ...answers, [answerKey]: ans })}
-              />
+              {/* Answer input area — by question type.
+                  GATED: hidden until the timed presentation is over
+                  (SRS feedback Common Issue 4). */}
+              {presentationActive ? (
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-6 text-center">
+                  <p className="text-sm text-slate-500">
+                    Answer options will be available after the presentation ends.
+                  </p>
+                </div>
+              ) : (
+                <AnswerInput
+                  question={q}
+                  currentAnswer={answers[answerKey]}
+                  onChange={(ans) => setAnswers({ ...answers, [answerKey]: ans })}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -980,7 +1065,8 @@ function AnswerInput({
                 className="w-full cursor-crosshair rounded-md border border-slate-300"
                 style={{ userSelect: "none", pointerEvents: "auto" }}
               />
-              {/* Show click markers */}
+              {/* Show click markers + (if hotspot_visibility='visible') the
+                  hotspot area outlines (SRS feedback §15 Recommendation). */}
               <svg
                 className="pointer-events-none absolute left-0 top-0"
                 width="100%"
@@ -988,6 +1074,54 @@ function AnswerInput({
                 viewBox={`0 0 ${qd.image_width || 400} ${qd.image_height || 300}`}
                 preserveAspectRatio="none"
               >
+                {/* Hotspot area outlines — only shown when visibility='visible' */}
+                {qd.hotspot_visibility === "visible" &&
+                  qd.hotspot_areas.map((area) => {
+                    const stroke = area.is_correct ? "#22c55e" : "#ef4444";
+                    if (area.shape_type === "RECTANGLE") {
+                      return (
+                        <rect
+                          key={`area-${area.id}`}
+                          x={area.x}
+                          y={area.y}
+                          width={area.width_px}
+                          height={area.height_px}
+                          fill={area.is_correct ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"}
+                          stroke={stroke}
+                          strokeWidth="2"
+                          strokeDasharray="4 2"
+                        />
+                      );
+                    }
+                    if (area.shape_type === "CIRCLE" && area.radius) {
+                      return (
+                        <circle
+                          key={`area-${area.id}`}
+                          cx={area.x}
+                          cy={area.y}
+                          r={area.radius}
+                          fill={area.is_correct ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"}
+                          stroke={stroke}
+                          strokeWidth="2"
+                          strokeDasharray="4 2"
+                        />
+                      );
+                    }
+                    if (area.shape_type === "POLYGON" && area.points && area.points.length > 1) {
+                      const pts = area.points.map((p) => `${p.x},${p.y}`).join(" ");
+                      return (
+                        <polygon
+                          key={`area-${area.id}`}
+                          points={pts}
+                          fill={area.is_correct ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"}
+                          stroke={stroke}
+                          strokeWidth="2"
+                          strokeDasharray="4 2"
+                        />
+                      );
+                    }
+                    return null;
+                  })}
                 {clicks.map((c, i) => (
                   <g key={i}>
                     <circle
@@ -1160,10 +1294,13 @@ function AnswerInput({
 
     return (
       <div>
-        <p className="mb-3 text-xs text-slate-500">
-          Click on a numbered button to view its content. Tick the checkbox to mark it as correct.
-          Each correct cell = +1, each incorrect = −1, minimum 0.
-        </p>
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-xs text-slate-500">
+            Click on a numbered button to view its content. Tick the checkbox to mark it as correct.
+            Each correct cell = +1, each incorrect = −1, minimum 0.
+          </p>
+          <ViewAllGridItemsButton dragPoolOptions={dragPoolOptions} />
+        </div>
         <table className="w-full text-sm">
           <tbody>
             {Array.from({ length: rows }).map((_, r) => (
@@ -1217,11 +1354,17 @@ function FlashSimulation({
   intervalMs,
   displayCount,
   order,
+  replayMode = "not_permitted",
+  hasBeenViewed = false,
+  onPresentationEnd,
 }: {
   items: FlashItemLike[];
   intervalMs: number;
   displayCount: number;
   order: string;
+  replayMode?: "permitted" | "not_permitted";
+  hasBeenViewed?: boolean;
+  onPresentationEnd?: () => void;
 }) {
   // Use only items flagged for the display pool (default to all if none flagged)
   const pool = items.filter((i) => i.is_in_display_pool);
@@ -1245,8 +1388,12 @@ function FlashSimulation({
     return trimmed;
   });
 
+  // If the question has already been viewed (Previous button) and replay
+  // is not permitted, lock the player. (SRS feedback C-FE-5 + 1e-3)
+  const replayLocked = hasBeenViewed && replayMode === "not_permitted" && !playing;
+
   const play = () => {
-    if (sequence.length === 0) return;
+    if (sequence.length === 0 || replayLocked) return;
     setPlaying(true);
     setCurrentIndex(0);
 
@@ -1261,6 +1408,10 @@ function FlashSimulation({
               setPlaying(false);
               setCurrentIndex(null);
               setPlayedOnce(true);
+              // Notify parent that the presentation has ended
+              // (used to un-gate Question Text 2 + answer options per
+              // SRS feedback Common Issue 4).
+              if (onPresentationEnd) onPresentationEnd();
             }, intervalMs);
           }
         },
@@ -1269,34 +1420,43 @@ function FlashSimulation({
     });
   };
 
+  // Hide flash specifications from candidate (SRS feedback §11 Issue 2)
+  // Show only status messages, not technical details like '1000ms each'.
+
   return (
     <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs font-medium text-amber-700">
-          Flash items · {intervalMs}ms each · {sequence.length} shown
-          {order === "RANDOM" ? " (random order)" : " (sequence)"}
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={play}
-          disabled={playing}
-          className="h-7 px-2 text-xs"
-        >
-          {playing ? "Flashing..." : playedOnce ? "↻ Replay" : "▶ Play"}
-        </Button>
-      </div>
-      <div className="flex h-32 items-center justify-center rounded-md border border-amber-200 bg-white">
-        {playing && currentIndex !== null && sequence[currentIndex] ? (
+      {/* Big centred Play button — only visible before play starts or after
+          replay is permitted (SRS feedback §11 Issue 3) */}
+      {!playing && currentIndex === null && !replayLocked && (
+        <div className="flex h-40 items-center justify-center rounded-md border border-amber-200 bg-white">
+          <button
+            type="button"
+            onClick={play}
+            disabled={playedOnce && replayMode === "not_permitted"}
+            className={`flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold shadow-md transition-colors ${
+              playedOnce && replayMode === "not_permitted"
+                ? "cursor-not-allowed bg-slate-200 text-slate-400"
+                : "bg-amber-500 text-white hover:bg-amber-600"
+            }`}
+            aria-label="Play flash sequence"
+          >
+            ▶
+          </button>
+        </div>
+      )}
+
+      {/* Flashing area */}
+      {playing && currentIndex !== null && sequence[currentIndex] && (
+        <div className="flex h-48 items-center justify-center rounded-md border border-amber-200 bg-white">
           <div className="text-center">
             {sequence[currentIndex].item_type === "IMAGE" && sequence[currentIndex].image_file ? (
               <img
                 src={sequence[currentIndex].image_file!}
                 alt=""
-                className="mx-auto max-h-24 max-w-full object-contain"
+                className="mx-auto max-h-44 max-w-full object-contain"
               />
             ) : (
-              <span className="text-2xl font-bold text-slate-900">
+              <span className="text-3xl font-bold text-slate-900">
                 {sequence[currentIndex].text_value}
               </span>
             )}
@@ -1304,12 +1464,39 @@ function FlashSimulation({
               {currentIndex + 1} / {sequence.length}
             </p>
           </div>
-        ) : (
-          <p className="text-sm text-slate-400">
-            {playedOnce ? "Click Replay to see the items again." : "Click Play to begin."}
+        </div>
+      )}
+
+      {/* Replay-permitted case: small replay button after play ends */}
+      {!playing && currentIndex === null && playedOnce && !replayLocked && (
+        <div className="mt-2 flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={play}
+            disabled={replayMode === "not_permitted"}
+            className="h-8 px-3 text-xs"
+          >
+            ↻ Replay
+          </Button>
+        </div>
+      )}
+
+      {/* Replay-locked case (Previous button + not_permitted) */}
+      {replayLocked && (
+        <div className="flex h-40 items-center justify-center rounded-md border border-amber-200 bg-white">
+          <p className="text-sm text-slate-500">
+            Flash presentation already viewed. Replay is not permitted for this question.
           </p>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Pre-play hint */}
+      {!playing && currentIndex === null && !playedOnce && !replayLocked && (
+        <p className="mt-2 text-center text-xs text-slate-500">
+          Click the play button to begin the flash sequence.
+        </p>
+      )}
     </div>
   );
 }
@@ -1327,6 +1514,7 @@ function PassageDisplay({
   displayMode = "timed",
   replayMode = "not_permitted",
   hasBeenViewed = false,
+  onPresentationEnd,
 }: {
   title: string;
   body: string;
@@ -1334,6 +1522,7 @@ function PassageDisplay({
   displayMode?: "timed" | "unlimited";
   replayMode?: "permitted" | "not_permitted";
   hasBeenViewed?: boolean;
+  onPresentationEnd?: () => void;
 }) {
   // For 'timed' mode: passage starts hidden until user clicks 'Start Passage Presentation'
   // For 'unlimited' mode: passage is always visible
@@ -1354,13 +1543,17 @@ function PassageDisplay({
         if (s === null || s <= 1) {
           clearInterval(timer);
           setVisible(false);
+          // Notify parent that the timed presentation has ended — used to
+          // un-gate Question Text 2 + answer options per SRS feedback
+          // Common Issue 4.
+          if (onPresentationEnd) onPresentationEnd();
           return 0;
         }
         return s - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [secondsLeft]);
+  }, [secondsLeft]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startPresentation = () => {
     setPresentationStarted(true);
@@ -1377,7 +1570,12 @@ function PassageDisplay({
         <div className="mb-1 flex items-center justify-between">
           <p className="font-semibold text-slate-900">{title}</p>
         </div>
-        {body && <p className="mt-1 text-sm leading-relaxed text-slate-700">{body}</p>}
+        {body && (
+          <div
+            className="prose prose-sm mt-1 max-w-none leading-relaxed text-slate-700"
+            dangerouslySetInnerHTML={{ __html: body }}
+          />
+        )}
       </div>
     );
   }
@@ -1434,7 +1632,12 @@ function PassageDisplay({
           </span>
         )}
       </div>
-      {body && <p className="mt-1 text-sm leading-relaxed text-slate-700">{body}</p>}
+      {body && (
+        <div
+          className="prose prose-sm mt-1 max-w-none leading-relaxed text-slate-700"
+          dangerouslySetInnerHTML={{ __html: body }}
+        />
+      )}
     </div>
   );
 }
@@ -1529,5 +1732,303 @@ function GridCell({
         </div>
       )}
     </td>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ImageDisplayTimed — for Image Display (1h) questions with a display duration.
+// Shows a Play button; clicking starts the timed display. After the duration
+// elapses, the image disappears and cannot be replayed (if replay_mode is
+// 'not_permitted'). On revisit (Previous button), the image is not shown.
+// SRS feedback §8 Issue 1, 3, 4.
+// ---------------------------------------------------------------------------
+
+function ImageDisplayTimed({
+  imageUrl,
+  durationSeconds,
+  replayMode = "not_permitted",
+  hasBeenViewed = false,
+  onPresentationEnd,
+}: {
+  imageUrl: string;
+  durationSeconds: number;
+  replayMode?: "permitted" | "not_permitted";
+  hasBeenViewed?: boolean;
+  onPresentationEnd?: () => void;
+}) {
+  const [visible, setVisible] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+
+  const replayLocked = hasBeenViewed && replayMode === "not_permitted";
+
+  useEffect(() => {
+    if (secondsLeft === null || secondsLeft <= 0) return;
+    const timer = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s === null || s <= 1) {
+          clearInterval(timer);
+          setVisible(false);
+          if (onPresentationEnd) onPresentationEnd();
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [secondsLeft]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const start = () => {
+    setStarted(true);
+    setVisible(true);
+    setSecondsLeft(durationSeconds);
+  };
+
+  if (replayLocked && !visible) {
+    return (
+      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-6 text-center">
+        <p className="text-sm text-slate-600">
+          Image was already displayed. It cannot be viewed again.
+        </p>
+      </div>
+    );
+  }
+
+  if (!started && !visible) {
+    return (
+      <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-center">
+        <p className="text-sm font-medium text-slate-700">Image ready to view</p>
+        <p className="mt-1 text-xs text-slate-600">
+          When you click the button below, the image will be displayed for {durationSeconds}{" "}
+          seconds. After the time elapses, the image cannot be viewed again.
+        </p>
+        <Button size="sm" className="mt-3" onClick={start}>
+          Start Image Display
+        </Button>
+      </div>
+    );
+  }
+
+  if (!visible && replayMode === "not_permitted") {
+    return (
+      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+        <p className="text-sm text-slate-600">
+          Image display time has elapsed. The image is no longer visible.
+        </p>
+      </div>
+    );
+  }
+
+  if (!visible && replayMode === "permitted") {
+    return (
+      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+        <p className="text-sm text-slate-600">
+          Image display time has elapsed. You can view it again.
+        </p>
+        <Button variant="outline" size="sm" className="mt-2" onClick={start}>
+          View Image Again
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4">
+      <img
+        src={imageUrl}
+        alt="Question"
+        className="max-h-[500px] w-full rounded-md border border-slate-200 object-contain"
+      />
+      {secondsLeft !== null && secondsLeft > 0 && (
+        <p className="mt-1 text-center text-xs text-amber-700">{secondsLeft}s remaining</p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AudioPlayerControlled — audio player that respects replay_mode.
+// If replay_mode='not_permitted', audio plays once and cannot be replayed.
+// On revisit (Previous button), the audio player is locked.
+// SRS feedback §3 Issue 2 + Recommendation 2.
+// ---------------------------------------------------------------------------
+
+function AudioPlayerControlled({
+  fileUrl,
+  replayMode,
+  hasBeenViewed,
+  onPresentationEnd,
+}: {
+  fileUrl: string;
+  replayMode: "permitted" | "not_permitted";
+  hasBeenViewed: boolean;
+  onPresentationEnd?: () => void;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [hasPlayed, setHasPlayed] = useState(false);
+
+  const replayLocked = hasBeenViewed && replayMode === "not_permitted";
+
+  const handleEnded = () => {
+    setHasPlayed(true);
+    if (onPresentationEnd) onPresentationEnd();
+  };
+
+  if (replayLocked) {
+    return (
+      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+        <p className="text-sm text-slate-600">
+          Audio was already played. Replay is not permitted for this question.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <p className="mb-2 text-xs font-medium text-slate-500">
+        Audio {replayMode === "not_permitted" ? "(plays once — no replay)" : "(replay permitted)"}:
+      </p>
+      <audio
+        ref={audioRef}
+        controls
+        src={fileUrl}
+        onEnded={handleEnded}
+        className="w-full"
+        // Hide the seek bar when replay is not permitted — candidate can play
+        // once from start to end, no scrubbing.
+        style={
+          replayMode === "not_permitted" && hasPlayed ? { pointerEvents: "none", opacity: 0.5 } : {}
+        }
+      >
+        Your browser does not support audio playback.
+      </audio>
+      {replayMode === "not_permitted" && hasPlayed && (
+        <p className="mt-1 text-xs text-amber-700">Audio has been played. Replay is disabled.</p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// VideoPlayerControlled — video player that respects replay_mode.
+// Same logic as AudioPlayerControlled.
+// ---------------------------------------------------------------------------
+
+function VideoPlayerControlled({
+  fileUrl,
+  replayMode,
+  hasBeenViewed,
+  onPresentationEnd,
+}: {
+  fileUrl: string;
+  replayMode: "permitted" | "not_permitted";
+  hasBeenViewed: boolean;
+  onPresentationEnd?: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [hasPlayed, setHasPlayed] = useState(false);
+
+  const replayLocked = hasBeenViewed && replayMode === "not_permitted";
+
+  const handleEnded = () => {
+    setHasPlayed(true);
+    if (onPresentationEnd) onPresentationEnd();
+  };
+
+  if (replayLocked) {
+    return (
+      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+        <p className="text-sm text-slate-600">
+          Video was already played. Replay is not permitted for this question.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <p className="mb-2 text-xs font-medium text-slate-500">
+        Video {replayMode === "not_permitted" ? "(plays once — no replay)" : "(replay permitted)"}:
+      </p>
+      <video
+        ref={videoRef}
+        controls
+        src={fileUrl}
+        onEnded={handleEnded}
+        className="max-h-80 w-full rounded"
+        style={
+          replayMode === "not_permitted" && hasPlayed ? { pointerEvents: "none", opacity: 0.5 } : {}
+        }
+      >
+        Your browser does not support video playback.
+      </video>
+      {replayMode === "not_permitted" && hasPlayed && (
+        <p className="mt-1 text-xs text-amber-700">Video has been played. Replay is disabled.</p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ViewAllGridItemsButton — opens a popup listing all grid cell contents.
+// SRS feedback §14 Recommendation — 'View Complete Grid Items' button.
+// ---------------------------------------------------------------------------
+
+function ViewAllGridItemsButton({ dragPoolOptions }: { dragPoolOptions: GridCellOption[] }) {
+  const [open, setOpen] = useState(false);
+
+  if (dragPoolOptions.length === 0) return null;
+
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        View Complete Grid Items ({dragPoolOptions.length})
+      </Button>
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="max-h-[80vh] max-w-2xl overflow-y-auto rounded-md bg-white p-6 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-sm font-semibold">All Grid Items ({dragPoolOptions.length})</p>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {dragPoolOptions.map((opt, i) => (
+                <div
+                  key={i}
+                  className="flex items-start gap-2 rounded-md border border-slate-200 p-3"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700">
+                    {i + 1}
+                  </span>
+                  <div className="flex-1">
+                    {opt.image_file && (
+                      <img
+                        src={opt.image_file}
+                        alt=""
+                        className="mb-1 max-h-32 rounded border border-slate-200"
+                      />
+                    )}
+                    {opt.text_value && <p className="text-sm text-slate-700">{opt.text_value}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

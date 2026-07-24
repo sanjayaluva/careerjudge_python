@@ -13,7 +13,7 @@
  * checkboxes. They check the correct cells to answer.
  */
 import { useState } from "react";
-import { Input, Label, MediaManager } from "@/components/ui";
+import { Input, Label, MediaManager, WysiwygEditorLite } from "@/components/ui";
 
 interface GridCell {
   text: string;
@@ -24,6 +24,7 @@ interface GridCell {
 interface GridEditorProps {
   data: {
     question_text_1: string;
+    question_text_2: string;
     grid_rows: string;
     grid_cols: string;
     rowLabels: string[];
@@ -110,13 +111,22 @@ export function GridEditor({ data, onChange }: GridEditorProps) {
         <Label htmlFor="qtext1" required>
           Question text
         </Label>
-        <textarea
-          id="qtext1"
-          rows={3}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+        <WysiwygEditorLite
           value={data.question_text_1}
-          onChange={(e) => onChange({ ...data, question_text_1: e.target.value })}
-          placeholder="Instructions for grid selection (e.g. 'Select all cells that match...')"
+          onChange={(html) => onChange({ ...data, question_text_1: html })}
+          minHeight={80}
+          placeholder="Instructions for grid selection (e.g. 'Select all cells that match…')"
+        />
+      </div>
+
+      {/* Additional text (SRS feedback §14 Issue — optional second text field) */}
+      <div>
+        <Label htmlFor="qtext2">Additional text (optional)</Label>
+        <WysiwygEditorLite
+          value={data.question_text_2}
+          onChange={(html) => onChange({ ...data, question_text_2: html })}
+          minHeight={60}
+          placeholder="Secondary context, hint, or note for the candidate…"
         />
       </div>
 

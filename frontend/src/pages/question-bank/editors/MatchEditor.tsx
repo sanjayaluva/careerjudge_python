@@ -4,7 +4,7 @@
  * Optional: add dummy (non-matching) options to Group B for added difficulty.
  * Per SRS feedback Issue 13 §1 — Add Dummy Option feature.
  */
-import { Button, Input, Label } from "@/components/ui";
+import { Button, Input, Label, WysiwygEditorLite } from "@/components/ui";
 import {
   AddOptionButton,
   MatchPairRow,
@@ -80,13 +80,11 @@ export function MatchEditor({ data, onChange }: MatchEditorProps) {
         <Label htmlFor="qtext1" required>
           Question text
         </Label>
-        <textarea
-          id="qtext1"
-          rows={3}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+        <WysiwygEditorLite
           value={data.question_text_1}
-          onChange={(e) => onChange({ ...data, question_text_1: e.target.value })}
-          placeholder="Instructions for matching..."
+          onChange={(html) => onChange({ ...data, question_text_1: html })}
+          minHeight={80}
+          placeholder="Instructions for matching…"
         />
       </div>
 

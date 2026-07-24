@@ -647,10 +647,63 @@ class HotspotArea(models.Model):
         return f"Hotspot ({self.x},{self.y}) {self.width_px}x{self.height_px}"
 
     def contains_point(self, click_x: int, click_y: int) -> bool:
-        """Check if a click point falls within this hotspot area."""
+        """Check if a click point falls within this hotspot area.
+
+        Handles all three shape types:
+        - RECTANGLE: bounding-box check
+        - CIRCLE: distance-from-center check
+        - POLYGON: ray-casting point-in-polygon check
+
+        Adds a small tolerance (TOLERANCE_PX) to make clicking easier on
+        very small hotspots / large images. The tolerance expands the
+        effective area by TOLERANCE_PX on every side.
+        Per SRS feedback §15 Issue 1 — clicking on the exact spot did not
+        register as correct.
+        """
+        # Tolerance in pixels — expands the clickable area.
+        TOLERANCE_PX = 5
+
+        if self.shape_type == "CIRCLE":
+            if self.radius is None:
+                return False
+            # Distance from click to circle centre <= radius + tolerance
+            dx = click_x - self.x
+            dy = click_y - self.y
+            return (dx * dx + dy * dy) <= ((self.radius + TOLERANCE_PX) ** 2)
+
+        if self.shape_type == "POLYGON":
+            pts = self.points or []
+            if len(pts) < 3:
+                return False
+            # Ray-casting algorithm — count edge crossings.
+            # Apply tolerance by checking a small expanded box first as a
+            # fast path, then fall back to the precise polygon test.
+            xs = [p.get("x", 0) if isinstance(p, dict) else p[0] for p in pts]
+            ys = [p.get("y", 0) if isinstance(p, dict) else p[1] for p in pts]
+            min_x, max_x = min(xs) - TOLERANCE_PX, max(xs) + TOLERANCE_PX
+            min_y, max_y = min(ys) - TOLERANCE_PX, max(ys) + TOLERANCE_PX
+            if not (min_x <= click_x <= max_x and min_y <= click_y <= max_y):
+                return False
+            # Precise point-in-polygon test (ray casting)
+            inside = False
+            n = len(pts)
+            j = n - 1
+            for i in range(n):
+                xi = pts[i].get("x", 0) if isinstance(pts[i], dict) else pts[i][0]
+                yi = pts[i].get("y", 0) if isinstance(pts[i], dict) else pts[i][1]
+                xj = pts[j].get("x", 0) if isinstance(pts[j], dict) else pts[j][0]
+                yj = pts[j].get("y", 0) if isinstance(pts[j], dict) else pts[j][1]
+                if ((yi > click_y) != (yj > click_y)) and (
+                    click_x < (xj - xi) * (click_y - yi) / (yj - yi + 0.0001) + xi
+                ):
+                    inside = not inside
+                j = i
+            return inside
+
+        # Default: RECTANGLE — bounding-box check with tolerance
         return (
-            self.x <= click_x <= self.x + self.width_px
-            and self.y <= click_y <= self.y + self.height_px
+            self.x - TOLERANCE_PX <= click_x <= self.x + self.width_px + TOLERANCE_PX
+            and self.y - TOLERANCE_PX <= click_y <= self.y + self.height_px + TOLERANCE_PX
         )
 
 

@@ -407,17 +407,24 @@ export default function QuestionDetailPage() {
                   );
                 })}
 
-                {/* Passage body — special rendering */}
-                {q.passage_body && visibleTypeFields.some((f) => f.key === "passage_body") && (
-                  <div className="py-1 sm:col-span-2">
-                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                      Passage Body
-                    </dt>
-                    <dd className="mt-1 rounded-md bg-slate-50 p-3 text-sm text-slate-900">
-                      {q.passage_body}
-                    </dd>
-                  </div>
-                )}
+                {/* Passage body — rendered in the Preview section below for
+                    Passage Display questions (SRS feedback §7 Issue 2 —
+                    duplicate passage body should be removed). For other
+                    question types that happen to have a passage_body, show
+                    it here as a fallback. */}
+                {q.passage_body &&
+                  q.question_type !== "MCQ_PASSAGE_DISPLAY_MULTI" &&
+                  visibleTypeFields.some((f) => f.key === "passage_body") && (
+                    <div className="py-1 sm:col-span-2">
+                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Passage Body
+                      </dt>
+                      <dd
+                        className="prose prose-sm mt-1 max-w-none rounded-md bg-slate-50 p-3 text-sm text-slate-900"
+                        dangerouslySetInnerHTML={{ __html: q.passage_body }}
+                      />
+                    </div>
+                  )}
 
                 {/* Audit */}
                 <div className="py-1">

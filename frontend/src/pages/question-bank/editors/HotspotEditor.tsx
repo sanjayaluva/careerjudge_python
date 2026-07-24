@@ -15,7 +15,7 @@
  * overlay on top. This prevents the browser's native image drag behavior.
  */
 import { useCallback, useRef, useState } from "react";
-import { Button, Label, MediaManager } from "@/components/ui";
+import { Button, Label, MediaManager, WysiwygEditorLite } from "@/components/ui";
 import { SCORING_TYPES } from "@/api/questionBank";
 
 type ShapeType = "RECTANGLE" | "CIRCLE" | "POLYGON";
@@ -411,26 +411,22 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
         <Label htmlFor="qtext1" required>
           Question text
         </Label>
-        <textarea
-          id="qtext1"
-          rows={3}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+        <WysiwygEditorLite
           value={data.question_text_1}
-          onChange={(e) => onChange({ ...data, question_text_1: e.target.value })}
-          placeholder="Click on the correct area in the image..."
+          onChange={(html) => onChange({ ...data, question_text_1: html })}
+          minHeight={80}
+          placeholder="Click on the correct area in the image…"
         />
       </div>
 
       {/* Additional text (optional) */}
       <div>
         <Label htmlFor="qtext2">Additional text (optional)</Label>
-        <textarea
-          id="qtext2"
-          rows={2}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+        <WysiwygEditorLite
           value={data.question_text_2}
-          onChange={(e) => onChange({ ...data, question_text_2: e.target.value })}
-          placeholder="Additional context or instructions..."
+          onChange={(html) => onChange({ ...data, question_text_2: html })}
+          minHeight={60}
+          placeholder="Additional context or instructions…"
         />
       </div>
 
