@@ -303,23 +303,34 @@ export default function SessionPlayerPage() {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          {/* Assessment-level timer */}
+          {/* Assessment-level timer — bigger box per SRS feedback Common Issue 10 */}
           {timeLeft !== null && timeLeft > 0 && (
-            <span
-              className={`font-mono text-sm font-bold ${timeLeft < 60 ? "text-danger" : "text-slate-600"}`}
+            <div
+              className={`flex items-center gap-1 rounded-lg px-3 py-1.5 font-mono text-lg font-bold ${
+                timeLeft < 60
+                  ? "bg-danger-100 text-danger-700"
+                  : timeLeft < 300
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-slate-100 text-slate-700"
+              }`}
               title="Assessment time remaining"
             >
+              <span className="text-xs">⏱</span>
               {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
-            </span>
+            </div>
           )}
           {/* Question-level timer (when timer_level='question') */}
           {questionTimeLeft !== null && questionTimeLeft > 0 && (
-            <span
-              className={`font-mono text-sm font-bold ${questionTimeLeft < 10 ? "text-danger" : "text-amber-600"}`}
+            <div
+              className={`flex items-center gap-1 rounded-lg px-3 py-1.5 font-mono text-base font-bold ${
+                questionTimeLeft < 10
+                  ? "bg-danger-100 text-danger-700"
+                  : "bg-amber-100 text-amber-700"
+              }`}
               title="Question time remaining"
             >
               Q: {questionTimeLeft}s
-            </span>
+            </div>
           )}
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => suspendMutation.mutate()}>
@@ -423,21 +434,23 @@ export default function SessionPlayerPage() {
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl px-6 py-8">
             <div className="rounded-lg border border-slate-200 bg-white p-6">
-              {/* Question type badge + bookmark */}
-              <div className="mb-4 flex items-center gap-2">
-                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                  {qd.question_type_label}
-                </span>
-                {qd.difficulty_level && (
-                  <span className="text-xs text-slate-400">· {qd.difficulty_level}</span>
-                )}
+              {/* Bookmark button only — hide backend details (question type,
+                  difficulty level, cognitive level) from the test taker
+                  per SRS feedback Common Issue 9 */}
+              <div className="mb-4 flex items-center justify-end">
                 <button
                   onClick={handleBookmark}
-                  className={`ml-auto text-sm ${bookmarked.has(answerKey) ? "text-primary-600" : "text-slate-400 hover:text-slate-600"}`}
+                  className={`text-sm ${bookmarked.has(answerKey) ? "text-primary-600" : "text-slate-400 hover:text-slate-600"}`}
                 >
                   {bookmarked.has(answerKey) ? "★ Bookmarked" : "☆ Bookmark"}
                 </button>
               </div>
+
+              {/* Question Text1 — ABOVE media (serves as instructions per
+                  SRS feedback Common Issue 2) */}
+              {qd.question_text_1 && (
+                <p className="mb-4 text-base font-medium text-slate-900">{qd.question_text_1}</p>
+              )}
 
               {/* Flash items — interactive simulation */}
               {qd.flash_items.length > 0 && (
@@ -458,12 +471,12 @@ export default function SessionPlayerPage() {
                 />
               )}
 
-              {/* Question image */}
+              {/* Question image — larger per SRS feedback Common Issue 6 */}
               {qd.image && (
                 <img
                   src={qd.image}
                   alt="Question"
-                  className="mb-4 max-h-60 rounded-md border border-slate-200"
+                  className="mb-4 max-h-[500px] w-full rounded-md border border-slate-200 object-contain"
                 />
               )}
 
@@ -497,10 +510,10 @@ export default function SessionPlayerPage() {
                   </div>
                 ))}
 
-              {/* Question text */}
-              <p className="mb-4 text-base font-medium text-slate-900">{qd.question_text_1}</p>
+              {/* Question Text2 — BELOW media (the actual question based on
+                  the audio/video/passage/image per SRS feedback Common Issue 2) */}
               {qd.question_text_2 && (
-                <p className="mb-4 text-sm text-slate-600">{qd.question_text_2}</p>
+                <p className="mb-4 mt-4 text-sm text-slate-600">{qd.question_text_2}</p>
               )}
 
               {/* Answer input area — by question type */}
@@ -601,8 +614,16 @@ function AnswerInput({
       }
     };
 
+    // Multi-column layout per SRS feedback Common Issue 7
+    const layoutCols =
+      qd.option_layout === "2"
+        ? "grid-cols-2"
+        : qd.option_layout === "3"
+          ? "grid-cols-3"
+          : "grid-cols-1";
+
     return (
-      <div className="space-y-2">
+      <div className={`grid ${layoutCols} gap-2`}>
         {qd.options
           .filter((o) => o.option_type === "TEXT" || o.option_type === "IMAGE")
           .map((opt) => (
@@ -619,10 +640,13 @@ function AnswerInput({
                 name={`q-${question.id}`}
                 checked={selectedIds.includes(opt.id)}
                 onChange={() => handleSelect(opt.id)}
-                className="h-4 w-4"
+                className="h-4 w-4 shrink-0"
               />
-              {opt.image_file && <img src={opt.image_file} alt="" className="h-8 w-8 rounded" />}
-              <span>{opt.text_value || "(image)"}</span>
+              {opt.image_file && (
+                <img src={opt.image_file} alt="" className="h-12 w-12 rounded object-cover" />
+              )}
+              {/* Hide '(image)' text for image-only options per SRS feedback Issue 2 (1b) */}
+              {opt.text_value && <span>{opt.text_value}</span>}
             </label>
           ))}
       </div>
