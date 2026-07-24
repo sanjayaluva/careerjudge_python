@@ -217,6 +217,58 @@ class Question(models.Model):
         blank=True,
         help_text="For timed display types 1g/1h",
     )
+
+    # --- Display mode (SRS feedback: Timed vs Unlimited display) ---
+    DISPLAY_MODE_CHOICES = [
+        ("timed", "Timed Display (no replay after expiry)"),
+        ("unlimited", "Unlimited Display (stays until next question)"),
+    ]
+    display_mode = models.CharField(
+        _("display mode"),
+        max_length=10,
+        choices=DISPLAY_MODE_CHOICES,
+        default="unlimited",
+        help_text="For passage/image display: timed = expires after display_duration_seconds, "
+        "unlimited = stays visible until test taker moves on",
+    )
+    # --- Replay control (SRS feedback: Replay Permitted vs Not Permitted) ---
+    REPLAY_MODE_CHOICES = [
+        ("permitted", "Replay Permitted (test taker can replay audio/video)"),
+        ("not_permitted", "Replay Not Permitted (one-time playback only)"),
+    ]
+    replay_mode = models.CharField(
+        _("replay mode"),
+        max_length=15,
+        choices=REPLAY_MODE_CHOICES,
+        default="not_permitted",
+        help_text="For audio/video/flash: whether the test taker can replay the content",
+    )
+    # --- Option layout (SRS feedback: 1/2/3 column option display) ---
+    OPTION_LAYOUT_CHOICES = [
+        ("1", "Single Column (default)"),
+        ("2", "Two Columns"),
+        ("3", "Three Columns"),
+    ]
+    option_layout = models.CharField(
+        _("option layout"),
+        max_length=1,
+        choices=OPTION_LAYOUT_CHOICES,
+        default="1",
+        help_text="How answer options are arranged in the assessment player",
+    )
+    # --- Hotspot visibility (SRS feedback: transparent vs visible spot-marking) ---
+    HOTSPOT_VISIBILITY_CHOICES = [
+        ("transparent", "Transparent (spot-marking not visible to test taker)"),
+        ("visible", "Visible (spot-marking shown to test taker)"),
+    ]
+    hotspot_visibility = models.CharField(
+        _("hotspot visibility"),
+        max_length=12,
+        choices=HOTSPOT_VISIBILITY_CHOICES,
+        default="transparent",
+        help_text="For hotspot questions: whether the hotspot areas are visible to the test taker",
+    )
+
     flash_interval_ms = models.PositiveIntegerField(
         _("flash interval (ms)"), null=True, blank=True, help_text="For flash types 1e/1f/2c/2d"
     )

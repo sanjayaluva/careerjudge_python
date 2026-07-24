@@ -33,6 +33,10 @@ def score_question(question: Question, raw_answer: dict[str, Any] | None) -> tup
     if question.question_type in ("HOTSPOT_SINGLE", "HOTSPOT_MULTI"):
         return _score_hotspot(question, raw_answer)
 
+    # Grid questions use their own scoring: correct = +1, incorrect = -1, min 0
+    if question.question_type == "GRID_LIST_SELECTION":
+        return _score_grid(question, raw_answer)
+
     scorer = SCORERS.get(question.scoring_type)
     if not scorer:
         # Default to binary
@@ -86,25 +90,44 @@ def _get_max_score(question: Question) -> float:
 
 
 def _score_binary(question: Question, raw_answer: dict) -> tuple[float, float]:
-    """Correct answer selected → 1, else 0."""
-    max_score = 1.0
+    """Score MCQ questions.
+
+    Single-answer (1 correct option): correct → 1, incorrect → 0.
+    Multi-answer (2+ correct options): each correct selected = +1, each
+    incorrect selected = -1, minimum score = 0.
+
+    Per SRS feedback report: 'each correct answer option selected by the
+    test taker should receive a score of 1 and each incorrect answer
+    option selected a score of -1. If the number of wrong answers
+    selected is more than the number of correct answers selected, then
+    the score is fixed at zero. The total score cannot be a negative
+    value.'
+
+    Max score = number of correct options (so multi-answer questions
+    can score higher than 1).
+    """
     selected_ids = raw_answer.get("selected_option_ids", [])
     if not selected_ids and "selected_option_id" in raw_answer:
         selected_ids = [raw_answer["selected_option_id"]]
 
     correct_options = list(question.options.filter(is_correct=True))
     if not correct_options:
-        return 0.0, max_score
+        return 0.0, 1.0
 
-    correct_ids = [o.id for o in correct_options]
-    # For single-answer: check if selected matches any correct
+    correct_ids = {o.id for o in correct_options}
+    selected_set = set(selected_ids)
+
+    # Single-answer: simple match
     if len(correct_options) == 1:
-        score = 1.0 if set(selected_ids) == {correct_ids[0]} else 0.0
-    else:
-        # For multi-answer binary: all correct selected, none incorrect
-        selected_set = set(selected_ids)
-        correct_set = set(correct_ids)
-        score = 1.0 if selected_set == correct_set else 0.0
+        score = 1.0 if selected_set == correct_ids else 0.0
+        return score, 1.0
+
+    # Multi-answer: +1 per correct selected, -1 per incorrect selected, min 0
+    correct_selected = selected_set & correct_ids
+    incorrect_selected = selected_set - correct_ids
+    raw_score = len(correct_selected) - len(incorrect_selected)
+    score = max(0.0, float(raw_score))
+    max_score = float(len(correct_options))
 
     return score, max_score
 
@@ -430,11 +453,14 @@ def _score_hotspot(question: Question, raw_answer: dict) -> tuple[float, float]:
                     return 1.0, max_score
         return 0.0, max_score
     else:
-        # Multi answer (5b): NEGATIVE scoring
-        # Correct clicks count, wrong clicks get negative
+        # Multi answer (5b): each correct click = +1, each wrong click = -1, min 0
+        # Per SRS feedback: 'Each correct selection should be given a score
+        # of 1. Each incorrect selection should receive a negative score
+        # of 1, but minimum score is zero, not a negative value.'
         correct_clicks = 0
         wrong_clicks = 0
         total_correct_areas = len(correct_areas)
+        max_score = float(total_correct_areas)
 
         for click in clicks:
             cx = click.get("x", 0)
@@ -449,12 +475,62 @@ def _score_hotspot(question: Question, raw_answer: dict) -> tuple[float, float]:
             else:
                 wrong_clicks += 1
 
-        # Score: correct clicks give +1/total, wrong clicks give -0.25/total
-        # Floor at 0
-        positive = correct_clicks / total_correct_areas
-        negative = (wrong_clicks * 0.25) / total_correct_areas
-        score = max(0.0, positive - negative)
-        return round(score, 4), max_score
+        raw_score = correct_clicks - wrong_clicks
+        score = max(0.0, float(raw_score))
+        return score, max_score
+
+
+# ---------------------------------------------------------------------------
+# GRID: correct = +1, incorrect = -1, min 0
+# Used by: Grid Selection (4)
+# Per SRS feedback: 'Total mark (five correct answers) should be 5.
+# Negative marking should be (-1) for each incorrect option selected.'
+# ---------------------------------------------------------------------------
+
+
+def _score_grid(question: Question, raw_answer: dict) -> tuple[float, float]:
+    """Score grid selection: each correct selected = +1, each incorrect = -1, min 0.
+
+    raw_answer = {"selected_cells": [{"r": 0, "c": 1}, ...]}
+    Correct cells are options with is_correct=True.
+    """
+    options = list(question.options.filter(option_type="DRAG_POOL"))
+    if not options:
+        return 0.0, 0.0
+
+    correct_options = [o for o in options if o.is_correct]
+    max_score = float(len(correct_options))
+
+    selected_cells = raw_answer.get("selected_cells", [])
+    if not selected_cells:
+        return 0.0, max_score
+
+    # Map selected cells to option IDs by (row, col) order
+    # Grid cells are options ordered by their 'order' field
+    # The frontend sends selected_cells as [{"r": row, "c": col}, ...]
+    # We need to map these to option IDs
+    correct_count = 0
+    wrong_count = 0
+
+    # Build a grid position -> option mapping
+    # Options are ordered: row 0 = options[0..cols-1], row 1 = options[cols..2*cols-1], etc.
+    grid_cols = question.grid_cols or 1
+
+    for cell in selected_cells:
+        r = cell.get("r", 0)
+        c = cell.get("c", 0)
+        idx = r * grid_cols + c
+        if 0 <= idx < len(options):
+            if options[idx].is_correct:
+                correct_count += 1
+            else:
+                wrong_count += 1
+        else:
+            wrong_count += 1
+
+    raw_score = correct_count - wrong_count
+    score = max(0.0, float(raw_score))
+    return score, max_score
 
 
 # ---------------------------------------------------------------------------
