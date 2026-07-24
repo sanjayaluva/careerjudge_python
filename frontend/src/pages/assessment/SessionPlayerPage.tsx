@@ -468,6 +468,8 @@ export default function SessionPlayerPage() {
                   title={qd.passage_title}
                   body={qd.passage_body}
                   displayDurationSeconds={qd.display_duration_seconds ?? null}
+                  displayMode={qd.display_mode ?? "timed"}
+                  replayMode={qd.replay_mode ?? "not_permitted"}
                 />
               )}
 
@@ -1011,6 +1013,18 @@ function AnswerInput({
       (currentAnswer?.pairs as { a_id: number; b_id: number }[]) || [];
     const groupA = qd.options.filter((o) => o.option_type === "MATCH_A");
     const groupB = qd.options.filter((o) => o.option_type === "MATCH_B");
+    const dummyB = qd.options.filter((o) => o.option_type === "MATCH_DUMMY");
+
+    // Combine real Group B + dummy options, then shuffle deterministically
+    // per question (so refreshes don't reshuffle). Use question id as seed.
+    const allGroupB = [...groupB, ...dummyB];
+    const seed = qd.id || 0;
+    const shuffledGroupB = [...allGroupB].sort((a, b) => {
+      // Simple deterministic pseudo-random based on option id + question seed
+      const ha = ((a.id * 9301 + seed * 49297) % 233280) / 233280;
+      const hb = ((b.id * 9301 + seed * 49297) % 233280) / 233280;
+      return ha - hb;
+    });
 
     const handleMatch = (bId: number) => {
       if (selectedA === null) return;
@@ -1026,13 +1040,18 @@ function AnswerInput({
       <div>
         <p className="mb-3 text-xs text-slate-500">
           Click an item from Group A, then click the matching item from Group B.
+          {dummyB.length > 0 && (
+            <span className="ml-1 italic text-amber-600">
+              (Some Group B items are dummy — they don't match any Group A item.)
+            </span>
+          )}
         </p>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Group A</p>
             {groupA.map((opt) => {
               const matchedB = getMatchedB(opt.id);
-              const matchedBOpt = groupB.find((b) => b.id === matchedB);
+              const matchedBOpt = shuffledGroupB.find((b) => b.id === matchedB);
               const isSelected = selectedA === opt.id;
               return (
                 <button
@@ -1056,8 +1075,10 @@ function AnswerInput({
             })}
           </div>
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Group B</p>
-            {groupB.map((opt) => {
+            <p className="mb-2 text-xs font-semibold uppercase text-slate-500">
+              Group B (shuffled)
+            </p>
+            {shuffledGroupB.map((opt) => {
               const isMatched = pairs.some((p) => p.b_id === opt.id);
               return (
                 <button
@@ -1302,13 +1323,27 @@ function PassageDisplay({
   title,
   body,
   displayDurationSeconds,
+  displayMode = "timed",
+  replayMode = "not_permitted",
+  hasBeenViewed = false,
 }: {
   title: string;
   body: string;
   displayDurationSeconds: number | null;
+  displayMode?: "timed" | "unlimited";
+  replayMode?: "permitted" | "not_permitted";
+  hasBeenViewed?: boolean;
 }) {
-  const [visible, setVisible] = useState(true);
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(displayDurationSeconds);
+  // For 'timed' mode: passage starts hidden until user clicks 'Start Passage Presentation'
+  // For 'unlimited' mode: passage is always visible
+  // For 'not_permitted' replay mode: once viewed + time elapsed, cannot be viewed again
+  const [presentationStarted, setPresentationStarted] = useState(
+    displayMode === "unlimited" || (replayMode === "permitted" && hasBeenViewed),
+  );
+  const [visible, setVisible] = useState(displayMode === "unlimited");
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(
+    displayMode === "timed" ? displayDurationSeconds : null,
+  );
 
   // Countdown for timed passages
   useEffect(() => {
@@ -1326,25 +1361,64 @@ function PassageDisplay({
     return () => clearInterval(timer);
   }, [secondsLeft]);
 
-  if (!visible) {
+  const startPresentation = () => {
+    setPresentationStarted(true);
+    setVisible(true);
+    if (displayMode === "timed" && displayDurationSeconds) {
+      setSecondsLeft(displayDurationSeconds);
+    }
+  };
+
+  // Unlimited mode: always visible
+  if (displayMode === "unlimited") {
+    return (
+      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="font-semibold text-slate-900">{title}</p>
+        </div>
+        {body && <p className="mt-1 text-sm leading-relaxed text-slate-700">{body}</p>}
+      </div>
+    );
+  }
+
+  // Timed mode — passage not yet started
+  if (!presentationStarted && replayMode === "not_permitted" && !hasBeenViewed) {
+    return (
+      <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-center">
+        <p className="text-sm font-medium text-slate-700">Passage ready to view</p>
+        <p className="mt-1 text-xs text-slate-600">
+          When you click the button below, the passage will be displayed
+          {displayDurationSeconds ? ` for ${displayDurationSeconds} seconds` : ""}. After the time
+          elapses, the passage cannot be viewed again.
+        </p>
+        <Button size="sm" className="mt-3" onClick={startPresentation}>
+          Start Passage Presentation
+        </Button>
+      </div>
+    );
+  }
+
+  // Timed mode — passage was viewed but cannot be replayed
+  if (!visible && replayMode === "not_permitted") {
     return (
       <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
         <p className="text-sm text-slate-600">
           Passage display time has elapsed. The passage is no longer visible.
         </p>
-        {displayDurationSeconds && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-2"
-            onClick={() => {
-              setVisible(true);
-              setSecondsLeft(null);
-            }}
-          >
-            Show passage anyway
-          </Button>
-        )}
+      </div>
+    );
+  }
+
+  // Timed mode — replay permitted
+  if (!visible && replayMode === "permitted") {
+    return (
+      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+        <p className="text-sm text-slate-600">
+          Passage display time has elapsed. You can replay it again.
+        </p>
+        <Button variant="outline" size="sm" className="mt-2" onClick={startPresentation}>
+          Replay Passage
+        </Button>
       </div>
     );
   }

@@ -458,6 +458,7 @@ class ResponseOption(models.Model):
         ("IMAGE", "Image Option"),
         ("MATCH_A", "Match Group A Item"),
         ("MATCH_B", "Match Group B Item"),
+        ("MATCH_DUMMY", "Match Dummy (Non-matching) Item"),
         ("DRAG_POOL", "Drag Pool Item (Grid)"),
         ("RANK", "Rank Item"),
         ("FORCED_CHOICE", "Forced-Choice Item"),

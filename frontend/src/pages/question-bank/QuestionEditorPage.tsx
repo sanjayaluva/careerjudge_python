@@ -112,6 +112,13 @@ export default function QuestionEditorPage() {
   const [flashInterval, setFlashInterval] = useState("");
   const [flashCount, setFlashCount] = useState("");
   const [flashOrder, setFlashOrder] = useState("SEQUENCE");
+  const [displayMode, setDisplayMode] = useState<"timed" | "unlimited">("timed");
+  const [replayMode, setReplayMode] = useState<"permitted" | "not_permitted">("not_permitted");
+  const [optionLayout, setOptionLayout] = useState<"1" | "2" | "3">("1");
+  const [hotspotVisibility, setHotspotVisibility] = useState<"transparent" | "visible">(
+    "transparent",
+  );
+  const [dummyOptions, setDummyOptions] = useState<OptionData[]>([]);
   const [imageWidth, setImageWidth] = useState(0);
   const [imageHeight, setImageHeight] = useState(0);
   const [gridRows, setGridRows] = useState("3");
@@ -162,6 +169,10 @@ export default function QuestionEditorPage() {
     setDisplayDuration(
       q.display_duration_seconds != null ? String(q.display_duration_seconds) : "",
     );
+    setDisplayMode(q.display_mode ?? "timed");
+    setReplayMode(q.replay_mode ?? "not_permitted");
+    setOptionLayout(q.option_layout ?? "1");
+    setHotspotVisibility(q.hotspot_visibility ?? "transparent");
     setCaseSensitive(Boolean(q.case_sensitive));
     setPctThreshold(q.pct_match_threshold != null ? String(q.pct_match_threshold) : "");
     setFlashInterval(q.flash_interval_ms != null ? String(q.flash_interval_ms) : "");
@@ -235,6 +246,28 @@ export default function QuestionEditorPage() {
       setPairs(rebuiltPairs);
     } else {
       setPairs([]);
+    }
+
+    // Load dummy options for Match type (SRS feedback Issue 13)
+    const matchDummy = q.options.filter((o) => o.option_type === "MATCH_DUMMY");
+    if (matchDummy.length > 0) {
+      setDummyOptions(
+        matchDummy.map((d) => ({
+          id: d.id,
+          sub_question_index: d.sub_question_index,
+          option_type: "MATCH_DUMMY",
+          label: d.label ?? "",
+          text_value: d.text_value ?? "",
+          image_file: d.image_file ?? null,
+          is_correct: false,
+          match_pair_id: null,
+          predefined_score: 0,
+          order: d.order,
+          correct_answers: [],
+        })),
+      );
+    } else {
+      setDummyOptions([]);
     }
 
     // Rebuild grid state from DRAG_POOL options (for type 4: Grid-List Selection)
@@ -372,6 +405,7 @@ export default function QuestionEditorPage() {
       payload: Record<string, unknown>;
       opts: typeof options;
       prs: typeof pairs;
+      dummies?: typeof dummyOptions;
       img?: string;
       aud?: string;
       vid?: string;
@@ -392,6 +426,7 @@ export default function QuestionEditorPage() {
         payload,
         opts,
         prs,
+        dummies,
         img,
         aud,
         vid,
@@ -473,6 +508,21 @@ export default function QuestionEditorPage() {
             is_correct: false,
             predefined_score: 1.0,
             order: i * 2 + 1,
+          });
+        });
+      }
+
+      // Match dummy options (non-matching Group B items, SRS feedback Issue 13)
+      if (dummies && dummies.length > 0) {
+        dummies.forEach((d, i) => {
+          allOptions.push({
+            sub_question_index: 0,
+            option_type: "MATCH_DUMMY",
+            text_value: d.text_value,
+            match_pair_id: null,
+            is_correct: false,
+            predefined_score: 0,
+            order: 1000 + i,
           });
         });
       }
@@ -569,6 +619,10 @@ export default function QuestionEditorPage() {
     if (passageTitle) payload.passage_title = passageTitle;
     if (passageBody) payload.passage_body = passageBody;
     if (displayDuration) payload.display_duration_seconds = parseInt(displayDuration);
+    payload.display_mode = displayMode;
+    payload.replay_mode = replayMode;
+    payload.option_layout = optionLayout;
+    if (isHotspot) payload.hotspot_visibility = hotspotVisibility;
     if (caseSensitive) payload.case_sensitive = true;
     if (pctThreshold) payload.pct_match_threshold = parseFloat(pctThreshold);
     if (flashInterval) payload.flash_interval_ms = parseInt(flashInterval);
@@ -622,6 +676,7 @@ export default function QuestionEditorPage() {
       payload,
       opts: options,
       prs: pairs,
+      dummies: dummyOptions.length > 0 ? dummyOptions : undefined,
       img: imageUrl || undefined,
       aud: audioUrl || undefined,
       vid: videoUrl || undefined,
@@ -651,6 +706,9 @@ export default function QuestionEditorPage() {
     passage_title: passageTitle,
     passage_body: passageBody,
     display_duration_seconds: displayDuration,
+    display_mode: displayMode,
+    replay_mode: replayMode,
+    option_layout: optionLayout,
     imageUrl,
     audioUrl,
     videoUrl,
@@ -674,7 +732,12 @@ export default function QuestionEditorPage() {
     flashItems,
   };
 
-  const matchData = { question_text_1: questionText1, scoring_type: "PARTIAL", pairs };
+  const matchData = {
+    question_text_1: questionText1,
+    scoring_type: "PARTIAL",
+    pairs,
+    dummyOptions,
+  };
 
   const gridData = {
     question_text_1: questionText1,
@@ -694,6 +757,7 @@ export default function QuestionEditorPage() {
     areas: hotspotAreas,
     image_width: imageWidth,
     image_height: imageHeight,
+    hotspot_visibility: hotspotVisibility,
   };
 
   const rankData = { question_text_1: questionText1, options };
@@ -761,6 +825,7 @@ export default function QuestionEditorPage() {
                     setQuestionType(newType);
                     setOptions([]);
                     setPairs([]);
+                    setDummyOptions([]);
                     setScoringType(DEFAULT_SCORING_BY_TYPE[newType] ?? "BINARY");
                   }}
                 >
@@ -856,6 +921,9 @@ export default function QuestionEditorPage() {
                   setPassageTitle(d.passage_title);
                   setPassageBody(d.passage_body);
                   setDisplayDuration(d.display_duration_seconds);
+                  setDisplayMode(d.display_mode);
+                  setReplayMode(d.replay_mode);
+                  setOptionLayout(d.option_layout);
                   setImageUrl(d.imageUrl);
                   setAudioUrl(d.audioUrl);
                   setVideoUrl(d.videoUrl);
@@ -891,6 +959,7 @@ export default function QuestionEditorPage() {
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
                   setPairs(d.pairs);
+                  setDummyOptions(d.dummyOptions);
                 }}
               />
             )}
@@ -920,6 +989,7 @@ export default function QuestionEditorPage() {
                   setHotspotAreas(d.areas);
                   setImageWidth(d.image_width);
                   setImageHeight(d.image_height);
+                  setHotspotVisibility(d.hotspot_visibility);
                 }}
               />
             )}

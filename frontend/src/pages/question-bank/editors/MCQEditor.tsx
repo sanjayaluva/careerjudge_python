@@ -17,6 +17,9 @@ interface MCQEditorProps {
     passage_title: string;
     passage_body: string;
     display_duration_seconds: string;
+    display_mode: "timed" | "unlimited";
+    replay_mode: "permitted" | "not_permitted";
+    option_layout: "1" | "2" | "3";
     imageUrl: string;
     audioUrl: string;
     videoUrl: string;
@@ -178,7 +181,27 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
               value={data.display_duration_seconds}
               onChange={(e) => onChange({ ...data, display_duration_seconds: e.target.value })}
               placeholder="How long the passage displays"
+              disabled={data.display_mode === "unlimited"}
             />
+          </div>
+          <div>
+            <Label htmlFor="display_mode">Display Mode</Label>
+            <select
+              id="display_mode"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={data.display_mode}
+              onChange={(e) =>
+                onChange({
+                  ...data,
+                  display_mode: e.target.value as "timed" | "unlimited",
+                })
+              }
+            >
+              <option value="timed">Timed — passage expires after duration, no replay</option>
+              <option value="unlimited">
+                Unlimited — passage stays visible until test taker moves on
+              </option>
+            </select>
           </div>
         </div>
       )}
@@ -202,6 +225,52 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
           }
         />
       )}
+
+      {/* Audio/Video replay mode (SRS feedback Recommendation 2) */}
+      {(isAudioType || isVideoType || isImageFlashType || isWordFlashType) && (
+        <div>
+          <Label htmlFor="replay_mode">Replay Mode</Label>
+          <select
+            id="replay_mode"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            value={data.replay_mode}
+            onChange={(e) =>
+              onChange({
+                ...data,
+                replay_mode: e.target.value as "permitted" | "not_permitted",
+              })
+            }
+          >
+            <option value="not_permitted">
+              Not Permitted — one-time playback only (assessment mode)
+            </option>
+            <option value="permitted">Permitted — test taker can replay (training mode)</option>
+          </select>
+        </div>
+      )}
+
+      {/* Option layout (SRS feedback Common Issue 7) */}
+      <div>
+        <Label htmlFor="option_layout">Option Layout</Label>
+        <select
+          id="option_layout"
+          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+          value={data.option_layout}
+          onChange={(e) =>
+            onChange({
+              ...data,
+              option_layout: e.target.value as "1" | "2" | "3",
+            })
+          }
+        >
+          <option value="1">Single column</option>
+          <option value="2">Two columns</option>
+          <option value="3">Three columns</option>
+        </select>
+        <p className="mt-1 text-xs text-slate-500">
+          Use multi-column layout when there are many options to avoid scrolling.
+        </p>
+      </div>
 
       {/* Answer type toggle */}
       <div className="flex items-center gap-4">

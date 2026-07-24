@@ -43,6 +43,7 @@ interface HotspotEditorProps {
     areas: HotspotArea[];
     image_width: number;
     image_height: number;
+    hotspot_visibility: "transparent" | "visible";
   };
   onChange: (data: HotspotEditorProps["data"]) => void;
 }
@@ -467,6 +468,31 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
             </p>
           ) : null;
         })()}
+      </div>
+
+      {/* Hotspot visibility (SRS feedback Issue 13 Recommendation) */}
+      <div>
+        <Label htmlFor="hotspot_visibility">Hotspot Visibility</Label>
+        <select
+          id="hotspot_visibility"
+          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+          value={data.hotspot_visibility}
+          onChange={(e) =>
+            onChange({
+              ...data,
+              hotspot_visibility: e.target.value as "transparent" | "visible",
+            })
+          }
+        >
+          <option value="transparent">
+            Transparent — spot-marking hidden, candidate must know exact location
+          </option>
+          <option value="visible">Visible — spot-marking shown to candidate (easier mode)</option>
+        </select>
+        <p className="mt-1 text-xs text-slate-500">
+          Choose based on assessment difficulty. Transparent is harder; Visible is more
+          candidate-friendly.
+        </p>
       </div>
 
       {/* Shape drawing tools */}

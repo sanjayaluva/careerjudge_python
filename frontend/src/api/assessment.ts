@@ -313,10 +313,10 @@ export interface SessionQuestion {
     passage_title: string;
     passage_body: string;
     display_duration_seconds: number | null;
-    display_mode: string;
-    replay_mode: string;
-    option_layout: string;
-    hotspot_visibility: string;
+    display_mode: "timed" | "unlimited";
+    replay_mode: "permitted" | "not_permitted";
+    option_layout: "1" | "2" | "3";
+    hotspot_visibility: "transparent" | "visible";
     grid_rows: number | null;
     grid_cols: number | null;
     rating_scale_points: number | null;
