@@ -86,6 +86,12 @@ ROLE_PERMISSIONS = {
         ("cms", "change"),
         ("cms", "delete"),
         ("notifications", "view"),
+        ("tasks", "view"),
+        ("tasks", "add"),
+        ("tasks", "change"),
+        ("tasks", "delete"),
+        ("tasks", "assign"),
+        ("tasks", "approve"),
     ],
     "corp_admin": [
         ("accounts", "view"),

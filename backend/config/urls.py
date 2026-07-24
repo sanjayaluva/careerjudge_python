@@ -36,6 +36,7 @@ urlpatterns = [
     path("api/cms/", include("apps.cms.urls", namespace="cms")),
     path("api/payments/", include("apps.payments.urls", namespace="payments")),
     path("api/notifications/", include("apps.notifications.urls", namespace="notifications")),
+    path("api/tasks/", include("apps.tasks.urls", namespace="tasks")),
     # Schema
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger"),

@@ -147,6 +147,8 @@ export interface ChangePasswordPayload {
 export interface AdminUserListParams {
   page?: number;
   search?: string;
+  role?: string;
+  page_size?: number;
 }
 
 export interface AdminCreateUserPayload {

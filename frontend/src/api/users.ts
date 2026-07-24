@@ -21,6 +21,8 @@ export function listUsers(params: AdminUserListParams = {}): Promise<{
     params: {
       page: params.page ?? 1,
       ...(params.search ? { search: params.search } : {}),
+      ...(params.role ? { role: params.role } : {}),
+      ...(params.page_size ? { page_size: params.page_size } : {}),
     },
   });
 }

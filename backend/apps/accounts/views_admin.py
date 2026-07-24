@@ -57,6 +57,14 @@ class UserViewSet(ModelViewSet):
     ordering_fields = ["created_at", "email", "full_name"]
     ordering = ["-created_at"]
 
+    def get_queryset(self):
+        """Allow filtering by role name via ?role=sme query param."""
+        qs = super().get_queryset()
+        role_name = self.request.query_params.get("role")
+        if role_name:
+            qs = qs.filter(role__name=role_name)
+        return qs
+
     def get_serializer_class(self):
         if self.action in ("create", "update", "partial_update"):
             return UserWriteSerializer

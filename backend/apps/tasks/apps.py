@@ -1,0 +1,12 @@
+"""App config for Tasks."""
+
+from django.apps import AppConfig
+
+
+class TasksConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.tasks"
+    verbose_name = "Task Management"
+    description = (
+        "Admin assigns + monitors tasks for SME / Reviewer / Psychometrician / Trainer / Counsellor"
+    )

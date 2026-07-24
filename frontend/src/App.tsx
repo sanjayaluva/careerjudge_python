@@ -23,6 +23,8 @@ import TrainingCourseEditorPage from "@/pages/training/TrainingCourseEditorPage"
 import CounselingPage from "@/pages/counseling/CounselingPage";
 import CMSPage from "@/pages/cms/CMSPage";
 import CMSPageViewer from "@/pages/cms/CMSPageViewer";
+import TasksPage from "@/pages/tasks/TasksPage";
+import TaskDetailPage from "@/pages/tasks/TaskDetailPage";
 import { PaymentSuccessPage, PaymentCancelPage } from "@/pages/payments/PaymentResultPages";
 import { PublicHomepage } from "@/pages/PublicHomepage";
 import ProfilePage from "@/pages/account/ProfilePage";
@@ -164,6 +166,8 @@ export default function App() {
                 <Route path="counseling" element={<CounselingPage />} />
                 <Route path="cms" element={<CMSPage />} />
                 <Route path="page/:slug" element={<CMSPageViewer />} />
+                <Route path="tasks" element={<TasksPage />} />
+                <Route path="tasks/:id" element={<TaskDetailPage />} />
               </Route>
 
               {/* Fullscreen session player — outside DashboardShell so the

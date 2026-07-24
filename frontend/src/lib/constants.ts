@@ -35,7 +35,8 @@ export type ModuleKey =
   | "reports"
   | "training"
   | "counseling"
-  | "cms";
+  | "cms"
+  | "tasks";
 
 export const ROLE_LABELS: Record<RoleName, string> = {
   cj_admin: "CareerJudge Admin",
@@ -87,6 +88,7 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "training",
     "counseling",
     "cms",
+    "tasks",
   ],
   corp_admin: [
     "dashboard",
@@ -105,12 +107,21 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "assessments",
     "career_profiling",
     "reports",
+    "tasks",
   ],
-  sme: ["dashboard", "profile", "question_bank", "assessments"],
-  reviewer: ["dashboard", "profile", "question_bank", "assessments"],
-  trainer: ["dashboard", "profile", "assessments", "training"],
+  sme: ["dashboard", "profile", "question_bank", "assessments", "tasks"],
+  reviewer: ["dashboard", "profile", "question_bank", "assessments", "tasks"],
+  trainer: ["dashboard", "profile", "assessments", "training", "tasks"],
   group_admin: ["dashboard", "profile", "organizations", "assessments"],
-  counsellor: ["dashboard", "profile", "assessments", "career_profiling", "reports", "counseling"],
+  counsellor: [
+    "dashboard",
+    "profile",
+    "assessments",
+    "career_profiling",
+    "reports",
+    "counseling",
+    "tasks",
+  ],
   channel_partner: ["dashboard", "profile", "users", "organizations", "assessments", "reports"],
   individual: [
     "dashboard",
@@ -206,6 +217,13 @@ export const NAV_ITEMS: NavItem[] = [
     roles: roleListFor("counseling"),
   },
   { key: "cms", label: "CMS", to: "/cms", icon: "FileText", roles: roleListFor("cms") },
+  {
+    key: "tasks",
+    label: "Tasks",
+    to: "/tasks",
+    icon: "ClipboardList",
+    roles: roleListFor("tasks"),
+  },
 ];
 
 /** Helper that returns the list of roles that can see a given module. */
@@ -239,6 +257,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   training: "Training",
   counseling: "Counseling",
   cms: "CMS",
+  tasks: "Task Management",
 };
 
 /** Short description shown on the dashboard cards. */
@@ -255,4 +274,5 @@ export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
   training: "Plan and deliver training programs.",
   counseling: "Schedule and track counseling sessions.",
   cms: "Manage static content and pages.",
+  tasks: "Admin assigns + monitors tasks for SME / Reviewer / Trainer / Counsellor.",
 };

@@ -203,6 +203,7 @@ class ModuleRight(models.Model):
         ("counseling", "Counseling"),
         ("cms", "CMS"),
         ("notifications", "Notifications"),
+        ("tasks", "Task Management"),
     ]
 
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="rights")
