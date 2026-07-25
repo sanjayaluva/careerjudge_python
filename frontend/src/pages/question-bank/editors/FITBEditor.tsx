@@ -3,7 +3,7 @@
  * Handles: single/multiple fields, correct answers (up to 5 per field),
  * fuzzy match config, flash items + flash config for 2c/2d
  */
-import { Input, Label, WysiwygEditorLite } from "@/components/ui";
+import { Input, Label, RichText, WysiwygEditorLite } from "@/components/ui";
 import { SCORING_TYPES } from "@/api/questionBank";
 import {
   AddOptionButton,
@@ -214,9 +214,11 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
             </div>
           )}
 
-          <p className="text-sm font-medium text-slate-900">
-            {data.question_text_1 || "(no question text)"}
-          </p>
+          <RichText
+            html={data.question_text_1}
+            fallback="(no question text)"
+            className="text-sm font-medium text-slate-900"
+          />
           <div className="mt-2 space-y-1">
             {data.options.map((opt, i) => (
               <div key={i} className="flex items-center gap-2 text-xs text-slate-600">

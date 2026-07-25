@@ -269,6 +269,32 @@ class Question(models.Model):
         help_text="For hotspot questions: whether the hotspot areas are visible to the test taker",
     )
 
+    # Multi-sub-question pooling (SRS feedback C-CFG-1)
+    # For Audio/Video/Passage/Image Display types: how many sub-questions
+    # share the same media. 1 = single question (default).
+    sub_question_count = models.PositiveIntegerField(
+        _("sub-question count"),
+        default=1,
+        help_text=_(
+            "For multi-sub-question types 1c-1h: how many sub-questions "
+            "share the media. 1 = single question (default). "
+            "Each sub-question has its own Question Text 2 + options."
+        ),
+    )
+    # Per-sub-question Text 2 storage (JSON list of strings, indexed by
+    # sub_question_index). The main question_text_2 field is used for
+    # sub-question 0 (backward compatibility).
+    sub_question_text_2_list = models.JSONField(
+        _("sub-question text 2 list"),
+        default=list,
+        blank=True,
+        help_text=_(
+            "JSON list of Question Text 2 strings, one per sub-question. "
+            "Index 0 = sub-question 1, etc. Empty list = use the single "
+            "question_text_2 field for all sub-questions."
+        ),
+    )
+
     flash_interval_ms = models.PositiveIntegerField(
         _("flash interval (ms)"), null=True, blank=True, help_text="For flash types 1e/1f/2c/2d"
     )

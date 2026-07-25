@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
   PageCard,
+  stripHtml,
 } from "@/components/ui";
 import {
   deleteQuestion,
@@ -317,7 +318,7 @@ export default function QuestionBankPage() {
                           to={`/question-bank/${q.id}`}
                           className="text-primary-600 hover:underline"
                         >
-                          {q.question_title || q.question_text_1}
+                          {q.question_title || stripHtml(q.question_text_1) || "(untitled)"}
                         </Link>
                       </TableCell>
                       <TableCell>
@@ -368,7 +369,10 @@ export default function QuestionBankPage() {
                               onClick={() =>
                                 setDeleteQ({
                                   id: q.id,
-                                  text: q.question_title || q.question_text_1,
+                                  text:
+                                    q.question_title ||
+                                    stripHtml(q.question_text_1) ||
+                                    "(untitled)",
                                 })
                               }
                             >

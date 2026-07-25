@@ -43,6 +43,7 @@ export interface QuestionListItem {
   exposure_count: number;
   is_psychometric: boolean;
   question_category: "normal" | "psychometric";
+  sub_question_count: number;
 }
 
 export interface ResponseOption {
@@ -72,6 +73,8 @@ export interface QuestionDetail extends QuestionListItem {
   replay_mode: "permitted" | "not_permitted";
   option_layout: "1" | "2" | "3";
   hotspot_visibility: "transparent" | "visible";
+  sub_question_count: number;
+  sub_question_text_2_list: string[];
   flash_interval_ms: number | null;
   flash_display_count: number | null;
   flash_order: string;

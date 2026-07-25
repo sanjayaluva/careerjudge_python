@@ -8,7 +8,7 @@
  * NOT multiple rows of statements — that's a different pattern.
  * This is a single-row rating field.
  */
-import { Input, Label, WysiwygEditorLite } from "@/components/ui";
+import { Input, Label, RichText, WysiwygEditorLite } from "@/components/ui";
 import { createEmptyOption, type OptionData } from "./shared";
 
 interface RatingScaleEditorProps {
@@ -132,9 +132,11 @@ export function RatingEditor({ data, onChange }: RatingScaleEditorProps) {
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
           Preview
         </p>
-        <p className="mb-3 text-sm font-medium text-slate-900">
-          {data.question_text_1 || "(no statement)"}
-        </p>
+        <RichText
+          html={data.question_text_1}
+          fallback="(no statement)"
+          className="mb-3 text-sm font-medium text-slate-900"
+        />
         <div className="flex items-center gap-2">
           {Array.from({ length: scalePoints }).map((_, i) => (
             <div key={i} className="flex flex-col items-center gap-1">
@@ -234,7 +236,11 @@ export function RankEditor({ data, onChange }: RankEditorProps) {
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
           Preview
         </p>
-        <p className="mb-2 text-sm text-slate-900">{data.question_text_1}</p>
+        <RichText
+          html={data.question_text_1}
+          fallback="(no question text)"
+          className="mb-2 text-sm text-slate-900"
+        />
         <div className="space-y-1">
           {data.options.map((opt, i) => (
             <div key={i} className="flex items-center gap-2 text-sm text-slate-700">
@@ -340,7 +346,11 @@ export function RankRateEditor({ data, onChange }: RankRateEditorProps) {
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
           Preview
         </p>
-        <p className="mb-2 text-sm text-slate-900">{data.question_text_1}</p>
+        <RichText
+          html={data.question_text_1}
+          fallback="(no question text)"
+          className="mb-2 text-sm text-slate-900"
+        />
         <div className="space-y-1">
           {data.options.map((opt, i) => (
             <div key={i} className="flex items-center gap-3 text-sm text-slate-700">
@@ -479,7 +489,11 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
           Preview
         </p>
-        <p className="mb-2 text-sm text-slate-900">{data.question_text_1}</p>
+        <RichText
+          html={data.question_text_1}
+          fallback="(no question text)"
+          className="mb-2 text-sm text-slate-900"
+        />
         <div className="space-y-1">
           {data.options.map((opt, i) => (
             <label key={i} className="flex items-center gap-2 text-sm">

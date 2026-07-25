@@ -117,6 +117,7 @@ export default function SessionPlayerPage() {
       question_id: number;
       raw_answer?: Record<string, unknown>;
       bookmark?: boolean;
+      sub_question_index?: number;
     }) => submitAnswer(sid, payload),
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -246,6 +247,7 @@ export default function SessionPlayerPage() {
       answerMutation.mutate({
         question_id: q.question,
         raw_answer: currentAnswer,
+        sub_question_index: q.sub_question_index,
       });
     }
     // Mark current question as viewed (locks replay on revisit)
@@ -262,6 +264,7 @@ export default function SessionPlayerPage() {
       answerMutation.mutate({
         question_id: q.question,
         raw_answer: currentAnswer,
+        sub_question_index: q.sub_question_index,
       });
     }
     // Mark current question as viewed (locks replay on revisit)
@@ -279,7 +282,11 @@ export default function SessionPlayerPage() {
       newBookmarked.add(answerKey);
     }
     setBookmarked(newBookmarked);
-    answerMutation.mutate({ question_id: q.question, bookmark: true });
+    answerMutation.mutate({
+      question_id: q.question,
+      bookmark: true,
+      sub_question_index: q.sub_question_index,
+    });
   };
 
   const handleSubmit = () => {
@@ -687,7 +694,11 @@ function AnswerInput({
 
   // MCQ types — radio or checkbox
   if (qType.startsWith("MCQ_")) {
-    const isMulti = qd.options.filter((o) => o.is_correct).length > 1;
+    // Filter options to only those belonging to the current sub-question
+    // (SRS feedback C-CFG-1 — multi-sub-question pooling).
+    const subQIdx = question.sub_question_index;
+    const subOptions = qd.options.filter((o) => (o.sub_question_index ?? 0) === subQIdx);
+    const isMulti = subOptions.filter((o) => o.is_correct).length > 1;
     const selectedIds: number[] = (currentAnswer?.selected_option_ids as number[]) || [];
 
     const handleSelect = (optId: number) => {
@@ -711,7 +722,7 @@ function AnswerInput({
 
     return (
       <div className={`grid ${layoutCols} gap-2`}>
-        {qd.options
+        {subOptions
           .filter((o) => o.option_type === "TEXT" || o.option_type === "IMAGE")
           .map((opt) => (
             <label

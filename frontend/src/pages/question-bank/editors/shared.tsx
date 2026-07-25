@@ -287,9 +287,9 @@ export function AddOptionButton({
 // Helpers
 // ---------------------------------------------------------------------------
 
-export function createEmptyOption(order: number, type = "TEXT"): OptionData {
+export function createEmptyOption(order: number, type = "TEXT", subQuestionIndex = 0): OptionData {
   return {
-    sub_question_index: 0,
+    sub_question_index: subQuestionIndex,
     option_type: type,
     label: "",
     text_value: "",

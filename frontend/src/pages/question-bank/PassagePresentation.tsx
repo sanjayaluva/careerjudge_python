@@ -11,7 +11,7 @@
  *   - "Replay" button after completion
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui";
+import { Button, RichText } from "@/components/ui";
 
 interface PassagePresentationProps {
   passageTitle: string;
@@ -115,7 +115,7 @@ export function PassagePresentation({
           </p>
           {passageTitle && <h3 className="text-lg font-bold text-slate-900">{passageTitle}</h3>}
           {passageBody && (
-            <p className="mt-2 text-sm leading-relaxed text-slate-700">{passageBody}</p>
+            <RichText html={passageBody} className="mt-2 text-sm leading-relaxed text-slate-700" />
           )}
           {/* Countdown progress bar */}
           <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-blue-200">

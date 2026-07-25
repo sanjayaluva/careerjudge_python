@@ -281,6 +281,7 @@ export interface SessionQuestion {
       match_pair_id: number | null;
       predefined_score: number;
       order: number;
+      sub_question_index: number;
     }[];
     flash_items: {
       id: number;
@@ -317,6 +318,8 @@ export interface SessionQuestion {
     replay_mode: "permitted" | "not_permitted";
     option_layout: "1" | "2" | "3";
     hotspot_visibility: "transparent" | "visible";
+    sub_question_count: number;
+    sub_question_text_2_list: string[];
     grid_rows: number | null;
     grid_cols: number | null;
     rating_scale_points: number | null;

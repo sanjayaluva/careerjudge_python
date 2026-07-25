@@ -193,6 +193,7 @@ class QuestionListSerializer(serializers.ModelSerializer):
             "exposure_count",
             "is_psychometric",
             "question_category",
+            "sub_question_count",
         ]
         read_only_fields = [
             "id",
@@ -252,6 +253,8 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
             "replay_mode",
             "option_layout",
             "hotspot_visibility",
+            "sub_question_count",
+            "sub_question_text_2_list",
             "flash_interval_ms",
             "flash_display_count",
             "flash_order",
@@ -352,6 +355,8 @@ class QuestionCreateSerializer(serializers.ModelSerializer):
             "replay_mode",
             "option_layout",
             "hotspot_visibility",
+            "sub_question_count",
+            "sub_question_text_2_list",
             "flash_interval_ms",
             "flash_display_count",
             "flash_order",

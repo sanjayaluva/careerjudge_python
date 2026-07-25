@@ -3,7 +3,7 @@
  * Handles: text/image options, single vs multiple correct, passage/image config, media,
  *          flash items for 1e (word flash) and 1f (image flash)
  */
-import { Input, Label, MediaManager, WysiwygEditorLite } from "@/components/ui";
+import { Input, Label, MediaManager, RichText, WysiwygEditorLite } from "@/components/ui";
 import { SCORING_TYPES } from "@/api/questionBank";
 import { AddOptionButton, createEmptyOption, type FlashItemData, type OptionData } from "./shared";
 import { FlashItemsEditor } from "./FlashItemsEditor";
@@ -35,6 +35,8 @@ interface MCQEditorProps {
     sub_question_count?: number;
     /** Currently active sub-question tab (0-indexed). */
     active_sub_question?: number;
+    /** Per-sub-question Text 2 list (indexed by sub_question_index). */
+    sub_question_text_2_list?: string[];
   };
   onChange: (data: MCQEditorProps["data"]) => void;
 }
@@ -64,7 +66,12 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
   };
 
   const addOption = () => {
-    onChange({ ...data, options: [...data.options, createEmptyOption(data.options.length)] });
+    // Tag new options with the active sub-question index (SRS feedback C-CFG-1)
+    const sqi = data.active_sub_question ?? 0;
+    onChange({
+      ...data,
+      options: [...data.options, createEmptyOption(data.options.length, "TEXT", sqi)],
+    });
   };
 
   const removeOption = (index: number) => {
@@ -76,12 +83,40 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
       // Multiple answers: toggle this option's correct flag
       updateOption(index, { ...data.options[index], is_correct: checked });
     } else {
-      // Single answer: only one can be correct (radio behavior)
+      // Single answer: only one can be correct (radio behavior) — but only
+      // within the same sub-question (SRS feedback C-CFG-1)
+      const sqi = data.active_sub_question ?? 0;
       const newOptions = data.options.map((opt, i) => ({
         ...opt,
-        is_correct: i === index,
+        is_correct:
+          i === index
+            ? checked
+            : opt.sub_question_index === sqi
+              ? false // clear other correct in same sub-question
+              : opt.is_correct, // preserve other sub-questions' correct flags
       }));
       onChange({ ...data, options: newOptions });
+    }
+  };
+
+  // Filter options to only those belonging to the active sub-question
+  const activeSubQ = data.active_sub_question ?? 0;
+  const visibleOptions = data.options.filter((o) => (o.sub_question_index ?? 0) === activeSubQ);
+
+  // Per-sub-question Text 2 helpers
+  const subText2List = data.sub_question_text_2_list ?? [];
+  const getSubText2 = (sqi: number): string => {
+    if (sqi === 0) return data.question_text_2;
+    return subText2List[sqi] ?? "";
+  };
+  const setSubText2 = (sqi: number, value: string) => {
+    if (sqi === 0) {
+      onChange({ ...data, question_text_2: value });
+    } else {
+      const newList = [...subText2List];
+      while (newList.length <= sqi) newList.push("");
+      newList[sqi] = value;
+      onChange({ ...data, sub_question_text_2_list: newList });
     }
   };
 
@@ -100,12 +135,21 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
         />
       </div>
 
-      {/* Additional text */}
+      {/* Additional text — per-sub-question for multi-sub-question types.
+          When sub_question_count > 1, show a different Text 2 per active
+          sub-question (SRS feedback C-CFG-1). */}
       <div>
-        <Label htmlFor="qtext2">Additional text (optional)</Label>
+        <Label htmlFor="qtext2">
+          Additional text (optional)
+          {isMultiSubQuestion && (data.sub_question_count ?? 1) > 1 && (
+            <span className="ml-2 text-xs font-normal text-slate-500">
+              (for sub-question {(data.active_sub_question ?? 0) + 1})
+            </span>
+          )}
+        </Label>
         <WysiwygEditorLite
-          value={data.question_text_2}
-          onChange={(html) => onChange({ ...data, question_text_2: html })}
+          value={getSubText2(data.active_sub_question ?? 0)}
+          onChange={(html) => setSubText2(data.active_sub_question ?? 0, html)}
           minHeight={60}
           placeholder="Secondary text — typically the actual question based on the media above…"
         />
@@ -390,65 +434,73 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
         <div className="flex items-center justify-between">
           <Label>Response Options</Label>
           <span className="text-xs text-slate-500">
-            {data.options.length} option{data.options.length !== 1 ? "s" : ""}
-            {isMultiSubQuestion && " (shared across sub-questions)"}
+            {visibleOptions.length} option{visibleOptions.length !== 1 ? "s" : ""}
+            {isMultiSubQuestion && (data.sub_question_count ?? 1) > 1 && (
+              <span className="ml-1 text-primary-600">
+                (for sub-question {(data.active_sub_question ?? 0) + 1})
+              </span>
+            )}
           </span>
         </div>
-        {data.options.map((opt, i) => (
-          <div key={i} className="flex items-start gap-3 rounded-md border border-slate-200 p-3">
-            <div className="flex-1 space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-slate-500">Option {i + 1}</span>
-                {data.isMultipleAnswer ? (
-                  <label className="flex items-center gap-1 text-xs text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={opt.is_correct}
-                      onChange={(e) => setCorrect(i, e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary-600"
-                    />
-                    Correct
-                  </label>
-                ) : (
-                  <label className="flex items-center gap-1 text-xs text-slate-600">
-                    <input
-                      type="radio"
-                      name="mcq-correct"
-                      checked={opt.is_correct}
-                      onChange={() => setCorrect(i, true)}
-                      className="h-4 w-4 border-slate-300 text-primary-600"
-                    />
-                    Correct answer
-                  </label>
+        {visibleOptions.map((opt, vi) => {
+          // Find the index in the full data.options array (for update/remove)
+          const i = data.options.indexOf(opt);
+          return (
+            <div key={i} className="flex items-start gap-3 rounded-md border border-slate-200 p-3">
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-slate-500">Option {vi + 1}</span>
+                  {data.isMultipleAnswer ? (
+                    <label className="flex items-center gap-1 text-xs text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={opt.is_correct}
+                        onChange={(e) => setCorrect(i, e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-primary-600"
+                      />
+                      Correct
+                    </label>
+                  ) : (
+                    <label className="flex items-center gap-1 text-xs text-slate-600">
+                      <input
+                        type="radio"
+                        name="mcq-correct"
+                        checked={opt.is_correct}
+                        onChange={() => setCorrect(i, true)}
+                        className="h-4 w-4 border-slate-300 text-primary-600"
+                      />
+                      Correct answer
+                    </label>
+                  )}
+                </div>
+                <Input
+                  value={opt.text_value}
+                  onChange={(e) => updateOption(i, { ...opt, text_value: e.target.value })}
+                  placeholder="Enter option text..."
+                  className="text-sm"
+                />
+                {/* Image option for type 1b */}
+                {isImageOptionType && (
+                  <MediaManager
+                    label={`Option ${i + 1} image`}
+                    accept="image/*"
+                    modes={["upload", "url", "gallery"]}
+                    value={opt.image_file || ""}
+                    onChange={(url) => updateOption(i, { ...opt, image_file: url })}
+                    previewType="image"
+                  />
                 )}
               </div>
-              <Input
-                value={opt.text_value}
-                onChange={(e) => updateOption(i, { ...opt, text_value: e.target.value })}
-                placeholder="Enter option text..."
-                className="text-sm"
-              />
-              {/* Image option for type 1b */}
-              {isImageOptionType && (
-                <MediaManager
-                  label={`Option ${i + 1} image`}
-                  accept="image/*"
-                  modes={["upload", "url", "gallery"]}
-                  value={opt.image_file || ""}
-                  onChange={(url) => updateOption(i, { ...opt, image_file: url })}
-                  previewType="image"
-                />
-              )}
+              <button
+                type="button"
+                className="rounded px-2 py-1 text-xs text-danger hover:bg-danger-50"
+                onClick={() => removeOption(i)}
+              >
+                Remove
+              </button>
             </div>
-            <button
-              type="button"
-              className="rounded px-2 py-1 text-xs text-danger hover:bg-danger-50"
-              onClick={() => removeOption(i)}
-            >
-              Remove
-            </button>
-          </div>
-        ))}
+          );
+        })}
         <AddOptionButton onClick={addOption} label="Add option" />
       </div>
 
@@ -499,22 +551,22 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
                 <p className="text-sm font-semibold text-slate-900">{data.passage_title}</p>
               )}
               {data.passage_body && (
-                <p className="mt-0.5 text-xs text-slate-700">{data.passage_body}</p>
+                <RichText html={data.passage_body} className="mt-0.5 text-xs text-slate-700" />
               )}
             </div>
           )}
 
           {data.imageUrl && <img src={data.imageUrl} alt="Question" className="max-h-32 rounded" />}
           {data.question_text_1 && (
-            <p className="text-sm font-medium text-slate-900">{data.question_text_1}</p>
+            <RichText html={data.question_text_1} className="text-sm font-medium text-slate-900" />
           )}
           {data.audioUrl && <audio controls src={data.audioUrl} className="w-full" />}
           {data.videoUrl && (
             <video controls src={data.videoUrl} className="max-h-32 w-full rounded" />
           )}
-          {data.options.length > 0 && (
+          {visibleOptions.length > 0 && (
             <div className="space-y-1.5">
-              {data.options.map((opt, i) => (
+              {visibleOptions.map((opt, i) => (
                 <label
                   key={i}
                   className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"

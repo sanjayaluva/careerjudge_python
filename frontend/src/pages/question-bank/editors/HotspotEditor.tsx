@@ -15,7 +15,7 @@
  * overlay on top. This prevents the browser's native image drag behavior.
  */
 import { useCallback, useRef, useState } from "react";
-import { Button, Label, MediaManager, WysiwygEditorLite } from "@/components/ui";
+import { Button, Label, MediaManager, RichText, WysiwygEditorLite } from "@/components/ui";
 import { SCORING_TYPES } from "@/api/questionBank";
 
 type ShapeType = "RECTANGLE" | "CIRCLE" | "POLYGON";
@@ -809,9 +809,11 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
           Preview
         </p>
-        <p className="mb-2 text-sm text-slate-900">
-          {data.question_text_1 || "(no question text)"}
-        </p>
+        <RichText
+          html={data.question_text_1}
+          fallback="(no question text)"
+          className="mb-2 text-sm text-slate-900"
+        />
         {data.image_url && (
           <div className="relative inline-block" style={{ maxWidth: 500 }}>
             <img

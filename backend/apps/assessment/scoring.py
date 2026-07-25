@@ -20,33 +20,48 @@ from typing import Any
 from apps.question_bank.models import Question
 
 
-def score_question(question: Question, raw_answer: dict[str, Any] | None) -> tuple[float, float]:
+def score_question(
+    question: Question,
+    raw_answer: dict[str, Any] | None,
+    sub_question_index: int = 0,
+) -> tuple[float, float]:
     """Score a single question based on its scoring_type.
 
     Returns (score, max_score).
+
+    ``sub_question_index`` filters the question's options/hotspot areas to
+    only those belonging to the given sub-question (for multi-sub-question
+    pooled types 1c-1h). Default 0 = single question.
     """
     if not raw_answer:
-        return 0.0, _get_max_score(question)
+        return 0.0, _get_max_score(question, sub_question_index)
 
     # Hotspot questions need special handling — they use clicks, not options.
     # Route them to the hotspot scorer regardless of their scoring_type.
     if question.question_type in ("HOTSPOT_SINGLE", "HOTSPOT_MULTI"):
-        return _score_hotspot(question, raw_answer)
+        return _score_hotspot(question, raw_answer, sub_question_index)
 
     # Grid questions use their own scoring: correct = +1, incorrect = -1, min 0
     if question.question_type == "GRID_LIST_SELECTION":
-        return _score_grid(question, raw_answer)
+        return _score_grid(question, raw_answer, sub_question_index)
 
     scorer = SCORERS.get(question.scoring_type)
     if not scorer:
         # Default to binary
         scorer = _score_binary
 
-    return scorer(question, raw_answer)
+    return scorer(question, raw_answer, sub_question_index)
 
 
-def _get_max_score(question: Question) -> float:
-    """Get the maximum possible score for a question."""
+def _get_max_score(question: Question, sub_question_index: int = 0) -> float:
+    """Get the maximum possible score for a question.
+
+    When ``sub_question_index`` is provided, only counts options belonging
+    to that sub-question.
+    """
+    opts_qs = question.options
+    if sub_question_index:
+        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
     st = question.scoring_type
     if st in ("BINARY", "BINARY_FUZZY"):
         return 1.0
@@ -54,8 +69,8 @@ def _get_max_score(question: Question) -> float:
         # Max = number of scoreable items.
         # For FITB multi-field: 1 per option (field).
         # For Match: 1 per pair = half the options (half A, half B).
-        n_opts = question.options.count()
-        has_match = question.options.filter(option_type__in=["MATCH_A", "MATCH_B"]).exists()
+        n_opts = opts_qs.count()
+        has_match = opts_qs.filter(option_type__in=["MATCH_A", "MATCH_B"]).exists()
         if has_match:
             return float(n_opts / 2)  # pairs
         return float(n_opts)
@@ -64,10 +79,10 @@ def _get_max_score(question: Question) -> float:
     elif st == "RANK":
         # Rank scoring counts correct pairs (i<j in correct order).
         # Number of pairs = n*(n-1)/2.
-        n = question.options.count()
+        n = opts_qs.count()
         return float(n * (n - 1) / 2) if n > 0 else 1.0
     elif st == "RANK_RATE":
-        n = question.options.count()
+        n = opts_qs.count()
         max_rating = question.rating_scale_points or 5
         return float(n * max_rating)
     elif st == "RATING":
@@ -89,7 +104,9 @@ def _get_max_score(question: Question) -> float:
 # ---------------------------------------------------------------------------
 
 
-def _score_binary(question: Question, raw_answer: dict) -> tuple[float, float]:
+def _score_binary(
+    question: Question, raw_answer: dict, sub_question_index: int = 0
+) -> tuple[float, float]:
     """Score MCQ questions.
 
     Single-answer (1 correct option): correct → 1, incorrect → 0.
@@ -105,12 +122,18 @@ def _score_binary(question: Question, raw_answer: dict) -> tuple[float, float]:
 
     Max score = number of correct options (so multi-answer questions
     can score higher than 1).
+
+    ``sub_question_index`` filters to only this sub-question's options
+    (for multi-sub-question pooled types 1c-1h).
     """
     selected_ids = raw_answer.get("selected_option_ids", [])
     if not selected_ids and "selected_option_id" in raw_answer:
         selected_ids = [raw_answer["selected_option_id"]]
 
-    correct_options = list(question.options.filter(is_correct=True))
+    opts_qs = question.options
+    if sub_question_index:
+        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    correct_options = list(opts_qs.filter(is_correct=True))
     if not correct_options:
         return 0.0, 1.0
 
@@ -138,7 +161,9 @@ def _score_binary(question: Question, raw_answer: dict) -> tuple[float, float]:
 # ---------------------------------------------------------------------------
 
 
-def _score_binary_fuzzy(question: Question, raw_answer: dict) -> tuple[float, float]:
+def _score_binary_fuzzy(
+    question: Question, raw_answer: dict, sub_question_index: int = 0
+) -> tuple[float, float]:
     """FITB: match against list (Mode A) or percentage match (Mode B)."""
     max_score = 1.0
     candidate_text = raw_answer.get("text", "").strip()
@@ -149,7 +174,10 @@ def _score_binary_fuzzy(question: Question, raw_answer: dict) -> tuple[float, fl
         candidate_text = candidate_text.lower()
 
     # Get correct answers from the first option's correct_answers
-    opt = question.options.first()
+    opts_qs = question.options
+    if sub_question_index:
+        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    opt = opts_qs.first()
     if not opt:
         return 0.0, max_score
 
@@ -180,7 +208,9 @@ def _score_binary_fuzzy(question: Question, raw_answer: dict) -> tuple[float, fl
 # ---------------------------------------------------------------------------
 
 
-def _score_partial(question: Question, raw_answer: dict) -> tuple[float, float]:
+def _score_partial(
+    question: Question, raw_answer: dict, sub_question_index: int = 0
+) -> tuple[float, float]:
     """Each correct item = +1, incorrect = 0. Total = sum of correct items.
 
     Supports two question types:
@@ -188,8 +218,14 @@ def _score_partial(question: Question, raw_answer: dict) -> tuple[float, float]:
         Max score = number of fields (options).
       - Match-the-following (3): raw_answer = {"pairs": [{"a_id": 1, "b_id": 3}, ...]}
         Max score = number of pairs (half the options).
+
+    ``sub_question_index`` filters to only this sub-question's options
+    (for multi-sub-question pooled types 1c-1h).
     """
-    options = list(question.options.all().order_by("order"))
+    opts_qs = question.options
+    if sub_question_index:
+        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    options = list(opts_qs.all().order_by("order"))
     if not options:
         return 0.0, 0.0
 
@@ -269,7 +305,9 @@ def _score_partial(question: Question, raw_answer: dict) -> tuple[float, float]:
 # ---------------------------------------------------------------------------
 
 
-def _score_negative(question: Question, raw_answer: dict) -> tuple[float, float]:
+def _score_negative(
+    question: Question, raw_answer: dict, sub_question_index: int = 0
+) -> tuple[float, float]:
     """Correct = +1, wrong = -0.25 (configurable). Floor at 0."""
     max_score = 1.0
     negative_fraction = 0.25  # TODO: make configurable per question
@@ -278,7 +316,10 @@ def _score_negative(question: Question, raw_answer: dict) -> tuple[float, float]
     if not selected_ids and "selected_option_id" in raw_answer:
         selected_ids = [raw_answer["selected_option_id"]]
 
-    correct_options = list(question.options.filter(is_correct=True))
+    opts_qs = question.options
+    if sub_question_index:
+        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    correct_options = list(opts_qs.filter(is_correct=True))
     correct_ids = {o.id for o in correct_options}
 
     if not selected_ids:
@@ -301,12 +342,17 @@ def _score_negative(question: Question, raw_answer: dict) -> tuple[float, float]
 # ---------------------------------------------------------------------------
 
 
-def _score_rank(question: Question, raw_answer: dict) -> tuple[float, float]:
+def _score_rank(
+    question: Question, raw_answer: dict, sub_question_index: int = 0
+) -> tuple[float, float]:
     """Score = number of items in correct relative order.
 
     Max score = n*(n-1)/2 (number of unique pairs).
     """
-    options = list(question.options.all().order_by("order"))
+    opts_qs = question.options
+    if sub_question_index:
+        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    options = list(opts_qs.all().order_by("order"))
     n = len(options)
     max_score = float(n * (n - 1) / 2) if n > 0 else 1.0
 
@@ -337,9 +383,14 @@ def _score_rank(question: Question, raw_answer: dict) -> tuple[float, float]:
 # ---------------------------------------------------------------------------
 
 
-def _score_rank_rate(question: Question, raw_answer: dict) -> tuple[float, float]:
+def _score_rank_rate(
+    question: Question, raw_answer: dict, sub_question_index: int = 0
+) -> tuple[float, float]:
     """Final score per option = rank_score x rating_score."""
-    options = list(question.options.all().order_by("order"))
+    opts_qs = question.options
+    if sub_question_index:
+        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    options = list(opts_qs.all().order_by("order"))
     n = len(options)
     max_rating = question.rating_scale_points or 5
     max_score = float(n * max_rating)
@@ -366,7 +417,9 @@ def _score_rank_rate(question: Question, raw_answer: dict) -> tuple[float, float
 # ---------------------------------------------------------------------------
 
 
-def _score_rating(question: Question, raw_answer: dict) -> tuple[float, float]:
+def _score_rating(
+    question: Question, raw_answer: dict, sub_question_index: int = 0
+) -> tuple[float, float]:
     """Score = rating point selected. Forward: leftmost=highest. Reverse: rightmost=highest."""
     scale_points = question.rating_scale_points or 5
     max_score = float(scale_points)
@@ -392,9 +445,14 @@ def _score_rating(question: Question, raw_answer: dict) -> tuple[float, float]:
 # ---------------------------------------------------------------------------
 
 
-def _score_forced_choice(question: Question, raw_answer: dict) -> tuple[float, float]:
+def _score_forced_choice(
+    question: Question, raw_answer: dict, sub_question_index: int = 0
+) -> tuple[float, float]:
     """Score = selected option's predefined_score. Unselected = 0."""
-    options = list(question.options.all())
+    opts_qs = question.options
+    if sub_question_index:
+        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    options = list(opts_qs.all())
     max_score = float(max((o.predefined_score for o in options), default=1.0))
 
     # raw_answer = {"selected_option_id": 2}
@@ -415,9 +473,14 @@ def _score_forced_choice(question: Question, raw_answer: dict) -> tuple[float, f
 # ---------------------------------------------------------------------------
 
 
-def _score_forced_choice_rated(question: Question, raw_answer: dict) -> tuple[float, float]:
+def _score_forced_choice_rated(
+    question: Question, raw_answer: dict, sub_question_index: int = 0
+) -> tuple[float, float]:
     """Score = predefined_score x rating. Unselected = 0."""
-    options = list(question.options.all())
+    opts_qs = question.options
+    if sub_question_index:
+        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    options = list(opts_qs.all())
     max_rating = question.rating_scale_points or 5
     max_predefined = max((o.predefined_score for o in options), default=1.0)
     max_score = float(max_predefined * max_rating)
@@ -442,7 +505,9 @@ def _score_forced_choice_rated(question: Question, raw_answer: dict) -> tuple[fl
 # ---------------------------------------------------------------------------
 
 
-def _score_hotspot(question: Question, raw_answer: dict) -> tuple[float, float]:
+def _score_hotspot(
+    question: Question, raw_answer: dict, sub_question_index: int = 0
+) -> tuple[float, float]:
     """Score hotspot questions based on candidate clicks.
 
     For HOTSPOT_SINGLE (5a, BINARY scoring):
@@ -456,15 +521,19 @@ def _score_hotspot(question: Question, raw_answer: dict) -> tuple[float, float]:
 
     The candidate's answer format is:
       {"clicks": [{"x": 142, "y": 159}, ...]}
-    """
 
+    ``sub_question_index`` filters to only this sub-question's hotspot areas.
+    """
     max_score = 1.0
     clicks = raw_answer.get("clicks", [])
     if not clicks:
         return 0.0, max_score
 
-    # Get all hotspot areas for this question
-    areas = list(question.hotspot_areas.all())
+    # Get all hotspot areas for this question (filtered by sub-question)
+    areas_qs = question.hotspot_areas
+    if sub_question_index:
+        areas_qs = areas_qs.filter(sub_question_index=sub_question_index)
+    areas = list(areas_qs.all())
     if not areas:
         return 0.0, max_score
 
@@ -520,13 +589,18 @@ def _score_hotspot(question: Question, raw_answer: dict) -> tuple[float, float]:
 # ---------------------------------------------------------------------------
 
 
-def _score_grid(question: Question, raw_answer: dict) -> tuple[float, float]:
+def _score_grid(
+    question: Question, raw_answer: dict, sub_question_index: int = 0
+) -> tuple[float, float]:
     """Score grid selection: each correct selected = +1, each incorrect = -1, min 0.
 
     raw_answer = {"selected_cells": [{"r": 0, "c": 1}, ...]}
     Correct cells are options with is_correct=True.
     """
-    options = list(question.options.filter(option_type="DRAG_POOL"))
+    opts_qs = question.options.filter(option_type="DRAG_POOL")
+    if sub_question_index:
+        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    options = list(opts_qs)
     if not options:
         return 0.0, 0.0
 
@@ -626,11 +700,15 @@ def calculate_session_scores(session):
         if attempt.status != "attempted" or not attempt.raw_answer:
             attempt.score = 0.0
             attempt.max_score = (
-                override_max if override_max is not None else _get_max_score(attempt.question)
+                override_max
+                if override_max is not None
+                else _get_max_score(attempt.question, attempt.sub_question_index)
             )
             attempt.save(update_fields=["score", "max_score"])
         else:
-            score, max_score = score_question(attempt.question, attempt.raw_answer)
+            score, max_score = score_question(
+                attempt.question, attempt.raw_answer, attempt.sub_question_index
+            )
             # Apply score_override: if set, use it as the max_score and
             # scale the raw score proportionally
             if override_max is not None and max_score > 0:

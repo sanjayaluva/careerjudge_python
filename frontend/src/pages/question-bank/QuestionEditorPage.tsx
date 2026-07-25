@@ -122,6 +122,9 @@ export default function QuestionEditorPage() {
   // Multi-sub-question pooling (SRS feedback C-CFG-1)
   const [subQuestionCount, setSubQuestionCount] = useState(1);
   const [activeSubQuestion, setActiveSubQuestion] = useState(0);
+  // Per-sub-question Text 2 list (indexed by sub_question_index).
+  // Index 0 mirrors the shared questionText2 state for backward compat.
+  const [subQuestionText2List, setSubQuestionText2List] = useState<string[]>([]);
   const [imageWidth, setImageWidth] = useState(0);
   const [imageHeight, setImageHeight] = useState(0);
   const [gridRows, setGridRows] = useState("3");
@@ -176,6 +179,10 @@ export default function QuestionEditorPage() {
     setReplayMode(q.replay_mode ?? "not_permitted");
     setOptionLayout(q.option_layout ?? "1");
     setHotspotVisibility(q.hotspot_visibility ?? "transparent");
+    // Multi-sub-question pooling (SRS feedback C-CFG-1)
+    setSubQuestionCount(q.sub_question_count ?? 1);
+    setSubQuestionText2List(q.sub_question_text_2_list ?? []);
+    setActiveSubQuestion(0);
     setCaseSensitive(Boolean(q.case_sensitive));
     setPctThreshold(q.pct_match_threshold != null ? String(q.pct_match_threshold) : "");
     setFlashInterval(q.flash_interval_ms != null ? String(q.flash_interval_ms) : "");
@@ -626,6 +633,19 @@ export default function QuestionEditorPage() {
     payload.replay_mode = replayMode;
     payload.option_layout = optionLayout;
     if (isHotspot) payload.hotspot_visibility = hotspotVisibility;
+    // Multi-sub-question pooling (SRS feedback C-CFG-1)
+    if (isMCQ) {
+      payload.sub_question_count = subQuestionCount;
+      // Build the per-sub-question Text 2 list. Index 0 uses the shared
+      // questionText2 state (backward compat), indices 1..N-1 use the
+      // subQuestionText2List state.
+      const text2List = [...subQuestionText2List];
+      // Pad/truncate to subQuestionCount
+      while (text2List.length < subQuestionCount) text2List.push("");
+      text2List.length = subQuestionCount;
+      text2List[0] = questionText2;
+      payload.sub_question_text_2_list = text2List;
+    }
     if (caseSensitive) payload.case_sensitive = true;
     if (pctThreshold) payload.pct_match_threshold = parseFloat(pctThreshold);
     if (flashInterval) payload.flash_interval_ms = parseInt(flashInterval);
@@ -723,6 +743,7 @@ export default function QuestionEditorPage() {
     flashOrder,
     sub_question_count: subQuestionCount,
     active_sub_question: activeSubQuestion,
+    sub_question_text_2_list: subQuestionText2List,
   };
 
   const fitbData = {
@@ -833,6 +854,9 @@ export default function QuestionEditorPage() {
                     setOptions([]);
                     setPairs([]);
                     setDummyOptions([]);
+                    setSubQuestionCount(1);
+                    setActiveSubQuestion(0);
+                    setSubQuestionText2List([]);
                     setScoringType(DEFAULT_SCORING_BY_TYPE[newType] ?? "BINARY");
                   }}
                 >
@@ -945,6 +969,9 @@ export default function QuestionEditorPage() {
                   }
                   if (d.active_sub_question !== undefined) {
                     setActiveSubQuestion(d.active_sub_question);
+                  }
+                  if (d.sub_question_text_2_list !== undefined) {
+                    setSubQuestionText2List(d.sub_question_text_2_list);
                   }
                 }}
               />

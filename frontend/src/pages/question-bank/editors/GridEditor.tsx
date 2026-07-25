@@ -13,7 +13,7 @@
  * checkboxes. They check the correct cells to answer.
  */
 import { useState } from "react";
-import { Input, Label, MediaManager, WysiwygEditorLite } from "@/components/ui";
+import { Input, Label, MediaManager, RichText, WysiwygEditorLite } from "@/components/ui";
 
 interface GridCell {
   text: string;
@@ -290,7 +290,11 @@ export function GridEditor({ data, onChange }: GridEditorProps) {
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
           Preview
         </p>
-        <p className="mb-2 text-sm text-slate-900">{data.question_text_1 || "(no instructions)"}</p>
+        <RichText
+          html={data.question_text_1}
+          fallback="(no instructions)"
+          className="mb-2 text-sm text-slate-900"
+        />
         {rows > 0 && cols > 0 && (
           <table className="w-full text-xs">
             <thead>

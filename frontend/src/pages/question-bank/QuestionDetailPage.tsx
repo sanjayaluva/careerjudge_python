@@ -14,11 +14,13 @@ import {
   Input,
   Label,
   Modal,
+  RichText,
   Spinner,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
+  stripHtml,
 } from "@/components/ui";
 import { retrieveQuestion, submitForReview, submitReview } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
@@ -272,7 +274,7 @@ export default function QuestionDetailPage() {
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <h1 className="text-xl font-bold text-slate-900">
-            {q.question_title || q.question_text_1}
+            {q.question_title || stripHtml(q.question_text_1) || "(untitled question)"}
           </h1>
           <Badge variant="outline">{q.question_type_label}</Badge>
           <Badge variant={STATUS_VARIANTS[q.status] ?? "default"}>{q.status_label}</Badge>
@@ -335,7 +337,7 @@ export default function QuestionDetailPage() {
                     Question Text
                   </dt>
                   <dd className="mt-1 rounded-md bg-slate-50 p-3 text-sm text-slate-900">
-                    {q.question_text_1}
+                    <RichText html={q.question_text_1} fallback="(no question text)" />
                   </dd>
                 </div>
                 {/* Additional Text — always shown; "(not provided)" when empty */}
@@ -345,7 +347,7 @@ export default function QuestionDetailPage() {
                   </dt>
                   <dd className="mt-1 text-sm text-slate-900">
                     {q.question_text_2 ? (
-                      q.question_text_2
+                      <RichText html={q.question_text_2} />
                     ) : (
                       <span className="italic text-slate-400">(not provided)</span>
                     )}
@@ -393,38 +395,40 @@ export default function QuestionDetailPage() {
                   </dd>
                 </div>
 
-                {/* Type-specific fields — only show relevant ones */}
-                {visibleTypeFields.map((f) => {
-                  const val = q[f.key];
-                  if (val === null || val === undefined || val === "" || val === false) return null;
-                  return (
-                    <div key={f.key} className="py-1">
-                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                        {f.label}
-                      </dt>
-                      <dd className="text-sm text-slate-900">{formatValue(val)}</dd>
-                    </div>
-                  );
-                })}
+                {/* Type-specific fields — only show relevant ones.
+                    Exclude passage_body here — it's rendered separately
+                    below as HTML (it's a WYSIWYG field, not plain text). */}
+                {visibleTypeFields
+                  .filter((f) => f.key !== "passage_body")
+                  .map((f) => {
+                    const val = q[f.key];
+                    if (val === null || val === undefined || val === "" || val === false)
+                      return null;
+                    return (
+                      <div key={f.key} className="py-1">
+                        <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                          {f.label}
+                        </dt>
+                        <dd className="text-sm text-slate-900">{formatValue(val)}</dd>
+                      </div>
+                    );
+                  })}
 
-                {/* Passage body — rendered in the Preview section below for
-                    Passage Display questions (SRS feedback §7 Issue 2 —
-                    duplicate passage body should be removed). For other
-                    question types that happen to have a passage_body, show
-                    it here as a fallback. */}
-                {q.passage_body &&
-                  q.question_type !== "MCQ_PASSAGE_DISPLAY_MULTI" &&
-                  visibleTypeFields.some((f) => f.key === "passage_body") && (
-                    <div className="py-1 sm:col-span-2">
-                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                        Passage Body
-                      </dt>
-                      <dd
-                        className="prose prose-sm mt-1 max-w-none rounded-md bg-slate-50 p-3 text-sm text-slate-900"
-                        dangerouslySetInnerHTML={{ __html: q.passage_body }}
-                      />
-                    </div>
-                  )}
+                {/* Passage body — rendered as HTML via RichText.
+                    Shown for ALL question types that have a passage_body
+                    (SRS feedback §7 Issue 2 — duplicate passage body should
+                    be removed; the body is shown only here, not in the
+                    metadata table as plain text). */}
+                {q.passage_body && (
+                  <div className="py-1 sm:col-span-2">
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Passage Body
+                    </dt>
+                    <dd className="mt-1 rounded-md bg-slate-50 p-3 text-sm text-slate-900">
+                      <RichText html={q.passage_body} />
+                    </dd>
+                  </div>
+                )}
 
                 {/* Audit */}
                 <div className="py-1">
@@ -712,9 +716,12 @@ export default function QuestionDetailPage() {
                     passageBody={q.passage_body}
                     displayDurationSeconds={q.display_duration_seconds}
                   >
-                    <p className="mb-4 text-base font-medium text-slate-900">{q.question_text_1}</p>
+                    <RichText
+                      html={q.question_text_1}
+                      className="mb-4 text-base font-medium text-slate-900"
+                    />
                     {q.question_text_2 && (
-                      <p className="mb-4 text-sm text-slate-600">{q.question_text_2}</p>
+                      <RichText html={q.question_text_2} className="mb-4 text-sm text-slate-600" />
                     )}
                     {/* Options for passage MCQ */}
                     {hasOptions && (
@@ -762,7 +769,7 @@ export default function QuestionDetailPage() {
                   <div className="mb-4 rounded-md bg-slate-50 p-4">
                     <p className="font-semibold text-slate-900">{q.passage_title}</p>
                     {q.passage_body && (
-                      <p className="mt-2 text-sm text-slate-700">{q.passage_body}</p>
+                      <RichText html={q.passage_body} className="mt-2 text-sm text-slate-700" />
                     )}
                     {q.display_duration_seconds && (
                       <p className="mt-2 text-xs text-slate-500">
@@ -796,9 +803,12 @@ export default function QuestionDetailPage() {
                     flashDisplayCount={q.flash_display_count}
                     flashOrder={q.flash_order}
                   >
-                    <p className="mb-4 text-base font-medium text-slate-900">{q.question_text_1}</p>
+                    <RichText
+                      html={q.question_text_1}
+                      className="mb-4 text-base font-medium text-slate-900"
+                    />
                     {q.question_text_2 && (
-                      <p className="mb-4 text-sm text-slate-600">{q.question_text_2}</p>
+                      <RichText html={q.question_text_2} className="mb-4 text-sm text-slate-600" />
                     )}
                     {/* Options rendered by type */}
                     {hasOptions && (
@@ -870,9 +880,12 @@ export default function QuestionDetailPage() {
                 {/* Non-flash, non-passage: static question + options preview */}
                 {q.flash_items.length === 0 && q.question_type !== "MCQ_PASSAGE_DISPLAY_MULTI" && (
                   <>
-                    <p className="mb-4 text-base font-medium text-slate-900">{q.question_text_1}</p>
+                    <RichText
+                      html={q.question_text_1}
+                      className="mb-4 text-base font-medium text-slate-900"
+                    />
                     {q.question_text_2 && (
-                      <p className="mb-4 text-sm text-slate-600">{q.question_text_2}</p>
+                      <RichText html={q.question_text_2} className="mb-4 text-sm text-slate-600" />
                     )}
 
                     {/* Options rendered by type */}

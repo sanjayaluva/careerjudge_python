@@ -32,6 +32,7 @@ Sessions (candidate-facing):
   POST   /api/assessments/sessions/<id>/suspend/        — suspend session
 """
 
+from django.db import models as django_db_models
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, status
@@ -660,6 +661,44 @@ class AssessmentQuestionViewSet(ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Multi-sub-question pooling (SRS feedback C-CFG-1):
+        # If the question is a multi-sub-question type (Audio, Video, Passage,
+        # Image Display) with sub_question_count > 1, auto-expand into N
+        # AssessmentQuestion rows — one per sub-question. This way the
+        # assessment author adds the question once, and the candidate sees
+        # N separate questions in the session (each with its own options).
+        MULTI_SUB_QUESTION_TYPES = {
+            "MCQ_AUDIO_MULTI",
+            "MCQ_VIDEO_MULTI",
+            "MCQ_PASSAGE_DISPLAY_MULTI",
+            "MCQ_IMAGE_DISPLAY_MULTI",
+        }
+        n_subs = getattr(question, "sub_question_count", 1) or 1
+        if question.question_type in MULTI_SUB_QUESTION_TYPES and n_subs > 1:
+            # Determine the next order value across all sub-questions
+            existing_max = (
+                AssessmentQuestion.objects.filter(section=section).aggregate(
+                    django_db_models.Max("order")
+                )["order__max"]
+                or 0
+            )
+            created_instances = []
+            for sqi in range(n_subs):
+                aq, created = AssessmentQuestion.objects.get_or_create(
+                    section=section,
+                    question=question,
+                    sub_question_index=sqi,
+                    defaults={"order": existing_max + sqi + 1},
+                )
+                created_instances.append(aq)
+            return Response(
+                {
+                    "message": f"Question assigned to section ({n_subs} sub-questions).",
+                    "data": AssessmentQuestionSerializer(created_instances, many=True).data,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -1063,8 +1102,10 @@ class SessionViewSet(ModelViewSet):
                     }
 
             # Re-score to show the calculation
-            calculated_score, calculated_max = score_question(q, att.raw_answer)
-            default_max = _get_max_score(q)
+            calculated_score, calculated_max = score_question(
+                q, att.raw_answer, att.sub_question_index
+            )
+            default_max = _get_max_score(q, att.sub_question_index)
 
             attempts_debug.append(
                 {

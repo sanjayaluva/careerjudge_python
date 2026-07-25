@@ -32,6 +32,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  stripHtml,
   useToast,
 } from "@/components/ui";
 import {
@@ -775,7 +776,7 @@ function QuestionAssignmentTab({
                       >
                         <Badge variant="outline">{q.question_type_label}</Badge>
                         <span className="flex-1 truncate text-slate-700">
-                          {q.question_title || q.question_text_1}
+                          {q.question_title || stripHtml(q.question_text_1) || "(untitled)"}
                         </span>
                         {q.difficulty_level && (
                           <span className="text-slate-400">{q.difficulty_level}</span>
