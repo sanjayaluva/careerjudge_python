@@ -215,12 +215,25 @@ export default function SessionPlayerPage() {
   //   - Question has a passage with display_mode='timed' (1g)
   //   - Question is Image Display (1h) with display_duration_seconds set
   // AND the presentation has not yet finished for this question.
+  // AND we are on the first sub-question (sub_question_index === 0).
+  // Per the Multiple Questions Display Style document: the media is shown
+  // only on the first sub-question. Sub-questions 2+ show only Text 2 +
+  // options — no media, no gating.
+  const isFirstSubQuestion = q.sub_question_index === 0;
   const hasTimedPresentation =
-    qd.flash_items.length > 0 ||
-    (qd.passage_title != null && (qd.display_mode ?? "timed") === "timed") ||
-    (qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" && qd.display_duration_seconds != null);
+    isFirstSubQuestion &&
+    (qd.flash_items.length > 0 ||
+      (qd.passage_title != null && (qd.display_mode ?? "timed") === "timed") ||
+      (qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" && qd.display_duration_seconds != null));
   const presentationActive =
     hasTimedPresentation && !presentationDone.has(qd.id) && !viewedQuestions.has(qd.id);
+
+  // Per-sub-question Text 2: for multi-sub-question types, sub-questions 2+
+  // get their Text 2 from sub_question_text_2_list. Sub-question 0 uses the
+  // shared question_text_2 field.
+  const effectiveText2 = isFirstSubQuestion
+    ? qd.question_text_2
+    : (qd.sub_question_text_2_list?.[q.sub_question_index] ?? qd.question_text_2 ?? "");
 
   // Navigation rule enforcement — per SRS 03_assessment_configuration.json:
   // FREE: free navigation (default, no restrictions)
@@ -485,114 +498,130 @@ export default function SessionPlayerPage() {
 
               {/* Question Text1 — ABOVE media (serves as instructions per
                   SRS feedback Common Issue 2).
-                  Rendered as HTML to support rich-text formatting
-                  (bold/italic/lists/subtitle) per SRS feedback Common Issue 2. */}
-              {qd.question_text_1 && (
+                  Rendered as HTML to support rich-text formatting.
+                  Per the Multiple Questions Display Style document: Text 1 is
+                  shown only on the first sub-question (it's the shared
+                  instruction). Sub-questions 2+ show only their own Text 2 +
+                  options. */}
+              {qd.question_text_1 && isFirstSubQuestion && (
                 <div
                   className="prose prose-sm mb-4 max-w-none text-base font-medium text-slate-900"
                   dangerouslySetInnerHTML={{ __html: qd.question_text_1 }}
                 />
               )}
 
-              {/* Flash items — interactive simulation.
-                  key={qd.id} forces re-mount when the question changes,
-                  fixing the flash-content-not-changing-between-questions bug
-                  (SRS feedback Common Issue 8). */}
-              {qd.flash_items.length > 0 && (
-                <FlashSimulation
-                  key={qd.id}
-                  items={qd.flash_items}
-                  intervalMs={qd.flash_interval_ms ?? 1000}
-                  displayCount={qd.flash_display_count ?? qd.flash_items.length}
-                  order={qd.flash_order}
-                  replayMode={qd.replay_mode ?? "not_permitted"}
-                  hasBeenViewed={viewedQuestions.has(qd.id)}
-                  onPresentationEnd={() => setPresentationDone((prev) => new Set(prev).add(qd.id))}
-                />
+              {/* Media (flash, passage, image, audio, video) — shown ONLY on
+                  the first sub-question. Per the Multiple Questions Display
+                  Style document: after the media phase ends, the media +
+                  button disappear entirely. Sub-questions 2+ show no media. */}
+              {isFirstSubQuestion && (
+                <>
+                  {/* Flash items — interactive simulation.
+                      key={qd.id} forces re-mount when the question changes,
+                      fixing the flash-content-not-changing-between-questions bug
+                      (SRS feedback Common Issue 8). */}
+                  {qd.flash_items.length > 0 && (
+                    <FlashSimulation
+                      key={qd.id}
+                      items={qd.flash_items}
+                      intervalMs={qd.flash_interval_ms ?? 1000}
+                      displayCount={qd.flash_display_count ?? qd.flash_items.length}
+                      order={qd.flash_order}
+                      replayMode={qd.replay_mode ?? "not_permitted"}
+                      hasBeenViewed={viewedQuestions.has(qd.id)}
+                      onPresentationEnd={() =>
+                        setPresentationDone((prev) => new Set(prev).add(qd.id))
+                      }
+                    />
+                  )}
+
+                  {/* Passage — collapsible panel */}
+                  {qd.passage_title && (
+                    <PassageDisplay
+                      key={`passage-${qd.id}`}
+                      title={qd.passage_title}
+                      body={qd.passage_body}
+                      displayDurationSeconds={qd.display_duration_seconds ?? null}
+                      displayMode={qd.display_mode ?? "timed"}
+                      replayMode={qd.replay_mode ?? "not_permitted"}
+                      hasBeenViewed={viewedQuestions.has(qd.id)}
+                      onPresentationEnd={() =>
+                        setPresentationDone((prev) => new Set(prev).add(qd.id))
+                      }
+                    />
+                  )}
+
+                  {/* Question image — larger per SRS feedback Common Issue 6.
+                      For Image Display (1h) questions with a display_duration,
+                      render the timed play button variant. */}
+                  {qd.image &&
+                  qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" &&
+                  qd.display_duration_seconds ? (
+                    <ImageDisplayTimed
+                      key={`img-${qd.id}`}
+                      imageUrl={qd.image}
+                      durationSeconds={qd.display_duration_seconds}
+                      replayMode={qd.replay_mode ?? "not_permitted"}
+                      hasBeenViewed={viewedQuestions.has(qd.id)}
+                      onPresentationEnd={() =>
+                        setPresentationDone((prev) => new Set(prev).add(qd.id))
+                      }
+                    />
+                  ) : qd.image ? (
+                    <img
+                      src={qd.image}
+                      alt="Question"
+                      className="mb-4 max-h-[500px] w-full rounded-md border border-slate-200 object-contain"
+                    />
+                  ) : null}
+
+                  {/* Audio player (for MCQ_AUDIO_MULTI 1c). */}
+                  {qd.media_files
+                    .filter((m) => m.media_type === "audio")
+                    .map((media) => (
+                      <AudioPlayerControlled
+                        key={`audio-${media.id}`}
+                        fileUrl={media.file_url}
+                        replayMode={qd.replay_mode ?? "not_permitted"}
+                        hasBeenViewed={viewedQuestions.has(qd.id)}
+                        onPresentationEnd={() =>
+                          setPresentationDone((prev) => new Set(prev).add(qd.id))
+                        }
+                      />
+                    ))}
+
+                  {/* Video player (for MCQ_VIDEO_MULTI 1d). */}
+                  {qd.media_files
+                    .filter((m) => m.media_type === "video")
+                    .map((media) => (
+                      <VideoPlayerControlled
+                        key={`video-${media.id}`}
+                        fileUrl={media.file_url}
+                        replayMode={qd.replay_mode ?? "not_permitted"}
+                        hasBeenViewed={viewedQuestions.has(qd.id)}
+                        onPresentationEnd={() =>
+                          setPresentationDone((prev) => new Set(prev).add(qd.id))
+                        }
+                      />
+                    ))}
+                </>
               )}
-
-              {/* Passage — collapsible panel */}
-              {qd.passage_title && (
-                <PassageDisplay
-                  key={`passage-${qd.id}`}
-                  title={qd.passage_title}
-                  body={qd.passage_body}
-                  displayDurationSeconds={qd.display_duration_seconds ?? null}
-                  displayMode={qd.display_mode ?? "timed"}
-                  replayMode={qd.replay_mode ?? "not_permitted"}
-                  hasBeenViewed={viewedQuestions.has(qd.id)}
-                  onPresentationEnd={() => setPresentationDone((prev) => new Set(prev).add(qd.id))}
-                />
-              )}
-
-              {/* Question image — larger per SRS feedback Common Issue 6.
-                  For Image Display (1h) questions with a display_duration,
-                  render the timed play button variant (SRS feedback §8 Issue 1+3). */}
-              {qd.image &&
-              qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" &&
-              qd.display_duration_seconds ? (
-                <ImageDisplayTimed
-                  key={`img-${qd.id}`}
-                  imageUrl={qd.image}
-                  durationSeconds={qd.display_duration_seconds}
-                  replayMode={qd.replay_mode ?? "not_permitted"}
-                  hasBeenViewed={viewedQuestions.has(qd.id)}
-                  onPresentationEnd={() => setPresentationDone((prev) => new Set(prev).add(qd.id))}
-                />
-              ) : qd.image ? (
-                <img
-                  src={qd.image}
-                  alt="Question"
-                  className="mb-4 max-h-[500px] w-full rounded-md border border-slate-200 object-contain"
-                />
-              ) : null}
-
-              {/* Audio player (for MCQ_AUDIO_MULTI 1c).
-                  Respects replay_mode: if 'not_permitted', audio can only be
-                  played once. On revisit (Previous button), audio is locked.
-                  SRS feedback §3 Issue 2 + Recommendation 2. */}
-              {qd.media_files
-                .filter((m) => m.media_type === "audio")
-                .map((media) => (
-                  <AudioPlayerControlled
-                    key={`audio-${media.id}`}
-                    fileUrl={media.file_url}
-                    replayMode={qd.replay_mode ?? "not_permitted"}
-                    hasBeenViewed={viewedQuestions.has(qd.id)}
-                    onPresentationEnd={() =>
-                      setPresentationDone((prev) => new Set(prev).add(qd.id))
-                    }
-                  />
-                ))}
-
-              {/* Video player (for MCQ_VIDEO_MULTI 1d).
-                  Same replay controls as audio. */}
-              {qd.media_files
-                .filter((m) => m.media_type === "video")
-                .map((media) => (
-                  <VideoPlayerControlled
-                    key={`video-${media.id}`}
-                    fileUrl={media.file_url}
-                    replayMode={qd.replay_mode ?? "not_permitted"}
-                    hasBeenViewed={viewedQuestions.has(qd.id)}
-                    onPresentationEnd={() =>
-                      setPresentationDone((prev) => new Set(prev).add(qd.id))
-                    }
-                  />
-                ))}
 
               {/* Question Text2 — BELOW media (the actual question based on
                   the audio/video/passage/image per SRS feedback Common Issue 2).
                   Rendered as HTML to support rich-text formatting.
+                  Uses effectiveText2 which is per-sub-question for multi-sub-
+                  question types.
                   GATED: hidden until the timed presentation is over
-                  (SRS feedback Common Issue 4). */}
-              {qd.question_text_2 && !presentationActive && (
+                  (SRS feedback Common Issue 4). Gating only applies to the
+                  first sub-question. */}
+              {effectiveText2 && !presentationActive && (
                 <div
                   className="prose prose-sm mb-4 mt-4 max-w-none text-sm text-slate-600"
-                  dangerouslySetInnerHTML={{ __html: qd.question_text_2 }}
+                  dangerouslySetInnerHTML={{ __html: effectiveText2 }}
                 />
               )}
-              {qd.question_text_2 && presentationActive && (
+              {effectiveText2 && presentationActive && (
                 <div className="mb-4 mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-center">
                   <p className="text-sm text-amber-700">
                     The question and answer options will appear after the presentation is over.
