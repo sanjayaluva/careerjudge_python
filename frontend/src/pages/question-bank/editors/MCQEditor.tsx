@@ -515,13 +515,24 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
         <AddOptionButton onClick={addOption} label="Add option" />
       </div>
 
-      {/* Preview */}
+      {/* Preview — shows the delivery-time layout:
+          Text 1 → Media → Text 2 → SubQ Text → Options */}
       <div className="rounded-md border border-primary-200 bg-primary-50/50 p-4">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
           Preview
+          {isMultiSubQuestion && (data.sub_question_count ?? 1) > 1 && (
+            <span className="ml-2 font-normal text-slate-500">
+              (Sub-question {(data.active_sub_question ?? 0) + 1} of {data.sub_question_count})
+            </span>
+          )}
         </p>
         <div className="space-y-2">
-          {/* Flash items (shown first at delivery time) */}
+          {/* 1. Question Text 1 — shown above media */}
+          {data.question_text_1 && (
+            <RichText html={data.question_text_1} className="text-sm font-medium text-slate-900" />
+          )}
+
+          {/* 2. Media — passage, flash, image, audio, video */}
           {isFlashType && data.flashItems.length > 0 && (
             <div className="rounded border border-amber-300 bg-amber-50 p-2">
               <p className="mb-1 text-xs font-medium text-amber-700">
@@ -551,7 +562,6 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
             </div>
           )}
 
-          {/* Passage (shown first at delivery time) */}
           {isPassageType && (data.passage_title || data.passage_body) && (
             <div className="rounded border border-blue-300 bg-blue-50 p-2">
               <p className="mb-1 text-xs font-medium text-blue-700">
@@ -568,13 +578,27 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
           )}
 
           {data.imageUrl && <img src={data.imageUrl} alt="Question" className="max-h-32 rounded" />}
-          {data.question_text_1 && (
-            <RichText html={data.question_text_1} className="text-sm font-medium text-slate-900" />
-          )}
           {data.audioUrl && <audio controls src={data.audioUrl} className="w-full" />}
           {data.videoUrl && (
             <video controls src={data.videoUrl} className="max-h-32 w-full rounded" />
           )}
+
+          {/* 3. Question Text 2 — shown below media */}
+          {data.question_text_2 && (
+            <RichText html={data.question_text_2} className="text-sm text-slate-600" />
+          )}
+
+          {/* 4. Sub-question text — shown before options (multi-sub-question only) */}
+          {isMultiSubQuestion &&
+            (data.sub_question_count ?? 1) > 1 &&
+            getSubQuestionText(data.active_sub_question ?? 0) && (
+              <RichText
+                html={getSubQuestionText(data.active_sub_question ?? 0)}
+                className="text-sm font-medium text-slate-900"
+              />
+            )}
+
+          {/* 5. Options */}
           {visibleOptions.length > 0 && (
             <div className="space-y-1.5">
               {visibleOptions.map((opt, i) => (

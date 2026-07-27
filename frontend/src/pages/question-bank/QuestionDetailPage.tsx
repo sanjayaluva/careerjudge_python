@@ -884,12 +884,65 @@ export default function QuestionDetailPage() {
                       html={q.question_text_1}
                       className="mb-4 text-base font-medium text-slate-900"
                     />
+                    {/* Media (image, audio, video) for non-passage types */}
+                    {q.image && !q.question_type.startsWith("HOTSPOT_") && (
+                      <img
+                        src={q.image}
+                        alt="Question"
+                        className="mb-4 max-h-60 rounded border border-slate-200"
+                      />
+                    )}
+                    {q.media_files.map((mf) => (
+                      <div key={mf.id} className="mb-4">
+                        {mf.media_type === "AUDIO" && (
+                          <audio controls src={mf.file} className="w-full" />
+                        )}
+                        {mf.media_type === "VIDEO" && (
+                          <video controls src={mf.file} className="max-h-60 w-full rounded" />
+                        )}
+                      </div>
+                    ))}
                     {q.question_text_2 && (
                       <RichText html={q.question_text_2} className="mb-4 text-sm text-slate-600" />
                     )}
 
-                    {/* Options rendered by type */}
-                    {hasOptions && (
+                    {/* Sub-question texts (for multi-sub-question types) */}
+                    {q.sub_question_count > 1 && q.sub_question_texts && (
+                      <div className="mb-4 space-y-3">
+                        {q.sub_question_texts.map((sqText, sqi) => (
+                          <div key={sqi}>
+                            <p className="mb-1 text-xs font-semibold text-slate-500">
+                              Sub-question {sqi + 1}
+                            </p>
+                            {sqText && (
+                              <RichText html={sqText} className="text-sm text-slate-900" />
+                            )}
+                            {/* Options for this sub-question */}
+                            {hasOptions &&
+                              q.options.filter((o) => o.sub_question_index === sqi).length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {q.options
+                                    .filter((o) => o.sub_question_index === sqi)
+                                    .map((opt) => (
+                                      <div
+                                        key={opt.id}
+                                        className="flex items-center gap-2 rounded border border-slate-100 px-2 py-1 text-xs"
+                                      >
+                                        <span className="text-slate-400">
+                                          {opt.is_correct ? "✓" : "○"}
+                                        </span>
+                                        {opt.text_value}
+                                      </div>
+                                    ))}
+                                </div>
+                              )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Options rendered by type (single question — no sub-questions) */}
+                    {hasOptions && q.sub_question_count <= 1 && (
                       <div className="space-y-2">
                         {/* MCQ: radio or checkbox */}
                         {q.question_type.startsWith("MCQ_") && (

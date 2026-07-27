@@ -1619,9 +1619,11 @@ function PassageDisplay({
     displayMode === "unlimited" || (replayMode === "permitted" && hasBeenViewed),
   );
   const [visible, setVisible] = useState(displayMode === "unlimited");
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(
-    displayMode === "timed" ? displayDurationSeconds : null,
-  );
+  // FIX: secondsLeft starts as null (no timer running). The timer is only
+  // started when the user clicks 'Start Passage Presentation'. Previously
+  // this was initialized to displayDurationSeconds, which started the
+  // countdown immediately on mount — before the user clicked anything.
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
 
   // Countdown for timed passages
   useEffect(() => {
@@ -1679,7 +1681,7 @@ function PassageDisplay({
           elapses, the passage cannot be viewed again.
         </p>
         <Button size="sm" className="mt-3" onClick={startPresentation}>
-          Start Passage Presentation
+          Click to Show the Passage
         </Button>
       </div>
     );
@@ -1891,7 +1893,7 @@ function ImageDisplayTimed({
           seconds. After the time elapses, the image cannot be viewed again.
         </p>
         <Button size="sm" className="mt-3" onClick={start}>
-          Start Image Display
+          Click to Show the Image
         </Button>
       </div>
     );
