@@ -618,7 +618,7 @@ export default function SessionPlayerPage() {
                     .map((media) => (
                       <AudioPlayerControlled
                         key={`audio-${media.id}`}
-                        fileUrl={media.file_url}
+                        fileUrl={media.file}
                         replayMode={qd.replay_mode ?? "not_permitted"}
                         hasBeenViewed={viewedQuestions.has(qd.id)}
                         onPresentationEnd={() =>
@@ -633,7 +633,7 @@ export default function SessionPlayerPage() {
                     .map((media) => (
                       <VideoPlayerControlled
                         key={`video-${media.id}`}
-                        fileUrl={media.file_url}
+                        fileUrl={media.file}
                         replayMode={qd.replay_mode ?? "not_permitted"}
                         hasBeenViewed={viewedQuestions.has(qd.id)}
                         onPresentationEnd={() =>

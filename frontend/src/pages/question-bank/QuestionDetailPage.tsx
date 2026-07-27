@@ -764,38 +764,11 @@ export default function QuestionDetailPage() {
                     )}
                   </PassagePresentation>
                 )}
-                {/* Non-passage, non-flash: static preview (passage info shown as text if present) */}
-                {q.question_type !== "MCQ_PASSAGE_DISPLAY_MULTI" && q.passage_title && (
-                  <div className="mb-4 rounded-md bg-slate-50 p-4">
-                    <p className="font-semibold text-slate-900">{q.passage_title}</p>
-                    {q.passage_body && (
-                      <RichText html={q.passage_body} className="mt-2 text-sm text-slate-700" />
-                    )}
-                    {q.display_duration_seconds && (
-                      <p className="mt-2 text-xs text-slate-500">
-                        Displays for {q.display_duration_seconds} seconds
-                      </p>
-                    )}
-                  </div>
-                )}
-                {/* Hide plain question image for hotspot questions — shapes version is shown below */}
-                {q.image && !q.question_type.startsWith("HOTSPOT_") && (
-                  <img
-                    src={q.image}
-                    alt="Question"
-                    className="mb-4 max-h-60 rounded border border-slate-200"
-                  />
-                )}
-                {q.media_files.map((mf) => (
-                  <div key={mf.id} className="mb-4">
-                    {mf.media_type === "AUDIO" && (
-                      <audio controls src={mf.file} className="w-full" />
-                    )}
-                    {mf.media_type === "VIDEO" && (
-                      <video controls src={mf.file} className="max-h-60 w-full rounded" />
-                    )}
-                  </div>
-                ))}
+                {/* NOTE: The old-style non-passage static passage block has been
+                    removed — it duplicated the passage_title/body that is already
+                    shown in the static preview branch below. The static branch
+                    renders Text1 → Media → Text2 → SubQ Text → Options in the
+                    correct delivery-time layout. */}
                 {q.flash_items.length > 0 && (
                   <FlashPresentation
                     flashItems={q.flash_items}

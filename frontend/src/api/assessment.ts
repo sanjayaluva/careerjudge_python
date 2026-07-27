@@ -305,8 +305,8 @@ export interface SessionQuestion {
     media_files: {
       id: number;
       media_type: string;
-      file_url: string;
-      order: number;
+      file: string;
+      created_at: string;
     }[];
     flash_interval_ms: number | null;
     flash_display_count: number | null;
