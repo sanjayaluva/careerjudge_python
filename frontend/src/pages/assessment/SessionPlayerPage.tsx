@@ -216,6 +216,13 @@ export default function SessionPlayerPage() {
   const isLast = currentIndex === questions.length - 1;
   const answeredCount = Object.keys(answers).length;
   const bookmarkedCount = bookmarked.size;
+  // Total question count: for multi-sub-question questions, each sub-question
+  // counts as one. So a question with sub_question_count=3 counts as 3.
+  const totalQuestions = questions.reduce(
+    (sum, sq) => sum + (sq.question_detail.sub_question_count ?? 1),
+    0,
+  );
+  const remainingCount = Math.max(0, totalQuestions - answeredCount);
 
   // Determine whether this question has a timed presentation that should
   // gate Question Text 2 + answer options (SRS feedback Common Issue 4).
@@ -374,8 +381,8 @@ export default function SessionPlayerPage() {
         <div>
           <h1 className="text-sm font-bold text-slate-900">{session.assessment_title}</h1>
           <p className="text-xs text-slate-500">
-            Question {currentIndex + 1} of {questions.length} · Answered: {answeredCount} ·
-            Bookmarked: {bookmarkedCount}
+            Question {currentIndex + 1} of {questions.length} · Answered: {answeredCount} /{" "}
+            {totalQuestions} · Bookmarked: {bookmarkedCount}
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -436,7 +443,7 @@ export default function SessionPlayerPage() {
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="rounded-md bg-slate-50 p-2">
                 <span className="text-slate-500">Total</span>
-                <p className="text-lg font-bold text-slate-900">{questions.length}</p>
+                <p className="text-lg font-bold text-slate-900">{totalQuestions}</p>
               </div>
               <div className="rounded-md bg-green-50 p-2">
                 <span className="text-green-600">Answered</span>
@@ -448,9 +455,7 @@ export default function SessionPlayerPage() {
               </div>
               <div className="rounded-md bg-slate-50 p-2">
                 <span className="text-slate-500">Remaining</span>
-                <p className="text-lg font-bold text-slate-700">
-                  {questions.length - answeredCount}
-                </p>
+                <p className="text-lg font-bold text-slate-700">{remainingCount}</p>
               </div>
             </div>
           </div>
@@ -749,12 +754,12 @@ export default function SessionPlayerPage() {
         size="sm"
       >
         <p className="text-sm text-slate-700">
-          You have answered <strong>{answeredCount}</strong> of <strong>{questions.length}</strong>{" "}
+          You have answered <strong>{answeredCount}</strong> of <strong>{totalQuestions}</strong>{" "}
           questions.
-          {answeredCount < questions.length && (
+          {answeredCount < totalQuestions && (
             <span className="mt-2 block text-amber-600">
-              ⚠ {questions.length - answeredCount} question(s) are unanswered and will score 0. Are
-              you sure you want to submit?
+              ⚠ {remainingCount} question(s) are unanswered and will score 0. Are you sure you want
+              to submit?
             </span>
           )}
         </p>
