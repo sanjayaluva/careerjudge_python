@@ -278,21 +278,32 @@ class Question(models.Model):
         help_text=_(
             "For multi-sub-question types 1c-1h: how many sub-questions "
             "share the media. 1 = single question (default). "
-            "Each sub-question has its own Question Text 2 + options."
+            "Each sub-question has its own sub_question_text + options."
         ),
     )
-    # Per-sub-question Text 2 storage (JSON list of strings, indexed by
-    # sub_question_index). The main question_text_2 field is used for
-    # sub-question 0 (backward compatibility).
-    sub_question_text_2_list = models.JSONField(
-        _("sub-question text 2 list"),
+    # Per-sub-question text — the text shown before the options for each
+    # sub-question. This is a SEPARATE field from question_text_2 (which is
+    # the main question's secondary text shown after the media).
+    # JSON list of strings, indexed by sub_question_index (0-based).
+    # Per the Multiple Questions Display Style spec: each sub-question has
+    # its own question text + option fields.
+    sub_question_texts = models.JSONField(
+        _("sub-question texts"),
         default=list,
         blank=True,
         help_text=_(
-            "JSON list of Question Text 2 strings, one per sub-question. "
-            "Index 0 = sub-question 1, etc. Empty list = use the single "
-            "question_text_2 field for all sub-questions."
+            "JSON list of sub-question text strings, one per sub-question. "
+            "Index 0 = sub-question 1, etc. Each sub-question shows this "
+            "text before its options. This is separate from question_text_2 "
+            "(the main question's secondary text shown after the media)."
         ),
+    )
+    # Kept for backward compatibility — superseded by sub_question_texts.
+    sub_question_text_2_list = models.JSONField(
+        _("sub-question text 2 list (deprecated)"),
+        default=list,
+        blank=True,
+        help_text=_("Deprecated. Use sub_question_texts instead."),
     )
 
     flash_interval_ms = models.PositiveIntegerField(

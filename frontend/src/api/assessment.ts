@@ -319,6 +319,7 @@ export interface SessionQuestion {
     option_layout: "1" | "2" | "3";
     hotspot_visibility: "transparent" | "visible";
     sub_question_count: number;
+    sub_question_texts: string[];
     sub_question_text_2_list: string[];
     grid_rows: number | null;
     grid_cols: number | null;

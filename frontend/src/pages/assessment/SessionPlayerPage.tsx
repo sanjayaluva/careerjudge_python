@@ -42,6 +42,10 @@ export default function SessionPlayerPage() {
   // has finished. Used to gate Question Text 2 + answer options until the
   // presentation is over (SRS feedback Common Issue 4).
   const [presentationDone, setPresentationDone] = useState<Set<number>>(new Set());
+  // In-question sub-question navigation. For multi-sub-question questions
+  // (sub_question_count > 1), this tracks which sub-question the candidate
+  // is currently on (0-indexed). Resets when the question changes.
+  const [activeSubQ, setActiveSubQ] = useState(0);
 
   const { data: session, isLoading: sessionLoading } = useQuery({
     queryKey: ["assessment-session", sid],
@@ -149,6 +153,11 @@ export default function SessionPlayerPage() {
     setQuestionTimeLeft(null);
   }, [currentIndex, timerLevel, questions]);
 
+  // Reset in-question sub-question index when the main question changes.
+  useEffect(() => {
+    setActiveSubQ(0);
+  }, [currentIndex]);
+
   // Question-level timer countdown
   useEffect(() => {
     if (questionTimeLeft === null || questionTimeLeft <= 0) return;
@@ -203,7 +212,7 @@ export default function SessionPlayerPage() {
 
   const q = questions[currentIndex];
   const qd = q.question_detail;
-  const answerKey = `${q.question}_${q.sub_question_index}`;
+  const answerKey = `${q.question}_${activeSubQ}`;
   const isLast = currentIndex === questions.length - 1;
   const answeredCount = Object.keys(answers).length;
   const bookmarkedCount = bookmarked.size;
@@ -215,25 +224,26 @@ export default function SessionPlayerPage() {
   //   - Question has a passage with display_mode='timed' (1g)
   //   - Question is Image Display (1h) with display_duration_seconds set
   // AND the presentation has not yet finished for this question.
-  // AND we are on the first sub-question (sub_question_index === 0).
+  // AND we are on the first sub-question (activeSubQ === 0).
   // Per the Multiple Questions Display Style document: the media is shown
-  // only on the first sub-question. Sub-questions 2+ show only Text 2 +
-  // options — no media, no gating.
-  const isFirstSubQuestion = q.sub_question_index === 0;
+  // only on the first sub-question. Sub-questions 2+ show only sub-question
+  // text + options — no media, no gating.
+  const subQuestionCount = qd.sub_question_count ?? 1;
+  const isFirstSubQ = activeSubQ === 0;
   const hasTimedPresentation =
-    isFirstSubQuestion &&
+    isFirstSubQ &&
     (qd.flash_items.length > 0 ||
       (qd.passage_title != null && (qd.display_mode ?? "timed") === "timed") ||
       (qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" && qd.display_duration_seconds != null));
+  // Presentation is active (gating Text2 + options) only on sub-question 0
+  // AND only until the media presentation ends.
+  // Requirement 2: sub-question text/options must appear only AFTER content
+  // presentation is over — not on a separate timer.
   const presentationActive =
     hasTimedPresentation && !presentationDone.has(qd.id) && !viewedQuestions.has(qd.id);
 
-  // Per-sub-question Text 2: for multi-sub-question types, sub-questions 2+
-  // get their Text 2 from sub_question_text_2_list. Sub-question 0 uses the
-  // shared question_text_2 field.
-  const effectiveText2 = isFirstSubQuestion
-    ? qd.question_text_2
-    : (qd.sub_question_text_2_list?.[q.sub_question_index] ?? qd.question_text_2 ?? "");
+  // Per-sub-question text: from sub_question_texts[activeSubQ].
+  const subQuestionText = qd.sub_question_texts?.[activeSubQ] ?? "";
 
   // Navigation rule enforcement — per SRS 03_assessment_configuration.json:
   // FREE: free navigation (default, no restrictions)
@@ -260,13 +270,21 @@ export default function SessionPlayerPage() {
       answerMutation.mutate({
         question_id: q.question,
         raw_answer: currentAnswer,
-        sub_question_index: q.sub_question_index,
+        sub_question_index: activeSubQ,
       });
     }
     // Mark current question as viewed (locks replay on revisit)
     if (q?.question) {
       setViewedQuestions((prev) => new Set(prev).add(q.question));
     }
+    // If this is a multi-sub-question question and we're not on the last
+    // sub-question, advance to the next sub-question within this question.
+    // Requirement 3: sub-questions must be delivered in order 1,2,3.
+    if (subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) {
+      setActiveSubQ((s) => s + 1);
+      return;
+    }
+    // Otherwise, move to the next question in the assessment.
     if (!isLast) setCurrentIndex((i) => i + 1);
   };
 
@@ -277,14 +295,22 @@ export default function SessionPlayerPage() {
       answerMutation.mutate({
         question_id: q.question,
         raw_answer: currentAnswer,
-        sub_question_index: q.sub_question_index,
+        sub_question_index: activeSubQ,
       });
     }
-    // Mark current question as viewed (locks replay on revisit)
-    if (q?.question) {
-      setViewedQuestions((prev) => new Set(prev).add(q.question));
+    // If we're on a sub-question > 0, go back to the previous sub-question.
+    if (activeSubQ > 0) {
+      setActiveSubQ((s) => s - 1);
+      return;
     }
-    if (currentIndex > 0) setCurrentIndex((i) => i - 1);
+    // Otherwise, go to the previous question in the assessment.
+    if (currentIndex > 0) {
+      // Mark current question as viewed (locks replay on revisit)
+      if (q?.question) {
+        setViewedQuestions((prev) => new Set(prev).add(q.question));
+      }
+      setCurrentIndex((i) => i - 1);
+    }
   };
 
   const handleBookmark = () => {
@@ -501,9 +527,9 @@ export default function SessionPlayerPage() {
                   Rendered as HTML to support rich-text formatting.
                   Per the Multiple Questions Display Style document: Text 1 is
                   shown only on the first sub-question (it's the shared
-                  instruction). Sub-questions 2+ show only their own Text 2 +
-                  options. */}
-              {qd.question_text_1 && isFirstSubQuestion && (
+                  instruction). Sub-questions 2+ show only their own sub-question
+                  text + options. */}
+              {qd.question_text_1 && isFirstSubQ && (
                 <div
                   className="prose prose-sm mb-4 max-w-none text-base font-medium text-slate-900"
                   dangerouslySetInnerHTML={{ __html: qd.question_text_1 }}
@@ -514,7 +540,7 @@ export default function SessionPlayerPage() {
                   the first sub-question. Per the Multiple Questions Display
                   Style document: after the media phase ends, the media +
                   button disappear entirely. Sub-questions 2+ show no media. */}
-              {isFirstSubQuestion && (
+              {isFirstSubQ && (
                 <>
                   {/* Flash items — interactive simulation.
                       key={qd.id} forces re-mount when the question changes,
@@ -610,23 +636,36 @@ export default function SessionPlayerPage() {
               {/* Question Text2 — BELOW media (the actual question based on
                   the audio/video/passage/image per SRS feedback Common Issue 2).
                   Rendered as HTML to support rich-text formatting.
-                  Uses effectiveText2 which is per-sub-question for multi-sub-
-                  question types.
+                  This is the MAIN question's Text 2 — shared across all
+                  sub-questions. Shown only on sub-question 0 (after media).
                   GATED: hidden until the timed presentation is over
-                  (SRS feedback Common Issue 4). Gating only applies to the
-                  first sub-question. */}
-              {effectiveText2 && !presentationActive && (
+                  (SRS feedback Common Issue 4 + Requirement 2: sub-question
+                  text/options must appear only AFTER content presentation). */}
+              {qd.question_text_2 && isFirstSubQ && !presentationActive && (
                 <div
                   className="prose prose-sm mb-4 mt-4 max-w-none text-sm text-slate-600"
-                  dangerouslySetInnerHTML={{ __html: effectiveText2 }}
+                  dangerouslySetInnerHTML={{ __html: qd.question_text_2 }}
                 />
               )}
-              {effectiveText2 && presentationActive && (
+              {qd.question_text_2 && isFirstSubQ && presentationActive && (
                 <div className="mb-4 mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-center">
                   <p className="text-sm text-amber-700">
                     The question and answer options will appear after the presentation is over.
                   </p>
                 </div>
+              )}
+
+              {/* Per-sub-question text — shown before the options for each
+                  sub-question. Separate from Text 2 (main question's secondary
+                  text). Per the Multiple Questions Display Style spec: each
+                  sub-question has its own question text + option fields.
+                  GATED on sub-question 0 (until media ends). Not gated on
+                  sub-questions 2+ (no media to wait for). */}
+              {subQuestionText && !(isFirstSubQ && presentationActive) && (
+                <div
+                  className="prose prose-sm mb-4 max-w-none text-base font-medium text-slate-900"
+                  dangerouslySetInnerHTML={{ __html: subQuestionText }}
+                />
               )}
 
               {/* Answer input area — by question type.
@@ -643,6 +682,7 @@ export default function SessionPlayerPage() {
                   question={q}
                   currentAnswer={answers[answerKey]}
                   onChange={(ans) => setAnswers({ ...answers, [answerKey]: ans })}
+                  activeSubQ={activeSubQ}
                 />
               )}
             </div>
@@ -663,9 +703,14 @@ export default function SessionPlayerPage() {
           ← Previous
         </Button>
         <p className="text-xs text-slate-400">
-          {currentIndex + 1} / {questions.length}
+          Question {currentIndex + 1} / {questions.length}
+          {subQuestionCount > 1 && (
+            <span className="ml-2 text-primary-600">
+              · Sub-question {activeSubQ + 1} / {subQuestionCount}
+            </span>
+          )}
         </p>
-        {isLast ? (
+        {isLast && !(subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) ? (
           <Button onClick={handleSubmit} loading={submitMutation.isPending}>
             Submit Assessment
           </Button>
@@ -712,10 +757,12 @@ function AnswerInput({
   question,
   currentAnswer,
   onChange,
+  activeSubQ = 0,
 }: {
   question: SessionQuestion;
   currentAnswer: Record<string, unknown> | undefined;
   onChange: (answer: Record<string, unknown>) => void;
+  activeSubQ?: number;
 }) {
   const qd = question.question_detail;
   const qType = qd.question_type;
@@ -725,7 +772,8 @@ function AnswerInput({
   if (qType.startsWith("MCQ_")) {
     // Filter options to only those belonging to the current sub-question
     // (SRS feedback C-CFG-1 — multi-sub-question pooling).
-    const subQIdx = question.sub_question_index;
+    // Uses the player's activeSubQ state (in-question navigation).
+    const subQIdx = activeSubQ;
     const subOptions = qd.options.filter((o) => (o.sub_question_index ?? 0) === subQIdx);
     const isMulti = subOptions.filter((o) => o.is_correct).length > 1;
     const selectedIds: number[] = (currentAnswer?.selected_option_ids as number[]) || [];

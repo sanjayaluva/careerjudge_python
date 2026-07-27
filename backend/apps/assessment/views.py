@@ -32,7 +32,6 @@ Sessions (candidate-facing):
   POST   /api/assessments/sessions/<id>/suspend/        — suspend session
 """
 
-from django.db import models as django_db_models
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, status
@@ -662,42 +661,15 @@ class AssessmentQuestionViewSet(ModelViewSet):
             )
 
         # Multi-sub-question pooling (SRS feedback C-CFG-1):
-        # If the question is a multi-sub-question type (Audio, Video, Passage,
-        # Image Display) with sub_question_count > 1, auto-expand into N
-        # AssessmentQuestion rows — one per sub-question. This way the
-        # assessment author adds the question once, and the candidate sees
-        # N separate questions in the session (each with its own options).
-        MULTI_SUB_QUESTION_TYPES = {
-            "MCQ_AUDIO_MULTI",
-            "MCQ_VIDEO_MULTI",
-            "MCQ_PASSAGE_DISPLAY_MULTI",
-            "MCQ_IMAGE_DISPLAY_MULTI",
-        }
-        n_subs = getattr(question, "sub_question_count", 1) or 1
-        if question.question_type in MULTI_SUB_QUESTION_TYPES and n_subs > 1:
-            # Determine the next order value across all sub-questions
-            existing_max = (
-                AssessmentQuestion.objects.filter(section=section).aggregate(
-                    django_db_models.Max("order")
-                )["order__max"]
-                or 0
-            )
-            created_instances = []
-            for sqi in range(n_subs):
-                aq, created = AssessmentQuestion.objects.get_or_create(
-                    section=section,
-                    question=question,
-                    sub_question_index=sqi,
-                    defaults={"order": existing_max + sqi + 1},
-                )
-                created_instances.append(aq)
-            return Response(
-                {
-                    "message": f"Question assigned to section ({n_subs} sub-questions).",
-                    "data": AssessmentQuestionSerializer(created_instances, many=True).data,
-                },
-                status=status.HTTP_201_CREATED,
-            )
+        # Multi-sub-question questions (Audio, Video, Passage, Image Display
+        # with sub_question_count > 1) are stored as a SINGLE AssessmentQuestion
+        # row. The player handles sub-question navigation internally — the
+        # candidate moves through sub-questions 1..N within the same question
+        # using Next/Previous, and the media is shown only once (on sub-question 1).
+        # This keeps the assessment builder clean (one row per question) and
+        # matches the Multiple Questions Display Style spec.
+        # No auto-expand needed — the player reads sub_question_count from the
+        # Question and renders N sub-question screens.
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)

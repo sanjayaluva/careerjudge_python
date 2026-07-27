@@ -35,8 +35,9 @@ interface MCQEditorProps {
     sub_question_count?: number;
     /** Currently active sub-question tab (0-indexed). */
     active_sub_question?: number;
-    /** Per-sub-question Text 2 list (indexed by sub_question_index). */
-    sub_question_text_2_list?: string[];
+    /** Per-sub-question text — shown before options for each sub-question.
+     * Separate from question_text_2 (main question's secondary text). */
+    sub_question_texts?: string[];
   };
   onChange: (data: MCQEditorProps["data"]) => void;
 }
@@ -103,55 +104,44 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
   const activeSubQ = data.active_sub_question ?? 0;
   const visibleOptions = data.options.filter((o) => (o.sub_question_index ?? 0) === activeSubQ);
 
-  // Per-sub-question Text 2 helpers
-  const subText2List = data.sub_question_text_2_list ?? [];
-  const getSubText2 = (sqi: number): string => {
-    if (sqi === 0) return data.question_text_2;
-    return subText2List[sqi] ?? "";
-  };
-  const setSubText2 = (sqi: number, value: string) => {
-    if (sqi === 0) {
-      onChange({ ...data, question_text_2: value });
-    } else {
-      const newList = [...subText2List];
-      while (newList.length <= sqi) newList.push("");
-      newList[sqi] = value;
-      onChange({ ...data, sub_question_text_2_list: newList });
-    }
+  // Per-sub-question text helpers — this is the text shown before options
+  // for each sub-question. Separate from question_text_2 (main question's
+  // secondary text shown after media).
+  const subTexts = data.sub_question_texts ?? [];
+  const getSubQuestionText = (sqi: number): string => subTexts[sqi] ?? "";
+  const setSubQuestionText = (sqi: number, value: string) => {
+    const newList = [...subTexts];
+    while (newList.length <= sqi) newList.push("");
+    newList[sqi] = value;
+    onChange({ ...data, sub_question_texts: newList });
   };
 
   return (
     <div className="space-y-4">
-      {/* Question text */}
+      {/* Question text 1 — main instruction, shown above media.
+          Shared across all sub-questions (not per-sub-question). */}
       <div>
         <Label htmlFor="qtext1" required>
-          Question text
+          Question text (Text 1)
         </Label>
         <WysiwygEditorLite
           value={data.question_text_1}
           onChange={(html) => onChange({ ...data, question_text_1: html })}
           minHeight={80}
-          placeholder="Enter the main question or instructions…"
+          placeholder="Enter the main question or instructions (shown above the media)…"
         />
       </div>
 
-      {/* Additional text — per-sub-question for multi-sub-question types.
-          When sub_question_count > 1, show a different Text 2 per active
-          sub-question (SRS feedback C-CFG-1). */}
+      {/* Question text 2 — main question's secondary text, shown BELOW media.
+          Shared across all sub-questions (not per-sub-question).
+          Per the review document: Text 1 → Media → Text 2 → Options. */}
       <div>
-        <Label htmlFor="qtext2">
-          Additional text (optional)
-          {isMultiSubQuestion && (data.sub_question_count ?? 1) > 1 && (
-            <span className="ml-2 text-xs font-normal text-slate-500">
-              (for sub-question {(data.active_sub_question ?? 0) + 1})
-            </span>
-          )}
-        </Label>
+        <Label htmlFor="qtext2">Additional text (Text 2, optional)</Label>
         <WysiwygEditorLite
-          value={getSubText2(data.active_sub_question ?? 0)}
-          onChange={(html) => setSubText2(data.active_sub_question ?? 0, html)}
+          value={data.question_text_2}
+          onChange={(html) => onChange({ ...data, question_text_2: html })}
           minHeight={60}
-          placeholder="Secondary text — typically the actual question based on the media above…"
+          placeholder="Secondary text shown below the media (e.g. the actual question based on the audio/video/passage)…"
         />
       </div>
 
@@ -428,6 +418,27 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
           ) : null;
         })()}
       </div>
+
+      {/* Per-sub-question text — shown before options for each sub-question.
+          Only visible when sub_question_count > 1.
+          Per the Multiple Questions Display Style spec: each sub-question has
+          its own question text + option fields. This is SEPARATE from Text 2. */}
+      {isMultiSubQuestion && (data.sub_question_count ?? 1) > 1 && (
+        <div className="rounded-md border border-blue-200 bg-blue-50/30 p-3">
+          <Label htmlFor="subq_text">
+            Sub-Question {(data.active_sub_question ?? 0) + 1} Text
+            <span className="ml-2 text-xs font-normal text-slate-500">
+              (shown before the options for this sub-question)
+            </span>
+          </Label>
+          <WysiwygEditorLite
+            value={getSubQuestionText(data.active_sub_question ?? 0)}
+            onChange={(html) => setSubQuestionText(data.active_sub_question ?? 0, html)}
+            minHeight={60}
+            placeholder="Enter the text for this sub-question (e.g. 'Which element in an atom is relatively more unstable?')…"
+          />
+        </div>
+      )}
 
       {/* Response Options */}
       <div className="space-y-3">

@@ -122,9 +122,9 @@ export default function QuestionEditorPage() {
   // Multi-sub-question pooling (SRS feedback C-CFG-1)
   const [subQuestionCount, setSubQuestionCount] = useState(1);
   const [activeSubQuestion, setActiveSubQuestion] = useState(0);
-  // Per-sub-question Text 2 list (indexed by sub_question_index).
-  // Index 0 mirrors the shared questionText2 state for backward compat.
-  const [subQuestionText2List, setSubQuestionText2List] = useState<string[]>([]);
+  // Per-sub-question text — shown before options for each sub-question.
+  // Separate from question_text_2 (main question's secondary text).
+  const [subQuestionTexts, setSubQuestionTexts] = useState<string[]>([]);
   const [imageWidth, setImageWidth] = useState(0);
   const [imageHeight, setImageHeight] = useState(0);
   const [gridRows, setGridRows] = useState("3");
@@ -181,7 +181,7 @@ export default function QuestionEditorPage() {
     setHotspotVisibility(q.hotspot_visibility ?? "transparent");
     // Multi-sub-question pooling (SRS feedback C-CFG-1)
     setSubQuestionCount(q.sub_question_count ?? 1);
-    setSubQuestionText2List(q.sub_question_text_2_list ?? []);
+    setSubQuestionTexts(q.sub_question_texts ?? []);
     setActiveSubQuestion(0);
     setCaseSensitive(Boolean(q.case_sensitive));
     setPctThreshold(q.pct_match_threshold != null ? String(q.pct_match_threshold) : "");
@@ -636,15 +636,11 @@ export default function QuestionEditorPage() {
     // Multi-sub-question pooling (SRS feedback C-CFG-1)
     if (isMCQ) {
       payload.sub_question_count = subQuestionCount;
-      // Build the per-sub-question Text 2 list. Index 0 uses the shared
-      // questionText2 state (backward compat), indices 1..N-1 use the
-      // subQuestionText2List state.
-      const text2List = [...subQuestionText2List];
-      // Pad/truncate to subQuestionCount
-      while (text2List.length < subQuestionCount) text2List.push("");
-      text2List.length = subQuestionCount;
-      text2List[0] = questionText2;
-      payload.sub_question_text_2_list = text2List;
+      // Save the per-sub-question texts. Pad/truncate to subQuestionCount.
+      const textsList = [...subQuestionTexts];
+      while (textsList.length < subQuestionCount) textsList.push("");
+      textsList.length = subQuestionCount;
+      payload.sub_question_texts = textsList;
     }
     if (caseSensitive) payload.case_sensitive = true;
     if (pctThreshold) payload.pct_match_threshold = parseFloat(pctThreshold);
@@ -743,7 +739,7 @@ export default function QuestionEditorPage() {
     flashOrder,
     sub_question_count: subQuestionCount,
     active_sub_question: activeSubQuestion,
-    sub_question_text_2_list: subQuestionText2List,
+    sub_question_texts: subQuestionTexts,
   };
 
   const fitbData = {
@@ -856,7 +852,7 @@ export default function QuestionEditorPage() {
                     setDummyOptions([]);
                     setSubQuestionCount(1);
                     setActiveSubQuestion(0);
-                    setSubQuestionText2List([]);
+                    setSubQuestionTexts([]);
                     setScoringType(DEFAULT_SCORING_BY_TYPE[newType] ?? "BINARY");
                   }}
                 >
@@ -970,8 +966,8 @@ export default function QuestionEditorPage() {
                   if (d.active_sub_question !== undefined) {
                     setActiveSubQuestion(d.active_sub_question);
                   }
-                  if (d.sub_question_text_2_list !== undefined) {
-                    setSubQuestionText2List(d.sub_question_text_2_list);
+                  if (d.sub_question_texts !== undefined) {
+                    setSubQuestionTexts(d.sub_question_texts);
                   }
                 }}
               />
