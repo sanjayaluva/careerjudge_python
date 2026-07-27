@@ -696,9 +696,11 @@ export default function SessionPlayerPage() {
         <Button
           variant="outline"
           onClick={handlePrev}
-          disabled={currentIndex === 0 || !canGoBack()}
+          disabled={(currentIndex === 0 && activeSubQ === 0) || (!canGoBack() && activeSubQ === 0)}
           title={
-            !canGoBack() ? "Backward navigation is not allowed for this assessment" : undefined
+            !canGoBack() && activeSubQ === 0
+              ? "Backward navigation is not allowed for this assessment"
+              : undefined
           }
         >
           ← Previous
@@ -712,11 +714,30 @@ export default function SessionPlayerPage() {
           )}
         </p>
         {isLast && !(subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) ? (
-          <Button onClick={handleSubmit} loading={submitMutation.isPending}>
+          <Button
+            onClick={handleSubmit}
+            loading={submitMutation.isPending}
+            disabled={presentationActive}
+            title={
+              presentationActive
+                ? "Answer options will appear after the presentation ends"
+                : undefined
+            }
+          >
             Submit Assessment
           </Button>
         ) : (
-          <Button onClick={handleNext}>Next →</Button>
+          <Button
+            onClick={handleNext}
+            disabled={presentationActive}
+            title={
+              presentationActive
+                ? "Answer options will appear after the presentation ends"
+                : undefined
+            }
+          >
+            Next →
+          </Button>
         )}
       </div>
 

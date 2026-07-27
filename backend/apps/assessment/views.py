@@ -793,11 +793,23 @@ class SessionViewSet(ModelViewSet):
         raw_answer = request.data.get("raw_answer")
         bookmark = request.data.get("bookmark", False)
 
-        attempt = get_object_or_404(
-            QuestionAttempt,
+        # For multi-sub-question questions, the player sends sub_question_index
+        # 0..N-1. Since these are stored as a single AssessmentQuestion (not
+        # auto-expanded), only sub_question_index=0 has a QuestionAttempt
+        # pre-created. For sub-questions 1..N-1, we create the attempt
+        # on-the-fly (get_or_create) so the answer can be saved.
+        attempt, _created = QuestionAttempt.objects.get_or_create(
             session=session,
             question_id=question_id,
             sub_question_index=sub_question_index,
+            defaults={
+                "section": (
+                    session.assessment.sections.first()
+                    if session.assessment.sections.exists()
+                    else None
+                ),
+                "status": "not_attempted",
+            },
         )
 
         if raw_answer is not None:
