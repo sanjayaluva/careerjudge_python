@@ -225,25 +225,35 @@ export default function SessionPlayerPage() {
   const remainingCount = Math.max(0, totalQuestions - answeredCount);
 
   // Determine whether this question has a timed presentation that should
-  // gate Question Text 2 + answer options (SRS feedback Common Issue 4).
+  // gate sub-question text + answer options.
   // Gate is active when:
   //   - Question has flash items (flash types 1e, 1f, 2c, 2d)
   //   - Question has a passage with display_mode='timed' (1g)
   //   - Question is Image Display (1h) with display_duration_seconds set
-  // AND the presentation has not yet finished for this question.
+  //   - Question has audio media files (1c) — audio plays once
+  //   - Question has video media files (1d) — video plays once
   // AND we are on the first sub-question (activeSubQ === 0).
   // Per the Multiple Questions Display Style document: the media is shown
   // only on the first sub-question. Sub-questions 2+ show only sub-question
   // text + options — no media, no gating.
+  const hasAudioMedia = qd.media_files.some((m) => m.media_type === "audio" && m.file);
+  const hasVideoMedia = qd.media_files.some((m) => m.media_type === "video" && m.file);
+  const hasImageDisplay =
+    qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" &&
+    qd.display_duration_seconds != null &&
+    Boolean(qd.image);
+  const hasPassageTimed = qd.passage_title != null && (qd.display_mode ?? "timed") === "timed";
   const subQuestionCount = qd.sub_question_count ?? 1;
   const isFirstSubQ = activeSubQ === 0;
   const hasTimedPresentation =
     isFirstSubQ &&
     (qd.flash_items.length > 0 ||
-      (qd.passage_title != null && (qd.display_mode ?? "timed") === "timed") ||
-      (qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" && qd.display_duration_seconds != null));
-  // Presentation is active (gating Text2 + options) only on sub-question 0
-  // AND only until the media presentation ends.
+      hasPassageTimed ||
+      hasImageDisplay ||
+      hasAudioMedia ||
+      hasVideoMedia);
+  // Presentation is active (gating sub-question text + options) only on
+  // sub-question 0 AND only until the media presentation ends.
   // Requirement 2: sub-question text/options must appear only AFTER content
   // presentation is over — not on a separate timer.
   const presentationActive =
@@ -682,6 +692,16 @@ export default function SessionPlayerPage() {
                   <p className="text-sm text-slate-500">
                     Answer options will be available after the presentation ends.
                   </p>
+                  {/* Fallback: allow skipping the presentation if the media
+                      fails to load or the candidate wants to skip. */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => setPresentationDone((prev) => new Set(prev).add(qd.id))}
+                  >
+                    Skip Presentation
+                  </Button>
                 </div>
               ) : (
                 <AnswerInput
