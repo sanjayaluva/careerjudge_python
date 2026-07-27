@@ -539,7 +539,11 @@ export default function SessionPlayerPage() {
               {/* Media (flash, passage, image, audio, video) — shown ONLY on
                   the first sub-question. Per the Multiple Questions Display
                   Style document: after the media phase ends, the media +
-                  button disappear entirely. Sub-questions 2+ show no media. */}
+                  button disappear entirely. Sub-questions 2+ show no media.
+                  Per Requirement 2 & 3: the content is hidden initially with
+                  a 'Show Content' button. Text2 is shown below (in the same
+                  frame) from the start. Only sub-question text + options are
+                  gated until the content presentation ends. */}
               {isFirstSubQ && (
                 <>
                   {/* Flash items — interactive simulation.
@@ -577,16 +581,18 @@ export default function SessionPlayerPage() {
                     />
                   )}
 
-                  {/* Question image — larger per SRS feedback Common Issue 6.
-                      For Image Display (1h) questions with a display_duration,
-                      render the timed play button variant. */}
-                  {qd.image &&
-                  qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" &&
-                  qd.display_duration_seconds ? (
+                  {/* Question image.
+                      For Image Display (1h) questions, ALWAYS use the timed
+                      display with a 'Show Content' button — even if
+                      display_duration_seconds is not set (default to 30s).
+                      Per Requirement 3: image must be hidden at first,
+                      show button to display it, timer runs, then image
+                      disappears. */}
+                  {qd.image && qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" ? (
                     <ImageDisplayTimed
                       key={`img-${qd.id}`}
                       imageUrl={qd.image}
-                      durationSeconds={qd.display_duration_seconds}
+                      durationSeconds={qd.display_duration_seconds ?? 30}
                       replayMode={qd.replay_mode ?? "not_permitted"}
                       hasBeenViewed={viewedQuestions.has(qd.id)}
                       onPresentationEnd={() =>
@@ -637,22 +643,15 @@ export default function SessionPlayerPage() {
                   the audio/video/passage/image per SRS feedback Common Issue 2).
                   Rendered as HTML to support rich-text formatting.
                   This is the MAIN question's Text 2 — shared across all
-                  sub-questions. Shown only on sub-question 0 (after media).
-                  GATED: hidden until the timed presentation is over
-                  (SRS feedback Common Issue 4 + Requirement 2: sub-question
-                  text/options must appear only AFTER content presentation). */}
-              {qd.question_text_2 && isFirstSubQ && !presentationActive && (
+                  sub-questions. Shown only on sub-question 0.
+                  Per Requirement 2: Text2 is shown from the start (in the same
+                  frame as Text1 + hidden content). It is NOT gated — only the
+                  sub-question text + options are gated until content ends. */}
+              {qd.question_text_2 && isFirstSubQ && (
                 <div
                   className="prose prose-sm mb-4 mt-4 max-w-none text-sm text-slate-600"
                   dangerouslySetInnerHTML={{ __html: qd.question_text_2 }}
                 />
-              )}
-              {qd.question_text_2 && isFirstSubQ && presentationActive && (
-                <div className="mb-4 mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-center">
-                  <p className="text-sm text-amber-700">
-                    The question and answer options will appear after the presentation is over.
-                  </p>
-                </div>
               )}
 
               {/* Per-sub-question text — shown before the options for each
@@ -660,7 +659,9 @@ export default function SessionPlayerPage() {
                   text). Per the Multiple Questions Display Style spec: each
                   sub-question has its own question text + option fields.
                   GATED on sub-question 0 (until media ends). Not gated on
-                  sub-questions 2+ (no media to wait for). */}
+                  sub-questions 2+ (no media to wait for).
+                  Per Requirement 2: sub-question text + options appear only
+                  AFTER content presentation is over. */}
               {subQuestionText && !(isFirstSubQ && presentationActive) && (
                 <div
                   className="prose prose-sm mb-4 max-w-none text-base font-medium text-slate-900"

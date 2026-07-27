@@ -606,6 +606,10 @@ function QuestionAssignmentTab({
       void queryClient.invalidateQueries({
         queryKey: ["assessment-section-questions", assessmentId, selectedSectionId],
       });
+      // Also refresh readiness + assessment detail so the Overview tab
+      // validation errors update immediately (Issue 5).
+      void queryClient.invalidateQueries({ queryKey: ["assessments", assessmentId] });
+      void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", assessmentId] });
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -616,6 +620,9 @@ function QuestionAssignmentTab({
       void queryClient.invalidateQueries({
         queryKey: ["assessment-section-questions", assessmentId, selectedSectionId],
       });
+      // Also refresh readiness + assessment detail (Issue 5).
+      void queryClient.invalidateQueries({ queryKey: ["assessments", assessmentId] });
+      void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", assessmentId] });
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
