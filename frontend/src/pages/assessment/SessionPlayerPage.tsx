@@ -499,6 +499,7 @@ export default function SessionPlayerPage() {
                       <button
                         key={i}
                         onClick={() => {
+                          if (presentationActive) return;
                           // Save current answer before jumping to a different question
                           const currentAnswer = answers[answerKey];
                           if (currentAnswer && i !== currentIndex) {
@@ -509,7 +510,11 @@ export default function SessionPlayerPage() {
                           }
                           setCurrentIndex(i);
                         }}
-                        title={`Question ${i + 1}`}
+                        title={
+                          presentationActive
+                            ? "Wait for the presentation to finish before navigating"
+                            : `Question ${i + 1}`
+                        }
                         className={`h-7 w-7 rounded-md text-xs font-medium transition-colors ${
                           isCurrent
                             ? "bg-primary-600 text-white"
@@ -518,7 +523,7 @@ export default function SessionPlayerPage() {
                               : isBookmarked
                                 ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
                                 : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                        }`}
+                        } ${presentationActive ? "cursor-not-allowed opacity-50" : ""}`}
                       >
                         {i + 1}
                       </button>
@@ -722,11 +727,17 @@ export default function SessionPlayerPage() {
         <Button
           variant="outline"
           onClick={handlePrev}
-          disabled={(currentIndex === 0 && activeSubQ === 0) || (!canGoBack() && activeSubQ === 0)}
+          disabled={
+            presentationActive ||
+            (currentIndex === 0 && activeSubQ === 0) ||
+            (!canGoBack() && activeSubQ === 0)
+          }
           title={
-            !canGoBack() && activeSubQ === 0
-              ? "Backward navigation is not allowed for this assessment"
-              : undefined
+            presentationActive
+              ? "Wait for the presentation to finish before navigating"
+              : !canGoBack() && activeSubQ === 0
+                ? "Backward navigation is not allowed for this assessment"
+                : undefined
           }
         >
           ← Previous
