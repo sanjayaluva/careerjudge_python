@@ -1989,9 +1989,21 @@ function ImageDisplayTimed({
 
 // ---------------------------------------------------------------------------
 // AudioPlayerControlled — audio player that respects replay_mode.
-// If replay_mode='not_permitted', audio plays once and cannot be replayed.
-// On revisit (Previous button), the audio player is locked.
-// SRS feedback §3 Issue 2 + Recommendation 2.
+//
+// For replay_mode='not_permitted':
+//   - Shows a 'Click to Play Audio' button instead of native player controls
+//   - Clicking starts playback; the audio plays once from start to end
+//   - No seeking/rewinding — the seekbar is disabled
+//   - No download — controlsList='nodownload' + context menu disabled
+//   - After playback ends, the player disappears and onPresentationEnd fires
+//   - On revisit (Previous button), audio is locked entirely
+//
+// For replay_mode='permitted':
+//   - Shows the 'Click to Play Audio' button (same UX for consistency)
+//   - After playback ends, a 'Play Again' button appears
+//   - Still no download
+//
+// SRS feedback §3 Issue 2 + Recommendation 2 + anti-cheating controls.
 // ---------------------------------------------------------------------------
 
 function AudioPlayerControlled({
@@ -2007,12 +2019,45 @@ function AudioPlayerControlled({
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [hasPlayed, setHasPlayed] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const replayLocked = hasBeenViewed && replayMode === "not_permitted";
 
   const handleEnded = () => {
     setHasPlayed(true);
+    setIsPlaying(false);
     if (onPresentationEnd) onPresentationEnd();
+  };
+
+  const startPlayback = () => {
+    if (audioRef.current) {
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
+  // Block seeking — prevents the candidate from rewinding or scrubbing
+  const handleSeeking = () => {
+    if (replayMode === "not_permitted" && audioRef.current) {
+      // If the candidate tries to seek backwards, force back to current position
+      const audio = audioRef.current;
+      const lastTime = (audio as unknown as { _lastTime?: number })._lastTime ?? 0;
+      if (audio.currentTime < lastTime) {
+        audio.currentTime = lastTime;
+      }
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      (audioRef.current as unknown as { _lastTime?: number })._lastTime =
+        audioRef.current.currentTime;
+    }
+  };
+
+  // Block context menu (right-click → "Save audio as...")
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
   };
 
   if (replayLocked) {
@@ -2025,27 +2070,74 @@ function AudioPlayerControlled({
     );
   }
 
+  // Not-permitted mode after playback — show "already played" message
+  if (hasPlayed && replayMode === "not_permitted") {
+    return (
+      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+        <p className="text-sm text-slate-600">Audio has been played. Replay is not permitted.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
       <p className="mb-2 text-xs font-medium text-slate-500">
-        Audio {replayMode === "not_permitted" ? "(plays once — no replay)" : "(replay permitted)"}:
+        Audio {replayMode === "not_permitted" ? "(plays once — no replay)" : "(replay permitted)"}
       </p>
+
+      {/* Hidden audio element — no native controls shown.
+          We control playback via the button below. */}
       <audio
         ref={audioRef}
-        controls
         src={fileUrl}
         onEnded={handleEnded}
-        className="w-full"
-        // Hide the seek bar when replay is not permitted — candidate can play
-        // once from start to end, no scrubbing.
-        style={
-          replayMode === "not_permitted" && hasPlayed ? { pointerEvents: "none", opacity: 0.5 } : {}
-        }
+        onSeeking={handleSeeking}
+        onTimeUpdate={handleTimeUpdate}
+        onContextMenu={handleContextMenu}
+        controlsList="nodownload noplaybackrate"
+        preload="auto"
+        className="hidden"
       >
         Your browser does not support audio playback.
       </audio>
-      {replayMode === "not_permitted" && hasPlayed && (
-        <p className="mt-1 text-xs text-amber-700">Audio has been played. Replay is disabled.</p>
+
+      {/* Show Content / Play button — centred, prominent */}
+      {!isPlaying && !hasPlayed && (
+        <div className="flex flex-col items-center gap-3 py-4">
+          <Button size="lg" className="h-16 w-16 rounded-full text-2xl" onClick={startPlayback}>
+            ▶
+          </Button>
+          <p className="text-xs text-slate-500">Click to play the audio</p>
+        </div>
+      )}
+
+      {/* While playing — show a progress indicator (no seekbar) */}
+      {isPlaying && (
+        <div className="flex items-center gap-2 py-3">
+          <span className="text-sm text-slate-600">Playing audio…</span>
+          <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className="h-full animate-pulse rounded-full bg-primary-500"
+              style={{ width: "60%" }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Permitted mode after playback — show "Play Again" button */}
+      {hasPlayed && replayMode === "permitted" && (
+        <div className="flex flex-col items-center gap-2 py-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setHasPlayed(false);
+              startPlayback();
+            }}
+          >
+            ↻ Play Again
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -2053,7 +2145,7 @@ function AudioPlayerControlled({
 
 // ---------------------------------------------------------------------------
 // VideoPlayerControlled — video player that respects replay_mode.
-// Same logic as AudioPlayerControlled.
+// Same logic as AudioPlayerControlled but with a visible video area.
 // ---------------------------------------------------------------------------
 
 function VideoPlayerControlled({
@@ -2069,12 +2161,43 @@ function VideoPlayerControlled({
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [hasPlayed, setHasPlayed] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const replayLocked = hasBeenViewed && replayMode === "not_permitted";
 
   const handleEnded = () => {
     setHasPlayed(true);
+    setIsPlaying(false);
     if (onPresentationEnd) onPresentationEnd();
+  };
+
+  const startPlayback = () => {
+    if (videoRef.current) {
+      videoRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
+  // Block seeking
+  const handleSeeking = () => {
+    if (replayMode === "not_permitted" && videoRef.current) {
+      const video = videoRef.current;
+      const lastTime = (video as unknown as { _lastTime?: number })._lastTime ?? 0;
+      if (video.currentTime < lastTime) {
+        video.currentTime = lastTime;
+      }
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      (videoRef.current as unknown as { _lastTime?: number })._lastTime =
+        videoRef.current.currentTime;
+    }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
   };
 
   if (replayLocked) {
@@ -2087,25 +2210,64 @@ function VideoPlayerControlled({
     );
   }
 
+  if (hasPlayed && replayMode === "not_permitted") {
+    return (
+      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+        <p className="text-sm text-slate-600">Video has been played. Replay is not permitted.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
       <p className="mb-2 text-xs font-medium text-slate-500">
-        Video {replayMode === "not_permitted" ? "(plays once — no replay)" : "(replay permitted)"}:
+        Video {replayMode === "not_permitted" ? "(plays once — no replay)" : "(replay permitted)"}
       </p>
-      <video
-        ref={videoRef}
-        controls
-        src={fileUrl}
-        onEnded={handleEnded}
-        className="max-h-80 w-full rounded"
-        style={
-          replayMode === "not_permitted" && hasPlayed ? { pointerEvents: "none", opacity: 0.5 } : {}
-        }
-      >
-        Your browser does not support video playback.
-      </video>
-      {replayMode === "not_permitted" && hasPlayed && (
-        <p className="mt-1 text-xs text-amber-700">Video has been played. Replay is disabled.</p>
+
+      {/* Video element — no controls shown for not_permitted mode.
+          We control playback via the button below. */}
+      <div className="relative overflow-hidden rounded">
+        <video
+          ref={videoRef}
+          src={fileUrl}
+          onEnded={handleEnded}
+          onSeeking={handleSeeking}
+          onTimeUpdate={handleTimeUpdate}
+          onContextMenu={handleContextMenu}
+          controlsList="nodownload noplaybackrate"
+          controls={replayMode === "permitted"}
+          playsInline
+          preload="auto"
+          className={`w-full rounded ${isPlaying || hasPlayed ? "block" : "hidden"} max-h-80`}
+        >
+          Your browser does not support video playback.
+        </video>
+
+        {/* Show Content / Play button — overlaid on the video area */}
+        {!isPlaying && !hasPlayed && (
+          <div className="flex h-48 flex-col items-center justify-center gap-3 rounded border border-slate-200 bg-slate-100">
+            <Button size="lg" className="h-16 w-16 rounded-full text-2xl" onClick={startPlayback}>
+              ▶
+            </Button>
+            <p className="text-xs text-slate-500">Click to play the video</p>
+          </div>
+        )}
+      </div>
+
+      {/* Permitted mode after playback — show "Play Again" button */}
+      {hasPlayed && replayMode === "permitted" && (
+        <div className="mt-3 flex flex-col items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setHasPlayed(false);
+              startPlayback();
+            }}
+          >
+            ↻ Play Again
+          </Button>
+        </div>
       )}
     </div>
   );
