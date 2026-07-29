@@ -236,8 +236,12 @@ export default function SessionPlayerPage() {
   // Per the Multiple Questions Display Style document: the media is shown
   // only on the first sub-question. Sub-questions 2+ show only sub-question
   // text + options — no media, no gating.
-  const hasAudioMedia = qd.media_files.some((m) => m.media_type === "audio" && m.file);
-  const hasVideoMedia = qd.media_files.some((m) => m.media_type === "video" && m.file);
+  const hasAudioMedia = qd.media_files.some(
+    (m) => m.media_type.toUpperCase() === "AUDIO" && m.file,
+  );
+  const hasVideoMedia = qd.media_files.some(
+    (m) => m.media_type.toUpperCase() === "VIDEO" && m.file,
+  );
   const hasImageDisplay =
     qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" &&
     qd.display_duration_seconds != null &&
@@ -624,7 +628,7 @@ export default function SessionPlayerPage() {
 
                   {/* Audio player (for MCQ_AUDIO_MULTI 1c). */}
                   {qd.media_files
-                    .filter((m) => m.media_type === "audio")
+                    .filter((m) => m.media_type.toUpperCase() === "AUDIO")
                     .map((media) => (
                       <AudioPlayerControlled
                         key={`audio-${media.id}`}
@@ -639,7 +643,7 @@ export default function SessionPlayerPage() {
 
                   {/* Video player (for MCQ_VIDEO_MULTI 1d). */}
                   {qd.media_files
-                    .filter((m) => m.media_type === "video")
+                    .filter((m) => m.media_type.toUpperCase() === "VIDEO")
                     .map((media) => (
                       <VideoPlayerControlled
                         key={`video-${media.id}`}
