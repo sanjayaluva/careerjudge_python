@@ -34,6 +34,7 @@ export default function SessionPlayerPage() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [questionTimeLeft, setQuestionTimeLeft] = useState<number | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   // Tracks question IDs the candidate has already viewed (visited + navigated
   // away from). Used to lock flash/passage/image replay on revisit
   // (SRS feedback Common Issue 5).
@@ -132,7 +133,10 @@ export default function SessionPlayerPage() {
       void queryClient.invalidateQueries({ queryKey: ["assessment-session", sid] });
       navigate(`/assessments/sessions/${sid}/results`);
     },
-    onError: (err) => toast.error(extractApiError(err)),
+    onError: (err) => {
+      setIsSubmitting(false);
+      toast.error(extractApiError(err));
+    },
   });
 
   const suspendMutation = useMutation({
@@ -355,6 +359,7 @@ export default function SessionPlayerPage() {
 
   const performSubmit = async () => {
     setShowSubmitConfirm(false);
+    setIsSubmitting(true);
 
     // Save ALL answers before submitting. The local `answers` state may have
     // unsaved changes — especially for the last question (the user answers
@@ -689,23 +694,15 @@ export default function SessionPlayerPage() {
               )}
 
               {/* Answer input area — by question type.
-                  GATED: hidden until the timed presentation is over
-                  (SRS feedback Common Issue 4). */}
+                  GATED: hidden until the timed presentation is over.
+                  No skip button — the candidate must play the content
+                  via the 'Show Content' button and wait for it to end.
+                  Only then do the sub-questions appear. */}
               {presentationActive ? (
                 <div className="rounded-md border border-slate-200 bg-slate-50 p-6 text-center">
                   <p className="text-sm text-slate-500">
                     Answer options will be available after the presentation ends.
                   </p>
-                  {/* Fallback: allow skipping the presentation if the media
-                      fails to load or the candidate wants to skip. */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => setPresentationDone((prev) => new Set(prev).add(qd.id))}
-                  >
-                    Skip Presentation
-                  </Button>
                 </div>
               ) : (
                 <AnswerInput
@@ -796,6 +793,23 @@ export default function SessionPlayerPage() {
           </Button>
         </div>
       </Modal>
+
+      {/* Submitting overlay — shows while answers are being saved and
+          the session is being submitted. Gives the user visual feedback
+          that the submission is in progress. */}
+      {isSubmitting && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
+          <div className="rounded-lg bg-white p-8 shadow-xl">
+            <div className="flex flex-col items-center gap-4">
+              <Spinner size="lg" />
+              <p className="text-sm font-medium text-slate-700">Submitting your assessment…</p>
+              <p className="text-xs text-slate-500">
+                Saving answers and calculating scores. Please do not close this page.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
