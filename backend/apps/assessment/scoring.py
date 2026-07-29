@@ -662,6 +662,13 @@ def calculate_session_scores(session):
     Called when a session is submitted. Iterates all QuestionAttempts,
     scores each one, then aggregates into SectionScores and session totals.
 
+    For multi-sub-question questions: the parent question is a wrapper
+    with no score of its own. Each sub-question has its own
+    QuestionAttempt (sub_question_index 0..N-1), scored independently
+    (0 or 1 for binary MCQ). The section total is the sum of all
+    sub-question scores. Unattempted sub-questions get placeholder
+    attempts with score=0 so the max_score is correct.
+
     Per SRS 03_assessment_configuration.json §3.2 (Score Summation Rules):
       - Question level scores are added up for Level4-Summary Score
       - Level4-summary scores are added up for Level3-Summary Score
@@ -672,15 +679,35 @@ def calculate_session_scores(session):
     assessment's hierarchy — leaf sections get direct question scores,
     parent sections get the sum of their children's scores.
     """
-    from .models import AssessmentSection, SectionScore
+    # ── Step 0: Ensure all sub-question attempts exist ──
+    # For multi-sub-question questions, create placeholder attempts
+    # for any sub-questions the candidate didn't answer. This ensures
+    # the max_score reflects ALL sub-questions (e.g., 5), not just the
+    # ones the candidate attempted (e.g., 3).
+    from .models import AssessmentQuestion, AssessmentSection, QuestionAttempt, SectionScore
+
+    for aq in AssessmentQuestion.objects.filter(
+        section__assessment=session.assessment
+    ).select_related("question"):
+        question = aq.question
+        n_subs = getattr(question, "sub_question_count", 1) or 1
+        if n_subs > 1:
+            for sqi in range(n_subs):
+                QuestionAttempt.objects.get_or_create(
+                    session=session,
+                    question=question,
+                    sub_question_index=sqi,
+                    defaults={
+                        "section": aq.section,
+                        "status": "not_attempted",
+                    },
+                )
 
     attempts = session.question_attempts.select_related("question", "section").all()
 
     # ── Step 1: Score each attempt and aggregate by leaf section ──
     # Build a lookup of AssessmentQuestion overrides so we can apply
     # score_override if the author set a custom max score per question.
-    from .models import AssessmentQuestion
-
     override_map: dict[tuple[int, int], float] = {}
     for aq in AssessmentQuestion.objects.filter(
         section__assessment=session.assessment,
