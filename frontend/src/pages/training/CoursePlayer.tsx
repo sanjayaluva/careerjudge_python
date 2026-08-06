@@ -35,6 +35,7 @@ import {
   getProgressSummary,
   listAssignmentReports,
   listMyCourses,
+  listProgress,
   submitAssignmentReport,
   submitAssignmentReportFile,
   updateProgress,
@@ -101,6 +102,31 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
   // Current content index (for sequential navigation)
   const [currentIdx, setCurrentIdx] = useState(0);
   const current = flatContent[currentIdx];
+
+  // Report 3 §5.1: content sequencing. When enforce_sequence is on, the
+  // candidate must complete each content in order before advancing.
+  const enforceSequence = course.enforce_sequence;
+  const { data: progressRecords } = useQuery({
+    queryKey: ["training", "progress-records", registration?.id],
+    queryFn: () => listProgress(registration!.id),
+    enabled: !!registration && enforceSequence,
+  });
+  // Set of completed session_content IDs (only relevant when enforcing).
+  const completedContentIds = new Set(
+    (progressRecords ?? [])
+      .filter((p) => p.content_type === "session_content" && p.is_completed)
+      .map((p) => p.content_id),
+  );
+  const currentCompleted = current ? completedContentIds.has(current.content.id) : false;
+  // A content item is unlocked if sequencing is off, or it's the first
+  // incomplete content, or it's already completed.
+  const isUnlocked = (idx: number) => {
+    if (!enforceSequence) return true;
+    if (idx === 0) return true;
+    // Unlocked if the previous content is completed
+    const prev = flatContent[idx - 1];
+    return completedContentIds.has(prev.content.id);
+  };
 
   if (!registration) {
     return (
@@ -192,11 +218,23 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
                 </span>
                 <Button
                   onClick={() => setCurrentIdx(Math.min(flatContent.length - 1, currentIdx + 1))}
-                  disabled={currentIdx === flatContent.length - 1}
+                  disabled={
+                    currentIdx === flatContent.length - 1 || (enforceSequence && !currentCompleted)
+                  }
+                  title={
+                    enforceSequence && !currentCompleted
+                      ? "Complete this content to unlock the next (sequential mode)"
+                      : undefined
+                  }
                 >
                   Next →
                 </Button>
               </div>
+              {enforceSequence && !currentCompleted && (
+                <p className="mt-2 text-xs text-amber-600">
+                  Sequential mode: mark this content as completed to unlock the next.
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -219,20 +257,33 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
             </CardHeader>
             <CardContent>
               <div className="max-h-96 space-y-1 overflow-y-auto">
-                {flatContent.map((item, idx) => (
-                  <button
-                    key={item.content.id}
-                    onClick={() => setCurrentIdx(idx)}
-                    className={`block w-full rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                      idx === currentIdx ? "bg-primary-50 text-primary-900" : "hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className="font-medium">{item.content.title}</div>
-                    <div className="text-slate-400">
-                      {item.lessonTitle} → {item.sessionTitle}
-                    </div>
-                  </button>
-                ))}
+                {flatContent.map((item, idx) => {
+                  const locked = enforceSequence && !isUnlocked(idx);
+                  const completed = completedContentIds.has(item.content.id);
+                  return (
+                    <button
+                      key={item.content.id}
+                      onClick={() => !locked && setCurrentIdx(idx)}
+                      disabled={locked}
+                      className={`block w-full rounded-md px-3 py-2 text-left text-xs transition-colors ${
+                        idx === currentIdx
+                          ? "bg-primary-50 text-primary-900"
+                          : locked
+                            ? "cursor-not-allowed text-slate-300"
+                            : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-medium">
+                        <span>{item.content.title}</span>
+                        {completed && <span className="text-emerald-500">✓</span>}
+                        {locked && <span title="Locked">🔒</span>}
+                      </div>
+                      <div className="text-slate-400">
+                        {item.lessonTitle} → {item.sessionTitle}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -328,6 +379,9 @@ function ContentPlayer({
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["training", "progress-summary", registrationId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["training", "progress-records", registrationId],
       });
     },
   });
