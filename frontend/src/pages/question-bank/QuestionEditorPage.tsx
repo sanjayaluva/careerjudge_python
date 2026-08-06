@@ -784,20 +784,23 @@ export default function QuestionEditorPage() {
     hotspot_visibility: hotspotVisibility,
   };
 
-  const rankData = { question_text_1: questionText1, options };
+  const rankData = { question_text_1: questionText1, question_text_2: questionText2, options };
   const rankRateData = {
     question_text_1: questionText1,
+    question_text_2: questionText2,
     rating_scale_points: ratingScalePoints,
     options,
   };
   const ratingData = {
     question_text_1: questionText1,
+    question_text_2: questionText2,
     rating_scale_points: ratingScalePoints,
     rating_direction: ratingDirection,
     scaleLabels,
   };
   const forcedChoiceData = {
     question_text_1: questionText1,
+    question_text_2: questionText2,
     rating_scale_points: ratingScalePoints,
     options,
   };

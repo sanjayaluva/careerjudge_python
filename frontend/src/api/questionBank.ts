@@ -56,6 +56,12 @@ export interface ResponseOption {
   is_correct: boolean;
   match_pair_id: number | null;
   predefined_score: number;
+  /** Psychometric: the profile variable / section this option feeds into. */
+  section_tag: string;
+  /** Forced-choice: score when this option is SELECTED. */
+  selection_score: number;
+  /** Forced-choice: score when this option is NOT selected. */
+  non_selection_score: number;
   order: number;
   correct_answers: { id: number; answer_text: string; order: number }[];
 }
