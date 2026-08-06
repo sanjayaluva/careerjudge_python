@@ -232,6 +232,50 @@ def test_non_scheduled_course_leaves_started_at_null(student_client, individual_
     assert reg.started_at is None
 
 
+def test_registration_captures_registration_form_snapshot(
+    student_client, individual_user, trainer_user
+):
+    """Report 3 §1.1: registration stores a form snapshot (profile-prefilled
+    + extra answers)."""
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    resp = student_client.post(
+        f"/api/training/courses/{course.id}/register/",
+        {"extra_answers": {"goal": "career switch", "experience": "3 years"}},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    reg = CourseRegistration.objects.get(course=course, student=individual_user)
+    assert reg.registration_form["email"] == individual_user.email
+    assert reg.registration_form["full_name"] == individual_user.full_name
+    assert reg.registration_form["extra_answers"]["goal"] == "career switch"
+
+
+def test_registration_creates_payment_record(student_client, individual_user, trainer_user):
+    """Report 3 §1.3: paid-course registration creates a Payment record."""
+    from apps.payments.models import Payment
+
+    course = TrainingCourse.objects.create(
+        title="Paid", created_by=trainer_user, status="published", price="49.99"
+    )
+    resp = student_client.post(f"/api/training/courses/{course.id}/register/")
+    assert resp.status_code == 201
+    assert Payment.objects.filter(
+        user=individual_user, module="training", item_id=course.id
+    ).exists()
+
+
+def test_registration_notifies_trainer(student_client, individual_user, trainer_user):
+    """Report 3 §1.2/§1.5: successful registration fires a notification to
+    the course trainer."""
+    from apps.notifications.models import Notification
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    student_client.post(f"/api/training/courses/{course.id}/register/")
+    assert Notification.objects.filter(
+        recipient=trainer_user, title__contains="New registration"
+    ).exists()
+
+
 def test_my_courses_returns_only_own_registrations(
     student_client, individual_user, trainer_user, db
 ):
@@ -474,16 +518,107 @@ def test_trainer_reviews_report(trainer_client, trainer_user, individual_user):
 
     resp = trainer_client.post(
         f"/api/training/registrations/{reg.id}/review-report/",
-        {"report_id": report.id, "trainer_score": 85, "trainer_feedback": "Good work"},
+        {"report_id": report.id, "trainer_score": 8.5, "trainer_feedback": "Good work"},
         format="json",
     )
     assert resp.status_code == 200, f"Got {resp.status_code}: {resp.data}"
     report.refresh_from_db()
     assert report.status == "reviewed"
-    assert report.trainer_score == 85
+    assert report.trainer_score == 8.5
     assert report.trainer_feedback == "Good work"
     assert report.reviewed_by == trainer_user
     assert report.reviewed_at is not None
+
+
+def test_trainer_review_rejects_score_above_10(trainer_client, trainer_user, individual_user):
+    """Report 3 §3.8: trainer rating is on a 0-10 scale."""
+    from apps.training.models import (
+        Assignment,
+        AssignmentReport,
+        CourseLesson,
+        LessonTopic,
+        TopicSession,
+    )
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="T1", order=1)
+    session = TopicSession.objects.create(topic=topic, title="S1", order=1)
+    assignment = Assignment.objects.create(
+        session=session, title="A1", report_submission_enabled=True
+    )
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    report = AssignmentReport.objects.create(
+        assignment=assignment, student=individual_user, report_text="content"
+    )
+
+    resp = trainer_client.post(
+        f"/api/training/registrations/{reg.id}/review-report/",
+        {"report_id": report.id, "trainer_score": 85},
+        format="json",
+    )
+    assert resp.status_code == 400
+    assert resp.data["error"]["code"] == "validation_error"
+
+
+def test_submission_after_deadline_requires_approval(
+    trainer_client, trainer_user, student_client, individual_user
+):
+    """Report 3 §3.3: after the deadline, submission is blocked unless the
+    trainer approves a late submission."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.training.models import (
+        Assignment,
+        CourseLesson,
+        LessonTopic,
+        TopicSession,
+    )
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="T1", order=1)
+    session = TopicSession.objects.create(topic=topic, title="S1", order=1)
+    # Deadline already passed
+    assignment = Assignment.objects.create(
+        session=session,
+        title="A1",
+        report_submission_enabled=True,
+        submission_deadline=timezone.now() - timedelta(hours=1),
+    )
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+
+    # 1) Student cannot submit after the deadline
+    resp = student_client.post(
+        f"/api/training/registrations/{reg.id}/assignment_reports/",
+        {"assignment": assignment.id, "report_text": "late"},
+        format="json",
+    )
+    assert resp.status_code == 403
+    assert resp.data["error"]["code"] == "deadline_passed"
+
+    # 2) Trainer approves late submission
+    from apps.training.models import AssignmentReport
+
+    report = AssignmentReport.objects.create(
+        assignment=assignment, student=individual_user, report_text=""
+    )
+    resp = trainer_client.post(
+        f"/api/training/registrations/{reg.id}/approve-late-submission/",
+        {"report_id": report.id},
+        format="json",
+    )
+    assert resp.status_code == 200
+
+    # 3) Now the student can submit
+    resp = student_client.post(
+        f"/api/training/registrations/{reg.id}/assignment_reports/",
+        {"assignment": assignment.id, "report_text": "late content"},
+        format="json",
+    )
+    assert resp.status_code in (200, 201), resp.data
 
 
 def test_student_cannot_review_report(student_client, individual_user, trainer_user):

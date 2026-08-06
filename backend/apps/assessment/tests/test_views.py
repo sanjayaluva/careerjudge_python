@@ -338,6 +338,23 @@ class TestAssessmentVisibilityFiltering(AssessmentViewTestBase):
         assert "Published A" in titles
         assert "Draft A" not in titles
 
+    def test_trainer_sees_own_and_published_only(self):
+        """Report 3 §4.2: trainers see published assessments + their OWN
+        (created_by=trainer), but NOT other trainers' drafts or the full pool."""
+        trainer = UserFactory.create(role=get_or_create_role("trainer", is_system=True))
+        grant_assessment_perms(trainer, actions=("view", "add", "change", "delete"))
+        # Trainer's own draft
+        own_draft = Assessment.objects.create(title="My Draft", status="draft", created_by=trainer)
+        self.client.force_authenticate(user=trainer)
+        resp = self.client.get("/api/assessments/")
+        data = resp.json()["data"]
+        results = data.get("results", data) if isinstance(data, dict) else data
+        titles = [r["title"] for r in results]
+        assert "Published A" in titles  # published (not owned) — visible
+        assert "My Draft" in titles  # own draft — visible
+        assert "Draft A" not in titles  # someone else's draft — hidden
+        assert "Archived A" not in titles  # not owned — hidden
+
 
 class TestPsychometricianAssessmentAccess(AssessmentViewTestBase):
     """Per SRS UC029 'Prepare Assessment Blueprint', the psychometrician is the

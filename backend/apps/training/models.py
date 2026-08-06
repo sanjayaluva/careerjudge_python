@@ -103,6 +103,18 @@ class TrainingCourse(models.Model):
 
     status = models.CharField(_("status"), max_length=20, choices=STATUS_CHOICES, default="draft")
 
+    # Report 3 §5.1: content sequencing. When True, the candidate must
+    # complete contents in their structured order and cannot skip ahead.
+    # When False, free navigation (any session/topic/lesson at will).
+    enforce_sequence = models.BooleanField(
+        _("enforce content sequence"),
+        default=False,
+        help_text=_(
+            "If True, candidates must complete contents in sequential order "
+            "and cannot skip ahead (SRS §2.4.1.2). If False, free navigation."
+        ),
+    )
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -247,6 +259,23 @@ class Assignment(models.Model):
     resource_url = models.URLField(_("resource URL"), blank=True, default="")
     # Whether students can submit a report for this assignment
     report_submission_enabled = models.BooleanField(_("report submission enabled"), default=False)
+    # Report 3 §3.4: mandatory vs optional report submission.
+    is_report_mandatory = models.BooleanField(
+        _("report submission mandatory"),
+        default=False,
+        help_text=_(
+            "If True, the candidate cannot advance past this assignment's "
+            "session until the report is submitted and reviewed (SRS §2.3.2)."
+        ),
+    )
+    # Report 3 §3.3: last date for assignment submission. After the deadline,
+    # a candidate cannot submit without trainer permission.
+    submission_deadline = models.DateTimeField(
+        _("submission deadline"),
+        null=True,
+        blank=True,
+        help_text=_("After this datetime, submission requires trainer approval."),
+    )
     report_instructions = models.TextField(_("report instructions"), blank=True, default="")
     order = models.PositiveIntegerField(_("order"), default=0)
 
@@ -418,6 +447,18 @@ class CourseRegistration(models.Model):
         choices=COMPLETION_STATUS_CHOICES,
         default="not_started",
     )
+    # Report 3 §1.1: registration form fields (prefilled from the user's
+    # profile at registration time). Stored as JSON so the form is flexible
+    # and the recorded snapshot is preserved even if the profile changes later.
+    registration_form = models.JSONField(
+        _("registration form"),
+        default=dict,
+        blank=True,
+        help_text=_(
+            "Snapshot of registration-form answers (prefilled from profile + "
+            "any extra answers the candidate provided) at registration time."
+        ),
+    )
     # For scheduled courses: the start time from which duration countdown begins
     started_at = models.DateTimeField(_("started at"), null=True, blank=True)
     completed_at = models.DateTimeField(_("completed at"), null=True, blank=True)
@@ -496,6 +537,21 @@ class AssignmentReport(models.Model):
         blank=True,
         default="",
         help_text=_("URL or base64 data URL of the uploaded report file"),
+    )
+    # Report 3 §3.6: real file upload (PDF/PPT/Word) for formal reports.
+    report_file = models.FileField(
+        _("report file upload"),
+        upload_to="assignment_reports/",
+        null=True,
+        blank=True,
+        help_text=_("Uploaded report file (PDF, PPT, Word, etc.)."),
+    )
+    # Report 3 §3.3: trainer can grant late-submission permission after the
+    # assignment's submission_deadline has passed.
+    late_submission_approved = models.BooleanField(
+        _("late submission approved"),
+        default=False,
+        help_text=_("Set by the trainer to allow submission after the deadline has passed."),
     )
 
     # Trainer review fields (filled when status moves to 'reviewed')

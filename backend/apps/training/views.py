@@ -61,6 +61,21 @@ from .serializers import (
 )
 
 
+def _notify_registration(course, student, *, is_paid: bool) -> None:
+    """Notify the course trainer + cj_admin users of a new registration
+    (Report 3 §1.2, §1.5). Fire-and-forget."""
+    from apps.notifications.models import notify_role, notify_user
+
+    student_name = student.full_name or student.email
+    verb = "registered for (paid)" if is_paid else "registered for (payment pending)"
+    title = f"New registration: {student_name}"
+    body = f"{student_name} {verb} your course '{course.title}'."
+    link = f"/training/{course.id}"
+    if course.created_by:
+        notify_user(course.created_by, title, body, "session", link)
+    notify_role("cj_admin", title, body, "session", link)
+
+
 class HasTrainingPermission(HasModulePermission):
     module = "training"
     action_map = {
@@ -82,6 +97,7 @@ class HasTrainingPermission(HasModulePermission):
         "messages": "add",
         "assignment_reports": "add",
         "review_report": "change",
+        "approve_late_submission": "change",
         "consent": "add",
         "consents": "view",
         "interactive_questions": "change",
@@ -322,16 +338,22 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def register(self, request, pk=None):
-        """Student registers for a course (SRS §6).
+        """Student registers for a course (SRS §6 + Report 3 §1).
 
-        Creates a CourseRegistration. For free courses (price=0), payment
-        is auto-completed. For paid courses, payment_status='pending'
-        (the payment gateway integration is a separate step). For
-        scheduled courses, started_at is set immediately per SRS §6
-        rule: 'If training course is scheduled, course duration starts
-        from this time'.
+        Captures a registration form (prefilled from the user's profile +
+        any extra answers in the request body), creates a CourseRegistration,
+        and creates a Payment record. For free courses (price=0) payment is
+        auto-completed and the course commences immediately. For paid courses
+        a Stripe Checkout session is created and its URL returned so the
+        frontend can redirect; the webhook flips payment_status to 'paid'
+        (payments/services._update_module_payment_status).
+
+        Per SRS §6: for scheduled courses, started_at is set when payment
+        completes (so the duration countdown begins then).
         """
         from django.utils import timezone
+
+        from apps.payments.services import create_stripe_checkout_session, get_or_create_payment
 
         course = self.get_object()
         if course.status != "published":
@@ -345,6 +367,16 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Build the registration-form snapshot: profile fields + any extra
+        # answers the candidate provided in the request body (Report 3 §1.1).
+        profile = getattr(request.user, "profile", None)
+        registration_form = {
+            "full_name": request.user.full_name,
+            "email": request.user.email,
+            "phone": getattr(profile, "phone", "") if profile else "",
+            "extra_answers": request.data.get("extra_answers", {}),
+        }
+
         # Free courses (price == 0) are auto-paid — no payment gateway needed
         is_free = float(course.price) == 0
         payment_status = "paid" if is_free else "pending"
@@ -356,7 +388,13 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
             defaults={
                 "payment_status": payment_status,
                 "completion_status": completion_status,
-                "started_at": timezone.now() if course.schedule_type == "scheduled" else None,
+                "registration_form": registration_form,
+                # For scheduled courses the duration countdown begins at
+                # registration when free, or when payment completes when paid
+                # (set in payments/services._update_module_payment_status).
+                "started_at": (
+                    timezone.now() if (is_free and course.schedule_type == "scheduled") else None
+                ),
             },
         )
         if not created:
@@ -367,10 +405,41 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 },
                 status=status.HTTP_200_OK,
             )
+
+        # Create a Payment record + (for paid courses) a Stripe Checkout URL.
+        payment = get_or_create_payment(
+            request.user,
+            module="training",
+            item_id=course.id,
+            amount=course.price,
+            description=f"Registration: {course.title}",
+        )
+        checkout_url = None
+        if not is_free:
+            success_url = request.build_absolute_uri("/training/my-courses/?payment=success")
+            cancel_url = request.build_absolute_uri("/training/?payment=cancelled")
+            checkout_url = create_stripe_checkout_session(payment, success_url, cancel_url)
+
+        # Notify the trainer + admins on successful (paid/free) registration
+        # (Report 3 §1.2, §1.5). Fire-and-forget.
+        _notify_registration(course, request.user, is_paid=is_free or checkout_url is None)
+
+        message = (
+            "Registration created. You can start the course now."
+            if is_free
+            else (
+                "Registration created. Complete payment to start the course."
+                if checkout_url is None
+                else "Registration created. Redirecting to payment…"
+            )
+        )
         return Response(
             {
-                "message": f"Registration created. {'You can start the course now.' if is_free else 'Payment pending.'}",
-                "data": CourseRegistrationSerializer(reg).data,
+                "message": message,
+                "data": {
+                    **CourseRegistrationSerializer(reg).data,
+                    "checkout_url": checkout_url,
+                },
             },
             status=status.HTTP_201_CREATED,
         )
@@ -748,15 +817,65 @@ class CourseRegistrationViewSet(ModelViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Report 3 §3.3: enforce submission deadline. After the deadline,
+        # submission requires trainer approval (late_submission_approved).
+        from django.utils import timezone
+
+        existing = AssignmentReport.objects.filter(
+            assignment=assignment, student=request.user
+        ).first()
+        deadline_passed = (
+            assignment.submission_deadline is not None
+            and assignment.submission_deadline < timezone.now()
+        )
+        late_ok = bool(existing and existing.late_submission_approved)
+        if deadline_passed and not late_ok:
+            return Response(
+                {
+                    "error": {
+                        "code": "deadline_passed",
+                        "message": (
+                            "The submission deadline for this assignment has passed. "
+                            "Ask the trainer to approve a late submission."
+                        ),
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Report 3 §3.6: accept an uploaded file (multipart) OR a URL.
+        report_file = request.data.get("report_file")
         report, created = AssignmentReport.objects.update_or_create(
             assignment=assignment,
             student=request.user,
             defaults={
                 "report_text": request.data.get("report_text", ""),
                 "report_file_url": request.data.get("report_file_url", ""),
+                "report_file": (
+                    report_file if report_file else (existing.report_file if existing else None)
+                ),
                 "status": "submitted",
+                # A new submission resets the late-approval flag.
+                "late_submission_approved": False,
             },
         )
+        # Report 3 §3.8: notify the trainer that a report was submitted.
+        try:
+            from apps.notifications.models import notify_user
+
+            if reg.course.created_by:
+                student_name = request.user.full_name or request.user.email
+                notify_user(
+                    reg.course.created_by,
+                    f"Report submitted: {student_name}",
+                    f"{student_name} submitted a report for '{assignment.title}'.",
+                    "session",
+                    f"/training/{reg.course_id}",
+                )
+        except Exception:
+            pass
+
         return Response(
             {"message": "Report submitted.", "data": AssignmentReportSerializer(report).data},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -794,16 +913,105 @@ class CourseRegistrationViewSet(ModelViewSet):
                 {"error": {"code": "not_found", "message": "Report not found."}},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        # Report 3 §3.8: trainer rates on a 0-10 scale.
+        trainer_score = request.data.get("trainer_score")
+        if trainer_score is not None:
+            try:
+                trainer_score = float(trainer_score)
+            except (TypeError, ValueError):
+                trainer_score = None
+            if trainer_score is not None and not (0 <= trainer_score <= 10):
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "trainer_score must be between 0 and 10.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         from django.utils import timezone
 
-        report.trainer_score = request.data.get("trainer_score")
+        report.trainer_score = trainer_score
         report.trainer_feedback = request.data.get("trainer_feedback", "")
         report.reviewed_by = user
         report.reviewed_at = timezone.now()
         report.status = "reviewed"
         report.save()
+        # Report 3 §3.8: notify the student that their report was reviewed.
+        try:
+            from apps.notifications.models import notify_user
+
+            score_str = f"{trainer_score:g}/10" if trainer_score is not None else "—"
+            notify_user(
+                reg.student,
+                f"Report reviewed: {report.assignment.title}",
+                f"Your report for '{report.assignment.title}' was reviewed. "
+                f"Score: {score_str}.",
+                "session",
+                f"/training/{reg.course_id}",
+            )
+        except Exception:
+            pass
         return Response(
             {"message": "Report reviewed.", "data": AssignmentReportSerializer(report).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="approve-late-submission")
+    def approve_late_submission(self, request, pk=None):
+        """Trainer approves a late assignment submission after the deadline
+        has passed (Report 3 §3.3).
+
+        POST body: {"report_id": 42}  (report must already exist)
+        """
+        reg = self.get_object()
+        user = request.user
+        user_role_name = user.role.name if user.role_id else None
+        is_trainer_or_admin = reg.course.created_by_id == user.id or user_role_name == "cj_admin"
+        if not is_trainer_or_admin:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the course trainer or admin can approve late submissions.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        report_id = request.data.get("report_id")
+        report = AssignmentReport.objects.filter(
+            id=report_id,
+            student=reg.student,
+            assignment__session__topic__lesson__course=reg.course,
+        ).first()
+        if not report:
+            return Response(
+                {"error": {"code": "not_found", "message": "Report not found."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        report.late_submission_approved = True
+        report.save(update_fields=["late_submission_approved"])
+        # Notify the student they can now submit.
+        try:
+            from apps.notifications.models import notify_user
+
+            notify_user(
+                reg.student,
+                f"Late submission approved: {report.assignment.title}",
+                "Your trainer has approved a late submission. You can now submit your report.",
+                "session",
+                f"/training/{reg.course_id}",
+            )
+        except Exception:
+            pass
+        return Response(
+            {
+                "message": "Late submission approved.",
+                "data": AssignmentReportSerializer(report).data,
+            },
             status=status.HTTP_200_OK,
         )
 

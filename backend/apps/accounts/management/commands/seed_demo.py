@@ -158,6 +158,14 @@ ROLE_PERMISSIONS = {
         ("training", "delete"),
         ("accounts", "view"),
         ("assessment", "view"),
+        # Report 3 §4.1: trainers author their own course assessments using
+        # the CJ Question Bank (scoped to created_by in the viewsets).
+        ("assessment", "add"),
+        ("assessment", "change"),
+        ("assessment", "delete"),
+        ("question_bank", "view"),
+        ("question_bank", "add"),
+        ("question_bank", "change"),
     ],
     "group_admin": [
         ("accounts", "view"),

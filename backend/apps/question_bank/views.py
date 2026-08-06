@@ -179,6 +179,15 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         if mine == "true" and self.request.user.is_authenticated:
             qs = qs.filter(created_by=self.request.user)
 
+        # Report 3 §4.1/§4.2: trainers can author questions to build course
+        # assessments, but must see ONLY their own questions (not the full
+        # CJ Question Bank pool). Other authoring roles (sme, psychometrician,
+        # cj_admin) keep their existing access.
+        if self.request.user.is_authenticated:
+            role_name = self.request.user.role.name if self.request.user.role_id else None
+            if role_name == "trainer":
+                qs = qs.filter(created_by=self.request.user)
+
         return qs
 
     def perform_create(self, serializer):

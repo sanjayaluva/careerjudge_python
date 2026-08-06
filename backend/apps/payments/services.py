@@ -141,15 +141,37 @@ def handle_stripe_webhook(payload: bytes, signature: str) -> bool:
 def _update_module_payment_status(payment: Payment):
     """Update the linked module's payment status after a successful payment."""
     if payment.module == "training":
+        from django.utils import timezone
+
         from apps.training.models import CourseRegistration
 
         reg = CourseRegistration.objects.filter(
             course_id=payment.item_id, student=payment.user
         ).first()
-        if reg:
+        if reg and reg.payment_status != "paid":
             reg.payment_status = "paid"
             reg.completion_status = "in_progress"
-            reg.save(update_fields=["payment_status", "completion_status"])
+            # SRS §6: for scheduled courses the duration countdown begins
+            # when payment completes.
+            if reg.course.schedule_type == "scheduled" and not reg.started_at:
+                reg.started_at = timezone.now()
+            reg.save(update_fields=["payment_status", "completion_status", "started_at"])
+            # Notify trainer + admin that payment confirmed (Report 3 §1.5).
+            try:
+                from apps.notifications.models import notify_role, notify_user
+
+                student_name = reg.student.full_name or reg.student.email
+                title = f"Payment confirmed: {student_name}"
+                body = (
+                    f"{student_name} has paid for '{reg.course.title}' and can "
+                    f"now start the course."
+                )
+                link = f"/training/{reg.course_id}"
+                if reg.course.created_by:
+                    notify_user(reg.course.created_by, title, body, "success", link)
+                notify_role("cj_admin", title, body, "success", link)
+            except Exception as e:
+                logger.warning("Training payment notification failed: %s", e)
 
     elif payment.module == "counseling":
         from apps.counseling.models import CounselingSession
