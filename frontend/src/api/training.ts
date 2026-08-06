@@ -38,6 +38,10 @@ export interface Assignment {
   description: string;
   resource_url: string;
   report_submission_enabled: boolean;
+  /** Report 3 §3.4: mandatory vs optional report submission. */
+  is_report_mandatory: boolean;
+  /** Report 3 §3.3: deadline after which submission requires trainer approval. */
+  submission_deadline: string | null;
   report_instructions: string;
   order: number;
 }
@@ -114,6 +118,8 @@ export interface TrainingCourse {
   duration_days: number | null;
   price: string;
   status: "draft" | "published" | "archived";
+  /** Report 3 §5.1: enforce sequential content navigation (no skipping). */
+  enforce_sequence: boolean;
   created_by: number | null;
   created_by_name: string | null;
   registration_count: number;
@@ -136,6 +142,8 @@ export interface TrainingCourseListItem {
   duration_days: number | null;
   price: string;
   status: string;
+  /** Report 3 §5.1: enforce sequential content navigation (no skipping). */
+  enforce_sequence: boolean;
   created_by: number | null;
   created_by_name: string | null;
   registration_count: number;
@@ -152,6 +160,8 @@ export interface CourseRegistration {
   student_email: string;
   payment_status: string;
   completion_status: string;
+  /** Report 3 §1.1: registration-form snapshot (profile-prefilled + answers). */
+  registration_form: Record<string, unknown>;
   started_at: string | null;
   completed_at: string | null;
   registered_at: string;
@@ -202,6 +212,10 @@ export interface AssignmentReport {
   student_email: string;
   report_text: string;
   report_file_url: string;
+  /** Report 3 §3.6: uploaded report file (PDF/PPT/Word). */
+  report_file: string | null;
+  /** Report 3 §3.3: trainer granted late-submission permission. */
+  late_submission_approved: boolean;
   status: string;
   trainer_score: number | null;
   trainer_feedback: string;
@@ -305,8 +319,14 @@ export function publishCourse(id: number): Promise<{ id: number; status: string 
   return apiPost(`${BASE}/courses/${id}/publish/`);
 }
 
-export function registerForCourse(courseId: number): Promise<CourseRegistration> {
-  return apiPost<CourseRegistration>(`${BASE}/courses/${courseId}/register/`);
+export function registerForCourse(
+  courseId: number,
+  extraAnswers?: Record<string, string>,
+): Promise<CourseRegistration & { checkout_url: string | null }> {
+  return apiPost<CourseRegistration & { checkout_url: string | null }>(
+    `${BASE}/courses/${courseId}/register/`,
+    extraAnswers ? { extra_answers: extraAnswers } : undefined,
+  );
 }
 
 export function listCourseRegistrations(courseId: number): Promise<CourseRegistration[]> {
@@ -568,6 +588,28 @@ export function submitAssignmentReport(
   );
 }
 
+/**
+ * Report 3 §3.6: submit an assignment report with an uploaded file
+ * (PDF/PPT/Word). Uses multipart/form-data so the file reaches the backend's
+ * request.data as a real upload.
+ */
+export function submitAssignmentReportFile(
+  registrationId: number,
+  payload: { assignment: number; report_text?: string; file: File },
+): Promise<AssignmentReport> {
+  const form = new FormData();
+  form.append("assignment", String(payload.assignment));
+  if (payload.report_text) form.append("report_text", payload.report_text);
+  form.append("report_file", payload.file);
+  return apiPost<AssignmentReport>(
+    `${BASE}/registrations/${registrationId}/assignment_reports/`,
+    form,
+  );
+}
+
+/**
+ * Report 3 §3.8: trainer reviews a report. trainer_score is on a 0-10 scale.
+ */
 export function reviewAssignmentReport(
   registrationId: number,
   payload: { report_id: number; trainer_score?: number; trainer_feedback?: string },
@@ -575,6 +617,19 @@ export function reviewAssignmentReport(
   return apiPost<AssignmentReport>(
     `${BASE}/registrations/${registrationId}/review-report/`,
     payload,
+  );
+}
+
+/**
+ * Report 3 §3.3: trainer approves a late submission after the deadline.
+ */
+export function approveLateSubmission(
+  registrationId: number,
+  reportId: number,
+): Promise<AssignmentReport> {
+  return apiPost<AssignmentReport>(
+    `${BASE}/registrations/${registrationId}/approve-late-submission/`,
+    { report_id: reportId },
   );
 }
 

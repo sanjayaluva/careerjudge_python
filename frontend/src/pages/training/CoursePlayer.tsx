@@ -36,6 +36,7 @@ import {
   listAssignmentReports,
   listMyCourses,
   submitAssignmentReport,
+  submitAssignmentReportFile,
   updateProgress,
   type InteractiveQuestion,
   type ProgressSummary,
@@ -508,6 +509,7 @@ function AssignmentsPanel({
   const queryClient = useQueryClient();
   const [submittingFor, setSubmittingFor] = useState<number | null>(null);
   const [reportText, setReportText] = useState("");
+  const [reportFile, setReportFile] = useState<File | null>(null);
 
   const { data: existingReports } = useQuery({
     queryKey: ["training", "assignment-reports", registrationId],
@@ -515,11 +517,20 @@ function AssignmentsPanel({
   });
 
   const submitMutation = useMutation({
-    mutationFn: () =>
-      submitAssignmentReport(registrationId, {
+    mutationFn: () => {
+      // Report 3 §3.6: if a file is attached, submit via multipart upload.
+      if (reportFile) {
+        return submitAssignmentReportFile(registrationId, {
+          assignment: submittingFor!,
+          report_text: reportText,
+          file: reportFile,
+        });
+      }
+      return submitAssignmentReport(registrationId, {
         assignment: submittingFor!,
         report_text: reportText,
-      }),
+      });
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["training", "assignment-reports", registrationId],
@@ -527,6 +538,7 @@ function AssignmentsPanel({
       toast.success("Report submitted. The trainer will review it.");
       setSubmittingFor(null);
       setReportText("");
+      setReportFile(null);
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -561,7 +573,7 @@ function AssignmentsPanel({
                     <Badge variant={existingReport.status === "reviewed" ? "success" : "warning"}>
                       {existingReport.status}
                       {existingReport.trainer_score != null &&
-                        ` (${existingReport.trainer_score}/100)`}
+                        ` (${existingReport.trainer_score}/10)`}
                     </Badge>
                   ) : a.report_submission_enabled ? (
                     <Button size="sm" variant="outline" onClick={() => setSubmittingFor(a.id)}>
@@ -573,12 +585,28 @@ function AssignmentsPanel({
                 </div>
               </div>
 
+              {/* Report 3 §3.3: deadline + mandatory indicators */}
+              {a.report_submission_enabled && (
+                <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                  {a.is_report_mandatory && <Badge variant="warning">Report mandatory</Badge>}
+                  {a.submission_deadline && (
+                    <span className="text-slate-500">
+                      Deadline: {new Date(a.submission_deadline).toLocaleString()}
+                      {new Date(a.submission_deadline) < new Date() &&
+                        !existingReport?.late_submission_approved && (
+                          <span className="ml-1 font-medium text-danger">
+                            (passed — ask trainer to approve late submission)
+                          </span>
+                        )}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* Report submission form */}
               {submittingFor === a.id && (
                 <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-                  <Label htmlFor={`report-${a.id}`} required>
-                    Your report
-                  </Label>
+                  <Label htmlFor={`report-${a.id}`}>Your report (text)</Label>
                   <textarea
                     id={`report-${a.id}`}
                     rows={4}
@@ -587,12 +615,20 @@ function AssignmentsPanel({
                     onChange={(e) => setReportText(e.target.value)}
                     placeholder="Write your report..."
                   />
+                  <Label htmlFor={`file-${a.id}`}>Or upload a file (PDF / PPT / Word)</Label>
+                  <input
+                    id={`file-${a.id}`}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.ppt,.pptx"
+                    onChange={(e) => setReportFile(e.target.files?.[0] ?? null)}
+                    className="block w-full text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-700 hover:file:bg-primary-100"
+                  />
                   <div className="flex gap-2">
                     <Button
                       size="sm"
                       onClick={() => submitMutation.mutate()}
                       loading={submitMutation.isPending}
-                      disabled={!reportText}
+                      disabled={!reportText && !reportFile}
                     >
                       Submit
                     </Button>
@@ -602,6 +638,7 @@ function AssignmentsPanel({
                       onClick={() => {
                         setSubmittingFor(null);
                         setReportText("");
+                        setReportFile(null);
                       }}
                     >
                       Cancel
