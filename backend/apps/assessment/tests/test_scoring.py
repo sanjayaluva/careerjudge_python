@@ -594,6 +594,36 @@ class TestPsychometricSectionAggregation(ScoringTestBase):
         ss1 = SectionScore.objects.get(session=self.session, section=self.s1)
         assert ss1.raw_score == 8.0  # 4 (Q1 opt tagged Section 1, rank 1) + 4 (Q2)
 
+    def test_section_max_does_not_explode_across_tags(self):
+        """Regression: each option's max must be assigned to its OWN tag, not
+        added to every tag. With 4 distinct tags the per-section max should be
+        N (4), not 4*N (16)."""
+        QuestionAttempt.objects.create(
+            session=self.session,
+            question=self.q1,
+            section=self.carrier,
+            status="attempted",
+            raw_answer={
+                "ranking": [
+                    self.q1_opts[0].id,
+                    self.q1_opts[1].id,
+                    self.q1_opts[2].id,
+                    self.q1_opts[3].id,
+                ]
+            },
+        )
+
+        calculate_session_scores(self.session)
+
+        from apps.assessment.models import SectionScore
+
+        for sec in (self.s1, self.s2, self.s3, self.s4):
+            ss = SectionScore.objects.get(session=self.session, section=sec)
+            # Each section has exactly one option (max = N = 4), not 16.
+            assert (
+                ss.max_score == 4.0
+            ), f"Section {sec.title} max_score={ss.max_score}, expected 4.0"
+
     def test_unresolved_tag_falls_back_to_attempt_section(self):
         # If a tag has no matching AssessmentSection, the score falls back to
         # the attempt's own section (carrier) instead of being lost.

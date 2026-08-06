@@ -1123,11 +1123,19 @@ class SessionViewSet(ModelViewSet):
                 elif q.question_type.startswith("FORCED_CHOICE"):
                     correct_answer = {
                         "type": "FORCED_CHOICE",
+                        "note": (
+                            "Scoring is by selection vs non-selection. The selected "
+                            "option earns selection_score (x rating if two-level); "
+                            "the non-selected option earns non_selection_score. "
+                            "Each option's score posts to its section_tag's section."
+                        ),
                         "options": [
                             {
                                 "id": o.id,
                                 "text": o.text_value,
-                                "predefined_score": o.predefined_score,
+                                "section_tag": o.section_tag,
+                                "selection_score": o.selection_score,
+                                "non_selection_score": o.non_selection_score,
                             }
                             for o in q.options.all().order_by("order")
                         ],
@@ -1135,8 +1143,17 @@ class SessionViewSet(ModelViewSet):
                 elif q.question_type.startswith("RANK"):
                     correct_answer = {
                         "type": "RANK",
-                        "correct_order": [
-                            {"id": o.id, "text": o.text_value, "order": o.order}
+                        "note": (
+                            "No single 'correct order' — any complete ranking is valid. "
+                            "Each option ranked r scores (N - r + 1), posted to that "
+                            "option's section_tag's section."
+                        ),
+                        "options": [
+                            {
+                                "id": o.id,
+                                "text": o.text_value,
+                                "section_tag": o.section_tag,
+                            }
                             for o in q.options.all().order_by("order")
                         ],
                     }

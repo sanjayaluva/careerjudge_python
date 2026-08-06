@@ -88,26 +88,28 @@ def score_question_by_section(
         result.setdefault(opt.section_tag or "", [0.0, 0.0])
 
     if question.scoring_type == "RANK":
-        # Each option ranked r → score (N - r + 1); max per option = N.
+        # Each option ranked r -> score (N - r + 1). Each option's achievable
+        # max is N (if it were ranked 1). Assign that max to the option's OWN
+        # tag (NOT every tag) so the per-section max sum equals N.
         ranking = (raw_answer or {}).get("ranking", [])
         max_per_opt = float(n) if n > 0 else 1.0
-        for tag in result:
-            result[tag][1] += max_per_opt
+        for opt in options:
+            result[opt.section_tag or ""][1] += max_per_opt
         if ranking and len(ranking) == n:
             for rank_pos, opt_id in enumerate(ranking):
                 opt = next((o for o in options if o.id == opt_id), None)
                 if opt is None:
                     continue
-                tag = opt.section_tag or ""
-                result[tag][0] += float(n - rank_pos)
+                result[opt.section_tag or ""][0] += float(n - rank_pos)
         return {t: (v[0], v[1]) for t, v in result.items()}
 
     if question.scoring_type == "RANK_RATE":
-        # score per option = rank_score * rating; max per option = N * max_rating
+        # score per option = rank_score * rating; max per option = N * max_rating.
+        # Assign each option's max to its own tag.
         max_rating = question.rating_scale_points or 5
         max_per_opt = float(n * max_rating)
-        for tag in result:
-            result[tag][1] += max_per_opt
+        for opt in options:
+            result[opt.section_tag or ""][1] += max_per_opt
         ranking = (raw_answer or {}).get("ranking", [])
         ratings = (raw_answer or {}).get("ratings", {})
         if ranking and len(ranking) == n:
