@@ -531,7 +531,50 @@ class ResponseOption(models.Model):
         help_text="For match-the-following: links Group A item to correct Group B item",
     )
     predefined_score = models.FloatField(
-        _("predefined score"), default=1.0, help_text="For forced-choice: may be 0,1,2,3 etc."
+        _("predefined score"),
+        default=1.0,
+        help_text=_(
+            "Deprecated for forced-choice (kept for backward-compat). "
+            "Use selection_score / non_selection_score instead."
+        ),
+    )
+    # --- Forced-choice scoring (Report 2 §3,§4) ---
+    # The score an option receives when SELECTED by the candidate.
+    selection_score = models.FloatField(
+        _("selection score"),
+        default=1.0,
+        help_text=_(
+            "Forced-choice: score posted to this option's section when the "
+            "candidate SELECTS it. Rule: selection_score > non_selection_score >= 0. "
+            "Default 1."
+        ),
+    )
+    # The score an option receives when NOT selected.
+    non_selection_score = models.FloatField(
+        _("non-selection score"),
+        default=0.0,
+        help_text=_(
+            "Forced-choice: score posted to this option's section when the "
+            "candidate does NOT select it. Must be >= 0 and < selection_score. "
+            "Default 0."
+        ),
+    )
+    # --- Psychometric option -> section tagging (Report 2 Common Issue 3) ---
+    # Portable label (e.g. "Leadership") that maps each option to a profile
+    # variable / section. At assessment-assign time this label is resolved to
+    # a concrete assessment.AssessmentSection so per-section scoring works.
+    # For Rank/RankRate: N options must carry N distinct non-empty tags.
+    # For Forced-choice: the two paired options must carry different tags.
+    section_tag = models.CharField(
+        _("section tag"),
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=_(
+            "Psychometric types: the profile variable / section this option "
+            "feeds into (e.g. 'Leadership'). Resolved to an AssessmentSection "
+            "when the question is attached to an assessment."
+        ),
     )
     order = models.PositiveIntegerField(_("order"), default=0)
 

@@ -99,7 +99,11 @@ def make_rating_question(created_by, confirmed=True):
 
 
 def make_rank_question(created_by, confirmed=True):
-    """Create a rank-simple question with 4 options."""
+    """Create a rank-simple question with 4 options.
+
+    Per Report 2 §1: each option is tagged to a different section
+    ("Section 1".."Section 4") — number of options = number of sections.
+    """
     q = _make_question(
         created_by,
         "RANK_SIMPLE",
@@ -109,7 +113,11 @@ def make_rank_question(created_by, confirmed=True):
     )
     for i in range(1, 5):
         ResponseOption.objects.create(
-            question=q, option_type="RANK", text_value=f"Item {i}", order=i
+            question=q,
+            option_type="RANK",
+            text_value=f"Item {i}",
+            section_tag=f"Section {i}",
+            order=i,
         )
     return q
 
@@ -119,6 +127,10 @@ def make_forced_choice_question(created_by, two_level=False, confirmed=True):
 
     two_level=False: FORCED_CHOICE_SINGLE_LEVEL + FORCED_CHOICE scoring.
     two_level=True:  FORCED_CHOICE_TWO_LEVEL + FORCED_CHOICE_RATED scoring.
+
+    Per Report 2 §3/§4: each option carries selection_score +
+    non_selection_score (default 1/0) and a section_tag. The two options
+    are tagged to different sections ("Section A" / "Section B").
     """
     qtype = "FORCED_CHOICE_TWO_LEVEL" if two_level else "FORCED_CHOICE_SINGLE_LEVEL"
     stype = "FORCED_CHOICE_RATED" if two_level else "FORCED_CHOICE"
@@ -135,14 +147,18 @@ def make_forced_choice_question(created_by, two_level=False, confirmed=True):
         question=q,
         option_type="FORCED_CHOICE",
         text_value="Option A",
-        predefined_score=2.0,
+        selection_score=2.0,
+        non_selection_score=0.0,
+        section_tag="Section A",
         order=1,
     )
     ResponseOption.objects.create(
         question=q,
         option_type="FORCED_CHOICE",
         text_value="Option B",
-        predefined_score=3.0,
+        selection_score=3.0,
+        non_selection_score=1.0,
+        section_tag="Section B",
         order=2,
     )
     return q

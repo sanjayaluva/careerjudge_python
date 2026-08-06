@@ -276,9 +276,53 @@ def test_rank_requires_two_options():
     from apps.question_bank.models import ResponseOption
 
     q = _make_question(question_type="RANK_SIMPLE")
-    ResponseOption.objects.create(question=q, order=0, option_type="RANK", text_value="1")
+    ResponseOption.objects.create(
+        question=q, order=0, option_type="RANK", text_value="1", section_tag="S1"
+    )
     errors = validate_question_config(q)
     assert any("at least 2 options" in e for e in errors)
+
+
+def test_rank_requires_distinct_section_tags():
+    """Report 2 §1: each option tagged to a different section."""
+    from apps.question_bank.models import ResponseOption
+
+    q = _make_question(question_type="RANK_SIMPLE")
+    # Two options share the same tag → invalid
+    ResponseOption.objects.create(
+        question=q, order=0, option_type="RANK", text_value="1", section_tag="S1"
+    )
+    ResponseOption.objects.create(
+        question=q, order=1, option_type="RANK", text_value="2", section_tag="S1"
+    )
+    errors = validate_question_config(q)
+    assert any("DIFFERENT section" in e for e in errors)
+
+
+def test_rank_requires_every_option_to_have_a_tag():
+    from apps.question_bank.models import ResponseOption
+
+    q = _make_question(question_type="RANK_SIMPLE")
+    ResponseOption.objects.create(
+        question=q, order=0, option_type="RANK", text_value="1", section_tag="S1"
+    )
+    ResponseOption.objects.create(
+        question=q, order=1, option_type="RANK", text_value="2", section_tag=""
+    )
+    errors = validate_question_config(q)
+    assert any("section_tag" in e for e in errors)
+
+
+def test_rank_with_distinct_tags_is_valid():
+    from apps.question_bank.models import ResponseOption
+
+    q = _make_question(question_type="RANK_SIMPLE")
+    for i, tag in enumerate(["S1", "S2", "S3", "S4"], start=0):
+        ResponseOption.objects.create(
+            question=q, order=i, option_type="RANK", text_value=str(i), section_tag=tag
+        )
+    errors = validate_question_config(q)
+    assert not any("section" in e.lower() for e in errors)
 
 
 # ---------------------------------------------------------------------------
@@ -302,24 +346,105 @@ def test_forced_choice_requires_two_options_with_score():
 
     q = _make_question(question_type="FORCED_CHOICE_SINGLE_LEVEL")
     ResponseOption.objects.create(
-        question=q, order=0, option_type="FORCED_CHOICE", text_value="A", predefined_score=1
+        question=q, order=0, option_type="FORCED_CHOICE", text_value="A", section_tag="S1"
     )
     errors = validate_question_config(q)
     assert any("at least 2 options" in e for e in errors)
 
 
-def test_forced_choice_option_without_score_is_invalid():
+def test_forced_choice_same_section_pair_is_invalid():
+    """Report 2 §3: two options from the same section cannot be paired."""
     from apps.question_bank.models import ResponseOption
 
     q = _make_question(question_type="FORCED_CHOICE_SINGLE_LEVEL")
     ResponseOption.objects.create(
-        question=q, order=0, option_type="FORCED_CHOICE", text_value="A", predefined_score=0
+        question=q, order=0, option_type="FORCED_CHOICE", text_value="A", section_tag="S1"
     )
     ResponseOption.objects.create(
-        question=q, order=1, option_type="FORCED_CHOICE", text_value="B", predefined_score=2
+        question=q, order=1, option_type="FORCED_CHOICE", text_value="B", section_tag="S1"
     )
     errors = validate_question_config(q)
-    assert any("predefined_score" in e for e in errors)
+    assert any("DIFFERENT sections" in e for e in errors)
+
+
+def test_forced_choice_selection_must_exceed_non_selection():
+    """Report 2 §3 rule: selection_score > non_selection_score >= 0."""
+    from apps.question_bank.models import ResponseOption
+
+    q = _make_question(question_type="FORCED_CHOICE_SINGLE_LEVEL")
+    # selection (1) is NOT greater than non_selection (2) → invalid
+    ResponseOption.objects.create(
+        question=q,
+        order=0,
+        option_type="FORCED_CHOICE",
+        text_value="A",
+        section_tag="S1",
+        selection_score=1.0,
+        non_selection_score=2.0,
+    )
+    ResponseOption.objects.create(
+        question=q,
+        order=1,
+        option_type="FORCED_CHOICE",
+        text_value="B",
+        section_tag="S2",
+        selection_score=3.0,
+        non_selection_score=0.0,
+    )
+    errors = validate_question_config(q)
+    assert any("selection_score" in e and "greater than" in e for e in errors)
+
+
+def test_forced_choice_negative_non_selection_is_invalid():
+    from apps.question_bank.models import ResponseOption
+
+    q = _make_question(question_type="FORCED_CHOICE_SINGLE_LEVEL")
+    ResponseOption.objects.create(
+        question=q,
+        order=0,
+        option_type="FORCED_CHOICE",
+        text_value="A",
+        section_tag="S1",
+        selection_score=2.0,
+        non_selection_score=-1.0,
+    )
+    ResponseOption.objects.create(
+        question=q,
+        order=1,
+        option_type="FORCED_CHOICE",
+        text_value="B",
+        section_tag="S2",
+        selection_score=3.0,
+        non_selection_score=0.0,
+    )
+    errors = validate_question_config(q)
+    assert any("negative" in e for e in errors)
+
+
+def test_forced_choice_with_distinct_tags_and_valid_scores_is_valid():
+    from apps.question_bank.models import ResponseOption
+
+    q = _make_question(question_type="FORCED_CHOICE_SINGLE_LEVEL")
+    ResponseOption.objects.create(
+        question=q,
+        order=0,
+        option_type="FORCED_CHOICE",
+        text_value="A",
+        section_tag="S1",
+        selection_score=2.0,
+        non_selection_score=0.0,
+    )
+    ResponseOption.objects.create(
+        question=q,
+        order=1,
+        option_type="FORCED_CHOICE",
+        text_value="B",
+        section_tag="S2",
+        selection_score=3.0,
+        non_selection_score=1.0,
+    )
+    errors = validate_question_config(q)
+    assert errors == []
 
 
 # ---------------------------------------------------------------------------

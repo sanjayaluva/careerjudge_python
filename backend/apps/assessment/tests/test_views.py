@@ -569,6 +569,95 @@ class TestQuestionAssignment(AssessmentViewTestBase):
         assert resp.status_code in (status.HTTP_200_OK, status.HTTP_204_NO_CONTENT)
         assert not AssessmentQuestion.objects.filter(id=aq.id).exists()
 
+    def test_assign_psychometric_question_creates_tagged_sections(self):
+        """Report 2: assigning a psychometric question auto-creates a leaf
+        AssessmentSection for each distinct section_tag that doesn't already
+        exist, so per-section scoring can route correctly."""
+        from apps.question_bank.models import Question, ResponseOption
+
+        assessment = Assessment.objects.create(
+            title="Psych", created_by=self.user, assessment_type="psychometric"
+        )
+        parent = AssessmentSection.objects.create(
+            assessment=assessment, title="Carrier", level=1, order=1
+        )
+        q = Question.objects.create(
+            question_type="RANK_SIMPLE",
+            question_title="Rank Q",
+            question_text_1="Rank",
+            scoring_type="RANK",
+            status="confirmed",
+            created_by=self.user,
+        )
+        for i, tag in enumerate(["Leadership", "Creativity", "Teamwork"], start=1):
+            ResponseOption.objects.create(
+                question=q,
+                option_type="RANK",
+                text_value=f"Item {i}",
+                section_tag=tag,
+                order=i,
+            )
+
+        resp = self.client.post(
+            f"/api/assessments/{assessment.id}/sections/{parent.id}/questions/",
+            {"question": q.id, "order": 1},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+
+        # Each tag should now have a matching AssessmentSection under the parent.
+        titles = set(
+            AssessmentSection.objects.filter(assessment=assessment, parent=parent).values_list(
+                "title", flat=True
+            )
+        )
+        assert {"Leadership", "Creativity", "Teamwork"}.issubset(titles)
+
+    def test_assign_psychometric_reuses_existing_matching_sections(self):
+        """If a section with the tag's title already exists, it is reused
+        (no duplicate created)."""
+        from apps.question_bank.models import Question, ResponseOption
+
+        assessment = Assessment.objects.create(
+            title="Psych2", created_by=self.user, assessment_type="psychometric"
+        )
+        parent = AssessmentSection.objects.create(
+            assessment=assessment, title="Carrier", level=1, order=1
+        )
+        # Pre-existing section matching one tag
+        AssessmentSection.objects.create(
+            assessment=assessment, parent=parent, title="Leadership", level=2, order=1
+        )
+        q = Question.objects.create(
+            question_type="RANK_SIMPLE",
+            question_title="Rank Q",
+            question_text_1="Rank",
+            scoring_type="RANK",
+            status="confirmed",
+            created_by=self.user,
+        )
+        for i, tag in enumerate(["Leadership", "Creativity"], start=1):
+            ResponseOption.objects.create(
+                question=q,
+                option_type="RANK",
+                text_value=f"Item {i}",
+                section_tag=tag,
+                order=i,
+            )
+
+        resp = self.client.post(
+            f"/api/assessments/{assessment.id}/sections/{parent.id}/questions/",
+            {"question": q.id, "order": 1},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        # Only ONE Leadership section should exist (reused, not duplicated)
+        assert (
+            AssessmentSection.objects.filter(assessment=assessment, title="Leadership").count() == 1
+        )
+        # Creativity was created
+        assert AssessmentSection.objects.filter(assessment=assessment, title="Creativity").exists()
+
 
 class TestSessionFlow(AssessmentViewTestBase):
     """End-to-end: start session → answer → submit → see scores."""
