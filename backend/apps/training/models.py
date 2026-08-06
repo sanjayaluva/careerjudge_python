@@ -708,3 +708,113 @@ class InteractiveQuestion(models.Model):
             if opt.get("is_correct"):
                 return opt.get("id")
         return None
+
+
+class CourseUpdateRequest(models.Model):
+    """Trainer's request to modify or delete a PUBLISHED course, requiring
+    admin approval (Report 3 §7.1, §7.2).
+
+    Per SRS §5: once a course is published, only the CJ Admin can approve
+    modifications or deletion. The trainer submits a request (with a reason);
+    the admin approves or declines; notifications flow on each step.
+
+    Flow:
+      1. Trainer POSTs a request (status='pending') -> admin notified.
+      2. Admin approves (status='approved') -> trainer notified; for delete
+         requests the course is archived; for update requests the trainer
+         may now edit the published course (a temporary edit window).
+      3. Admin declines (status='declined') -> trainer notified with reason.
+    """
+
+    REQUEST_TYPE_CHOICES = [
+        ("update", "Update published course"),
+        ("delete", "Delete published course"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending admin review"),
+        ("approved", "Approved by admin"),
+        ("declined", "Declined by admin"),
+    ]
+
+    course = models.ForeignKey(
+        TrainingCourse, on_delete=models.CASCADE, related_name="update_requests"
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="training_course_requests",
+    )
+    request_type = models.CharField(_("request type"), max_length=10, choices=REQUEST_TYPE_CHOICES)
+    reason = models.TextField(_("reason"), help_text=_("Why the change is needed."))
+    status = models.CharField(_("status"), max_length=10, choices=STATUS_CHOICES, default="pending")
+    admin_note = models.TextField(
+        _("admin note"), blank=True, default="", help_text=_("Admin's response note.")
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_course_requests",
+    )
+    reviewed_at = models.DateTimeField(_("reviewed at"), null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("course update request")
+        verbose_name_plural = _("course update requests")
+
+    def __str__(self) -> str:
+        return f"{self.course.title} ({self.request_type}, {self.status})"
+
+
+class LiveSessionRequest(models.Model):
+    """A candidate's request for the trainer to schedule a live session
+    (Report 3 §7.5, OS.4).
+
+    When a live session is unscheduled (e.g. it sits at a point in the course
+    the candidate has reached but no time has been set), the candidate sends a
+    request with preferred times. The trainer then schedules the session and
+    the candidate is notified.
+    """
+
+    STATUS_CHOICES = [
+        ("pending", "Pending — trainer has not scheduled yet"),
+        ("scheduled", "Trainer scheduled a session"),
+        ("declined", "Trainer declined"),
+    ]
+
+    course = models.ForeignKey(
+        TrainingCourse, on_delete=models.CASCADE, related_name="live_session_requests"
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="live_session_requests",
+    )
+    preferred_times = models.JSONField(
+        _("preferred times"),
+        default=list,
+        blank=True,
+        help_text=_("List of candidate-preferred date/times (ISO strings)."),
+    )
+    note = models.TextField(_("note"), blank=True, default="")
+    status = models.CharField(_("status"), max_length=10, choices=STATUS_CHOICES, default="pending")
+    scheduled_session = models.ForeignKey(
+        LiveSession,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="originating_requests",
+        help_text=_("The LiveSession created in response to this request."),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("live session request")
+        verbose_name_plural = _("live session requests")
+
+    def __str__(self) -> str:
+        return f"{self.student.email} -> {self.course.title} ({self.status})"

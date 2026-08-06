@@ -845,3 +845,129 @@ def test_paid_course_stays_pending(student_client, individual_user, trainer_user
     reg = CourseRegistration.objects.get(course=course, student=individual_user)
     assert reg.payment_status == "pending"
     assert reg.completion_status == "not_started"
+
+
+# ---------------------------------------------------------------------------
+# Course Update Request workflow (Report 3 §7.1/§7.2)
+# ---------------------------------------------------------------------------
+
+
+def test_trainer_can_request_course_update(trainer_client, trainer_user):
+    """Report 3 §7.1: trainer requests admin approval to update a published course."""
+    from apps.training.models import CourseUpdateRequest
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/request-update/",
+        {"request_type": "update", "reason": "Fix lesson 2 typo"},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    cur = CourseUpdateRequest.objects.get(course=course)
+    assert cur.request_type == "update"
+    assert cur.status == "pending"
+    assert cur.requested_by == trainer_user
+
+
+def test_non_trainer_cannot_request_update(student_client, trainer_user):
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    resp = student_client.post(
+        f"/api/training/courses/{course.id}/request-update/",
+        {"request_type": "update", "reason": "x"},
+        format="json",
+    )
+    assert resp.status_code == 403
+
+
+def test_admin_approve_delete_archives_course(admin_client, trainer_client, trainer_user):
+    """Report 3 §7.2: when admin approves a delete request, the course is archived."""
+    from apps.training.models import CourseUpdateRequest
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    trainer_client.post(
+        f"/api/training/courses/{course.id}/request-update/",
+        {"request_type": "delete", "reason": "Obsolete"},
+        format="json",
+    )
+    cur = CourseUpdateRequest.objects.get(course=course)
+    resp = admin_client.post(
+        f"/api/training/course-update-requests/{cur.id}/approve/",
+        {"admin_note": "OK"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    course.refresh_from_db()
+    assert course.status == "archived"
+    cur.refresh_from_db()
+    assert cur.status == "approved"
+
+
+def test_non_admin_cannot_approve_request(trainer_client, trainer_user):
+    from apps.training.models import CourseUpdateRequest
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    cur = CourseUpdateRequest.objects.create(
+        course=course, requested_by=trainer_user, request_type="update", reason="x"
+    )
+    resp = trainer_client.post(
+        f"/api/training/course-update-requests/{cur.id}/approve/",
+        format="json",
+    )
+    assert resp.status_code == 403
+
+
+def test_admin_decline_keeps_course_and_notifies(admin_client, trainer_client, trainer_user):
+    from apps.notifications.models import Notification
+    from apps.training.models import CourseUpdateRequest
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    trainer_client.post(
+        f"/api/training/courses/{course.id}/request-update/",
+        {"request_type": "update", "reason": "x"},
+        format="json",
+    )
+    cur = CourseUpdateRequest.objects.get(course=course)
+    admin_client.post(
+        f"/api/training/course-update-requests/{cur.id}/decline/",
+        {"admin_note": "Not now"},
+        format="json",
+    )
+    course.refresh_from_db()
+    assert course.status == "published"  # unchanged
+    cur.refresh_from_db()
+    assert cur.status == "declined"
+    assert Notification.objects.filter(recipient=trainer_user, title__contains="declined").exists()
+
+
+# ---------------------------------------------------------------------------
+# Live Session Request (Report 3 §7.5/OS.4)
+# ---------------------------------------------------------------------------
+
+
+def test_student_can_request_live_session(student_client, individual_user, trainer_user):
+    """Report 3 §7.5: candidate requests the trainer schedule a live session."""
+    from apps.training.models import LiveSessionRequest
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    resp = student_client.post(
+        "/api/training/live-session-requests/",
+        {"course": course.id, "note": "Prefer mornings", "preferred_times": ["2026-08-10T09:00"]},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    lsr = LiveSessionRequest.objects.get(course=course, student=individual_user)
+    assert lsr.status == "pending"
+
+
+def test_trainer_sees_own_course_live_session_requests(
+    trainer_client, trainer_user, individual_user
+):
+    from apps.training.models import LiveSessionRequest
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    LiveSessionRequest.objects.create(course=course, student=individual_user, note="hi")
+    resp = trainer_client.get("/api/training/live-session-requests/")
+    assert resp.status_code == 200
+    data = resp.data["data"]
+    results = data.get("results", data) if isinstance(data, dict) else data
+    assert len(results) == 1

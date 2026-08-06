@@ -13,10 +13,12 @@ from .models import (
     CourseMessage,
     CourseProgress,
     CourseRegistration,
+    CourseUpdateRequest,
     InteractiveQuestion,
     LessonTopic,
     LiveSession,
     LiveSessionConsent,
+    LiveSessionRequest,
     SessionContent,
     TopicSession,
     TrainingCategory,
@@ -387,4 +389,76 @@ class LiveSessionConsentSerializer(serializers.ModelSerializer):
             "student_email",
             "live_session_title",
             "consented_at",
+        ]
+
+
+class CourseUpdateRequestSerializer(serializers.ModelSerializer):
+    """Report 3 §7.1/§7.2: trainer request to update/delete a published course."""
+
+    course_title = serializers.CharField(source="course.title", read_only=True)
+    requested_by_name = serializers.CharField(
+        source="requested_by.full_name", read_only=True, default=None
+    )
+    reviewed_by_name = serializers.CharField(
+        source="reviewed_by.full_name", read_only=True, default=None
+    )
+
+    class Meta:
+        model = CourseUpdateRequest
+        fields = [
+            "id",
+            "course",
+            "course_title",
+            "requested_by",
+            "requested_by_name",
+            "request_type",
+            "reason",
+            "status",
+            "admin_note",
+            "reviewed_by",
+            "reviewed_by_name",
+            "reviewed_at",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "requested_by",
+            "requested_by_name",
+            "status",
+            "reviewed_by",
+            "reviewed_by_name",
+            "reviewed_at",
+            "created_at",
+            "course_title",
+        ]
+
+
+class LiveSessionRequestSerializer(serializers.ModelSerializer):
+    """Report 3 §7.5/OS.4: candidate request to schedule a live session."""
+
+    course_title = serializers.CharField(source="course.title", read_only=True)
+    student_name = serializers.CharField(source="student.full_name", read_only=True, default=None)
+
+    class Meta:
+        model = LiveSessionRequest
+        fields = [
+            "id",
+            "course",
+            "course_title",
+            "student",
+            "student_name",
+            "preferred_times",
+            "note",
+            "status",
+            "scheduled_session",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "student",
+            "student_name",
+            "status",
+            "scheduled_session",
+            "created_at",
+            "course_title",
         ]

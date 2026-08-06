@@ -33,9 +33,11 @@ from .models import (
     CourseMessage,
     CourseProgress,
     CourseRegistration,
+    CourseUpdateRequest,
     LessonTopic,
     LiveSession,
     LiveSessionConsent,
+    LiveSessionRequest,
     SessionContent,
     TopicSession,
     TrainingCategory,
@@ -49,9 +51,11 @@ from .serializers import (
     CourseMessageSerializer,
     CourseProgressSerializer,
     CourseRegistrationSerializer,
+    CourseUpdateRequestSerializer,
     InteractiveQuestionSerializer,
     LessonTopicSerializer,
     LiveSessionConsentSerializer,
+    LiveSessionRequestSerializer,
     LiveSessionSerializer,
     SessionContentSerializer,
     TopicSessionSerializer,
@@ -98,10 +102,14 @@ class HasTrainingPermission(HasModulePermission):
         "assignment_reports": "add",
         "review_report": "change",
         "approve_late_submission": "change",
+        "request_update": "change",
         "consent": "add",
         "consents": "view",
         "interactive_questions": "change",
         "notify_students": "change",
+        # CourseUpdateRequestViewSet + LiveSessionRequestViewSet custom actions
+        "approve": "change",
+        "decline": "change",
         "zoom_config": "view",
         "zoom_create_meeting": "change",
         # Nested resource actions (CourseLessonViewSet, LessonTopicViewSet, etc.)
@@ -465,6 +473,75 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         return Response(
             {"message": "OK", "data": CourseRegistrationSerializer(regs, many=True).data},
             status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="request-update")
+    def request_update(self, request, pk=None):
+        """Report 3 §7.1/§7.2: trainer requests admin approval to update or
+        delete a PUBLISHED course.
+
+        POST body: {"request_type": "update" | "delete", "reason": "..."}
+        Creates a pending CourseUpdateRequest and notifies cj_admin. Only the
+        course's trainer (or admin) may request. The admin approves/declines
+        via the CourseUpdateRequestViewSet.
+        """
+        course = self.get_object()
+        user = request.user
+        user_role_name = user.role.name if user.role_id else None
+        is_trainer_or_admin = course.created_by_id == user.id or user_role_name == "cj_admin"
+        if not is_trainer_or_admin:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the course trainer or admin can request changes.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        req_type = request.data.get("request_type")
+        if req_type not in ("update", "delete"):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "request_type must be 'update' or 'delete'.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        reason = (request.data.get("reason") or "").strip()
+        if not reason:
+            return Response(
+                {"error": {"code": "validation_error", "message": "reason is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        cur = CourseUpdateRequest.objects.create(
+            course=course,
+            requested_by=user,
+            request_type=req_type,
+            reason=reason,
+        )
+        # Notify cj_admin (Report 3 §7.1).
+        try:
+            from apps.notifications.models import notify_role
+
+            notify_role(
+                "cj_admin",
+                f"Course {req_type} request: {course.title}",
+                f"{user.full_name or user.email} requested to {req_type} "
+                f"the published course '{course.title}'. Reason: {reason}",
+                "review",
+                f"/training/{course.id}",
+            )
+        except Exception:
+            pass
+        return Response(
+            {
+                "message": "Request submitted. An admin will review it.",
+                "data": CourseUpdateRequestSerializer(cur).data,
+            },
+            status=status.HTTP_201_CREATED,
         )
 
     @action(detail=False, methods=["get"])
@@ -1305,3 +1382,226 @@ class CourseAssessmentViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = CourseAssessmentSerializer
     http_method_names = ["get", "head", "options", "patch", "delete", "post"]
+
+
+# ---------------------------------------------------------------------------
+# Course Update Request (Report 3 §7.1/§7.2) — admin approval workflow
+# ---------------------------------------------------------------------------
+
+
+class CourseUpdateRequestViewSet(ModelViewSet):
+    """List/course-update requests + admin approve/decline actions.
+
+    Trainers see their own requests; admins see all. Approve/decline are
+    admin-only and notify the requesting trainer.
+    """
+
+    queryset = CourseUpdateRequest.objects.select_related("course", "requested_by", "reviewed_by")
+    permission_classes = [IsAuthenticated, HasTrainingPermission]
+    serializer_class = CourseUpdateRequestSerializer
+    http_method_names = ["get", "head", "options", "post"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        user_role_name = user.role.name if user.role_id else None
+        if user_role_name == "cj_admin" or user.is_superuser:
+            return qs
+        # Trainers see only their own requests
+        return qs.filter(requested_by=user)
+
+    def list(self, request, *args, **kwargs):
+        resp = super().list(request, *args, **kwargs)
+        return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        # Creation happens via /courses/<id>/request-update/ (which scopes to
+        # the course). Block direct creation here to keep the audit trail clean.
+        return Response(
+            {
+                "error": {
+                    "code": "forbidden",
+                    "message": "Submit requests via POST /courses/<id>/request-update/.",
+                }
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve(self, request, pk=None):
+        """Admin approves a course update/delete request (Report 3 §7.1/§7.2)."""
+        cur = self.get_object()
+        user = request.user
+        user_role_name = user.role.name if user.role_id else None
+        if user_role_name != "cj_admin" and not user.is_superuser:
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can approve."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if cur.status != "pending":
+            return Response(
+                {
+                    "error": {
+                        "code": "invalid_state",
+                        "message": f"Request is already {cur.status}.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from django.utils import timezone
+
+        cur.status = "approved"
+        cur.reviewed_by = user
+        cur.reviewed_at = timezone.now()
+        cur.admin_note = request.data.get("admin_note", "")
+        cur.save(update_fields=["status", "reviewed_by", "reviewed_at", "admin_note"])
+
+        # For delete requests, archive the course on approval.
+        if cur.request_type == "delete":
+            cur.course.status = "archived"
+            cur.course.save(update_fields=["status", "updated_at"])
+
+        # Notify the requesting trainer.
+        try:
+            from apps.notifications.models import notify_user
+
+            action_word = "deleted" if cur.request_type == "delete" else "may now edit"
+            notify_user(
+                cur.requested_by,
+                f"Course {cur.request_type} approved: {cur.course.title}",
+                f"Your request to {cur.request_type} '{cur.course.title}' was approved. "
+                f"The course {action_word}.",
+                "success",
+                f"/training/{cur.course_id}",
+            )
+        except Exception:
+            pass
+        return Response(
+            {"message": "Request approved.", "data": CourseUpdateRequestSerializer(cur).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="decline")
+    def decline(self, request, pk=None):
+        """Admin declines a course update/delete request."""
+        cur = self.get_object()
+        user = request.user
+        user_role_name = user.role.name if user.role_id else None
+        if user_role_name != "cj_admin" and not user.is_superuser:
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can decline."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if cur.status != "pending":
+            return Response(
+                {
+                    "error": {
+                        "code": "invalid_state",
+                        "message": f"Request is already {cur.status}.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from django.utils import timezone
+
+        cur.status = "declined"
+        cur.reviewed_by = user
+        cur.reviewed_at = timezone.now()
+        cur.admin_note = request.data.get("admin_note", "")
+        cur.save(update_fields=["status", "reviewed_by", "reviewed_at", "admin_note"])
+        try:
+            from apps.notifications.models import notify_user
+
+            notify_user(
+                cur.requested_by,
+                f"Course {cur.request_type} request declined: {cur.course.title}",
+                f"Your request to {cur.request_type} '{cur.course.title}' was declined. "
+                f"{cur.admin_note}",
+                "warning",
+                f"/training/{cur.course_id}",
+            )
+        except Exception:
+            pass
+        return Response(
+            {"message": "Request declined.", "data": CourseUpdateRequestSerializer(cur).data},
+            status=status.HTTP_200_OK,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Live Session Request (Report 3 §7.5/OS.4) — candidate schedule requests
+# ---------------------------------------------------------------------------
+
+
+class LiveSessionRequestViewSet(ModelViewSet):
+    """Candidate requests for the trainer to schedule a live session, plus
+    trainer scheduling against a request.
+
+    Candidates create requests; trainers list their course's requests and
+    schedule a session (which notifies the candidate).
+    """
+
+    queryset = LiveSessionRequest.objects.select_related("course", "student")
+    permission_classes = [IsAuthenticated, HasTrainingPermission]
+    serializer_class = LiveSessionRequestSerializer
+    http_method_names = ["get", "head", "options", "post"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        user_role_name = user.role.name if user.role_id else None
+        if user_role_name in ("cj_admin", "trainer") or user.is_superuser:
+            # Trainers see requests for their own courses
+            if user_role_name == "trainer":
+                return qs.filter(course__created_by=user)
+            return qs
+        # Candidates see their own requests
+        return qs.filter(student=user)
+
+    def list(self, request, *args, **kwargs):
+        resp = super().list(request, *args, **kwargs)
+        return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        course_id = request.data.get("course")
+        if not course_id:
+            return Response(
+                {"error": {"code": "validation_error", "message": "course is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        lsr = LiveSessionRequest.objects.create(
+            course_id=course_id,
+            student=request.user,
+            preferred_times=request.data.get("preferred_times", []),
+            note=request.data.get("note", ""),
+        )
+        # Notify the trainer.
+        try:
+            from apps.notifications.models import notify_user
+
+            course = lsr.course
+            if course.created_by:
+                notify_user(
+                    course.created_by,
+                    f"Live-session request: {course.title}",
+                    f"{request.user.full_name or request.user.email} requested a live session. "
+                    f"Note: {lsr.note}",
+                    "session",
+                    f"/training/{course.id}",
+                )
+        except Exception:
+            pass
+        return Response(
+            {"message": "Request sent to trainer.", "data": LiveSessionRequestSerializer(lsr).data},
+            status=status.HTTP_201_CREATED,
+        )

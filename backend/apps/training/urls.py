@@ -7,7 +7,9 @@ from .views import (
     CourseAssessmentViewSet,
     CourseLessonViewSet,
     CourseRegistrationViewSet,
+    CourseUpdateRequestViewSet,
     LessonTopicViewSet,
+    LiveSessionRequestViewSet,
     LiveSessionViewSet,
     SessionContentViewSet,
     TopicSessionViewSet,
@@ -27,6 +29,11 @@ router.register("sessions", TopicSessionViewSet, basename="session")
 router.register("contents", SessionContentViewSet, basename="content")
 router.register("course-assessments", CourseAssessmentViewSet, basename="course-assessment")
 router.register("live-sessions", LiveSessionViewSet, basename="live-session")
+# Report 3 §6/§7
+router.register(
+    "course-update-requests", CourseUpdateRequestViewSet, basename="course-update-request"
+)
+router.register("live-session-requests", LiveSessionRequestViewSet, basename="live-session-request")
 
 urlpatterns = [
     path("", include(router.urls)),
