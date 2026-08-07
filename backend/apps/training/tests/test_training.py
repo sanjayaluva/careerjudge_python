@@ -971,3 +971,79 @@ def test_trainer_sees_own_course_live_session_requests(
     data = resp.data["data"]
     results = data.get("results", data) if isinstance(data, dict) else data
     assert len(results) == 1
+
+
+# ---------------------------------------------------------------------------
+# Completion Parameters (Report 3 §6)
+# ---------------------------------------------------------------------------
+
+
+def test_trainer_can_set_completion_parameters(trainer_client, trainer_user):
+    """Report 3 §6.1: trainer sets which contents are mandatory for completion."""
+    from apps.training.models import (
+        CourseCompletionParameter,
+        CourseLesson,
+        LessonTopic,
+        SessionContent,
+        TopicSession,
+    )
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
+    lesson = CourseLesson.objects.create(course=course, title="L", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="T", order=1)
+    session = TopicSession.objects.create(topic=topic, title="S", order=1)
+    sc = SessionContent.objects.create(session=session, title="Content 1", order=1)
+
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/completion-parameters/",
+        {
+            "parameters": [
+                {"content_type": "session_content", "content_id": sc.id, "is_mandatory": True},
+            ]
+        },
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    assert CourseCompletionParameter.objects.filter(course=course, is_mandatory=True).count() == 1
+
+
+def test_progress_summary_uses_mandatory_params(admin_client, trainer_user, individual_user):
+    """Report 3 §6: completion % is computed against mandatory parameters
+    when set, not all progress records."""
+    from apps.training.models import (
+        CourseCompletionParameter,
+        CourseLesson,
+        CourseProgress,
+        CourseRegistration,
+        LessonTopic,
+        SessionContent,
+        TopicSession,
+    )
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="T", order=1)
+    session = TopicSession.objects.create(topic=topic, title="S", order=1)
+    sc1 = SessionContent.objects.create(session=session, title="C1", order=1)
+    sc2 = SessionContent.objects.create(session=session, title="C2", order=2)
+    # Only sc1 is mandatory
+    CourseCompletionParameter.objects.create(
+        course=course, content_type="session_content", content_id=sc1.id, is_mandatory=True
+    )
+    reg = CourseRegistration.objects.create(
+        course=course, student=individual_user, payment_status="paid"
+    )
+    # Student completed sc2 (non-mandatory) but NOT sc1 (mandatory)
+    CourseProgress.objects.create(
+        registration=reg,
+        content_type="session_content",
+        content_id=sc2.id,
+        is_completed=True,
+    )
+    resp = admin_client.get(f"/api/training/registrations/{reg.id}/progress_summary/")
+    assert resp.status_code == 200
+    data = resp.data["data"]
+    # Mandatory completion = 0/1 = 0% (sc1 not done) -> overrides completion_pct
+    assert data["mandatory_total_count"] == 1
+    assert data["mandatory_completed_count"] == 0
+    assert data["completion_percentage"] == 0.0

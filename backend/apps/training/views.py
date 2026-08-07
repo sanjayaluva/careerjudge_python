@@ -93,6 +93,7 @@ class HasTrainingPermission(HasModulePermission):
         "lessons": "change",
         "live_sessions": "change",
         "assessments": "change",
+        "completion_parameters": "change",
         "register": "add",
         "registrations": "view",
         "progress": "change",
@@ -342,6 +343,69 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         return Response(
             {"message": "Assessment added.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["get", "post"], url_path="completion-parameters")
+    def completion_parameters(self, request, pk=None):
+        """Report 3 §6.1: list or set course-completion parameters.
+
+        GET: returns all CourseCompletionParameter rows for this course.
+        POST body (set/replace the full set):
+            {
+              "parameters": [
+                {"content_type": "session_content", "content_id": 12, "is_mandatory": true},
+                {"content_type": "assignment",      "content_id": 7,  "is_mandatory": true},
+                ...
+              ]
+            }
+        Posting replaces the full set (idempotent) so the trainer's 'Set
+        Parameters' form reflects exactly what they checked.
+        """
+        from .models import CourseCompletionParameter
+        from .serializers import CourseCompletionParameterSerializer
+
+        course = self.get_object()
+        if request.method == "GET":
+            params = course.completion_parameters.all()
+            return Response(
+                {
+                    "message": "OK",
+                    "data": CourseCompletionParameterSerializer(params, many=True).data,
+                },
+                status=status.HTTP_200_OK,
+            )
+        # POST: replace the full set
+        parameters = request.data.get("parameters", [])
+        if not isinstance(parameters, list):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "parameters must be a list.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        CourseCompletionParameter.objects.filter(course=course).delete()
+        new_objs = [
+            CourseCompletionParameter(
+                course=course,
+                content_type=p.get("content_type"),
+                content_id=p.get("content_id"),
+                is_mandatory=bool(p.get("is_mandatory", True)),
+            )
+            for p in parameters
+            if p.get("content_type") and p.get("content_id")
+        ]
+        CourseCompletionParameter.objects.bulk_create(new_objs)
+        return Response(
+            {
+                "message": f"Saved {len(new_objs)} completion parameter(s).",
+                "data": CourseCompletionParameterSerializer(
+                    course.completion_parameters.all(), many=True
+                ).data,
+            },
+            status=status.HTTP_200_OK,
         )
 
     @action(detail=True, methods=["post"])
@@ -752,6 +816,32 @@ class CourseRegistrationViewSet(ModelViewSet):
             round((len(completed) / len(progress_records)) * 100, 1) if progress_records else 0.0
         )
 
+        # Report 3 §6: completion against MANDATORY parameters. If the trainer
+        # has marked any contents mandatory, compute what fraction of those
+        # mandatory contents the student has completed (this is the figure that
+        # determines true course completion). Falls back to completion_pct when
+        # no mandatory params are set.
+        mandatory_params = list(reg.course.completion_parameters.filter(is_mandatory=True))
+        mandatory_completion_pct = None
+        mandatory_completed_count = None
+        mandatory_total_count = None
+        if mandatory_params:
+            completed_keys = {
+                (p.content_type, p.content_id) for p in progress_records if p.is_completed
+            }
+            mandatory_total_count = len(mandatory_params)
+            mandatory_completed_count = sum(
+                1 for mp in mandatory_params if (mp.content_type, mp.content_id) in completed_keys
+            )
+            mandatory_completion_pct = (
+                round((mandatory_completed_count / mandatory_total_count) * 100, 1)
+                if mandatory_total_count
+                else 0.0
+            )
+            # Override completion_pct with the mandatory figure when set — this
+            # is what 'course completion' actually means per SRS §2.6.
+            completion_pct = mandatory_completion_pct
+
         return Response(
             {
                 "message": "OK",
@@ -759,6 +849,9 @@ class CourseRegistrationViewSet(ModelViewSet):
                     "completion_percentage": completion_pct,
                     "completed_count": len(completed),
                     "total_count": len(progress_records),
+                    "mandatory_completion_percentage": mandatory_completion_pct,
+                    "mandatory_completed_count": mandatory_completed_count,
+                    "mandatory_total_count": mandatory_total_count,
                     "total_time_spent_seconds": total_time_spent,
                     "total_time_allowed_seconds": total_time_allowed,
                     "time_left_seconds": time_left,
