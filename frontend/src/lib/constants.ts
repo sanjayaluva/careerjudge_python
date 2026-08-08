@@ -12,6 +12,7 @@
 
 export type RoleName =
   | "cj_admin"
+  | "helpdesk"
   | "corp_admin"
   | "corp_exclusive"
   | "psychometrician"
@@ -40,6 +41,7 @@ export type ModuleKey =
 
 export const ROLE_LABELS: Record<RoleName, string> = {
   cj_admin: "CareerJudge Admin",
+  helpdesk: "Help Desk",
   corp_admin: "Corporate Admin",
   corp_exclusive: "Corporate Exclusive",
   psychometrician: "Psychometrician",
@@ -55,6 +57,7 @@ export const ROLE_LABELS: Record<RoleName, string> = {
 /** Allowed role names when creating a new role via the admin API. */
 export const ROLE_NAME_CHOICES: RoleName[] = [
   "cj_admin",
+  "helpdesk",
   "corp_admin",
   "corp_exclusive",
   "psychometrician",
@@ -90,6 +93,7 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "cms",
     "tasks",
   ],
+  helpdesk: ["dashboard", "profile", "training", "counseling"],
   corp_admin: [
     "dashboard",
     "profile",

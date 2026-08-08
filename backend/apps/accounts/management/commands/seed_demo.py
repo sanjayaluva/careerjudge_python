@@ -34,6 +34,7 @@ User = get_user_model()
 DEMO_USERS = [
     # (role_name, email, full_name, password)
     ("cj_admin", "cj.admin@demo.careerjudge.pp.ua", "CJ Admin", "Demo@1234"),
+    ("helpdesk", "helpdesk@demo.careerjudge.pp.ua", "Help Desk", "Demo@1234"),
     ("corp_admin", "corp.admin@demo.careerjudge.pp.ua", "Corp Admin", "Demo@1234"),
     ("corp_exclusive", "corp.exclusive@demo.careerjudge.pp.ua", "Corp Exclusive", "Demo@1234"),
     ("psychometrician", "psychometrician@demo.careerjudge.pp.ua", "Psychometrician", "Demo@1234"),
@@ -92,6 +93,14 @@ ROLE_PERMISSIONS = {
         ("tasks", "delete"),
         ("tasks", "assign"),
         ("tasks", "approve"),
+    ],
+    "helpdesk": [
+        ("training", "view"),
+        ("counseling", "view"),
+        ("counseling", "add"),
+        ("counseling", "change"),
+        ("notifications", "view"),
+        ("accounts", "view"),
     ],
     "corp_admin": [
         ("accounts", "view"),

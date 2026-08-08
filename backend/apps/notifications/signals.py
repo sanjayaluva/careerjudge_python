@@ -86,6 +86,14 @@ def notify_on_review_action(sender, instance, created, **kwargs):
     )
 
 
+def _notify_admin_and_helpdesk(title, message, ntype="info", link=""):
+    """Notify both cj_admin and helpdesk roles."""
+    from .models import notify_role
+
+    notify_role("cj_admin", title, message, ntype, link)
+    notify_role("helpdesk", title, message, ntype, link)
+
+
 # ---------------------------------------------------------------------------
 # Doc 3 — Training + Counselling notification signals
 # ---------------------------------------------------------------------------
@@ -96,12 +104,11 @@ def notify_on_course_registration(sender, instance, created, **kwargs):
     """Per Doc 3 Issues 1.2, 1.5: notify admin + trainer on registration."""
     if not created:
         return
-    from .models import notify_role, notify_user
+    from .models import notify_user
 
     course = instance.course
     # Notify admin
-    notify_role(
-        "cj_admin",
+    _notify_admin_and_helpdesk(
         "New course registration",
         f"User {instance.student.email} registered for course '{course.title}'. Payment status: {instance.payment_status}.",
         "info",
@@ -140,12 +147,11 @@ def notify_on_assignment_report_submitted(sender, instance, created, **kwargs):
 @receiver(post_save, sender="training.CourseModificationRequest")
 def notify_on_course_modification_request(sender, instance, created, **kwargs):
     """Per Doc 3 Issues 6.1, 6.2: notify admin on request, notify trainer on decision."""
-    from .models import notify_role, notify_user
+    from .models import notify_user
 
     if created:
         # Notify admin of new request
-        notify_role(
-            "cj_admin",
+        _notify_admin_and_helpdesk(
             f"Course {instance.request_type} request",
             f"Trainer {instance.trainer.email} requests to {instance.request_type} course '{instance.course.title}'. Reason: {instance.reason}",
             "warning",
@@ -186,7 +192,7 @@ def notify_on_session_reschedule(sender, instance, created, **kwargs):
 @receiver(post_save, sender="counseling.CounselingSession")
 def notify_on_counseling_session(sender, instance, created, **kwargs):
     """Per Doc 3 Issues 1.10, 1.12, 1.13: notify on booking/confirmation/cancellation."""
-    from .models import notify_role, notify_user
+    from .models import notify_user
 
     if created:
         # New booking — notify counsellor + help desk
@@ -197,8 +203,7 @@ def notify_on_counseling_session(sender, instance, created, **kwargs):
             "info",
             f"/counseling/{instance.id}",
         )
-        notify_role(
-            "cj_admin",
+        _notify_admin_and_helpdesk(
             "New counseling booking",
             f"Booking: {instance.counselee.email} → {instance.counsellor.full_name}. Topic: {instance.topic}.",
             "info",
@@ -229,7 +234,7 @@ def notify_on_followup_session(sender, instance, created, **kwargs):
     """Per Doc 3 Issues CD-6, CD-7: notify on followup session proposed."""
     if not created:
         return
-    from .models import notify_role, notify_user
+    from .models import notify_user
 
     # Notify counselee + help desk
     notify_user(
@@ -239,8 +244,7 @@ def notify_on_followup_session(sender, instance, created, **kwargs):
         "info",
         "/counseling",
     )
-    notify_role(
-        "cj_admin",
+    _notify_admin_and_helpdesk(
         "Followup session proposed",
         f"Counsellor {instance.original_session.counsellor.full_name} proposed a followup for {instance.original_session.counselee.email}.",
         "info",

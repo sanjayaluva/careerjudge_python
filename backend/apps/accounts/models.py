@@ -88,6 +88,7 @@ class Role(models.Model):
 
     ROLE_CHOICES = [
         ("cj_admin", "CareerJudge Admin"),
+        ("helpdesk", "Help Desk"),
         ("corp_admin", "Corporate Admin"),
         ("corp_exclusive", "Corporate Exclusive"),
         ("psychometrician", "Psychometrician"),
