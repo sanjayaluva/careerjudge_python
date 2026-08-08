@@ -1032,10 +1032,106 @@ class LiveSessionViewSet(ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=True, methods=["post"])
+    def reschedule(self, request, pk=None):
+        """Trainer reschedules a live session with reason (Doc 3 Issues 6.4, OL-2).
 
-# ---------------------------------------------------------------------------
-# Session Content → Interactive Questions (SRS §2.3.1 Timeliner)
-# ---------------------------------------------------------------------------
+        POST /api/training/live-sessions/<id>/reschedule/
+        body: {
+            "new_start_time": "2026-08-15T10:00:00Z",
+            "reason": "Public holiday",
+            "push_forward": true  // if true, all subsequent sessions shifted
+        }
+        """
+
+        from .models import SessionReschedule
+
+        live_session = self.get_object()
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_trainer_or_admin = (
+            live_session.course.created_by_id == request.user.id or user_role_name == "cj_admin"
+        )
+        if not is_trainer_or_admin:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the trainer or admin can reschedule sessions.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        new_start_time = request.data.get("new_start_time")
+        reason = request.data.get("reason", "")
+        push_forward = request.data.get("push_forward", False)
+
+        if not new_start_time:
+            return Response(
+                {"error": {"code": "validation_error", "message": "new_start_time is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        old_start_time = live_session.scheduled_at
+        if not old_start_time:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "Session has no scheduled time.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Parse new time
+        from django.utils.dateparse import parse_datetime
+
+        new_dt = parse_datetime(new_start_time)
+        if not new_dt:
+            return Response(
+                {"error": {"code": "validation_error", "message": "Invalid datetime format."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create reschedule record
+        reschedule = SessionReschedule.objects.create(
+            live_session=live_session,
+            old_start_time=old_start_time,
+            new_start_time=new_dt,
+            reason=reason,
+            rescheduled_by=request.user,
+            push_forward_remaining=push_forward,
+        )
+
+        # Update the session's scheduled time
+        live_session.scheduled_at = new_dt
+        live_session.save(update_fields=["scheduled_at"])
+
+        # If push_forward is True, shift all subsequent sessions by the same delta
+        if push_forward:
+            delta = new_dt - old_start_time
+            subsequent = LiveSession.objects.filter(
+                course=live_session.course,
+                scheduled_at__gt=old_start_time,
+            ).exclude(pk=live_session.pk)
+            for session in subsequent:
+                session.scheduled_at = session.scheduled_at + delta
+                session.save(update_fields=["scheduled_at"])
+
+        return Response(
+            {
+                "message": "Session rescheduled."
+                + (" Subsequent sessions pushed forward." if push_forward else ""),
+                "data": {
+                    "reschedule_id": reschedule.id,
+                    "old_start_time": old_start_time.isoformat(),
+                    "new_start_time": new_dt.isoformat(),
+                    "push_forward": push_forward,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class SessionContentViewSet(ModelViewSet):

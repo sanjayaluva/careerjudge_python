@@ -102,6 +102,13 @@ class TrainingCourse(models.Model):
     )
 
     status = models.CharField(_("status"), max_length=20, choices=STATUS_CHOICES, default="draft")
+    # Per Doc 3 Issue 5.1: content sequencing — if True, candidate must
+    # complete contents in sequential order (cannot skip ahead)
+    content_sequencing_enabled = models.BooleanField(
+        _("content sequencing enabled"),
+        default=False,
+        help_text=_("If True, candidate must complete contents in sequential order. Cannot skip."),
+    )
 
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -233,11 +240,16 @@ class SessionContent(models.Model):
 
 
 class Assignment(models.Model):
-    """Additional training materials (SRS §2.3.2).
+    """Additional training materials (SRS §2.3.2 + Doc 3).
 
     Assignments are NOT part of the main session — they're additional
     study materials (videos, audios, docs, YouTube links, websites).
     Optionally enables report submission by students.
+
+    Per Doc 3:
+    - submission_deadline: last date for report submission
+    - report_submission_enabled: mandatory/non-mandatory toggle
+    - Rich-text description via WysiwygEditorLite on frontend
     """
 
     session = models.ForeignKey(TopicSession, on_delete=models.CASCADE, related_name="assignments")
@@ -248,6 +260,23 @@ class Assignment(models.Model):
     # Whether students can submit a report for this assignment
     report_submission_enabled = models.BooleanField(_("report submission enabled"), default=False)
     report_instructions = models.TextField(_("report instructions"), blank=True, default="")
+    # Per Doc 3 Issue 3.3: last date for assignment submission
+    submission_deadline = models.DateTimeField(
+        _("submission deadline"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Last date/time for report submission. After deadline, special trainer permission required."
+        ),
+    )
+    # Per Doc 3 Issue 3.4: mandatory/non-mandatory toggle (report_submission_enabled serves this)
+    is_mandatory = models.BooleanField(
+        _("is mandatory"),
+        default=False,
+        help_text=_(
+            "If True, candidate cannot proceed to next session/topic/lesson until report is submitted."
+        ),
+    )
     order = models.PositiveIntegerField(_("order"), default=0)
 
     class Meta:
@@ -495,15 +524,27 @@ class AssignmentReport(models.Model):
         _("report file URL"),
         blank=True,
         default="",
-        help_text=_("URL or base64 data URL of the uploaded report file"),
+        help_text=_("URL or base64 data URL of the uploaded report file (PDF/PPT/Word)"),
+    )
+    # Per Doc 3 Issue 3.6: file type of the uploaded report
+    report_file_type = models.CharField(
+        _("report file type"),
+        max_length=20,
+        blank=True,
+        default="",
+        help_text=_("File type of uploaded report: pdf, ppt, word, etc."),
     )
 
     # Trainer review fields (filled when status moves to 'reviewed')
     status = models.CharField(
         _("status"), max_length=20, choices=STATUS_CHOICES, default="submitted"
     )
+    # Per Doc 3 Issue 3.8: trainer rates on 10-point scale
     trainer_score = models.FloatField(
-        _("trainer score"), null=True, blank=True, help_text=_("Score given by trainer (0-100)")
+        _("trainer score"),
+        null=True,
+        blank=True,
+        help_text=_("Score given by trainer (0-10 scale)"),
     )
     trainer_feedback = models.TextField(_("trainer feedback"), blank=True, default="")
     reviewed_at = models.DateTimeField(_("reviewed at"), null=True, blank=True)
@@ -652,3 +693,108 @@ class InteractiveQuestion(models.Model):
             if opt.get("is_correct"):
                 return opt.get("id")
         return None
+
+
+# ---------------------------------------------------------------------------
+# CourseModificationRequest — trainer requests admin approval to update/delete
+# a published course. Per Doc 3 Issues 6.1, 6.2.
+# ---------------------------------------------------------------------------
+
+
+class CourseModificationRequest(models.Model):
+    """Trainer's request to update or delete a published course.
+
+    Per Doc 3 Issues 6.1, 6.2:
+    - Trainer clicks 'Request Course Update' or 'Request Course Deletion'
+    - Notification sent to Admin
+    - Admin approves or rejects
+    - Notification of decision sent to Trainer
+    """
+
+    REQUEST_TYPE_CHOICES = [
+        ("update", "Course Update"),
+        ("delete", "Course Deletion"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending Admin Review"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    course = models.ForeignKey(
+        TrainingCourse, on_delete=models.CASCADE, related_name="modification_requests"
+    )
+    trainer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="course_modification_requests",
+    )
+    request_type = models.CharField(_("request type"), max_length=10, choices=REQUEST_TYPE_CHOICES)
+    reason = models.TextField(_("reason"), help_text=_("Reason for the update/delete request"))
+    status = models.CharField(_("status"), max_length=10, choices=STATUS_CHOICES, default="pending")
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="course_modification_reviews",
+    )
+    review_comment = models.TextField(_("review comment"), blank=True, default="")
+    reviewed_at = models.DateTimeField(_("reviewed at"), null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("course modification request")
+        verbose_name_plural = _("course modification requests")
+
+    def __str__(self) -> str:
+        return f"{self.request_type} request for '{self.course.title}' ({self.status})"
+
+
+# ---------------------------------------------------------------------------
+# SessionReschedule — trainer reschedules a live session with reason.
+# Per Doc 3 Issues 6.4, OL-2.
+# ---------------------------------------------------------------------------
+
+
+class SessionReschedule(models.Model):
+    """Record of a live session reschedule by the trainer.
+
+    Per Doc 3:
+    - Trainer reschedules with reason (Doc 3 Issue 6.4)
+    - In advance scheduling, rest of schedule pushed forward (OL-2)
+    """
+
+    live_session = models.ForeignKey(
+        "LiveSession", on_delete=models.CASCADE, related_name="reschedules"
+    )
+    old_start_time = models.DateTimeField(_("old start time"))
+    new_start_time = models.DateTimeField(_("new start time"))
+    reason = models.TextField(_("reason"), help_text=_("Reason for rescheduling"))
+    rescheduled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="session_reschedules"
+    )
+    # If True, all subsequent sessions in the course are pushed forward
+    # by the same time delta (Doc 3 OL-2)
+    push_forward_remaining = models.BooleanField(
+        _("push forward remaining sessions"),
+        default=False,
+        help_text=_("If True, all subsequent live sessions are shifted by the same delta."),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("session reschedule")
+        verbose_name_plural = _("session reschedules")
+
+    def __str__(self) -> str:
+        return f"Reschedule {self.live_session.id}: {self.old_start_time} -> {self.new_start_time}"
+
+    @property
+    def time_delta_seconds(self) -> int:
+        """Time difference in seconds between old and new start times."""
+        if self.old_start_time and self.new_start_time:
+            return int((self.new_start_time - self.old_start_time).total_seconds())
+        return 0

@@ -159,15 +159,42 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
     @action(detail=True, methods=["get"])
     def timeslots(self, request, pk=None):
         """List a counsellor's available timeslots (SRS §2.1: 'System shows
-        available timeslots of the counsellor for a week')."""
+        available timeslots of the counsellor for a week').
+
+        Per Doc 3 Issue 1.3: if less than 1 week of timeslots is available,
+        notify the counsellor + help desk.
+        """
         counsellor = self.get_object()
-        # Default: show slots from now to 3 weeks ahead (SRS §3.1 max)
         weeks = int(request.query_params.get("weeks", 3))
         from_date = timezone.now()
         to_date = from_date + timedelta(weeks=weeks)
         slots = counsellor.timeslots.filter(
             start_time__gte=from_date, start_time__lte=to_date
         ).order_by("start_time")
+
+        # Per Doc 3 Issue 1.3: check if at least 1 week of timeslots is available
+        one_week_ahead = from_date + timedelta(weeks=1)
+        available_count = counsellor.timeslots.filter(
+            status="available", start_time__gte=from_date, start_time__lte=one_week_ahead
+        ).count()
+        if available_count == 0:
+            from apps.notifications.models import notify_role, notify_user
+
+            notify_user(
+                counsellor.user,
+                "Timeslot update needed",
+                "You have no available timeslots in the next week. Please add timeslots.",
+                "warning",
+                "/counseling",
+            )
+            notify_role(
+                "cj_admin",
+                "Counsellor timeslot warning",
+                f"Counsellor {counsellor.full_name} has no available timeslots in the next week.",
+                "warning",
+                "/counseling",
+            )
+
         return Response(
             {"message": "OK", "data": TimeSlotSerializer(slots, many=True).data},
             status=status.HTTP_200_OK,
@@ -230,6 +257,22 @@ class TimeSlotViewSet(ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+        # Per Doc 3 Issue 1.2: timeslots limited to next 3 weeks
+        start_time = serializer.validated_data.get("start_time")
+        if start_time:
+            from datetime import timedelta as _td
+
+            max_date = timezone.now() + _td(weeks=3)
+            if start_time > max_date:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "Timeslots can only be created up to 3 weeks in advance.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         serializer.save()
         return Response(
             {"message": "Time slot created.", "data": serializer.data},
@@ -421,6 +464,9 @@ class CounselingSessionViewSet(ModelViewSet):
                 "data": {
                     "session": CounselingSessionSerializer(session).data,
                     "cancellation": SessionCancellationSerializer(cancellation).data,
+                    # Per Doc 3 Issue 1.16: suggest rebooking
+                    "suggested_action": "Would you like to book another counsellor or timeslot?",
+                    "cancellation_policy": CounselingSettings.get().cancellation_policy,
                 },
             },
             status=status.HTTP_200_OK,
@@ -571,12 +617,39 @@ class CounselingSessionViewSet(ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def my_sessions(self, request):
-        """Counselee views their own sessions."""
+        """Counselee views their own sessions.
+
+        Also auto-cancels sessions that haven't been confirmed by the
+        counsellor within 6 hours of booking (Doc 3 Issue 1.12).
+        """
+        self._auto_cancel_unconfirmed_sessions()
         sessions = self.get_queryset().filter(counselee=request.user)
         return Response(
             {"message": "OK", "data": CounselingSessionSerializer(sessions, many=True).data},
             status=status.HTTP_200_OK,
         )
+
+    def _auto_cancel_unconfirmed_sessions(self):
+        """Auto-cancel pending sessions where 6 hours have passed since
+        booking without counsellor confirmation. Per Doc 3 Issue 1.12."""
+        from datetime import timedelta
+
+        cutoff = timezone.now() - timedelta(hours=6)
+        expired = CounselingSession.objects.filter(
+            status="pending",
+            booked_at__lt=cutoff,
+        )
+        for session in expired:
+            session.status = "cancelled"
+            session.save(update_fields=["status"])
+            # Create cancellation record
+            SessionCancellation.objects.create(
+                session=session,
+                cancelled_by="system",
+                reason="Auto-cancelled: counsellor did not confirm within 6 hours.",
+                refund_tier="full",
+                refund_amount=session.fee,
+            )
 
 
 # ---------------------------------------------------------------------------
