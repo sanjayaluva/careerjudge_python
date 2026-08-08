@@ -189,6 +189,10 @@ export interface ProgressSummary {
   last_content: { content_type: string; content_id: number } | null;
   completion_status: string;
   started_at: string | null;
+  /** Report 3 §6: mandatory-parameter completion figures (null if no params set). */
+  mandatory_completion_percentage: number | null;
+  mandatory_completed_count: number | null;
+  mandatory_total_count: number | null;
 }
 
 export interface CourseMessage {
@@ -317,6 +321,110 @@ export function deleteCourse(id: number): Promise<void> {
 
 export function publishCourse(id: number): Promise<{ id: number; status: string }> {
   return apiPost(`${BASE}/courses/${id}/publish/`);
+}
+
+// ---------------------------------------------------------------------------
+// Report 3 §6 — completion parameters
+// ---------------------------------------------------------------------------
+
+export interface CompletionParameter {
+  id?: number;
+  content_type: "session_content" | "assignment" | "assessment" | "live_session";
+  content_id: number;
+  is_mandatory: boolean;
+}
+
+export function listCompletionParameters(courseId: number): Promise<CompletionParameter[]> {
+  return apiGet<CompletionParameter[]>(`${BASE}/courses/${courseId}/completion-parameters/`);
+}
+
+export function setCompletionParameters(
+  courseId: number,
+  parameters: CompletionParameter[],
+): Promise<CompletionParameter[]> {
+  return apiPost<CompletionParameter[]>(`${BASE}/courses/${courseId}/completion-parameters/`, {
+    parameters,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Report 3 §7 — course update requests (trainer -> admin approval workflow)
+// ---------------------------------------------------------------------------
+
+export interface CourseUpdateRequest {
+  id: number;
+  course: number;
+  course_title: string;
+  requested_by: number;
+  requested_by_name: string | null;
+  request_type: "update" | "delete";
+  reason: string;
+  status: "pending" | "approved" | "declined";
+  admin_note: string;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export function requestCourseUpdate(
+  courseId: number,
+  payload: { request_type: "update" | "delete"; reason: string },
+): Promise<CourseUpdateRequest> {
+  return apiPost<CourseUpdateRequest>(`${BASE}/courses/${courseId}/request-update/`, payload);
+}
+
+export function listCourseUpdateRequests(): Promise<CourseUpdateRequest[]> {
+  return apiGet<CourseUpdateRequest[]>(`${BASE}/course-update-requests/`);
+}
+
+export function approveCourseUpdateRequest(
+  id: number,
+  adminNote?: string,
+): Promise<CourseUpdateRequest> {
+  return apiPost<CourseUpdateRequest>(
+    `${BASE}/course-update-requests/${id}/approve/`,
+    adminNote ? { admin_note: adminNote } : {},
+  );
+}
+
+export function declineCourseUpdateRequest(
+  id: number,
+  adminNote?: string,
+): Promise<CourseUpdateRequest> {
+  return apiPost<CourseUpdateRequest>(
+    `${BASE}/course-update-requests/${id}/decline/`,
+    adminNote ? { admin_note: adminNote } : {},
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Report 3 §7.5/OS.4 — candidate live-session requests
+// ---------------------------------------------------------------------------
+
+export interface LiveSessionRequestItem {
+  id: number;
+  course: number;
+  course_title: string;
+  student: number;
+  student_name: string | null;
+  preferred_times: string[];
+  note: string;
+  status: "pending" | "scheduled" | "declined";
+  created_at: string;
+}
+
+export function requestLiveSession(
+  courseId: number,
+  payload: { preferred_times?: string[]; note?: string },
+): Promise<LiveSessionRequestItem> {
+  return apiPost<LiveSessionRequestItem>(`${BASE}/live-session-requests/`, {
+    course: courseId,
+    ...payload,
+  });
+}
+
+export function listLiveSessionRequests(): Promise<LiveSessionRequestItem[]> {
+  return apiGet<LiveSessionRequestItem[]>(`${BASE}/live-session-requests/`);
 }
 
 export function registerForCourse(
