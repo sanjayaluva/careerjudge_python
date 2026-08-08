@@ -1047,3 +1047,68 @@ def test_progress_summary_uses_mandatory_params(admin_client, trainer_user, indi
     assert data["mandatory_total_count"] == 1
     assert data["mandatory_completed_count"] == 0
     assert data["completion_percentage"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Live Session reschedule (Report 3 §7.4/OL.2)
+# ---------------------------------------------------------------------------
+
+
+def test_trainer_can_reschedule_live_session(trainer_client, trainer_user, individual_user):
+    """Report 3 §7.4: trainer reschedules a session; the old time + reason are recorded."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.training.models import CourseRegistration, LiveSession
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    original = timezone.now() + timedelta(days=2)
+    ls = LiveSession.objects.create(
+        course=course, title="Q&A", scheduled_at=original, duration_minutes=60
+    )
+    CourseRegistration.objects.create(course=course, student=individual_user, payment_status="paid")
+    new_time = (timezone.now() + timedelta(days=5)).isoformat()
+    resp = trainer_client.post(
+        f"/api/training/live-sessions/{ls.id}/reschedule/",
+        {"scheduled_at": new_time, "reason": "Trainer unavailable"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    ls.refresh_from_db()
+    assert ls.rescheduled_from is not None
+    assert ls.reschedule_reason == "Trainer unavailable"
+
+
+def test_reschedule_requires_reason(trainer_client, trainer_user):
+    from apps.training.models import LiveSession
+
+    from django.utils import timezone
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    ls = LiveSession.objects.create(
+        course=course, title="Q&A", scheduled_at=timezone.now(), duration_minutes=60
+    )
+    resp = trainer_client.post(
+        f"/api/training/live-sessions/{ls.id}/reschedule/",
+        {"scheduled_at": "2026-12-01T10:00:00"},
+        format="json",
+    )
+    assert resp.status_code == 400
+
+
+def test_non_trainer_cannot_reschedule(student_client, trainer_user):
+    from django.utils import timezone
+
+    from apps.training.models import LiveSession
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    ls = LiveSession.objects.create(
+        course=course, title="Q&A", scheduled_at=timezone.now(), duration_minutes=60
+    )
+    resp = student_client.post(
+        f"/api/training/live-sessions/{ls.id}/reschedule/",
+        {"scheduled_at": "2026-12-01T10:00:00", "reason": "x"},
+        format="json",
+    )
+    assert resp.status_code == 403

@@ -62,6 +62,7 @@ class SessionContentSerializer(serializers.ModelSerializer):
             "title",
             "content_format",
             "content_url",
+            "document",
             "text_content",
             "duration_seconds",
             "order",
@@ -145,14 +146,18 @@ class LiveSessionSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "mode",
+            "schedule_mode",
+            "depends_on",
             "meeting_url",
             "venue",
             "scheduled_at",
             "duration_minutes",
             "status",
+            "rescheduled_from",
+            "reschedule_reason",
             "created_at",
         ]
-        read_only_fields = ["id", "created_at", "course"]
+        read_only_fields = ["id", "created_at", "course", "rescheduled_from"]
 
 
 class CourseCompletionParameterSerializer(serializers.ModelSerializer):

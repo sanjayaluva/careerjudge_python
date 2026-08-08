@@ -205,6 +205,7 @@ class SessionContent(models.Model):
         ("video", "Video"),
         ("audio", "Audio"),
         ("text", "Text"),
+        ("document", "Document (PDF / Word / PPT)"),
     ]
 
     session = models.ForeignKey(TopicSession, on_delete=models.CASCADE, related_name="contents")
@@ -217,7 +218,16 @@ class SessionContent(models.Model):
     content_url = models.TextField(
         _("content URL"), blank=True, default="", help_text=_("URL or base64 data URL")
     )
-    # Optional text content (for text format or transcript)
+    # Report 3 §OS.1: uploaded document (PDF/Word/PPT) for document-format content.
+    document = models.FileField(
+        _("document"),
+        upload_to="session_documents/",
+        null=True,
+        blank=True,
+        help_text=_("Uploaded PDF/Word/PPT document (document format)."),
+    )
+    # Optional text content (for text format or transcript). Report 3 §OS.1/§3.7:
+    # may be rich-text HTML so the trainer can format/embed media links.
     text_content = models.TextField(_("text content"), blank=True, default="")
     duration_seconds = models.PositiveIntegerField(_("duration (seconds)"), null=True, blank=True)
     order = models.PositiveIntegerField(_("order"), default=0)
@@ -352,6 +362,10 @@ class LiveSession(models.Model):
         ("completed", "Completed"),
         ("cancelled", "Cancelled"),
     ]
+    SCHEDULE_MODE_CHOICES = [
+        ("advance", "Advance (fixed date set ahead of time)"),
+        ("ongoing", "Ongoing (trainer schedules based on the preceding session)"),
+    ]
 
     course = models.ForeignKey(
         TrainingCourse, on_delete=models.CASCADE, related_name="live_sessions"
@@ -361,6 +375,20 @@ class LiveSession(models.Model):
     mode = models.CharField(
         _("mode"), max_length=10, choices=SESSION_MODE_CHOICES, default="online"
     )
+    # Report 3 §OL.1: advance vs ongoing scheduling mode.
+    schedule_mode = models.CharField(
+        _("schedule mode"), max_length=10, choices=SCHEDULE_MODE_CHOICES, default="advance"
+    )
+    # Report 3 §OL.1: for ongoing mode, this session depends on the completion
+    # of a preceding live session before it can be scheduled.
+    depends_on = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dependent_sessions",
+        help_text=_("Ongoing mode: the preceding session this one waits on."),
+    )
     # Zoom meeting URL (online mode) or physical venue address (offline mode)
     meeting_url = models.URLField(_("meeting URL"), blank=True, default="")
     venue = models.CharField(_("venue"), max_length=255, blank=True, default="")
@@ -369,6 +397,10 @@ class LiveSession(models.Model):
     status = models.CharField(
         _("status"), max_length=20, choices=STATUS_CHOICES, default="scheduled"
     )
+    # Report 3 §7.4/OL.2: reschedule tracking. When a session is rescheduled,
+    # the previous time + reason are recorded for audit.
+    rescheduled_from = models.DateTimeField(_("rescheduled from"), null=True, blank=True)
+    reschedule_reason = models.TextField(_("reschedule reason"), blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

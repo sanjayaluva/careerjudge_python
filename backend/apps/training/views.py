@@ -108,6 +108,7 @@ class HasTrainingPermission(HasModulePermission):
         "consents": "view",
         "interactive_questions": "change",
         "notify_students": "change",
+        "reschedule": "change",
         # CourseUpdateRequestViewSet + LiveSessionRequestViewSet custom actions
         "approve": "change",
         "decline": "change",
@@ -1407,6 +1408,79 @@ class LiveSessionViewSet(ModelViewSet):
             count += 1
         return Response(
             {"message": f"Notified {count} student(s).", "data": {"notified_count": count}},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="reschedule")
+    def reschedule(self, request, pk=None):
+        """Report 3 §7.4/OL.2: trainer reschedules a session to a new time.
+
+        POST body: {"scheduled_at": "2026-08-10T10:00:00Z", "reason": "..."}
+        Records the previous time in rescheduled_from + the reason, then
+        notifies all registered students.
+        """
+        live_session = self.get_object()
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_trainer_or_admin = (
+            live_session.course.created_by_id == request.user.id or user_role_name == "cj_admin"
+        )
+        if not is_trainer_or_admin:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the trainer or admin can reschedule a session.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        new_time = request.data.get("scheduled_at")
+        reason = (request.data.get("reason") or "").strip()
+        if not new_time:
+            return Response(
+                {"error": {"code": "validation_error", "message": "scheduled_at is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not reason:
+            return Response(
+                {"error": {"code": "validation_error", "message": "reason is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from django.utils import timezone
+
+        # Parse + record the previous time.
+        try:
+            from datetime import datetime
+
+            parsed = datetime.fromisoformat(str(new_time).replace("Z", "+00:00"))
+        except ValueError:
+            return Response(
+                {"error": {"code": "validation_error", "message": "Invalid scheduled_at format."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        live_session.rescheduled_from = live_session.scheduled_at
+        live_session.reschedule_reason = reason
+        live_session.scheduled_at = (
+            parsed if timezone.is_aware(parsed) else timezone.make_aware(parsed)
+        )
+        live_session.save(update_fields=["scheduled_at", "rescheduled_from", "reschedule_reason"])
+        # Notify registered students.
+        from apps.notifications.models import notify_user
+
+        regs = CourseRegistration.objects.filter(
+            course=live_session.course, payment_status="paid"
+        ).select_related("student")
+        new_str = live_session.scheduled_at.strftime("%Y-%m-%d %H:%M")
+        for reg in regs:
+            notify_user(
+                reg.student,
+                f"Session rescheduled: {live_session.title}",
+                f"Moved to {new_str}. Reason: {reason}.",
+                "session",
+                f"/training/{live_session.course_id}?live_session={live_session.id}",
+            )
+        return Response(
+            {"message": "Session rescheduled.", "data": LiveSessionSerializer(live_session).data},
             status=status.HTTP_200_OK,
         )
 
