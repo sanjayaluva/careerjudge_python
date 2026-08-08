@@ -182,3 +182,135 @@ These will be analyzed and implemented when provided by the client.
 | `8586395` | 26 Jul | Add .npmrc for Vercel build (legacy-peer-deps) |
 | `ddc0ac7` | 25 Jul | Close all remaining feedback gaps (12 gaps → 0) |
 | `4efb91f` | 24 Jul | Close SRS 09 Task Management module + all feedback items |
+
+---
+
+### 5. System Testing & Review Feedback Report 2 (Psychometric)
+- **File:** `docs/review-docs/System Testing & Review Feedback Report 2 _ 25-07-2026.pdf`
+- **Date received:** 25 July 2026
+- **Source:** Client testing team (8-page report with screenshots)
+- **Status:** ✅ All items resolved
+- **Commit:** `1816a79`
+- **Resolution summary:**
+
+#### Common Issues (3 items)
+| Ref | Issue | Status |
+|---|---|---|
+| C-1 | Question Text 2 should be optional (not always required) | ✅ Done (already optional) |
+| C-2 | Text formatting (italics, bold, font size) | ✅ Done (WysiwygEditorLite) |
+| C-3 | Section tagging per option for psychometric types | ✅ Done (section_tag field) |
+
+#### Simple Ranking Scale (6a) — 2 items
+| Ref | Issue | Status |
+|---|---|---|
+| 1 | Each option tagged to a different Section | ✅ Done (section_tag field on ResponseOption) |
+| 2 | Scoring: rank value = N - rank_position. Section summary = sum per section | ✅ Done (_score_rank rewritten) |
+
+#### Rank-Then-Rate Scale (6b) — 2 items
+| Ref | Issue | Status |
+|---|---|---|
+| 1 | Same section tagging as Simple Rank | ✅ Done |
+| 2 | Scoring: rank_value x rating_value. Section summary | ✅ Done (_score_rank_rate rewritten) |
+
+#### Forced-Choice Single Level (8a) — 3 items
+| Ref | Issue | Status |
+|---|---|---|
+| 1 | Two options tagged to DIFFERENT sections | ✅ Done (section_tag field) |
+| 2 | Score = selection vs non-selection (not predefined per option) | ✅ Done (selection_score, non_selection_score fields) |
+| 3 | Scoring: selected gets selection_score, unselected gets non_selection_score | ✅ Done (_score_forced_choice rewritten) |
+
+#### Forced-Choice with Rating (8b) — 3 items
+| Ref | Issue | Status |
+|---|---|---|
+| 1 | Same pairing rules as 8a | ✅ Done |
+| 2 | Same scoring method as 8a | ✅ Done (selection_score, non_selection_score) |
+| 3 | Selected: selection_score x rating. Unselected: non_selection_score | ✅ Done (_score_forced_choice_rated rewritten) |
+
+---
+
+### 6. System Testing & Review Feedback Report 3 (Training + Counselling)
+- **File:** `docs/review-docs/System Testing & Review Feddback Report 3 _ 30-07-2026.pdf`
+- **Date received:** 30 July 2026
+- **Source:** Client testing team (17-page report with screenshots)
+- **Status:** 🔄 In progress — implementing
+
+#### Training Issues
+| # | Issue | Status |
+|---|---|---|
+| 1.1 | Individual user registration form for courses | 🔄 Pending |
+| 1.2 | To-and-fro notification system post-registration | 🔄 Pending |
+| 1.3 | Payment process viewable | 🔄 Pending |
+| 1.4 | Course structure view post-registration | 🔄 Pending |
+| 1.5 | Post-payment notification to trainer + admin | 🔄 Pending |
+| 2.1 | Course commencement logic (online standard vs live) | 🔄 Pending |
+| 2.2 | Training dashboard (completion status, time tracker, score) | 🔄 Pending |
+| 2.3 | Resume course from last position | 🔄 Pending |
+| 3.1 | Add/Edit assignment features | 🔄 Pending |
+| 3.2 | Embed external links in content | 🔄 Pending |
+| 3.3 | Last date for assignment submission | 🔄 Pending |
+| 3.4 | Report submission mandatory/non-mandatory toggle | 🔄 Pending |
+| 3.5 | Report submission feature | 🔄 Pending |
+| 3.6 | File upload (PDF/PPT/Word) for report submission | 🔄 Pending |
+| 3.7 | Text formatting for report entry field | 🔄 Pending |
+| 3.8 | Trainer evaluation: 10-point rating + feedback text | 🔄 Pending |
+| 4.1 | Trainer can create assessments (not just select from pool) | 🔄 Pending |
+| 4.2 | Only trainer's own assessments visible | 🔄 Pending |
+| 4.3 | Link assessment to specific session/topic/lesson | 🔄 Pending |
+| 4.4 | Assessment report viewable to individual + trainer | 🔄 Pending |
+| 5.1 | Course content sequencing | 🔄 Pending |
+| 5.2 | Set course completion parameters | 🔄 Pending |
+| 6.1 | Trainer request course update (admin approval) | 🔄 Pending |
+| 6.2 | Trainer request course deletion (admin approval) | 🔄 Pending |
+| 6.3 | Show upcoming live sessions on trainer page | 🔄 Pending |
+| 6.4 | Trainer reschedule session | 🔄 Pending |
+| 6.5 | Schedule session on candidate request | 🔄 Pending |
+| 6.6 | Post-scheduling notification to individual user | 🔄 Pending |
+
+#### Online Standard Course Issues
+| # | Issue | Status |
+|---|---|---|
+| 1 | Add content (text/audio/video/links) + content config | 🔄 Pending |
+| 2 | Interactive questions during video/audio | 🔄 Pending |
+| 3 | Embed video/audio links in text | 🔄 Pending |
+| 4 | Live session scheduling post-registration | 🔄 Pending |
+
+#### Online Live Course Issues
+| # | Issue | Status |
+|---|---|---|
+| 1 | Advance vs ongoing scheduling | 🔄 Pending |
+| 2 | Reschedule in emergencies | 🔄 Pending |
+| 3 | To-and-fro notification | 🔄 Pending |
+
+#### Counselling Issues
+| # | Issue | Status |
+|---|---|---|
+| 1.1 | Edit timeslots | 🔄 Pending |
+| 1.2 | Timeslot limit (3 weeks) | 🔄 Pending |
+| 1.3 | At least 1 week timeslots available + notification | 🔄 Pending |
+| 1.4 | Text formatting for counsellor biodata | 🔄 Pending |
+| 1.5 | Upload passport-size photograph | 🔄 Pending |
+| 1.6 | Fields: gender, language, geographical location | 🔄 Pending |
+| 1.7 | Counsellor info visible to individual user | 🔄 Pending |
+| 1.8 | Registration form on booking | 🔄 Pending |
+| 1.9 | Terms & Policies text field for CJ Admin | 🔄 Pending |
+| 1.10 | Booking confirmation notification | 🔄 Pending |
+| 1.11 | Cancellation/refund policy display | 🔄 Pending |
+| 1.12 | Counsellor confirms booking within 6 hours | 🔄 Pending |
+| 1.13 | Confirmation/cancellation notification | 🔄 Pending |
+| 1.14 | Track counsellor booking cancellations | 🔄 Pending |
+| 1.15 | Individual user cancellation + refund policy | 🔄 Pending |
+| 1.16 | Cancellation reason text field | 🔄 Pending |
+| 1.17 | Counsellor tagged to counselling categories | 🔄 Pending |
+| 1.18 | Remove My Sessions from counsellor page | 🔄 Pending |
+
+#### Counselling Delivery Issues
+| # | Issue | Status |
+|---|---|---|
+| 1 | Countdown reminder on dashboard | 🔄 Pending |
+| 2 | Feedback form (8 questions) | 🔄 Pending |
+| 3 | Feedback available to CJ Admin only | 🔄 Pending |
+| 4 | Session Summary form (6 fields) | 🔄 Pending |
+| 5 | Followup session scheduling | 🔄 Pending |
+| 6 | Followup session notification | 🔄 Pending |
+| 7 | Followup session booking notification | 🔄 Pending |
+| 8 | Followup session payment reminder | 🔄 Pending |
