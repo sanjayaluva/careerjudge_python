@@ -268,7 +268,15 @@ class SessionCancellation(models.Model):
 
 
 class SessionSummary(models.Model):
-    """Counsellor's post-session notes (SRS §3.3).
+    """Counsellor's post-session notes (SRS §3.3 + Doc 3).
+
+    Per Doc 3 Session Summary form (6 fields):
+    1. Client details and problem description (Text, mandatory)
+    2. Session Summary (Text, mandatory)
+    3. Provisional Diagnosis (Text, optional)
+    4. Case Prognosis (Text, optional)
+    5. Did the session go smoothly? (Yes/Somewhat/No + reason Text, mandatory)
+    6. Is followup session needed? (Yes/No, mandatory)
 
     Per SRS §3.3: "Session Summary details available only to user and Admin."
     Filled by the counsellor after conducting the session.
@@ -283,10 +291,33 @@ class SessionSummary(models.Model):
         null=True,
         related_name="session_summaries",
     )
+    # 1. Client details and problem description (mandatory)
+    client_details = models.TextField(
+        _("client details and problem description"),
+        blank=True,
+        default="",
+        help_text=_("Client details and problem description (mandatory)"),
+    )
+    # 2. Session Summary (mandatory)
     summary = models.TextField(_("session summary"))
-    recommendations = models.TextField(_("recommendations"), blank=True, default="")
-    # Whether a follow-up session is recommended
+    # 3. Provisional Diagnosis (optional)
+    provisional_diagnosis = models.TextField(_("provisional diagnosis"), blank=True, default="")
+    # 4. Case Prognosis (optional)
+    case_prognosis = models.TextField(_("case prognosis"), blank=True, default="")
+    # 5. Did the session go smoothly?
+    SMOOTHNESS_CHOICES = [
+        ("yes", "Yes"),
+        ("somewhat", "Somewhat"),
+        ("no", "No"),
+    ]
+    session_smoothness = models.CharField(
+        _("session smoothness"), max_length=10, choices=SMOOTHNESS_CHOICES, default="yes"
+    )
+    smoothness_reason = models.TextField(_("reason for smoothness rating"), blank=True, default="")
+    # 6. Is followup session needed? (mandatory)
     followup_recommended = models.BooleanField(_("follow-up recommended"), default=False)
+    # Legacy fields — kept for backward compatibility
+    recommendations = models.TextField(_("recommendations"), blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -298,7 +329,17 @@ class SessionSummary(models.Model):
 
 
 class SessionFeedback(models.Model):
-    """Counselee's feedback after session (SRS §2.3).
+    """Counselee's feedback after session (SRS §2.3 + Doc 3).
+
+    Per Doc 3 feedback form (8 questions):
+    1. Was the session useful? (Very useful / Useful / Somewhat / Not useful)
+    2. How was it useful or not? (Text)
+    3. Was the counsellor friendly and empathetic? (Very much / Somewhat / Not much)
+    4. How did the session end? (On time / Before time / Late)
+    5. Would you choose the counsellor again? (Yes / Maybe / No)
+    6. Why would you or wouldn't you? (Text)
+    7. How can we improve the service? (Text)
+    8. Rate the Counsellor on a 10-point scale (10=excellent, 1=very poor)
 
     Per SRS §2.3: "User feedbacks are available only to Admin User."
     """
@@ -311,9 +352,54 @@ class SessionFeedback(models.Model):
         on_delete=models.CASCADE,
         related_name="session_feedbacks",
     )
-    # 1-5 rating
-    rating = models.PositiveIntegerField(_("rating (1-5)"))
-    experience_text = models.TextField(_("experience feedback"))
+    # 1. Was the session useful?
+    USEFULNESS_CHOICES = [
+        ("very_useful", "Very useful"),
+        ("useful", "Useful"),
+        ("somewhat_useful", "Somewhat useful"),
+        ("not_useful", "Not useful"),
+    ]
+    session_usefulness = models.CharField(
+        _("session usefulness"), max_length=20, choices=USEFULNESS_CHOICES, default="useful"
+    )
+    # 2. How was it useful or not? (Text)
+    usefulness_text = models.TextField(_("usefulness explanation"), blank=True, default="")
+    # 3. Was the counsellor friendly and empathetic?
+    EMPATHY_CHOICES = [
+        ("very_much", "Very much"),
+        ("somewhat", "Somewhat"),
+        ("not_much", "Not much"),
+    ]
+    counsellor_empathy = models.CharField(
+        _("counsellor empathy"), max_length=20, choices=EMPATHY_CHOICES, default="somewhat"
+    )
+    # 4. How did the session end?
+    ENDING_CHOICES = [
+        ("on_time", "Ended on time"),
+        ("before_time", "Ended before time"),
+        ("late", "Ended late"),
+    ]
+    session_ending = models.CharField(
+        _("session ending"), max_length=20, choices=ENDING_CHOICES, default="on_time"
+    )
+    # 5. Would you choose the counsellor again?
+    RECHOOSE_CHOICES = [
+        ("yes", "Yes"),
+        ("maybe", "May be"),
+        ("no", "No"),
+    ]
+    would_rechoose = models.CharField(
+        _("would rechoose counsellor"), max_length=10, choices=RECHOOSE_CHOICES, default="maybe"
+    )
+    # 6. Why would you or wouldn't you? (Text)
+    rechoose_text = models.TextField(_("rechoose explanation"), blank=True, default="")
+    # 7. How can we improve the service? (Text)
+    improvement_suggestions = models.TextField(_("improvement suggestions"), blank=True, default="")
+    # 8. Rate the Counsellor on a 10-point scale
+    counsellor_rating = models.PositiveIntegerField(_("counsellor rating (1-10)"), default=5)
+    # Legacy field — kept for backward compatibility
+    rating = models.PositiveIntegerField(_("rating (1-5)"), default=3)
+    experience_text = models.TextField(_("experience feedback"), blank=True, default="")
     counsellor_effectiveness = models.TextField(
         _("counsellor effectiveness"), blank=True, default=""
     )
@@ -324,7 +410,7 @@ class SessionFeedback(models.Model):
         verbose_name_plural = _("session feedbacks")
 
     def __str__(self) -> str:
-        return f"Feedback for Session #{self.session_id} ({self.rating}/5)"
+        return f"Feedback for Session #{self.session_id} ({self.counsellor_rating}/10)"
 
 
 class FollowupSession(models.Model):
@@ -367,3 +453,45 @@ class FollowupSession(models.Model):
 
     def __str__(self) -> str:
         return f"Followup for Session #{self.original_session_id} ({self.status})"
+
+
+# ---------------------------------------------------------------------------
+# CounselingSettings — singleton for terms, cancellation policy, etc.
+# Per Doc 3 (Counselling review): CJ Admin defines terms & policies.
+# ---------------------------------------------------------------------------
+
+
+class CounselingSettings(models.Model):
+    """Singleton model for counseling-wide settings.
+
+    Stores terms & conditions, cancellation/refund policy, and other
+    admin-defined text that is displayed to candidates during booking.
+    Per Doc 3 Issues 1.9, 1.11.
+    """
+
+    terms_and_conditions = models.TextField(
+        _("terms and conditions"),
+        blank=True,
+        default="",
+        help_text=_("Terms & Conditions for counseling. Shown to candidate on booking."),
+    )
+    cancellation_policy = models.TextField(
+        _("cancellation/refund policy"),
+        blank=True,
+        default="Before 24 hours: full refund. Before 4 hours: 50% refund. Less than 4 hours: no refund.",
+        help_text=_("Cancellation and refund policy. Shown to candidate before cancellation."),
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("counseling settings")
+        verbose_name_plural = _("counseling settings")
+
+    def __str__(self) -> str:
+        return "Counseling Settings"
+
+    @classmethod
+    def get(cls):
+        """Get or create the singleton settings instance."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

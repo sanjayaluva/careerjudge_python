@@ -361,6 +361,23 @@ class UserProfile(models.Model):
     mobile = models.CharField(_("mobile"), max_length=15, blank=True)
     avatar = models.ImageField(_("avatar"), upload_to="avatars/", null=True, blank=True)
     bio = models.TextField(_("bio"), max_length=1000, blank=True)
+    # Per Doc 3 (Counselling review): language of communication for counsellors
+    language_of_communication = models.CharField(
+        _("language of communication"),
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=_("Counsellor: languages spoken (e.g. 'English, Hindi')"),
+    )
+    # Per Doc 3: geographical location (already have city, but this is a
+    # more general field for counsellors to specify their region)
+    geographical_location = models.CharField(
+        _("geographical location"),
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=_("Counsellor: general geographical location/region"),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
