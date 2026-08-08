@@ -77,24 +77,29 @@ def _get_max_score(question: Question, sub_question_index: int = 0) -> float:
     elif st == "NEGATIVE":
         return 1.0
     elif st == "RANK":
-        # Rank scoring counts correct pairs (i<j in correct order).
-        # Number of pairs = n*(n-1)/2.
+        # Per Doc 2: max = sum of rank values = N*(N+1)/2
         n = opts_qs.count()
-        return float(n * (n - 1) / 2) if n > 0 else 1.0
+        return float(n * (n + 1) / 2) if n > 0 else 1.0
     elif st == "RANK_RATE":
+        # Per Doc 2: max = max_rating x N*(N+1)/2
         n = opts_qs.count()
         max_rating = question.rating_scale_points or 5
-        return float(n * max_rating)
+        return float(max_rating * n * (n + 1) / 2) if n > 0 else 1.0
     elif st == "RATING":
         return float(question.rating_scale_points or 5)
     elif st == "FORCED_CHOICE":
-        opts = list(question.options.all())
-        return float(max((o.predefined_score for o in opts), default=1.0))
+        # Per Doc 2: max = max(selection_score) + max(non_selection_score)
+        opts = list(opts_qs.all())
+        max_sel = max((o.selection_score for o in opts), default=1.0)
+        max_non_sel = max((o.non_selection_score for o in opts), default=0.0)
+        return float(max_sel + max_non_sel)
     elif st == "FORCED_CHOICE_RATED":
-        opts = list(question.options.all())
-        max_predefined = max((o.predefined_score for o in opts), default=1.0)
+        # Per Doc 2: max = max(selection_score x max_rating) + max(non_selection_score)
+        opts = list(opts_qs.all())
         max_rating = question.rating_scale_points or 5
-        return float(max_predefined * max_rating)
+        max_sel = max((o.selection_score for o in opts), default=1.0)
+        max_non_sel = max((o.non_selection_score for o in opts), default=0.0)
+        return float(max_sel * max_rating + max_non_sel)
     return 1.0
 
 
@@ -345,57 +350,71 @@ def _score_negative(
 def _score_rank(
     question: Question, raw_answer: dict, sub_question_index: int = 0
 ) -> tuple[float, float]:
-    """Score = number of items in correct relative order.
+    """Score = rank value per option, grouped by section_tag.
 
-    Max score = n*(n-1)/2 (number of unique pairs).
+    Per Doc 2 (Psychometric Review):
+    - Each option is tagged to a different section (section_tag field)
+    - Number of options = number of sections
+    - Rank value = N - rank_position (0-indexed), so rank 0 → N, rank 1 → N-1, etc.
+    - The score for each option = its rank value
+    - Total score = sum of all rank values
+    - Section summary = sum of rank values of all options (across all rank
+      questions in the assessment) tagged to that section
+
+    raw_answer = {"ranking": [3, 1, 4, 2]} — option IDs in rank order
+    (first = rank 1, last = rank N)
     """
     opts_qs = question.options
     if sub_question_index:
         opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all().order_by("order"))
     n = len(options)
-    max_score = float(n * (n - 1) / 2) if n > 0 else 1.0
 
-    # raw_answer = {"ranking": [3, 1, 4, 2]} — option IDs in rank order
+    # Max score = sum of all rank values = N + (N-1) + ... + 1 = N*(N+1)/2
+    max_score = float(n * (n + 1) / 2) if n > 0 else 1.0
+
     ranking = raw_answer.get("ranking", [])
     if not ranking or len(ranking) != n:
         return 0.0, max_score
 
-    # The correct order is the option order as stored (order field)
-    correct_order = [o.id for o in sorted(options, key=lambda x: x.order)]
-
-    # Score = count of pairs in correct relative order
+    # Score = sum of rank values for each option
+    # Rank position 0 (first in ranking) gets rank value N
+    # Rank position 1 gets N-1, etc.
     score = 0.0
-    for i in range(n):
-        for j in range(i + 1, n):
-            # Check if ranking[i] comes before ranking[j] in correct_order
-            pos_i = correct_order.index(ranking[i]) if ranking[i] in correct_order else -1
-            pos_j = correct_order.index(ranking[j]) if ranking[j] in correct_order else -1
-            if pos_i >= 0 and pos_j >= 0 and pos_i < pos_j:
-                score += 1.0
+    for rank_pos, _ in enumerate(ranking):
+        rank_value = n - rank_pos  # Rank 1 → N, Rank 2 → N-1, etc.
+        score += rank_value
 
     return score, max_score
 
 
 # ---------------------------------------------------------------------------
-# RANK_RATE: rank score x rating score
+# RANK_RATE: rank value x rating value, grouped by section_tag
 # Used by: Rank-then-Rate (6b)
+# Per Doc 2 (Psychometric Review):
+# - Same section tagging as Simple Rank
+# - Score per option = rank_value x rating_value
+# - Section summary = sum of (rank x rating) for all options tagged to that section
 # ---------------------------------------------------------------------------
 
 
 def _score_rank_rate(
     question: Question, raw_answer: dict, sub_question_index: int = 0
 ) -> tuple[float, float]:
-    """Final score per option = rank_score x rating_score."""
+    """Score per option = rank_value x rating_value. Total = sum.
+
+    raw_answer = {"ranking": [3, 1, 4, 2], "ratings": {3: 5, 1: 3, 4: 1, 2: 4}}
+    """
     opts_qs = question.options
     if sub_question_index:
         opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all().order_by("order"))
     n = len(options)
     max_rating = question.rating_scale_points or 5
-    max_score = float(n * max_rating)
+    # Max score = sum of (rank_value x max_rating) for all positions
+    # = max_rating x (N + (N-1) + ... + 1) = max_rating x N*(N+1)/2
+    max_score = float(max_rating * n * (n + 1) / 2) if n > 0 else 1.0
 
-    # raw_answer = {"ranking": [3, 1, 4, 2], "ratings": {3: 5, 1: 3, 4: 1, 2: 4}}
     ranking = raw_answer.get("ranking", [])
     ratings = raw_answer.get("ratings", {})
 
@@ -404,9 +423,9 @@ def _score_rank_rate(
 
     score = 0.0
     for rank_pos, opt_id in enumerate(ranking):
-        rank_score = n - rank_pos  # Rank 1 → n, Rank 2 → n-1, etc.
+        rank_value = n - rank_pos  # Rank 1 → N, Rank 2 → N-1, etc.
         rating = ratings.get(str(opt_id), ratings.get(opt_id, 0))
-        score += rank_score * float(rating)
+        score += rank_value * float(rating)
 
     return score, max_score
 
@@ -440,63 +459,99 @@ def _score_rating(
 
 
 # ---------------------------------------------------------------------------
-# FORCED_CHOICE: predefined score per option
+# FORCED_CHOICE: selection vs non-selection scoring
 # Used by: Forced-Choice Single Level (8a)
+# Per Doc 2 (Psychometric Review):
+# - Two options in a pair are tagged to DIFFERENT sections
+# - The candidate selects one option from the pair
+# - Selected option gets selection_score
+# - Unselected option gets non_selection_score
+# - Rule: selection_score > non_selection_score, both >= 0
+# - Total score = selection_score + non_selection_score
+# - Section summary = sum of scores for all options tagged to that section
 # ---------------------------------------------------------------------------
 
 
 def _score_forced_choice(
     question: Question, raw_answer: dict, sub_question_index: int = 0
 ) -> tuple[float, float]:
-    """Score = selected option's predefined_score. Unselected = 0."""
+    """Score = selection_score for selected + non_selection_score for unselected.
+
+    raw_answer = {"selected_option_id": 2}
+    """
     opts_qs = question.options
     if sub_question_index:
         opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all())
-    max_score = float(max((o.predefined_score for o in options), default=1.0))
 
-    # raw_answer = {"selected_option_id": 2}
+    if not options:
+        return 0.0, 1.0
+
+    # Max score = max(selection_score) + max(non_selection_score) across all options
+    max_sel = max((o.selection_score for o in options), default=1.0)
+    max_non_sel = max((o.non_selection_score for o in options), default=0.0)
+    max_score = float(max_sel + max_non_sel)
+
     selected_id = raw_answer.get("selected_option_id")
     if not selected_id:
         return 0.0, max_score
 
+    score = 0.0
     for opt in options:
         if opt.id == selected_id:
-            return float(opt.predefined_score), max_score
+            score += float(opt.selection_score)
+        else:
+            score += float(opt.non_selection_score)
 
-    return 0.0, max_score
+    return score, max_score
 
 
 # ---------------------------------------------------------------------------
-# FORCED_CHOICE_RATED: predefined score x rating
+# FORCED_CHOICE_RATED: (selection_score x rating) for selected +
+#                       non_selection_score for unselected
 # Used by: Forced-Choice Two-Level (8b)
+# Per Doc 2 (Psychometric Review):
+# - Same pairing rules as Forced-Choice Single Level
+# - Selected option: final_score = selection_score x rating
+# - Unselected option: final_score = non_selection_score
+# - Total = sum of all option scores
 # ---------------------------------------------------------------------------
 
 
 def _score_forced_choice_rated(
     question: Question, raw_answer: dict, sub_question_index: int = 0
 ) -> tuple[float, float]:
-    """Score = predefined_score x rating. Unselected = 0."""
+    """Score = (selection_score x rating) for selected + non_selection_score for unselected.
+
+    raw_answer = {"selected_option_id": 2, "rating": 4}
+    """
     opts_qs = question.options
     if sub_question_index:
         opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all())
-    max_rating = question.rating_scale_points or 5
-    max_predefined = max((o.predefined_score for o in options), default=1.0)
-    max_score = float(max_predefined * max_rating)
 
-    # raw_answer = {"selected_option_id": 2, "rating": 4}
+    if not options:
+        return 0.0, 1.0
+
+    max_rating = question.rating_scale_points or 5
+    max_sel = max((o.selection_score for o in options), default=1.0)
+    max_non_sel = max((o.non_selection_score for o in options), default=0.0)
+    max_score = float(max_sel * max_rating + max_non_sel)
+
     selected_id = raw_answer.get("selected_option_id")
     rating = raw_answer.get("rating", 0)
 
-    if not selected_id or not rating:
+    if not selected_id:
         return 0.0, max_score
 
+    score = 0.0
     for opt in options:
         if opt.id == selected_id:
-            return float(opt.predefined_score * rating), max_score
+            score += float(opt.selection_score) * float(rating)
+        else:
+            score += float(opt.non_selection_score)
 
-    return 0.0, max_score
+    return score, max_score
 
 
 # ---------------------------------------------------------------------------

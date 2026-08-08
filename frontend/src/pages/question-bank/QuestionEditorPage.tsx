@@ -209,6 +209,9 @@ export default function QuestionEditorPage() {
         is_correct: o.is_correct,
         match_pair_id: o.match_pair_id,
         predefined_score: o.predefined_score ?? 1,
+        section_tag: o.section_tag ?? "",
+        selection_score: o.selection_score ?? 1,
+        non_selection_score: o.non_selection_score ?? 0,
         order: o.order,
         correct_answers: (o.correct_answers ?? []).map((ca) => ({
           answer_text: ca.answer_text,
@@ -235,6 +238,9 @@ export default function QuestionEditorPage() {
             is_correct: a.is_correct,
             match_pair_id: a.match_pair_id,
             predefined_score: a.predefined_score ?? 1,
+            section_tag: "",
+            selection_score: 1.0,
+            non_selection_score: 0.0,
             order: a.order,
             correct_answers: [],
           },
@@ -248,6 +254,9 @@ export default function QuestionEditorPage() {
             is_correct: b?.is_correct ?? false,
             match_pair_id: b?.match_pair_id ?? pairId,
             predefined_score: b?.predefined_score ?? 1,
+            section_tag: "",
+            selection_score: 1.0,
+            non_selection_score: 0.0,
             order: b?.order ?? i * 2 + 1,
             correct_answers: [],
           },
@@ -272,6 +281,9 @@ export default function QuestionEditorPage() {
           is_correct: false,
           match_pair_id: null,
           predefined_score: 0,
+          section_tag: "",
+          selection_score: 1.0,
+          non_selection_score: 0.0,
           order: d.order,
           correct_answers: [],
         })),
@@ -489,6 +501,9 @@ export default function QuestionEditorPage() {
             is_correct: opt.is_correct,
             match_pair_id: opt.match_pair_id,
             predefined_score: opt.predefined_score,
+            section_tag: "",
+            selection_score: 1.0,
+            non_selection_score: 0.0,
             order: i,
             correct_answers: opt.correct_answers?.map((ca) => ({
               answer_text: ca.answer_text,
@@ -508,6 +523,9 @@ export default function QuestionEditorPage() {
             match_pair_id: pair.pairId,
             is_correct: false,
             predefined_score: 1.0,
+            section_tag: "",
+            selection_score: 1.0,
+            non_selection_score: 0.0,
             order: i * 2,
           });
           allOptions.push({
@@ -517,6 +535,9 @@ export default function QuestionEditorPage() {
             match_pair_id: pair.pairId,
             is_correct: false,
             predefined_score: 1.0,
+            section_tag: "",
+            selection_score: 1.0,
+            non_selection_score: 0.0,
             order: i * 2 + 1,
           });
         });
@@ -532,6 +553,9 @@ export default function QuestionEditorPage() {
             match_pair_id: null,
             is_correct: false,
             predefined_score: 0,
+            section_tag: "",
+            selection_score: 1.0,
+            non_selection_score: 0.0,
             order: 1000 + i,
           });
         });
@@ -552,6 +576,9 @@ export default function QuestionEditorPage() {
             text_value: label,
             is_correct: false,
             predefined_score: 1.0,
+            section_tag: "",
+            selection_score: 1.0,
+            non_selection_score: 0.0,
             order: i,
           });
         });
@@ -684,6 +711,9 @@ export default function QuestionEditorPage() {
               image_file: cell.image || null,
               is_correct: correctCells?.[r]?.[c] || false,
               predefined_score: 1.0,
+              section_tag: "",
+              selection_score: 1.0,
+              non_selection_score: 0.0,
               order: order++,
             });
           }

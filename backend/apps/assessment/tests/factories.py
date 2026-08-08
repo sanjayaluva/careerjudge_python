@@ -136,6 +136,8 @@ def make_forced_choice_question(created_by, two_level=False, confirmed=True):
         option_type="FORCED_CHOICE",
         text_value="Option A",
         predefined_score=2.0,
+        selection_score=2.0,
+        non_selection_score=0.0,
         order=1,
     )
     ResponseOption.objects.create(
@@ -143,6 +145,8 @@ def make_forced_choice_question(created_by, two_level=False, confirmed=True):
         option_type="FORCED_CHOICE",
         text_value="Option B",
         predefined_score=3.0,
+        selection_score=3.0,
+        non_selection_score=0.0,
         order=2,
     )
     return q

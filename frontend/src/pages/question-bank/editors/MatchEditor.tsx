@@ -55,6 +55,9 @@ export function MatchEditor({ data, onChange }: MatchEditorProps) {
       is_correct: false,
       match_pair_id: null,
       predefined_score: 0,
+      section_tag: "",
+      selection_score: 1.0,
+      non_selection_score: 0.0,
       order: data.dummyOptions.length,
       correct_answers: [],
     };

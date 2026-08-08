@@ -107,37 +107,56 @@ class TestRankScoring(ScoringTestBase):
         self.q = make_rank_question(self.user)  # 4 options, scoring_type=RANK
 
     def test_perfect_order_max_score(self):
-        # The correct order is the saved option order: items 1, 2, 3, 4
+        # Per Doc 2: rank value = N - rank_position. For n=4 options:
+        # rank 1 → 4, rank 2 → 3, rank 3 → 2, rank 4 → 1. Sum = 10
         options = list(self.q.options.all().order_by("order"))
         perfect = [o.id for o in options]
         score, max_score = score_question(self.q, {"ranking": perfect})
-        # Max score for n=4 is 4*3/2 = 6 (number of unique pairs)
         assert score == max_score
-        assert max_score == 6.0
+        assert max_score == 10.0  # 4+3+2+1 = 10
 
     def test_zero_score_for_no_answer(self):
         score, max_score = score_question(self.q, None)
         assert score == 0.0
-        assert max_score == 6.0
+        assert max_score == 10.0  # 4+3+2+1 = 10
 
 
 class TestForcedChoiceScoring(ScoringTestBase):
     def setUp(self):
         self.user = UserFactory.create(role=self.individual_role)
         self.q = make_forced_choice_question(self.user, two_level=False)
-        # Options: A=2.0, B=3.0
+        # Options: A=2.0, B=3.0 (predefined_score, also used as selection_score default)
 
     def test_select_high_score_option(self):
+        # Per Doc 2: selected option gets selection_score, unselected gets non_selection_score
+        # Default: selection_score = predefined_score, non_selection_score = 0
         opt_b = self.q.options.get(text_value="Option B")
+        # Set selection/non_selection scores
+        opt_b.selection_score = 3.0
+        opt_b.non_selection_score = 0.0
+        opt_b.save()
+        opt_a = self.q.options.get(text_value="Option A")
+        opt_a.selection_score = 2.0
+        opt_a.non_selection_score = 0.0
+        opt_a.save()
         score, max_score = score_question(self.q, {"selected_option_id": opt_b.id})
+        # Selected B: 3.0, unselected A: 0.0 → total = 3.0
         assert score == 3.0
-        assert max_score == 3.0
+        assert max_score == 3.0  # max(selection) + max(non_selection) = 3.0 + 0.0
 
     def test_select_low_score_option(self):
+        opt_b = self.q.options.get(text_value="Option B")
+        opt_b.selection_score = 3.0
+        opt_b.non_selection_score = 0.0
+        opt_b.save()
         opt_a = self.q.options.get(text_value="Option A")
+        opt_a.selection_score = 2.0
+        opt_a.non_selection_score = 0.0
+        opt_a.save()
         score, max_score = score_question(self.q, {"selected_option_id": opt_a.id})
+        # Selected A: 2.0, unselected B: 0.0 → total = 2.0
         assert score == 2.0
-        assert max_score == 3.0
+        assert max_score == 3.0  # max(selection) + max(non_selection) = 3.0 + 0.0
 
     def test_no_selection_scores_0(self):
         score, _ = score_question(self.q, {})
@@ -151,10 +170,20 @@ class TestForcedChoiceRatedScoring(ScoringTestBase):
         # Options: A=2.0, B=3.0, max_rating=5
 
     def test_score_is_predefined_times_rating(self):
+        # Per Doc 2: selected option = selection_score x rating, unselected = non_selection_score
         opt_b = self.q.options.get(text_value="Option B")
+        opt_b.selection_score = 3.0
+        opt_b.non_selection_score = 0.0
+        opt_b.save()
+        opt_a = self.q.options.get(text_value="Option A")
+        opt_a.selection_score = 2.0
+        opt_a.non_selection_score = 0.0
+        opt_a.save()
         score, max_score = score_question(self.q, {"selected_option_id": opt_b.id, "rating": 4})
-        assert score == 12.0  # 3.0 x 4
-        assert max_score == 15.0  # 3.0 x 5
+        # Selected B: 3.0 x 4 = 12.0, unselected A: 0.0 → total = 12.0
+        assert score == 12.0
+        # max = max(selection x max_rating) + max(non_selection) = 3.0 x 5 + 0.0 = 15.0
+        assert max_score == 15.0
 
     def test_no_rating_scores_0(self):
         opt_b = self.q.options.get(text_value="Option B")
@@ -208,11 +237,14 @@ class TestGetMaxScore(ScoringTestBase):
 
     def test_rank_max_n_choose_2_pairs(self):
         q = make_rank_question(self.user)  # 4 options
-        assert _get_max_score(q) == 6.0  # 4*3/2
+        # Per Doc 2: max = N*(N+1)/2 = 4*5/2 = 10
+        assert _get_max_score(q) == 10.0
 
     def test_forced_choice_max_is_highest_predefined(self):
         q = make_forced_choice_question(self.user, two_level=False)
-        assert _get_max_score(q) == 3.0  # max predefined_score
+        # Per Doc 2: max = max(selection_score) + max(non_selection_score)
+        # Default: selection_score = predefined_score, non_selection_score = 0
+        assert _get_max_score(q) == 3.0  # 3.0 + 0.0
 
 
 class TestCalculateSessionScores(ScoringTestBase):

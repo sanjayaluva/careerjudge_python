@@ -56,6 +56,9 @@ export interface ResponseOption {
   is_correct: boolean;
   match_pair_id: number | null;
   predefined_score: number;
+  section_tag: string;
+  selection_score: number;
+  non_selection_score: number;
   order: number;
   correct_answers: { id: number; answer_text: string; order: number }[];
 }

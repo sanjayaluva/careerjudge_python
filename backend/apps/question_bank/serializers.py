@@ -96,6 +96,9 @@ class ResponseOptionSerializer(serializers.ModelSerializer):
             "is_correct",
             "match_pair_id",
             "predefined_score",
+            "section_tag",
+            "selection_score",
+            "non_selection_score",
             "order",
             "correct_answers",
         ]

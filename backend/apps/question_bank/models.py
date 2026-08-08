@@ -533,6 +533,41 @@ class ResponseOption(models.Model):
     predefined_score = models.FloatField(
         _("predefined score"), default=1.0, help_text="For forced-choice: may be 0,1,2,3 etc."
     )
+    # Psychometric section tagging (Doc 2 — psychometric review):
+    # For Rank/RankRate/ForcedChoice types, each option is tagged to a
+    # different section. The section_tag is a string label (e.g. "Section1",
+    # "Section2"). Number of options = number of sections.
+    section_tag = models.CharField(
+        _("section tag"),
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=_(
+            "For psychometric question types (Rank, RankRate, ForcedChoice): "
+            "the section this option belongs to. Each option in a rank/forced-choice "
+            "question is tagged to a different section."
+        ),
+    )
+    # Forced-Choice scoring (Doc 2 — Common Issue for ForcedChoice types):
+    # Instead of a single predefined_score, forced-choice options have
+    # separate scores for selection vs non-selection.
+    # selection_score: score when this option is selected by the candidate
+    # non_selection_score: score when this option is NOT selected
+    # Rule: selection_score > non_selection_score, both >= 0
+    selection_score = models.FloatField(
+        _("selection score"),
+        default=1.0,
+        help_text=_(
+            "Forced-Choice: score when this option is selected. Must be > non_selection_score."
+        ),
+    )
+    non_selection_score = models.FloatField(
+        _("non-selection score"),
+        default=0.0,
+        help_text=_(
+            "Forced-Choice: score when this option is NOT selected. Must be < selection_score."
+        ),
+    )
     order = models.PositiveIntegerField(_("order"), default=0)
 
     class Meta:
