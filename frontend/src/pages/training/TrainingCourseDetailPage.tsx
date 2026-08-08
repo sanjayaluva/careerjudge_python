@@ -52,6 +52,7 @@ import {
   publishCourse,
   registerForCourse,
   requestCourseUpdate,
+  rescheduleLiveSession,
   retrieveCourse,
   SCHEDULE_TYPES,
   setCompletionParameters,
@@ -395,6 +396,7 @@ export default function TrainingCourseDetailPage() {
                               >
                                 Notify
                               </Button>
+                              <RescheduleLiveSessionButton liveSessionId={s.id} courseId={cid} />
                               <DeleteLiveSessionButton liveSessionId={s.id} courseId={cid} />
                             </div>
                           </TableCell>
@@ -1224,5 +1226,69 @@ function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function RescheduleLiveSessionButton({
+  liveSessionId,
+  courseId,
+}: {
+  liveSessionId: number;
+  courseId: number;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [reason, setReason] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: () => rescheduleLiveSession(liveSessionId, { scheduled_at: scheduledAt, reason }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["training", "courses", courseId] });
+      toast.success("Session rescheduled. Registered students notified.");
+      setOpen(false);
+      setScheduledAt("");
+      setReason("");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (!open) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        Reschedule
+      </Button>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-slate-200 p-2">
+      <input
+        type="datetime-local"
+        className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+        value={scheduledAt}
+        onChange={(e) => setScheduledAt(e.target.value)}
+      />
+      <input
+        type="text"
+        placeholder="Reason (required)"
+        className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <div className="flex gap-1">
+        <Button
+          size="sm"
+          onClick={() => mutation.mutate()}
+          loading={mutation.isPending}
+          disabled={!scheduledAt || !reason.trim()}
+        >
+          Save
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </div>
   );
 }

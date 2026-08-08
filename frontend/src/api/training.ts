@@ -22,8 +22,10 @@ export interface SessionContent {
   id: number;
   session: number;
   title: string;
-  content_format: "video" | "audio" | "text";
+  content_format: "video" | "audio" | "text" | "document";
   content_url: string;
+  /** Report 3 §OS.1: uploaded document (PDF/Word/PPT) URL. */
+  document: string | null;
   text_content: string;
   duration_seconds: number | null;
   order: number;
@@ -97,11 +99,17 @@ export interface LiveSession {
   title: string;
   description: string;
   mode: "online" | "offline";
+  /** Report 3 §OL.1: advance vs ongoing scheduling. */
+  schedule_mode: "advance" | "ongoing";
+  depends_on: number | null;
   meeting_url: string;
   venue: string;
   scheduled_at: string;
   duration_minutes: number;
   status: string;
+  /** Report 3 §7.4: reschedule audit. */
+  rescheduled_from: string | null;
+  reschedule_reason: string;
   created_at: string;
 }
 
@@ -764,6 +772,17 @@ export function notifyLiveSessionStudents(
   return apiPost<{ notified_count: number }>(
     `${BASE}/live-sessions/${liveSessionId}/notify_students/`,
   );
+}
+
+/**
+ * Report 3 §7.4: trainer reschedules a live session (records the previous
+ * time + reason, notifies registered students).
+ */
+export function rescheduleLiveSession(
+  liveSessionId: number,
+  payload: { scheduled_at: string; reason: string },
+): Promise<LiveSession> {
+  return apiPost<LiveSession>(`${BASE}/live-sessions/${liveSessionId}/reschedule/`, payload);
 }
 
 // ---------------------------------------------------------------------------
