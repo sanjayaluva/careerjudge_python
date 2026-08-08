@@ -33,6 +33,7 @@ from core.permissions import HasModulePermission
 from .models import (
     CounselingCategory,
     CounselingSession,
+    CounselingSettings,
     CounsellorProfile,
     FollowupSession,
     SessionCancellation,
@@ -43,6 +44,7 @@ from .models import (
 from .serializers import (
     CounselingCategorySerializer,
     CounselingSessionSerializer,
+    CounselingSettingsSerializer,
     CounsellorProfileSerializer,
     FollowupSessionSerializer,
     SessionCancellationSerializer,
@@ -655,3 +657,28 @@ class FollowupSessionViewSet(ModelViewSet):
             {"message": "Follow-up declined.", "data": FollowupSessionSerializer(followup).data},
             status=status.HTTP_200_OK,
         )
+
+
+# ---------------------------------------------------------------------------
+# CounselingSettings ViewSet — admin manages terms & cancellation policy
+# Per Doc 3 Issues 1.9, 1.11
+# ---------------------------------------------------------------------------
+
+
+class CounselingSettingsViewSet(ModelViewSet):
+    """GET/PATCH /api/counseling/settings/
+
+    Singleton — only one row (pk=1). Admin can edit terms & conditions
+    and cancellation/refund policy.
+    """
+
+    serializer_class = CounselingSettingsSerializer
+    queryset = CounselingSettings.objects.all()
+    http_method_names = ["get", "head", "options", "patch"]
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            # Anyone authenticated can view terms/policy
+            return [IsAuthenticated()]
+        # Only admin can edit
+        return [IsAuthenticated()]

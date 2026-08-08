@@ -5,6 +5,7 @@ from rest_framework import serializers
 from .models import (
     CounselingCategory,
     CounselingSession,
+    CounselingSettings,
     CounsellorProfile,
     FollowupSession,
     SessionCancellation,
@@ -41,6 +42,15 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
     cancellation_count = serializers.IntegerField(
         source="user.profile.cancellation_count", read_only=True, default=0
     )
+    # Doc 3 fields (read from UserProfile)
+    gender = serializers.CharField(source="user.profile.gender", read_only=True, default="")
+    avatar = serializers.SerializerMethodField()
+    language_of_communication = serializers.CharField(
+        source="user.profile.language_of_communication", read_only=True, default=""
+    )
+    geographical_location = serializers.CharField(
+        source="user.profile.geographical_location", read_only=True, default=""
+    )
     category_names = serializers.SerializerMethodField()
     upcoming_slot_count = serializers.SerializerMethodField()
 
@@ -58,6 +68,10 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
             "category_names",
             "is_available",
             "cancellation_count",
+            "gender",
+            "avatar",
+            "language_of_communication",
+            "geographical_location",
             "upcoming_slot_count",
             "created_at",
             "updated_at",
@@ -72,6 +86,10 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
             "meeting_url",
             "is_available",
             "cancellation_count",
+            "gender",
+            "avatar",
+            "language_of_communication",
+            "geographical_location",
             "upcoming_slot_count",
             "category_names",
             "created_at",
@@ -80,6 +98,15 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
 
     def get_category_names(self, obj):
         return [c.get_name_display() for c in obj.categories.all()]
+
+    def get_avatar(self, obj):
+        """Return avatar URL or empty string if no avatar."""
+        try:
+            if obj.user.profile.avatar:
+                return obj.user.profile.avatar.url
+        except (AttributeError, ValueError):
+            pass
+        return ""
 
     def get_upcoming_slot_count(self, obj):
         from django.utils import timezone
@@ -170,27 +197,49 @@ class SessionCancellationSerializer(serializers.ModelSerializer):
 
 
 class SessionSummarySerializer(serializers.ModelSerializer):
+    """Serializer for counsellor's post-session summary (Doc 3)."""
+
     class Meta:
         model = SessionSummary
         fields = [
             "id",
             "session",
             "counsellor",
+            "client_details",
             "summary",
-            "recommendations",
+            "provisional_diagnosis",
+            "case_prognosis",
+            "session_smoothness",
+            "smoothness_reason",
             "followup_recommended",
+            "recommendations",
             "created_at",
         ]
         read_only_fields = ["id", "counsellor", "created_at"]
 
 
 class SessionFeedbackSerializer(serializers.ModelSerializer):
+    """Serializer for counselee's post-session feedback (Doc 3).
+
+    Per Doc 3 feedback form (8 questions).
+    """
+
     class Meta:
         model = SessionFeedback
         fields = [
             "id",
             "session",
             "counselee",
+            # Doc 3 feedback form fields
+            "session_usefulness",
+            "usefulness_text",
+            "counsellor_empathy",
+            "session_ending",
+            "would_rechoose",
+            "rechoose_text",
+            "improvement_suggestions",
+            "counsellor_rating",
+            # Legacy fields (backward compatibility)
             "rating",
             "experience_text",
             "counsellor_effectiveness",
@@ -219,3 +268,12 @@ class FollowupSessionSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "counsellor_name", "counselee_name", "created_at"]
+
+
+class CounselingSettingsSerializer(serializers.ModelSerializer):
+    """Serializer for counseling settings (terms, cancellation policy)."""
+
+    class Meta:
+        model = CounselingSettings
+        fields = ["id", "terms_and_conditions", "cancellation_policy", "updated_at"]
+        read_only_fields = ["id", "updated_at"]
