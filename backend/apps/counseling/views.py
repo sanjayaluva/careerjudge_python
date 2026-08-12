@@ -21,11 +21,11 @@ Endpoints:
 from datetime import timedelta
 
 from django.utils import timezone
-from rest_framework import filters, status
+from rest_framework import filters, serializers, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import ModelViewSet, ViewSet
 
 from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
@@ -33,6 +33,7 @@ from core.permissions import HasModulePermission
 from .models import (
     CounselingCategory,
     CounselingSession,
+    CounselingSettings,
     CounsellorProfile,
     FollowupSession,
     SessionCancellation,
@@ -228,11 +229,101 @@ class TimeSlotViewSet(ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+        # Report 3 §1.2: enforce max-weeks-ahead limit (admin-configurable).
+
+        max_weeks = CounselingSettings.get().max_weeks_ahead
+        start = serializer.validated_data.get("start_time")
+        if start:
+            from datetime import timedelta
+
+            from django.utils import timezone
+
+            horizon = timezone.now() + timedelta(weeks=max_weeks)
+            # Allow naive datetimes from the serializer to slip through; only
+            # compare when both sides are aware (or coerce).
+            try:
+                if timezone.is_aware(start) and start > horizon:
+                    raise ValueError
+                if not timezone.is_aware(start):
+                    start_aware = timezone.make_aware(start) if start > timezone.now() else start
+                    if timezone.is_aware(start_aware) and start_aware > horizon:
+                        raise ValueError
+            except ValueError:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": (
+                                f"Timeslots cannot be more than {max_weeks} weeks ahead "
+                                f"(admin-configurable limit)."
+                            ),
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         serializer.save()
         return Response(
             {"message": "Time slot created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
         )
+
+    def _check_ownership(self, instance):
+        """Only the counsellor who owns the slot (or an admin) may modify/delete it."""
+        user_role_name = self.request.user.role.name if self.request.user.role_id else None
+        return instance.counsellor.user_id == self.request.user.id or user_role_name == "cj_admin"
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if not self._check_ownership(instance):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "You can only manage your own timeslots.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if not self._check_ownership(instance):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "You can only manage your own timeslots.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if not self._check_ownership(instance):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "You can only manage your own timeslots.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        # Report 3 §1.1: block editing/deleting a slot that's already booked.
+        if instance.status == "booked":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Cannot delete a timeslot that is already booked.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -705,3 +796,65 @@ class FollowupSessionViewSet(ModelViewSet):
             {"message": "Follow-up declined.", "data": FollowupSessionSerializer(followup).data},
             status=status.HTTP_200_OK,
         )
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.9/§1.11/§1.2/§1.12 — global counseling settings (admin-only)
+# ---------------------------------------------------------------------------
+
+
+class CounselingSettingsViewSet(ViewSet):
+    """Retrieve or update the counseling-module settings singleton
+    (terms & conditions, refund policy, max_weeks_ahead, confirm window,
+    refund thresholds).
+
+    GET    /api/counseling/settings/        — any authenticated user (so the
+                                              booking form can show terms)
+    PATCH  /api/counseling/settings/        — cj_admin only.
+    """
+
+    permission_classes = [IsAuthenticated, HasCounselingPermission]
+
+    def list(self, request):
+
+        return Response(
+            {"message": "OK", "data": _CounselingSettingsData(CounselingSettings.get()).data},
+            status=status.HTTP_200_OK,
+        )
+
+    def retrieve(self, request, pk=None):
+        # Treat as a singleton — pk ignored; same as list.
+        return self.list(request)
+
+    def partial_update(self, request, pk=None):
+        user_role_name = request.user.role.name if request.user.role_id else None
+        if user_role_name != "cj_admin" and not request.user.is_superuser:
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can edit settings."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        settings = CounselingSettings.get()
+        serializer = _CounselingSettingsData(settings, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {"message": "Settings updated.", "data": serializer.data},
+            status=status.HTTP_200_OK,
+        )
+
+
+class _CounselingSettingsData(serializers.ModelSerializer):
+    """Lightweight serializer for the settings singleton (defined here to keep
+    the view + serializer together)."""
+
+    class Meta:
+        model = CounselingSettings
+        fields = [
+            "terms_and_conditions",
+            "cancellation_refund_policy",
+            "max_weeks_ahead",
+            "confirm_window_hours",
+            "full_refund_within_hours",
+            "half_refund_within_hours",
+        ]

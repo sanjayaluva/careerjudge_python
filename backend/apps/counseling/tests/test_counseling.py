@@ -714,3 +714,98 @@ def test_summary_six_fields(counsellor_client, counselee_user, counsellor_user):
     assert sm.client_details == "Client seeking career change"
     assert sm.session_smoothly == "yes"
     assert sm.followup_recommended is True
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.1/§1.2 — timeslot edit/delete + 3-week limit
+# ---------------------------------------------------------------------------
+
+
+def test_counsellor_can_delete_own_available_timeslot(counsellor_client, counsellor_user):
+    """Report 3 §1.1: a counsellor can delete their own (unbooked) timeslot."""
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor, status="available")
+    resp = counsellor_client.delete(f"/api/counseling/timeslots/{timeslot.id}/")
+    assert resp.status_code in (200, 204), resp.data
+    assert not TimeSlot.objects.filter(id=timeslot.id).exists()
+
+
+def test_cannot_delete_booked_timeslot(counsellor_client, counsellor_user, counselee_user):
+    """Report 3 §1.1: a booked timeslot cannot be deleted."""
+    from apps.counseling.models import CounselingSession
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor, status="booked")
+    CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee=counsellor.hourly_rate,
+    )
+    resp = counsellor_client.delete(f"/api/counseling/timeslots/{timeslot.id}/")
+    assert resp.status_code == 403
+    assert "booked" in resp.data["error"]["message"]
+
+
+def test_non_owner_cannot_edit_timeslot(counselee_client, counsellor_user):
+    """Report 3 §1.1: only the owning counsellor (or admin) can edit a slot."""
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    resp = counselee_client.patch(
+        f"/api/counseling/timeslots/{timeslot.id}/",
+        {"status": "blocked"},
+        format="json",
+    )
+    assert resp.status_code == 403
+
+
+def test_timeslot_rejects_beyond_max_weeks(counsellor_client, counsellor_user):
+    """Report 3 §1.2: cannot create a timeslot beyond the max_weeks_ahead limit."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    counsellor = _make_counsellor(counsellor_user)
+    too_far = (timezone.now() + timedelta(weeks=10)).isoformat()
+    resp = counsellor_client.post(
+        "/api/counseling/timeslots/",
+        {"counsellor": counsellor.id, "start_time": too_far, "end_time": too_far},
+        format="json",
+    )
+    assert resp.status_code == 400
+    assert "weeks" in resp.data["error"]["message"]
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.9/§1.11 — counseling settings (terms + refund policy)
+# ---------------------------------------------------------------------------
+
+
+def test_anyone_can_read_settings(counselee_client):
+    """Settings (terms, refund policy) are readable by any authed user so the
+    booking form can display them."""
+    resp = counselee_client.get("/api/counseling/settings/")
+    assert resp.status_code == 200
+    assert "terms_and_conditions" in resp.data["data"]
+
+
+def test_only_admin_can_update_settings(counselee_client, admin_client):
+    from apps.counseling.models import CounselingSettings
+
+    # counselee cannot patch
+    resp = counselee_client.patch(
+        "/api/counseling/settings/1/",
+        {"terms_and_conditions": "New terms"},
+        format="json",
+    )
+    assert resp.status_code == 403
+    # admin can patch
+    resp = admin_client.patch(
+        "/api/counseling/settings/1/",
+        {"terms_and_conditions": "New terms", "max_weeks_ahead": 5},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    assert CounselingSettings.get().terms_and_conditions == "New terms"
+    assert CounselingSettings.get().max_weeks_ahead == 5
