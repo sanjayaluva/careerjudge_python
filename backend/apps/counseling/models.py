@@ -268,11 +268,26 @@ class SessionCancellation(models.Model):
 
 
 class SessionSummary(models.Model):
-    """Counsellor's post-session notes (SRS §3.3).
+    """Counsellor's post-session notes (SRS §3.3, Report 3 Counselling §2.4).
 
-    Per SRS §3.3: "Session Summary details available only to user and Admin."
-    Filled by the counsellor after conducting the session.
+    The 6 summary fields per Report 3:
+      1. client_details        — text (client details + problem description; mandatory)
+      2. summary               — text (session summary; mandatory)
+      3. provisional_diagnosis — text (optional)
+      4. case_prognosis        — text (optional)
+      5. session_smoothly      — Yes / Somewhat / No + smoothly_reason (mandatory)
+      6. followup_recommended  — Yes / No (mandatory)
     """
+
+    SMOOTHLY_CHOICES = [
+        ("yes", "Yes"),
+        ("somewhat", "Somewhat"),
+        ("no", "No"),
+    ]
+    FOLLOWUP_CHOICES = [
+        ("yes", "Yes"),
+        ("no", "No"),
+    ]
 
     session = models.OneToOneField(
         CounselingSession, on_delete=models.CASCADE, related_name="summary"
@@ -283,10 +298,29 @@ class SessionSummary(models.Model):
         null=True,
         related_name="session_summaries",
     )
+    # Field 1 (mandatory)
+    client_details = models.TextField(
+        _("client details and problem description"), blank=True, default=""
+    )
+    # Field 2 (mandatory)
     summary = models.TextField(_("session summary"))
-    recommendations = models.TextField(_("recommendations"), blank=True, default="")
-    # Whether a follow-up session is recommended
+    # Field 3 (optional)
+    provisional_diagnosis = models.TextField(_("provisional diagnosis"), blank=True, default="")
+    # Field 4 (optional)
+    case_prognosis = models.TextField(_("case prognosis"), blank=True, default="")
+    # Field 5 (choice + mandatory reason)
+    session_smoothly = models.CharField(
+        _("did the session go smoothly?"),
+        max_length=20,
+        choices=SMOOTHLY_CHOICES,
+        blank=True,
+        default="",
+    )
+    smoothly_reason = models.TextField(_("reason"), blank=True, default="")
+    # Field 6 (mandatory)
     followup_recommended = models.BooleanField(_("follow-up recommended"), default=False)
+    # Legacy field kept for backward-compat.
+    recommendations = models.TextField(_("recommendations"), blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -298,10 +332,42 @@ class SessionSummary(models.Model):
 
 
 class SessionFeedback(models.Model):
-    """Counselee's feedback after session (SRS §2.3).
+    """Counselee's feedback after session (SRS §2.3, Report 3 Counselling §2.2).
 
     Per SRS §2.3: "User feedbacks are available only to Admin User."
+
+    The 8 feedback fields per Report 3:
+      1. session_useful      — Very useful / Useful / Somewhat useful / Not useful
+      2. useful_reason       — text (why useful or not)
+      3. counsellor_empathy  — Very much / Somewhat / Not much
+      4. session_ended       — on time / before time / ended late
+      5. would_rechoose      — Yes / Maybe / No
+      6. rechoose_reason     — text (why (re)choose or not)
+      7. improvement_suggestions — text
+      8. rating              — 1-10 scale (10 = excellent)
     """
+
+    USEFUL_CHOICES = [
+        ("very_useful", "Very useful"),
+        ("useful", "Useful"),
+        ("somewhat_useful", "Somewhat useful"),
+        ("not_useful", "Not useful"),
+    ]
+    EMPATHY_CHOICES = [
+        ("very_much", "Very much"),
+        ("somewhat", "Somewhat"),
+        ("not_much", "Not much"),
+    ]
+    ENDED_CHOICES = [
+        ("on_time", "Ended on time"),
+        ("before_time", "Ended before time"),
+        ("ended_late", "Ended late"),
+    ]
+    RECHOOSE_CHOICES = [
+        ("yes", "Yes"),
+        ("maybe", "Maybe"),
+        ("no", "No"),
+    ]
 
     session = models.OneToOneField(
         CounselingSession, on_delete=models.CASCADE, related_name="feedback"
@@ -311,9 +377,42 @@ class SessionFeedback(models.Model):
         on_delete=models.CASCADE,
         related_name="session_feedbacks",
     )
-    # 1-5 rating
-    rating = models.PositiveIntegerField(_("rating (1-5)"))
-    experience_text = models.TextField(_("experience feedback"))
+    # Field 1
+    session_useful = models.CharField(
+        _("was the session useful?"), max_length=20, choices=USEFUL_CHOICES, blank=True, default=""
+    )
+    # Field 2
+    useful_reason = models.TextField(_("why useful / not useful"), blank=True, default="")
+    # Field 3
+    counsellor_empathy = models.CharField(
+        _("counsellor friendly & empathetic?"),
+        max_length=20,
+        choices=EMPATHY_CHOICES,
+        blank=True,
+        default="",
+    )
+    # Field 4
+    session_ended = models.CharField(
+        _("how did the session end?"), max_length=20, choices=ENDED_CHOICES, blank=True, default=""
+    )
+    # Field 5
+    would_rechoose = models.CharField(
+        _("would you choose this counsellor again?"),
+        max_length=20,
+        choices=RECHOOSE_CHOICES,
+        blank=True,
+        default="",
+    )
+    # Field 6
+    rechoose_reason = models.TextField(_("why would you (re)choose or not"), blank=True, default="")
+    # Field 7
+    improvement_suggestions = models.TextField(
+        _("how can we improve the service"), blank=True, default=""
+    )
+    # Field 8 — 1-10 scale (Report 3: 10 = excellent, 1 = very poor)
+    rating = models.PositiveIntegerField(_("rating (1-10)"))
+    # Legacy free-text fields kept for backward-compat with older feedback.
+    experience_text = models.TextField(_("experience feedback"), blank=True, default="")
     counsellor_effectiveness = models.TextField(
         _("counsellor effectiveness"), blank=True, default=""
     )
@@ -324,7 +423,7 @@ class SessionFeedback(models.Model):
         verbose_name_plural = _("session feedbacks")
 
     def __str__(self) -> str:
-        return f"Feedback for Session #{self.session_id} ({self.rating}/5)"
+        return f"Feedback for Session #{self.session_id} ({self.rating}/10)"
 
 
 class FollowupSession(models.Model):
@@ -367,3 +466,57 @@ class FollowupSession(models.Model):
 
     def __str__(self) -> str:
         return f"Followup for Session #{self.original_session_id} ({self.status})"
+
+
+class CounselingSettings(models.Model):
+    """Admin-managed global settings for the counseling module (Report 3 §1.9,
+    §1.11, §1.2, §1.15).
+
+    A singleton (one row, id=1) holding:
+      - terms_and_conditions: rich text shown on the booking 'Accept Terms' step.
+      - cancellation_refund_policy: rich text shown to the user before cancelling.
+      - max_weeks_ahead: how far ahead counsellors may create timeslots.
+      - confirm_window_hours: counsellor must confirm a booking within this many
+        hours or it auto-cancels (Report 3 §1.12).
+      - refund thresholds (hours + percentages) — admin-configurable.
+    """
+
+    terms_and_conditions = models.TextField(
+        _("terms and conditions"), blank=True, default="", help_text=_("Shown on booking.")
+    )
+    cancellation_refund_policy = models.TextField(
+        _("cancellation & refund policy"),
+        blank=True,
+        default="",
+        help_text=_("Shown before cancel."),
+    )
+    max_weeks_ahead = models.PositiveIntegerField(
+        _("max weeks ahead for timeslots"),
+        default=3,
+        help_text=_("Counsellors cannot create timeslots further than this many weeks out."),
+    )
+    confirm_window_hours = models.PositiveIntegerField(
+        _("confirm window (hours)"),
+        default=6,
+        help_text=_("A pending booking auto-cancels after this many hours unconfirmed."),
+    )
+    # Refund tiers (Report 3 §1.15) — admin-configurable.
+    full_refund_within_hours = models.PositiveIntegerField(
+        _("full refund if cancelled > N hours before"), default=24
+    )
+    half_refund_within_hours = models.PositiveIntegerField(
+        _("half refund if cancelled > N hours before"), default=4
+    )
+
+    class Meta:
+        verbose_name = _("counseling settings")
+        verbose_name_plural = _("counseling settings")
+
+    def __str__(self) -> str:
+        return "Counseling Settings"
+
+    @classmethod
+    def get(cls) -> "CounselingSettings":
+        """Return the singleton settings row, creating it if necessary."""
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj

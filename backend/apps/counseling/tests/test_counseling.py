@@ -228,7 +228,12 @@ def test_cannot_book_unavailable_timeslot(counselee_client, counselee_user, coun
     timeslot = _make_timeslot(counsellor, status="booked")
     resp = counselee_client.post(
         "/api/counseling/sessions/",
-        {"counsellor": counsellor.id, "timeslot": timeslot.id, "topic": "Test"},
+        {
+            "counsellor": counsellor.id,
+            "timeslot": timeslot.id,
+            "topic": "Test",
+            "terms_accepted": True,
+        },
         format="json",
     )
     assert resp.status_code == 400
@@ -558,3 +563,154 @@ def test_counselee_confirms_followup(counselee_client, counselee_user, counsello
     assert followup.status == "confirmed"
     assert followup.confirmed_session is not None
     assert followup.confirmed_session.status == "confirmed"
+
+
+# ---------------------------------------------------------------------------
+# Report 3 Counselling — notification wiring (helpdesk + counselee + counsellor)
+# ---------------------------------------------------------------------------
+
+
+def test_booking_notifies_counsellor_and_helpdesk(
+    counselee_client, counselee_user, counsellor_user
+):
+    """Report 3 §1.10: a new booking fires notifications to the counsellor + helpdesk."""
+    from apps.accounts.models import Role
+    from apps.notifications.models import Notification
+
+    # Ensure the helpdesk role + a helpdesk user exist
+    helpdesk_role, _ = Role.objects.get_or_create(name="helpdesk")
+    helpdesk_user = UserFactory.create(role=helpdesk_role, email="helpdesk@test.com")
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    resp = counselee_client.post(
+        "/api/counseling/sessions/",
+        {
+            "counsellor": counsellor.id,
+            "timeslot": timeslot.id,
+            "topic": "Career",
+            "terms_accepted": True,
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    assert Notification.objects.filter(
+        recipient=counsellor_user, title__contains="New booking"
+    ).exists()
+    assert Notification.objects.filter(
+        recipient=helpdesk_user, title__contains="counselling booking"
+    ).exists()
+
+
+def test_booking_requires_terms_acceptance(counselee_client, counselee_user, counsellor_user):
+    """Report 3 §1.8: terms must be explicitly accepted."""
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    resp = counselee_client.post(
+        "/api/counseling/sessions/",
+        {"counsellor": counsellor.id, "timeslot": timeslot.id, "topic": "Career"},
+        format="json",
+    )
+    assert resp.status_code == 400
+    assert resp.data["error"]["code"] == "validation_error"
+    assert "Terms" in resp.data["error"]["message"]
+
+
+def test_confirm_notifies_counselee(counsellor_client, counselee_user, counsellor_user):
+    """Report 3 §1.13: confirming a booking notifies the counselee."""
+    from apps.notifications.models import Notification
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee=counsellor.hourly_rate,
+    )
+    resp = counsellor_client.post(f"/api/counseling/sessions/{session.id}/confirm/")
+    assert resp.status_code == 200
+    assert Notification.objects.filter(
+        recipient=counselee_user, title__contains="confirmed"
+    ).exists()
+
+
+# ---------------------------------------------------------------------------
+# Report 3 Counselling §2.2 — feedback form (8 fields, 1-10 scale)
+# ---------------------------------------------------------------------------
+
+
+def test_feedback_eight_fields_and_10_point_scale(
+    counselee_client, counselee_user, counsellor_user
+):
+    """Report 3 §2.2: feedback accepts the 8 fields + a 1-10 rating."""
+    from apps.counseling.models import SessionFeedback
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee=counsellor.hourly_rate,
+        status="completed",
+    )
+    resp = counselee_client.post(
+        f"/api/counseling/sessions/{session.id}/feedback/",
+        {
+            "session_useful": "very_useful",
+            "useful_reason": "Great advice",
+            "counsellor_empathy": "very_much",
+            "session_ended": "on_time",
+            "would_rechoose": "yes",
+            "rechoose_reason": "Very helpful",
+            "improvement_suggestions": "More examples",
+            "rating": 9,
+        },
+        format="json",
+    )
+    assert resp.status_code in (200, 201), resp.data
+    fb = SessionFeedback.objects.get(session=session)
+    assert fb.session_useful == "very_useful"
+    assert fb.rating == 9
+
+
+# ---------------------------------------------------------------------------
+# Report 3 Counselling §2.4 — session summary (6 fields)
+# ---------------------------------------------------------------------------
+
+
+def test_summary_six_fields(counsellor_client, counselee_user, counsellor_user):
+    """Report 3 §2.4: summary accepts the 6 mandatory/optional fields."""
+    from apps.counseling.models import SessionSummary
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee=counsellor.hourly_rate,
+        status="completed",
+    )
+    resp = counsellor_client.post(
+        f"/api/counseling/sessions/{session.id}/summary/",
+        {
+            "client_details": "Client seeking career change",
+            "summary": "Discussed options",
+            "provisional_diagnosis": "Career indecision",
+            "case_prognosis": "Good with guidance",
+            "session_smoothly": "yes",
+            "smoothly_reason": "Engaged client",
+            "followup_recommended": True,
+        },
+        format="json",
+    )
+    assert resp.status_code in (200, 201), resp.data
+    sm = SessionSummary.objects.get(session=session)
+    assert sm.client_details == "Client seeking career change"
+    assert sm.session_smoothly == "yes"
+    assert sm.followup_recommended is True

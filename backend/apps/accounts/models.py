@@ -98,6 +98,8 @@ class Role(models.Model):
         ("counsellor", "Counsellor"),
         ("channel_partner", "Channel Partner"),
         ("individual", "Individual"),
+        # Report 3 Counselling: helpdesk receives booking/slot/followup notifications.
+        ("helpdesk", "Help Desk"),
     ]
 
     # Name is no longer constrained to ROLE_CHOICES — custom roles can have any name.
@@ -388,6 +390,10 @@ class UserProfile(models.Model):
     institution_name = models.CharField(_("institution name"), max_length=50, blank=True)
     place_of_institution = models.CharField(_("place of institution"), max_length=50, blank=True)
     location = models.CharField(_("location"), max_length=50, blank=True)
+    # Report 3 Counselling §1.6: language(s) of communication.
+    language = models.CharField(
+        _("language of communication"), max_length=100, blank=True, default=""
+    )
     assessment_package_allocated = models.CharField(
         _("assessment package allocated"), max_length=100, blank=True
     )

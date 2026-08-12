@@ -176,9 +176,16 @@ class SessionSummarySerializer(serializers.ModelSerializer):
             "id",
             "session",
             "counsellor",
+            # Report 3 §2.4 (6 fields)
+            "client_details",
             "summary",
-            "recommendations",
+            "provisional_diagnosis",
+            "case_prognosis",
+            "session_smoothly",
+            "smoothly_reason",
             "followup_recommended",
+            # legacy
+            "recommendations",
             "created_at",
         ]
         read_only_fields = ["id", "counsellor", "created_at"]
@@ -191,7 +198,16 @@ class SessionFeedbackSerializer(serializers.ModelSerializer):
             "id",
             "session",
             "counselee",
-            "rating",
+            # Report 3 §2.2 (8 fields)
+            "session_useful",
+            "useful_reason",
+            "counsellor_empathy",
+            "session_ended",
+            "would_rechoose",
+            "rechoose_reason",
+            "improvement_suggestions",
+            "rating",  # 1-10 scale
+            # legacy
             "experience_text",
             "counsellor_effectiveness",
             "created_at",

@@ -273,7 +273,7 @@ class CounselingSessionViewSet(ModelViewSet):
         )
 
     def create(self, request, *args, **kwargs):
-        """Book a counselling session (SRS §2.1).
+        """Book a counselling session (SRS §2.1, Report 3 §1.8/§1.10).
 
         Body:
             {
@@ -282,12 +282,26 @@ class CounselingSessionViewSet(ModelViewSet):
                 "category": 1,
                 "topic": "Career advice",
                 "description": "...",
-                "mode": "online"
+                "mode": "online",
+                "terms_accepted": true
             }
 
         Creates a pending session + marks the timeslot as booked.
-        The counselee is the authenticated user.
+        The counselee is the authenticated user. Per Report 3 §1.8 the
+        counselee must accept the terms; per §1.10 the counsellor + helpdesk
+        are notified of the new booking.
         """
+        # Report 3 §1.8: terms must be explicitly accepted.
+        if not request.data.get("terms_accepted"):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "You must accept the Terms & Conditions to book.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -306,15 +320,36 @@ class CounselingSessionViewSet(ModelViewSet):
 
         counsellor = serializer.validated_data["counsellor"]
         # Capture the fee at booking time
-        serializer.save(
+        session = serializer.save(
             counselee=request.user,
             fee=counsellor.hourly_rate,
             status="pending",
             payment_status="pending",
+            terms_accepted=True,
         )
         # Mark the timeslot as booked
         timeslot.status = "booked"
         timeslot.save(update_fields=["status"])
+
+        # Report 3 §1.10: notify the counsellor + helpdesk of the new booking.
+        from apps.notifications.models import notify_role, notify_user
+
+        counselee_name = request.user.full_name or request.user.email
+        slot_str = timeslot.start_time.strftime("%Y-%m-%d %H:%M")
+        notify_user(
+            counsellor.user,
+            f"New booking: {counselee_name}",
+            f"{counselee_name} booked a session for {slot_str}. "
+            f"Topic: {session.topic}. Please confirm within the confirm window.",
+            "session",
+            f"/counseling?session={session.id}",
+        )
+        notify_role(
+            "helpdesk",
+            f"New counselling booking: {counselee_name}",
+            f"{counselee_name} booked a session with {counsellor.full_name} on {slot_str}.",
+            "session",
+        )
 
         return Response(
             {
@@ -464,14 +499,20 @@ class CounselingSessionViewSet(ModelViewSet):
                 {"message": "OK", "data": SessionSummarySerializer(session.summary).data},
                 status=status.HTTP_200_OK,
             )
-        # POST: create or update
+        # POST: create or update (Report 3 §2.4 — 6 summary fields)
         summary, _ = SessionSummary.objects.update_or_create(
             session=session,
             defaults={
                 "counsellor": request.user,
+                "client_details": request.data.get("client_details", ""),
                 "summary": request.data.get("summary", ""),
-                "recommendations": request.data.get("recommendations", ""),
+                "provisional_diagnosis": request.data.get("provisional_diagnosis", ""),
+                "case_prognosis": request.data.get("case_prognosis", ""),
+                "session_smoothly": request.data.get("session_smoothly", ""),
+                "smoothly_reason": request.data.get("smoothly_reason", ""),
                 "followup_recommended": bool(request.data.get("followup_recommended", False)),
+                # legacy
+                "recommendations": request.data.get("recommendations", ""),
             },
         )
         return Response(
@@ -526,7 +567,16 @@ class CounselingSessionViewSet(ModelViewSet):
             session=session,
             defaults={
                 "counselee": request.user,
+                # Report 3 §2.2 — 8 feedback fields
+                "session_useful": request.data.get("session_useful", ""),
+                "useful_reason": request.data.get("useful_reason", ""),
+                "counsellor_empathy": request.data.get("counsellor_empathy", ""),
+                "session_ended": request.data.get("session_ended", ""),
+                "would_rechoose": request.data.get("would_rechoose", ""),
+                "rechoose_reason": request.data.get("rechoose_reason", ""),
+                "improvement_suggestions": request.data.get("improvement_suggestions", ""),
                 "rating": int(request.data.get("rating", 5)),
+                # legacy
                 "experience_text": request.data.get("experience_text", ""),
                 "counsellor_effectiveness": request.data.get("counsellor_effectiveness", ""),
             },
