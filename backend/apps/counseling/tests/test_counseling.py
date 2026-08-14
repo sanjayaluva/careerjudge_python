@@ -341,7 +341,7 @@ def test_cancel_4h_before_half_refund(counselee_client, counselee_user, counsell
     )
     resp = counselee_client.post(
         f"/api/counseling/sessions/{session.id}/cancel/",
-        {"cancelled_by": "counselee"},
+        {"cancelled_by": "counselee", "reason": "Cannot attend"},
         format="json",
     )
     assert resp.status_code == 200
@@ -363,7 +363,7 @@ def test_cancel_under_4h_no_refund(counselee_client, counselee_user, counsellor_
     )
     resp = counselee_client.post(
         f"/api/counseling/sessions/{session.id}/cancel/",
-        {"cancelled_by": "counselee"},
+        {"cancelled_by": "counselee", "reason": "Cannot attend"},
         format="json",
     )
     assert resp.status_code == 200
@@ -876,3 +876,135 @@ def test_user_can_upload_avatar(counselee_client, counselee_user):
 def test_avatar_requires_file(counselee_client):
     resp = counselee_client.post("/api/me/avatar", {}, format="multipart")
     assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.15/§1.16 — configurable refunds + reason + ownership on cancel
+# ---------------------------------------------------------------------------
+
+
+def test_cancel_requires_reason(counselee_client, counselee_user, counsellor_user):
+    """Report 3 §1.16: a cancellation reason is required."""
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor, hours_from_now=48)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee="100.00",
+        status="confirmed",
+    )
+    resp = counselee_client.post(
+        f"/api/counseling/sessions/{session.id}/cancel/",
+        {"cancelled_by": "counselee"},
+        format="json",
+    )
+    assert resp.status_code == 400
+
+
+def test_unrelated_user_cannot_cancel(counselee_client, counsellor_user):
+    """Only the counselee, the counsellor, or admin may cancel."""
+    from apps.accounts.tests.factories import UserFactory
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor, hours_from_now=48)
+    from apps.accounts.services import get_or_create_default_roles
+
+    other = UserFactory.create(
+        role=get_or_create_default_roles()["individual"], email="other@test.com"
+    )
+    session = CounselingSession.objects.create(
+        counselee=other,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee="100.00",
+        status="confirmed",
+    )
+    resp = counselee_client.post(
+        f"/api/counseling/sessions/{session.id}/cancel/",
+        {"cancelled_by": "counselee", "reason": "x"},
+        format="json",
+    )
+    # The session list is scoped to the counselee, so an unrelated user gets a
+    # 404 (no existence leak) rather than a 403.
+    assert resp.status_code == 404
+
+
+def test_refund_thresholds_are_configurable(counselee_client, counselee_user, counsellor_user):
+    """Report 3 §1.15: admin can change the refund thresholds; a 10h-before
+    cancel earns a half refund when full_refund_within_hours is raised to 48."""
+    from apps.counseling.models import CounselingSettings
+
+    settings = CounselingSettings.get()
+    settings.full_refund_within_hours = 48
+    settings.save(update_fields=["full_refund_within_hours"])
+
+    counsellor = _make_counsellor(counsellor_user, hourly_rate="100.00")
+    timeslot = _make_timeslot(counsellor, hours_from_now=10)  # 10h: was full, now half
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee="100.00",
+        status="confirmed",
+    )
+    resp = counselee_client.post(
+        f"/api/counseling/sessions/{session.id}/cancel/",
+        {"cancelled_by": "counselee", "reason": "conflict"},
+        format="json",
+    )
+    assert resp.status_code == 200
+    assert resp.data["data"]["cancellation"]["refund_tier"] == "half"
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.3/§1.12 — maintenance command
+# ---------------------------------------------------------------------------
+
+
+def test_maintenance_auto_cancels_stale_pending(counselee_user, counsellor_user):
+    """§1.12: a pending booking older than the confirm window is auto-cancelled
+    and the counselee notified."""
+    from datetime import timedelta
+
+    from django.core.management import call_command
+    from django.utils import timezone
+
+    from apps.notifications.models import Notification
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor, hours_from_now=48)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee="100.00",
+        status="pending",
+    )
+    # booked_at is auto_now_add; force it into the past via a queryset update.
+    CounselingSession.objects.filter(id=session.id).update(
+        booked_at=timezone.now() - timedelta(hours=10)  # past the 6h window
+    )
+    call_command("counseling_maintenance", "--confirm", verbosity=0)
+    session.refresh_from_db()
+    assert session.status == "cancelled"
+    timeslot.refresh_from_db()
+    assert timeslot.status == "available"
+    assert Notification.objects.filter(recipient=counselee_user, title__contains="expired").exists()
+
+
+def test_maintenance_notifies_slot_shortage(counsellor_user):
+    """§1.3: a counsellor with no near-term available slots is notified."""
+    from django.core.management import call_command
+
+    from apps.notifications.models import Notification
+
+    _make_counsellor(counsellor_user)  # no near-term slots -> shortage
+    call_command("counseling_maintenance", "--slots", verbosity=0)
+    assert Notification.objects.filter(
+        recipient=counsellor_user, title__contains="Timeslot update"
+    ).exists()

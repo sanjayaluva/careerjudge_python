@@ -474,14 +474,15 @@ class CounselingSessionViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
-        """Cancel a session with refund logic (SRS §2.2).
+        """Cancel a session with refund logic (SRS §2.2, Report 3 §1.15/§1.16).
 
-        Refund rules:
-          - 24+ hours before: full refund
-          - 4+ hours before: 50% refund
-          - <4 hours before: no refund
+        Refund rules (thresholds admin-configurable via CounselingSettings):
+          - > full_refund_within_hours (default 24) before: full refund
+          - > half_refund_within_hours (default 4) before: 50% refund
+          - less: no refund
 
         Body: {"reason": "...", "cancelled_by": "counselee" | "counsellor"}
+        Only the session's counselee, its counsellor, or an admin may cancel.
         """
         session = self.get_object()
         if session.status in ("cancelled", "completed"):
@@ -495,18 +496,49 @@ class CounselingSessionViewSet(ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        cancelled_by = request.data.get("cancelled_by", "counselee")
+        # Only the counselee, the counsellor, or an admin may cancel.
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_admin = user_role_name == "cj_admin" or request.user.is_superuser
+        is_counselee = session.counselee_id == request.user.id
+        is_counsellor = session.counsellor.user_id == request.user.id
+        if not (is_admin or is_counselee or is_counsellor):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the counselee, the counsellor, or an admin can cancel.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Infer cancelled_by from the caller when not explicitly provided.
+        default_by = "counsellor" if is_counsellor and not is_counselee else "counselee"
+        cancelled_by = request.data.get("cancelled_by", default_by)
         reason = request.data.get("reason", "")
 
-        # Compute refund tier based on time until session
+        # Report 3 §1.16: reason is required for cancellations.
+        if not reason.strip():
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "A reason is required to cancel.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Compute refund tier based on time until session (admin-configurable).
+        settings = CounselingSettings.get()
         now = timezone.now()
         session_time = session.timeslot.start_time
         hours_until = (session_time - now).total_seconds() / 3600
 
-        if hours_until >= 24:
+        if hours_until >= settings.full_refund_within_hours:
             refund_tier = "full"
             refund_amount = session.fee
-        elif hours_until >= 4:
+        elif hours_until >= settings.half_refund_within_hours:
             refund_tier = "half"
             refund_amount = session.fee / 2
         else:
