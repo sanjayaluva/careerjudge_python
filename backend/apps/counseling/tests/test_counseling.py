@@ -809,3 +809,70 @@ def test_only_admin_can_update_settings(counselee_client, admin_client):
     assert resp.status_code == 200, resp.data
     assert CounselingSettings.get().terms_and_conditions == "New terms"
     assert CounselingSettings.get().max_weeks_ahead == 5
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.17 — counsellor category tagging on add-user
+# ---------------------------------------------------------------------------
+
+
+def test_admin_creating_counsellor_tags_categories(admin_client, admin_user):
+    """Report 3 §1.17: when admin creates a counsellor, the selected
+    counselling categories are linked to the new CounsellorProfile."""
+    from apps.accounts.models import ModuleRight, User
+    from apps.accounts.services import get_or_create_default_roles
+    from apps.counseling.models import CounselingCategory, CounsellorProfile
+
+    # The counseling admin fixture only grants counseling perms; user creation
+    # also needs accounts.add.
+    ModuleRight.objects.get_or_create(role=admin_user.role, module="accounts", action="add")
+    roles = get_or_create_default_roles()
+    cat1 = CounselingCategory.objects.create(name="career")
+    cat2 = CounselingCategory.objects.create(name="learning")
+
+    resp = admin_client.post(
+        "/api/accounts/users/",
+        {
+            "email": "newcounsellor@test.com",
+            "full_name": "New Counsellor",
+            "role": roles["counsellor"].id,
+            "counsellor_categories": [cat1.id, cat2.id],
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    user = User.objects.get(email="newcounsellor@test.com")
+    profile = CounsellorProfile.objects.get(user=user)
+    assert set(profile.categories.values_list("id", flat=True)) == {cat1.id, cat2.id}
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.5 — avatar upload
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Report 3 1.5 - avatar upload
+# ---------------------------------------------------------------------------
+
+
+def test_user_can_upload_avatar(counselee_client, counselee_user):
+    """Report 3 1.5: a user can upload their avatar via POST /api/me/avatar/."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    # 1x1 transparent PNG
+    hex_png = (
+        "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+        "1f15c4890000000d49444154789c63fcffff3f0300060002fea13581ea"
+        "0000000049454e44ae426082"
+    )
+    upload = SimpleUploadedFile("avatar.png", bytes.fromhex(hex_png), content_type="image/png")
+    resp = counselee_client.post("/api/me/avatar", {"avatar": upload}, format="multipart")
+    assert resp.status_code == 200, resp.data
+    counselee_user.refresh_from_db()
+    assert bool(counselee_user.profile.avatar)
+
+
+def test_avatar_requires_file(counselee_client):
+    resp = counselee_client.post("/api/me/avatar", {}, format="multipart")
+    assert resp.status_code == 400

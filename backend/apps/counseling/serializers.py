@@ -25,6 +25,12 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
     user_email = serializers.CharField(source="user.email", read_only=True)
     full_name = serializers.CharField(source="user.full_name", read_only=True)
     bio = serializers.CharField(source="user.profile.bio", read_only=True, default="")
+    # Report 3 §1.7: expose gender / avatar / language / location so the
+    # browse view shows them to candidates.
+    gender = serializers.CharField(source="user.profile.gender", read_only=True, default="")
+    avatar = serializers.ImageField(source="user.profile.avatar", read_only=True, default=None)
+    language = serializers.CharField(source="user.profile.language", read_only=True, default="")
+    location = serializers.CharField(source="user.profile.location", read_only=True, default="")
     hourly_rate = serializers.DecimalField(
         source="user.profile.hourly_rate",
         max_digits=10,
@@ -52,6 +58,10 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
             "user_email",
             "full_name",
             "bio",
+            "gender",
+            "avatar",
+            "language",
+            "location",
             "hourly_rate",
             "meeting_url",
             "categories",
@@ -68,6 +78,10 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
             "user_email",
             "full_name",
             "bio",
+            "gender",
+            "avatar",
+            "language",
+            "location",
             "hourly_rate",
             "meeting_url",
             "is_available",
