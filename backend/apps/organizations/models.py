@@ -107,3 +107,72 @@ class OrganizationMember(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user.email} @ {self.organization.name}"
+
+
+# ---------------------------------------------------------------------------
+# DomainCategory — for tagging SME/Reviewer to domain expertise areas
+# Per Doc 4 CJ Admin Issues 5-7: SME/Reviewer tagged to domain categories
+# ---------------------------------------------------------------------------
+
+
+class DomainCategory(models.Model):
+    """A domain expertise category (e.g. Mathematics, Physics, Chemistry).
+
+    SMEs and Reviewers are tagged to domain categories so that questions
+    created by an SME in a domain reach a Reviewer with the same domain
+    expertise. Per Doc 4 CJ Admin Issues 5, 6, 7.
+    """
+
+    name = models.CharField(_("name"), max_length=100, unique=True)
+    description = models.TextField(_("description"), blank=True, default="")
+    is_active = models.BooleanField(_("active"), default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = _("domain category")
+        verbose_name_plural = _("domain categories")
+
+    def __str__(self) -> str:
+        return self.name
+
+
+# ---------------------------------------------------------------------------
+# OrganizationAssignment — CJ Admin assigns assessments/training courses
+# to organizations. Per Doc 4 CJ Admin Issues 12-14, 17-18.
+# ---------------------------------------------------------------------------
+
+
+class OrganizationAssignment(models.Model):
+    """Links a published assessment or training course to an organization.
+
+    CJ Admin selects specific published assessments/training courses and
+    assigns them to a Corp organization or channel partner. Only assigned
+    items are visible to the org's users.
+    """
+
+    ITEM_TYPE_CHOICES = [
+        ("assessment", "Assessment"),
+        ("training_course", "Training Course"),
+        ("counseling", "Counseling Service"),
+    ]
+
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="assignments"
+    )
+    item_type = models.CharField(_("item type"), max_length=20, choices=ITEM_TYPE_CHOICES)
+    item_id = models.PositiveIntegerField(_("item ID"))
+    assigned_by = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, related_name="org_assignments"
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-assigned_at"]
+        unique_together = [("organization", "item_type", "item_id")]
+        verbose_name = _("organization assignment")
+        verbose_name_plural = _("organization assignments")
+
+    def __str__(self) -> str:
+        return f"{self.organization.name} → {self.item_type}#{self.item_id}"
