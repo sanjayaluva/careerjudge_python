@@ -44,6 +44,8 @@ DEMO_USERS = [
     ("counsellor", "counsellor@demo.careerjudge.pp.ua", "Counsellor", "Demo@1234"),
     ("channel_partner", "channel.partner@demo.careerjudge.pp.ua", "Channel Partner", "Demo@1234"),
     ("individual", "individual@demo.careerjudge.pp.ua", "Individual User", "Demo@1234"),
+    # Report 3: helpdesk receives counselling booking/slot/followup notifications
+    ("helpdesk", "helpdesk@demo.careerjudge.pp.ua", "Help Desk", "Demo@1234"),
 ]
 
 
@@ -180,6 +182,10 @@ ROLE_PERMISSIONS = {
         ("accounts", "view"),
         ("assessment", "view"),
         ("reporting", "view"),
+    ],
+    # Report 3: helpdesk monitors counselling activity (notification recipient)
+    "helpdesk": [
+        ("counseling", "view"),
     ],
     "channel_partner": [
         # Channel Partner: manages their own individual users + assessments

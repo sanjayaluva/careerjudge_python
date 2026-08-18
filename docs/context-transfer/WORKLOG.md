@@ -1985,3 +1985,108 @@ Stage Summary:
   by sub-question, scoring filters by sub-question, assessment auto-
   expands on assign.
 - PDF header no longer overlaps content.
+
+
+---
+Task ID: 63-70
+Agent: main (ZCode)
+Task: Implement Report 2 (Psychometric) + Report 3 (Training + Counselling)
+review feedback end-to-end on branch
+feat/reports-2-3-psychometric-training-counseling (LOCAL ONLY — not pushed;
+user handles push after their own docs updates).
+
+Inputs: the two previously-pending client review PDFs:
+  - "System Testing & Review Feedback Report 2" (25-07-2026) — psychometric
+    question types (the awaited "Psychometric Questions Review").
+  - "System Testing & Review Feddback Report 3" (30-07-2026) — Training +
+    Counselling (the awaited "Course & Counselling Review").
+
+User decisions locked in before planning:
+  1. Forced-choice: follow the REPORT (selection vs non-selection with two
+     configurable scores), superseding the older SRS predefined-score model.
+  2. Psychometric "section" = reuse AssessmentSection via a portable
+     section_tag label on each option, resolved at assign time.
+  3. Add a new `helpdesk` role for Help Desk notifications.
+  4. Trainer QB/assessment access scoped to created_by=trainer (own only).
+
+Phase A — Psychometric (Report 2), 3 commits (a2f2487, 44f95bf, 0ed68a8):
+- question_bank 0013: ResponseOption gains section_tag + selection_score +
+  non_selection_score (predefined_score kept for back-compat).
+- Scoring rewrite: _score_rank = per-option (N - rank + 1); rank-rate =
+  rank x rating; forced-choice = selection/non-selection with BOTH options'
+  sections scored; new score_question_by_section() routes each option's
+  score to its tagged section; calculate_session_scores distributes
+  psychometric scores by section tag (fallback to attempt's own section).
+- _get_max_score updated (RANK -> N; forced-choice best-of).
+- Validation: rank N options <-> N distinct tags; forced-choice pair must
+  use different tags; selection > non-selection >= 0.
+- Assign-time: _ensure_section_tags_have_sections() auto-creates leaf
+  AssessmentSections for unresolved tags.
+- Frontend: all 4 psychometric editors gain question_text_2 (WYSIWYG) +
+  per-option section_tag; forced-choice gains selection/non-selection
+  inputs replacing predefined_score.
+- Self-review found + fixed: per-section max double-count bug (each option's
+  max must go to its OWN tag); debug view updated to the new model.
+- Tests: SRS worked example (Section 1 = 8 across two rank questions),
+  two-section forced-choice routing, validation rules, max-accounting
+  regression, assign-time resolution.
+
+Phase B — Training (Report 3), 10 commits (96c930b..6582363):
+- Registration (§1): registration_form JSON snapshot (profile-prefilled +
+  extra_answers); Payment record + Stripe checkout URL on paid registration
+  (webhook flips to paid + sets started_at for scheduled courses +
+  notifies trainer/admin); registration notifies trainer + cj_admin.
+- Assignments (§3): is_report_mandatory + submission_deadline; report_file
+  FileField upload (multipart); deadline enforced (403 deadline_passed)
+  unless trainer approves via new approve-late-submission endpoint; review
+  validates 0-10 score; submit/review notify trainer/student.
+- Trainer access (§4): trainers see own assessments (published + own) and
+  own QB questions; accounts 0008 grants assessment add/change/delete +
+  QB view/add/change to trainer.
+- Sequencing (§5): TrainingCourse.enforce_sequence; player locks Next until
+  current completed; sidebar locks ahead-jumps; editor checkbox.
+- Completion params (§6): POST/GET completion-parameters (replace-set);
+  progress_summary computes mandatory-aware completion.
+- Course management (§7): CourseUpdateRequest workflow (trainer request ->
+  admin approve/decline -> notify; approve+delete archives course);
+  LiveSessionRequest (candidate requests scheduling; trainer notified);
+  reschedule endpoint records rescheduled_from + reason, notifies students;
+  schedule_mode advance/ongoing + depends_on; SessionContent.document
+  (PDF/Word/PPT) + 'document' format.
+- Migrations: training 0004/0005/0006, accounts 0008.
+
+Phase C — Counselling (Report 3), 6 commits (f3646cb..63bfff1):
+- counseling/signals.py + apps.ready(): booking->counsellor+helpdesk,
+  confirm->counselee, cancel->counselee+helpdesk, followup->counselee+helpdesk
+  (all defensive — notification failures never break the operation).
+- helpdesk role (accounts 0009; 12 system roles now). UserProfile.language.
+- counseling 0003: SessionFeedback rebuilt to the 8 report fields + 1-10
+  rating; SessionSummary rebuilt to the 6 fields; CounselingSettings
+  singleton (terms, refund policy, max_weeks_ahead, confirm window,
+  refund thresholds).
+- Booking requires explicit terms_accepted; Timeslot CRUD (ownership +
+  booked-slot protection + max-weeks-ahead); settings endpoint (GET anyone,
+  PATCH admin); cancel requires reason + ownership + configurable refunds;
+  POST /api/me/avatar; counsellor_categories on admin user-create links
+  CounsellorProfile categories; counsellor serializer exposes
+  gender/avatar/language/location.
+- counseling_maintenance command: slot-shortage reminders (counsellor +
+  helpdesk) + confirm-window auto-cancel (default 6h, frees slot, notifies
+  counselee to rebook).
+- Frontend: BookingModal (profile card, refund policy, expandable terms +
+  checkbox gate); 8-field feedback modal; 6-field summary modal; timeslot
+  Edit/Delete; counselee cancel -> reason -> rebook prompt; My Sessions
+  hidden for counsellors; followup 'Confirm & pay'.
+
+Verification at each commit: ruff + black + pytest (backend) and typecheck +
+lint + prettier + vitest + build (frontend). Final state: 536 backend
+tests + 30 frontend tests green (9 WeasyPrint PDF tests excluded locally —
+native libs absent in dev venv; they pass on CI).
+
+Stage Summary:
+- Both awaited review reports fully implemented across 3 modules
+  (~19 local commits on the feature branch, NOT pushed per user request).
+- Known deferred: Zoom OAuth auto-create (manual URL works), email channel
+  for notifications (in-app bell only), followup Stripe payment wiring
+  (confirm marks paid), admin UI for counseling settings text editing
+  (API ready).
