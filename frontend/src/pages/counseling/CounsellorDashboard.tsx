@@ -39,12 +39,15 @@ import {
   completeSession,
   confirmSession,
   createTimeSlot,
+  deleteTimeSlot,
   getSessionSummary,
   listCounsellorTimeslots,
   listSessions,
   proposeFollowup,
+  updateTimeSlot,
   saveSessionSummary,
   type CounselingSession,
+  type SessionSummary,
 } from "@/api/counseling";
 import { extractApiError } from "@/api/client";
 
@@ -303,8 +306,13 @@ function SessionRow({
 function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () => void }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  // Report 3 §2.4 — the 6 summary fields.
+  const [clientDetails, setClientDetails] = useState("");
   const [summary, setSummary] = useState("");
-  const [recommendations, setRecommendations] = useState("");
+  const [provisionalDiagnosis, setProvisionalDiagnosis] = useState("");
+  const [casePrognosis, setCasePrognosis] = useState("");
+  const [sessionSmoothly, setSessionSmoothly] = useState<SessionSummary["session_smoothly"]>("");
+  const [smoothlyReason, setSmoothlyReason] = useState("");
   const [followupRecommended, setFollowupRecommended] = useState(false);
   const [followupTime, setFollowupTime] = useState("");
   const [showFollowupForm, setShowFollowupForm] = useState(false);
@@ -317,8 +325,12 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
   // Load existing summary if available
   useState(() => {
     if (existingSummary) {
+      setClientDetails(existingSummary.client_details ?? "");
       setSummary(existingSummary.summary);
-      setRecommendations(existingSummary.recommendations);
+      setProvisionalDiagnosis(existingSummary.provisional_diagnosis ?? "");
+      setCasePrognosis(existingSummary.case_prognosis ?? "");
+      setSessionSmoothly(existingSummary.session_smoothly ?? "");
+      setSmoothlyReason(existingSummary.smoothly_reason ?? "");
       setFollowupRecommended(existingSummary.followup_recommended);
     }
   });
@@ -326,8 +338,12 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
   const saveMut = useMutation({
     mutationFn: () =>
       saveSessionSummary(sessionId, {
+        client_details: clientDetails,
         summary,
-        recommendations,
+        provisional_diagnosis: provisionalDiagnosis,
+        case_prognosis: casePrognosis,
+        session_smoothly: sessionSmoothly,
+        smoothly_reason: smoothlyReason,
         followup_recommended: followupRecommended,
       }),
     onSuccess: () => {
@@ -352,14 +368,31 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  const summaryValid = summary.trim() && clientDetails.trim() && sessionSmoothly;
+
   return (
     <Modal open onClose={onClose} title="Session Summary" size="md">
       <div className="space-y-4">
         {!showFollowupForm ? (
           <>
+            {/* 1 — mandatory */}
+            <div>
+              <Label htmlFor="client-details" required>
+                1. Client details &amp; problem description
+              </Label>
+              <textarea
+                id="client-details"
+                rows={3}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={clientDetails}
+                onChange={(e) => setClientDetails(e.target.value)}
+                placeholder="Client background and the problem presented…"
+              />
+            </div>
+            {/* 2 — mandatory */}
             <div>
               <Label htmlFor="summary" required>
-                Session Summary
+                2. Session summary
               </Label>
               <textarea
                 id="summary"
@@ -368,20 +401,56 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
                 placeholder="What was discussed? Key observations?"
-                required
               />
             </div>
+            {/* 3 — optional */}
             <div>
-              <Label htmlFor="recs">Recommendations</Label>
+              <Label htmlFor="diagnosis">3. Provisional diagnosis (optional)</Label>
               <textarea
-                id="recs"
+                id="diagnosis"
                 rows={2}
                 className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                value={recommendations}
-                onChange={(e) => setRecommendations(e.target.value)}
-                placeholder="Recommendations for the counselee..."
+                value={provisionalDiagnosis}
+                onChange={(e) => setProvisionalDiagnosis(e.target.value)}
               />
             </div>
+            {/* 4 — optional */}
+            <div>
+              <Label htmlFor="prognosis">4. Case prognosis (optional)</Label>
+              <textarea
+                id="prognosis"
+                rows={2}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={casePrognosis}
+                onChange={(e) => setCasePrognosis(e.target.value)}
+              />
+            </div>
+            {/* 5 — choice + mandatory reason */}
+            <div>
+              <Label required>5. Did the session go smoothly?</Label>
+              <select
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                value={sessionSmoothly}
+                onChange={(e) =>
+                  setSessionSmoothly(e.target.value as SessionSummary["session_smoothly"])
+                }
+              >
+                <option value="">Select…</option>
+                <option value="yes">Yes</option>
+                <option value="somewhat">Somewhat</option>
+                <option value="no">No</option>
+              </select>
+              {sessionSmoothly && (
+                <textarea
+                  rows={2}
+                  className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  value={smoothlyReason}
+                  onChange={(e) => setSmoothlyReason(e.target.value)}
+                  placeholder="Reason (required)…"
+                />
+              )}
+            </div>
+            {/* 6 — mandatory */}
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -389,7 +458,7 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
                 onChange={(e) => setFollowupRecommended(e.target.checked)}
                 className="h-4 w-4"
               />
-              Recommend a follow-up session
+              6. Follow-up session needed?
             </label>
             <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
               <Button variant="outline" onClick={onClose}>
@@ -398,7 +467,7 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
               <Button
                 onClick={() => saveMut.mutate()}
                 loading={saveMut.isPending}
-                disabled={!summary}
+                disabled={!summaryValid}
               >
                 Save summary
               </Button>
@@ -478,6 +547,45 @@ function TimeSlotsTab({ counsellorId }: { counsellorId: number }) {
   const available = slots.filter((s) => s.status === "available");
   const booked = slots.filter((s) => s.status === "booked");
 
+  // Report 3 §1.1: edit/delete existing slots.
+  const [editingSlotId, setEditingSlotId] = useState<number | null>(null);
+  const [editTime, setEditTime] = useState("");
+  const [deleteSlotId, setDeleteSlotId] = useState<number | null>(null);
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["counseling", "timeslots", counsellorId] });
+    void queryClient.invalidateQueries({ queryKey: ["counseling", "counsellors"] });
+  };
+
+  const editMut = useMutation({
+    mutationFn: (slotId: number) => {
+      const start = new Date(editTime);
+      const end = new Date(start.getTime() + 60 * 60 * 1000); // keep 1-hour slots
+      return updateTimeSlot(slotId, {
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+      });
+    },
+    onSuccess: () => {
+      invalidate();
+      toast.success("Time slot updated.");
+      setEditingSlotId(null);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (slotId: number) => {
+      setDeleteSlotId(slotId);
+      return deleteTimeSlot(slotId);
+    },
+    onSuccess: () => {
+      invalidate();
+      toast.success("Time slot deleted.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   return (
     <div className="space-y-4">
       <Card>
@@ -523,14 +631,59 @@ function TimeSlotsTab({ counsellorId }: { counsellorId: number }) {
               <CardHeader>
                 <CardTitle className="text-sm">Available Slots ({available.length})</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {available.map((s) => (
-                    <Badge key={s.id} variant="success">
-                      {new Date(s.start_time).toLocaleString()}
-                    </Badge>
-                  ))}
-                </div>
+              <CardContent className="space-y-2">
+                {available.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex flex-wrap items-center gap-2 rounded-md border border-slate-100 p-2 text-sm"
+                  >
+                    {editingSlotId === s.id ? (
+                      <>
+                        <input
+                          type="datetime-local"
+                          className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+                          value={editTime}
+                          onChange={(e) => setEditTime(e.target.value)}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => editMut.mutate(s.id)}
+                          loading={editMut.isPending}
+                          disabled={!editTime}
+                        >
+                          Save
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditingSlotId(null)}>
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Badge variant="success">{new Date(s.start_time).toLocaleString()}</Badge>
+                        {/* Report 3 §1.1: counsellors can edit their slots */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditingSlotId(s.id);
+                            setEditTime(new Date(s.start_time).toISOString().slice(0, 16));
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        {/* Report 3 §1.1: …and delete unbooked slots */}
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => deleteMut.mutate(s.id)}
+                          loading={deleteMut.isPending && deleteSlotId === s.id}
+                        >
+                          Delete
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
