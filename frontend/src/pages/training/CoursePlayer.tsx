@@ -219,7 +219,8 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
                 <Button
                   onClick={() => setCurrentIdx(Math.min(flatContent.length - 1, currentIdx + 1))}
                   disabled={
-                    currentIdx === flatContent.length - 1 || (contentSequencingEnabled && !currentCompleted)
+                    currentIdx === flatContent.length - 1 ||
+                    (contentSequencingEnabled && !currentCompleted)
                   }
                   title={
                     contentSequencingEnabled && !currentCompleted

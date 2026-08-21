@@ -240,6 +240,21 @@ export default function SessionPlayerPage() {
   // Per the Multiple Questions Display Style document: the media is shown
   // only on the first sub-question. Sub-questions 2+ show only sub-question
   // text + options — no media, no gating.
+  //
+  // Retest fix: the presentation-first rule is TYPE-driven. Plain MCQ
+  // text/image, FITB single/multi-field, Match, Grid and Hotspot questions
+  // must NEVER show the 'options after presentation' gate even if they
+  // carry leftover passage/flash configuration fields.
+  const PRESENTATION_QTYPES = new Set([
+    "MCQ_AUDIO_MULTI",
+    "MCQ_VIDEO_MULTI",
+    "MCQ_WORD_FLASH_MULTI",
+    "MCQ_IMAGE_FLASH_MULTI",
+    "MCQ_PASSAGE_DISPLAY_MULTI",
+    "MCQ_IMAGE_DISPLAY_MULTI",
+    "FITB_WORD_FLASH_MULTI",
+    "FITB_IMAGE_FLASH_MULTI",
+  ]);
   const hasAudioMedia = qd.media_files.some(
     (m) => m.media_type.toUpperCase() === "AUDIO" && m.file,
   );
@@ -250,20 +265,21 @@ export default function SessionPlayerPage() {
     qd.question_type === "MCQ_IMAGE_DISPLAY_MULTI" &&
     qd.display_duration_seconds != null &&
     Boolean(qd.image);
-  const hasPassageTimed = qd.passage_title != null && (qd.display_mode ?? "timed") === "timed";
+  const hasPassageTimed =
+    qd.question_type === "MCQ_PASSAGE_DISPLAY_MULTI" &&
+    qd.passage_title != null &&
+    (qd.display_mode ?? "timed") === "timed";
+  const hasFlashItems = qd.question_type.includes("FLASH") && qd.flash_items.length > 0;
   const subQuestionCount = qd.sub_question_count ?? 1;
   const isFirstSubQ = activeSubQ === 0;
   const hasTimedPresentation =
     isFirstSubQ &&
-    (qd.flash_items.length > 0 ||
-      hasPassageTimed ||
-      hasImageDisplay ||
-      hasAudioMedia ||
-      hasVideoMedia);
-  // Presentation is active (gating sub-question text + options) only on
-  // sub-question 0 AND only until the media presentation ends.
-  // Requirement 2: sub-question text/options must appear only AFTER content
-  // presentation is over — not on a separate timer.
+    PRESENTATION_QTYPES.has(qd.question_type) &&
+    (hasFlashItems || hasPassageTimed || hasImageDisplay || hasAudioMedia || hasVideoMedia);
+  // Presentation is active (gating Text2 + sub-question text + options) only
+  // on sub-question 0 AND only until the media presentation ends.
+  // Retest fix: Question Text2 is also gated for presentation-first types —
+  // it must appear only AFTER the presentation ends.
   const presentationActive =
     hasTimedPresentation && !presentationDone.has(qd.id) && !viewedQuestions.has(qd.id);
 
@@ -560,7 +576,7 @@ export default function SessionPlayerPage() {
                   text + options. */}
               {qd.question_text_1 && isFirstSubQ && (
                 <div
-                  className="prose prose-sm mb-4 max-w-none text-base font-medium text-slate-900"
+                  className="prose prose-sm mb-4 max-w-none text-base font-medium text-slate-900 [&_br]:leading-6 [&_p]:mb-2 [&_p]:mt-2"
                   dangerouslySetInnerHTML={{ __html: qd.question_text_1 }}
                 />
               )}
@@ -628,7 +644,10 @@ export default function SessionPlayerPage() {
                         setPresentationDone((prev) => new Set(prev).add(qd.id))
                       }
                     />
-                  ) : qd.image ? (
+                  ) : qd.image && !qType0StartsWithHotspot(qd.question_type) ? (
+                    /* Retest 5a-1: hotspot questions must show the image ONLY
+                       inside the clickable hotspot area — a second copy above
+                       is a duplicate. */
                     <img
                       src={qd.image}
                       alt="Question"
@@ -675,13 +694,23 @@ export default function SessionPlayerPage() {
                   sub-questions. Shown only on sub-question 0.
                   Per Requirement 2: Text2 is shown from the start (in the same
                   frame as Text1 + hidden content). It is NOT gated — only the
-                  sub-question text + options are gated until content ends. */}
-              {qd.question_text_2 && isFirstSubQ && (
-                <div
-                  className="prose prose-sm mb-4 mt-4 max-w-none text-sm text-slate-600"
-                  dangerouslySetInnerHTML={{ __html: qd.question_text_2 }}
-                />
-              )}
+                  sub-question text + options are gated until content ends.
+
+                  Retest fixes:
+                  1. Text2 is GATED for presentation-first types (appears only
+                     after the presentation ends).
+                  2. No duplicate text on sub-question 1: when the question is
+                     multi-sub-question AND has a per-sub-question text, that
+                     text wins and the shared Text2 is suppressed. */}
+              {qd.question_text_2 &&
+                isFirstSubQ &&
+                !presentationActive &&
+                !(subQuestionCount > 1 && subQuestionText) && (
+                  <div
+                    className="prose prose-sm mb-4 mt-4 max-w-none text-sm text-slate-600 [&_br]:leading-6 [&_p]:mb-2 [&_p]:mt-2"
+                    dangerouslySetInnerHTML={{ __html: qd.question_text_2 }}
+                  />
+                )}
 
               {/* Per-sub-question text — shown before the options for each
                   sub-question. Separate from Text 2 (main question's secondary
@@ -693,7 +722,7 @@ export default function SessionPlayerPage() {
                   AFTER content presentation is over. */}
               {subQuestionText && !(isFirstSubQ && presentationActive) && (
                 <div
-                  className="prose prose-sm mb-4 max-w-none text-base font-medium text-slate-900"
+                  className="prose prose-sm mb-4 max-w-none text-base font-medium text-slate-900 [&_br]:leading-6 [&_p]:mb-2 [&_p]:mt-2"
                   dangerouslySetInnerHTML={{ __html: subQuestionText }}
                 />
               )}
@@ -724,20 +753,17 @@ export default function SessionPlayerPage() {
 
       {/* ─── Footer — navigation buttons ─── */}
       <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white px-6 py-3">
+        {/* Retest G2: Previous must stay ACTIVE even during timed
+            presentations (the presentation is already in flight); on
+            revisit the media replay stays blocked via viewedQuestions. */}
         <Button
           variant="outline"
           onClick={handlePrev}
-          disabled={
-            presentationActive ||
-            (currentIndex === 0 && activeSubQ === 0) ||
-            (!canGoBack() && activeSubQ === 0)
-          }
+          disabled={(currentIndex === 0 && activeSubQ === 0) || (!canGoBack() && activeSubQ === 0)}
           title={
-            presentationActive
-              ? "Wait for the presentation to finish before navigating"
-              : !canGoBack() && activeSubQ === 0
-                ? "Backward navigation is not allowed for this assessment"
-                : undefined
+            !canGoBack() && activeSubQ === 0
+              ? "Backward navigation is not allowed for this assessment"
+              : undefined
           }
         >
           ← Previous
@@ -828,6 +854,10 @@ export default function SessionPlayerPage() {
 // ---------------------------------------------------------------------------
 // Answer Input — renders the correct input based on question type
 // ---------------------------------------------------------------------------
+
+function qType0StartsWithHotspot(qtype: string): boolean {
+  return qtype.startsWith("HOTSPOT_");
+}
 
 function AnswerInput({
   question,
@@ -1241,7 +1271,7 @@ function AnswerInput({
                 {/* Hotspot area outlines — only shown when visibility='visible' */}
                 {qd.hotspot_visibility === "visible" &&
                   qd.hotspot_areas.map((area) => {
-                    const stroke = area.is_correct ? "#22c55e" : "#ef4444";
+                    const stroke = "#6366f1"; // uniform: no answer colour-leak (retest 5a-2)
                     if (area.shape_type === "RECTANGLE") {
                       return (
                         <rect
@@ -1250,7 +1280,7 @@ function AnswerInput({
                           y={area.y}
                           width={area.width_px}
                           height={area.height_px}
-                          fill={area.is_correct ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"}
+                          fill={"rgba(99,102,241,0.12)"}
                           stroke={stroke}
                           strokeWidth="2"
                           strokeDasharray="4 2"
@@ -1264,7 +1294,7 @@ function AnswerInput({
                           cx={area.x}
                           cy={area.y}
                           r={area.radius}
-                          fill={area.is_correct ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"}
+                          fill={"rgba(99,102,241,0.12)"}
                           stroke={stroke}
                           strokeWidth="2"
                           strokeDasharray="4 2"
@@ -1277,7 +1307,7 @@ function AnswerInput({
                         <polygon
                           key={`area-${area.id}`}
                           points={pts}
-                          fill={area.is_correct ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"}
+                          fill={"rgba(99,102,241,0.12)"}
                           stroke={stroke}
                           strokeWidth="2"
                           strokeDasharray="4 2"
@@ -1839,11 +1869,15 @@ function GridCell({
           selected ? "bg-green-50 ring-1 ring-green-300" : "bg-white"
         }`}
       >
+        {/* Retest 14-2: bigger cell numbers, highlighted with the same amber
+            colour as the 'View Complete Grid Items' button. */}
         <button
           type="button"
           onClick={() => setPopupOpen(true)}
-          className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-bold ${
-            selected ? "bg-green-500 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+          className={`flex h-10 w-10 items-center justify-center rounded-md text-base font-bold ${
+            selected
+              ? "bg-amber-500 text-white ring-2 ring-amber-400"
+              : "bg-amber-100 text-amber-900 ring-1 ring-amber-300 hover:bg-amber-200"
           }`}
           aria-label={`View cell ${cellIndex + 1}`}
         >
@@ -2310,7 +2344,12 @@ function ViewAllGridItemsButton({ dragPoolOptions }: { dragPoolOptions: GridCell
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      {/* Retest 14-2: bigger font + highlighted colour so it is immediately
+          noticeable; grid cell numbers use the same highlight. */}
+      <Button
+        onClick={() => setOpen(true)}
+        className="bg-amber-100 px-4 py-2 text-base font-bold text-amber-900 ring-2 ring-amber-400 hover:bg-amber-200"
+      >
         View Complete Grid Items ({dragPoolOptions.length})
       </Button>
       {open && (

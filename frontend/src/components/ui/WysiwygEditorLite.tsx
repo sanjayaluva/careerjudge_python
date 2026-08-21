@@ -9,8 +9,10 @@
  * / passage_body fields (already TextField, no schema change needed).
  */
 import { useEditor, EditorContent } from "@tiptap/react";
+import Color from "@tiptap/extension-color";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
+import { TextStyle } from "@tiptap/extension-text-style";
 import Underline from "@tiptap/extension-underline";
 import { useEffect } from "react";
 
@@ -28,7 +30,13 @@ export function WysiwygEditorLite({
   placeholder = "Type here…",
 }: WysiwygEditorLiteProps) {
   const editor = useEditor({
-    extensions: [StarterKit, Underline, TextAlign.configure({ types: ["heading", "paragraph"] })],
+    extensions: [
+      StarterKit,
+      Underline,
+      TextStyle,
+      Color,
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
+    ],
     content: value,
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
@@ -137,6 +145,33 @@ export function WysiwygEditorLite({
           title="Align right"
         >
           ➡
+        </button>
+        <div className="mx-1 h-4 w-px bg-slate-200" />
+        {/* Retest G3: colour formatting */}
+        <label className={`${btnClass} cursor-pointer gap-1`} title="Text colour">
+          <span className="text-[10px]">Colour</span>
+          <input
+            type="color"
+            className="h-4 w-4 cursor-pointer border-0 bg-transparent p-0"
+            onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().unsetColor().run()}
+          className={btnClass}
+          title="Remove colour"
+        >
+          ⌫ Colour
+        </button>
+        <div className="mx-1 h-4 w-px bg-slate-200" />
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().setParagraph().run()}
+          className={`${btnClass} ${editor.isActive("paragraph") ? activeClass : ""}`}
+          title="Paragraph"
+        >
+          ¶
         </button>
         <div className="mx-1 h-4 w-px bg-slate-200" />
         <button

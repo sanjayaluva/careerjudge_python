@@ -245,7 +245,9 @@ function CourseForm({
     course?.duration_days ? String(course.duration_days) : "30",
   );
   const [price, setPrice] = useState(course?.price ?? "0");
-  const [contentSequencingEnabled, setEnforceSequence] = useState(course?.content_sequencing_enabled ?? false);
+  const [contentSequencingEnabled, setEnforceSequence] = useState(
+    course?.content_sequencing_enabled ?? false,
+  );
 
   return (
     <Card>

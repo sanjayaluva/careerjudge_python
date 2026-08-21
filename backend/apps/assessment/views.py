@@ -793,8 +793,24 @@ class SessionViewSet(ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def questions(self, request, pk=None):
-        """Get all questions for this session (with attempts)."""
+        """Get all questions for this session (with attempts).
+
+        Retest General-1 self-heal: some sessions were created without their
+        QuestionAttempt rows (older/partial start flow), which surfaced as
+        'No questions found for this session' in the player while the
+        assessment clearly had questions assigned. If this session has no
+        attempts but the assessment does, seed them here on the fly.
+        """
         session = self.get_object()
+        if not session.question_attempts.exists():
+            for section in session.assessment.sections.all().order_by("level", "order"):
+                for aq in section.questions.all().order_by("order"):
+                    QuestionAttempt.objects.get_or_create(
+                        session=session,
+                        question=aq.question,
+                        sub_question_index=aq.sub_question_index,
+                        defaults={"section": section, "status": "not_attempted"},
+                    )
         attempts = session.question_attempts.select_related("question", "section").all()
         serializer = QuestionAttemptSerializer(attempts, many=True)
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)

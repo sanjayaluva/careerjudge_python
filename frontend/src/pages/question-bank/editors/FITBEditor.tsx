@@ -92,15 +92,26 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
           flashDisplayCount={data.flash_display_count}
           flashOrder={data.flash_order}
           itemType={flashItemType}
-          onChange={(flashData) =>
+          onChange={(flashData) => {
+            // Retest 2d observation: as many flash items as configured, that
+            // many answer-entry fields must exist (one correct answer each).
+            const n = flashData.items.length;
+            let options = data.options;
+            if (n > options.length) {
+              const extra = Array.from({ length: n - options.length }, (_, k) => ({
+                ...createEmptyOption(options.length + k, "TEXT"),
+              }));
+              options = [...options, ...extra];
+            }
             onChange({
               ...data,
               flashItems: flashData.items,
               flash_interval_ms: flashData.flashIntervalMs,
               flash_display_count: flashData.flashDisplayCount,
               flash_order: flashData.flashOrder,
-            })
-          }
+              options,
+            });
+          }}
         />
       )}
 

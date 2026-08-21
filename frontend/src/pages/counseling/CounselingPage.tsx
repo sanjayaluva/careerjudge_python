@@ -782,7 +782,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
               <Label required>1. Was the session useful?</Label>
               <select
                 className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
-                value={fb.session_useful}
+                value={fb.session_usefulness}
                 onChange={set("session_usefulness")}
               >
                 <option value="">Select…</option>
@@ -886,7 +886,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
               <Button
                 onClick={() => feedbackMut.mutate()}
                 loading={feedbackMut.isPending}
-                disabled={!fb.session_useful || !fb.counsellor_empathy || !fb.would_rechoose}
+                disabled={!fb.session_usefulness || !fb.counsellor_empathy || !fb.would_rechoose}
               >
                 Submit feedback
               </Button>
