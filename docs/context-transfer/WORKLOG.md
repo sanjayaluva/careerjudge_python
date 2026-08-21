@@ -2090,3 +2090,43 @@ Stage Summary:
   for notifications (in-app bell only), followup Stripe payment wiring
   (confirm marks paid), admin UI for counseling settings text editing
   (API ready).
+
+
+---
+Task ID: 71-74
+Agent: main (ZCode)
+Task: Merge local Docs 2&3 work with remote (chat.z.ai) main incl. Doc 4;
+fix the Post-Updation Retesting Report; assess Doc 4 gaps.
+
+Branch: final/docs-2-3-4-merge (LOCAL ONLY - not pushed).
+
+M1 - Merge (da9bd5f): origin/main (chat.z.ai: Docs 2&3 partial + Doc 4 modules
+  + deployed migrations) merged with feat/reports-2-3. Remote's migration
+  numbers/field names preserved (dev DB safety); local logic won everywhere;
+  duplicate notification handlers deduped; local extras added via new
+  migrations training/0005 + counseling/0004; accounts trainer-perms -> 0009.
+  Remote's better max formulas ported (RANK N(N+1)/2 etc.).
+
+M2 - Retest scoring fixes (8d33e9b): sub-question max inflation (filter was
+  skipped at index 0 -> pooled all options: 1/3, 3/5, 2/6 cases); FITB single
+  zero-score (fuzzy scorer now accepts the player's answers-list format);
+  Match-with-distractors 0/7.5 (dummies no longer counted as pairs).
+  8-test regression suite: apps/assessment/tests/test_retest_fixes.py.
+
+M3 - Retest player/editor fixes (5bb9fcc): type-driven presentation gating
+  (no gate on plain MCQ/FITB/Match/Grid/Hotspot); Text2 gated for
+  presentation types + no duplicate with per-sub-question text; Previous
+  stays active; hotspot duplicate image removed + uniform area colours
+  (answer leak); grid button/cells amber-highlighted; flash labels renamed
+  to 'Multiple Answers'; FITB flash editor auto-creates N answer fields;
+  WYSIWYG colour + paragraph buttons; player paragraph spacing; session
+  questions endpoint self-heals missing attempts ('No questions found').
+
+Doc 4 assessment: remote implemented only the 4 NEW modules (messaging,
+invoicing, DomainCategory, OrganizationAssignment) + helpdesk role. The
+~100 permission/UI-visibility issues across the 12 roles remain OPEN
+(org-scoped visibility, button removal, role-restricted lists) - proposed
+as the next phase.
+
+Final state: 565 backend + 30 frontend tests green; frontend typecheck +
+lint + build green; migrations reconcile with the deployed chain.
