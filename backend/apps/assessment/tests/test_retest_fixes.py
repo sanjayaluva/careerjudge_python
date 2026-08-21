@@ -16,21 +16,21 @@ import pytest
 
 from apps.accounts.services import get_or_create_default_roles
 from apps.accounts.tests.factories import UserFactory
-from apps.question_bank.models import CorrectAnswer, Question, ResponseOption
 from apps.assessment.scoring import score_question
+from apps.question_bank.models import CorrectAnswer, Question, ResponseOption
 
 pytestmark = pytest.mark.django_db
 
 
 def _mk_q(user, qtype, stype, **extra):
-    defaults = dict(
-        question_type=qtype,
-        question_title="T",
-        question_text_1="T",
-        scoring_type=stype,
-        status="confirmed",
-        created_by=user,
-    )
+    defaults = {
+        "question_type": qtype,
+        "question_title": "T",
+        "question_text_1": "T",
+        "scoring_type": stype,
+        "status": "confirmed",
+        "created_by": user,
+    }
     defaults.update(extra)
     return Question.objects.create(**defaults)
 
