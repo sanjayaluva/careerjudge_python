@@ -11,12 +11,14 @@ from .models import (
     CourseCompletionParameter,
     CourseLesson,
     CourseMessage,
+    CourseModificationRequest,
     CourseProgress,
     CourseRegistration,
     InteractiveQuestion,
     LessonTopic,
     LiveSession,
     LiveSessionConsent,
+    LiveSessionRequest,
     SessionContent,
     TopicSession,
     TrainingCategory,
@@ -60,6 +62,7 @@ class SessionContentSerializer(serializers.ModelSerializer):
             "title",
             "content_format",
             "content_url",
+            "document",
             "text_content",
             "duration_seconds",
             "order",
@@ -79,6 +82,8 @@ class AssignmentSerializer(serializers.ModelSerializer):
             "description",
             "resource_url",
             "report_submission_enabled",
+            "is_mandatory",
+            "submission_deadline",
             "report_instructions",
             "order",
         ]
@@ -141,14 +146,18 @@ class LiveSessionSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "mode",
+            "schedule_mode",
+            "depends_on",
             "meeting_url",
             "venue",
             "scheduled_at",
             "duration_minutes",
             "status",
+            "rescheduled_from",
+            "reschedule_reason",
             "created_at",
         ]
-        read_only_fields = ["id", "created_at", "course"]
+        read_only_fields = ["id", "created_at", "course", "rescheduled_from"]
 
 
 class CourseCompletionParameterSerializer(serializers.ModelSerializer):
@@ -189,6 +198,7 @@ class CourseRegistrationSerializer(serializers.ModelSerializer):
             "student_email",
             "payment_status",
             "completion_status",
+            "registration_form",
             "started_at",
             "completed_at",
             "registered_at",
@@ -228,6 +238,7 @@ class TrainingCourseListSerializer(serializers.ModelSerializer):
             "duration_days",
             "price",
             "status",
+            "content_sequencing_enabled",
             "created_by",
             "created_by_name",
             "registration_count",
@@ -264,6 +275,7 @@ class TrainingCourseSerializer(serializers.ModelSerializer):
             "duration_days",
             "price",
             "status",
+            "content_sequencing_enabled",
             "created_by",
             "created_by_name",
             "registration_count",
@@ -304,6 +316,8 @@ class AssignmentReportSerializer(serializers.ModelSerializer):
             "student_email",
             "report_text",
             "report_file_url",
+            "report_file",
+            "late_submission_approved",
             "status",
             "trainer_score",
             "trainer_feedback",
@@ -380,4 +394,74 @@ class LiveSessionConsentSerializer(serializers.ModelSerializer):
             "student_email",
             "live_session_title",
             "consented_at",
+        ]
+
+
+class CourseModificationRequestSerializer(serializers.ModelSerializer):
+    """Report 3 §7.1/§7.2: trainer request to update/delete a published course."""
+
+    course_title = serializers.CharField(source="course.title", read_only=True)
+    trainer_name = serializers.CharField(source="trainer.full_name", read_only=True, default=None)
+    reviewed_by_name = serializers.CharField(
+        source="reviewed_by.full_name", read_only=True, default=None
+    )
+
+    class Meta:
+        model = CourseModificationRequest
+        fields = [
+            "id",
+            "course",
+            "course_title",
+            "trainer",
+            "trainer_name",
+            "request_type",
+            "reason",
+            "status",
+            "review_comment",
+            "reviewed_by",
+            "reviewed_by_name",
+            "reviewed_at",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "trainer",
+            "trainer_name",
+            "status",
+            "reviewed_by",
+            "reviewed_by_name",
+            "reviewed_at",
+            "created_at",
+            "course_title",
+        ]
+
+
+class LiveSessionRequestSerializer(serializers.ModelSerializer):
+    """Report 3 §7.5/OS.4: candidate request to schedule a live session."""
+
+    course_title = serializers.CharField(source="course.title", read_only=True)
+    student_name = serializers.CharField(source="student.full_name", read_only=True, default=None)
+
+    class Meta:
+        model = LiveSessionRequest
+        fields = [
+            "id",
+            "course",
+            "course_title",
+            "student",
+            "student_name",
+            "preferred_times",
+            "note",
+            "status",
+            "scheduled_session",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "student",
+            "student_name",
+            "status",
+            "scheduled_session",
+            "created_at",
+            "course_title",
         ]

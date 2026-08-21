@@ -481,6 +481,19 @@ class CounselingSettings(models.Model):
         default="Before 24 hours: full refund. Before 4 hours: 50% refund. Less than 4 hours: no refund.",
         help_text=_("Cancellation and refund policy. Shown to candidate before cancellation."),
     )
+    # Report 3 section 1.2: how far ahead counsellors may create timeslots.
+    max_weeks_ahead = models.PositiveIntegerField(_("max weeks ahead for timeslots"), default=3)
+    # Report 3 section 1.12: pending bookings auto-cancel after this many hours
+    # without counsellor confirmation.
+    confirm_window_hours = models.PositiveIntegerField(_("confirm window (hours)"), default=6)
+    # Report 3 section 1.15: admin-configurable refund thresholds (hours
+    # before the session start).
+    full_refund_within_hours = models.PositiveIntegerField(
+        _("full refund if cancelled > N hours before"), default=24
+    )
+    half_refund_within_hours = models.PositiveIntegerField(
+        _("half refund if cancelled > N hours before"), default=4
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

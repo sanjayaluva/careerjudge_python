@@ -45,6 +45,7 @@ DEMO_USERS = [
     ("counsellor", "counsellor@demo.careerjudge.pp.ua", "Counsellor", "Demo@1234"),
     ("channel_partner", "channel.partner@demo.careerjudge.pp.ua", "Channel Partner", "Demo@1234"),
     ("individual", "individual@demo.careerjudge.pp.ua", "Individual User", "Demo@1234"),
+    # Report 3: helpdesk receives counselling booking/slot/followup notifications
 ]
 
 
@@ -167,6 +168,14 @@ ROLE_PERMISSIONS = {
         ("training", "delete"),
         ("accounts", "view"),
         ("assessment", "view"),
+        # Report 3 §4.1: trainers author their own course assessments using
+        # the CJ Question Bank (scoped to created_by in the viewsets).
+        ("assessment", "add"),
+        ("assessment", "change"),
+        ("assessment", "delete"),
+        ("question_bank", "view"),
+        ("question_bank", "add"),
+        ("question_bank", "change"),
     ],
     "group_admin": [
         ("accounts", "view"),

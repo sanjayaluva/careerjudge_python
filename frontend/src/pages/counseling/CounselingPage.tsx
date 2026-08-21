@@ -33,7 +33,9 @@ import {
 } from "@/components/ui";
 import {
   COUNSELING_CATEGORIES,
+  cancelSession,
   createCounsellorProfile,
+  getCounselingSettings,
   listCounsellors,
   listMySessions,
   bookSession,
@@ -45,6 +47,7 @@ import {
   type CounsellorProfile,
   type TimeSlot,
   type CounselingSession,
+  type SessionFeedback,
 } from "@/api/counseling";
 import { extractApiError, apiPatch } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -90,7 +93,10 @@ export default function CounselingPage() {
             <TabsList>
               <TabsTrigger value="browse">Browse Counsellors ({counsellors.length})</TabsTrigger>
               {isCounsellor && <TabsTrigger value="dashboard">My Dashboard</TabsTrigger>}
-              <TabsTrigger value="my-sessions">My Sessions ({sessions.length})</TabsTrigger>
+              {/* Report 3 §1.18: counsellors don't book sessions — hide the tab */}
+              {!isCounsellor && (
+                <TabsTrigger value="my-sessions">My Sessions ({sessions.length})</TabsTrigger>
+              )}
             </TabsList>
           </div>
 
@@ -250,9 +256,18 @@ function BookingModal({
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [topic, setTopic] = useState("");
   const [description, setDescription] = useState("");
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
+  // Report 3 §1.8: explicit terms acceptance (backend rejects without it).
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  // Report 3 §1.9/§1.11: show the admin-managed terms + refund policy.
+  const { data: settings } = useQuery({
+    queryKey: ["counseling", "settings"],
+    queryFn: getCounselingSettings,
+  });
 
   const { data: timeslots, isLoading } = useQuery({
     queryKey: ["counseling", "counsellors", counsellor.id, "timeslots"],
@@ -268,6 +283,7 @@ function BookingModal({
         topic,
         description,
         mode: "online",
+        terms_accepted: termsAccepted,
       });
     },
     onSuccess: () => {
@@ -292,13 +308,36 @@ function BookingModal({
       size="md"
     >
       <div className="space-y-4">
-        {counsellor.bio && (
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Bio</div>
-            <p className="mt-1 text-sm text-slate-700">{counsellor.bio}</p>
+        {/* Report 3 §1.7: counsellor profile details */}
+        <div className="flex items-start gap-3 rounded-md border border-slate-100 p-3">
+          {counsellor.avatar ? (
+            <img
+              src={counsellor.avatar}
+              alt={counsellor.full_name}
+              className="h-12 w-12 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary-700">
+              {counsellor.full_name?.[0] ?? "?"}
+            </div>
+          )}
+          <div className="text-sm">
+            <div className="font-medium text-slate-900">{counsellor.full_name}</div>
+            {(counsellor.gender || counsellor.language || counsellor.location) && (
+              <div className="mt-0.5 text-xs text-slate-500">
+                {[counsellor.gender, counsellor.language, counsellor.location]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+            )}
+            {counsellor.bio && (
+              <p className="mt-1 line-clamp-2 text-xs text-slate-600">{counsellor.bio}</p>
+            )}
           </div>
-        )}
+        </div>
 
+        {/* Report 3 §1.8: registration form (topic + description prefilled
+            from the user's context) */}
         <div>
           <Label htmlFor="topic" required>
             Topic / Issue
@@ -310,6 +349,11 @@ function BookingModal({
             placeholder="e.g., Career change advice"
             required
           />
+          {user?.full_name && (
+            <p className="mt-1 text-xs text-slate-400">
+              Booking as {user.full_name} ({user.email})
+            </p>
+          )}
         </div>
 
         <div>
@@ -352,6 +396,39 @@ function BookingModal({
           )}
         </div>
 
+        {/* Report 3 §1.11: refund policy display */}
+        {settings?.cancellation_policy && (
+          <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+            <div className="mb-1 font-medium text-slate-700">Cancellation & refund policy</div>
+            {settings.cancellation_policy}
+          </div>
+        )}
+
+        {/* Report 3 §1.8: terms checkbox */}
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(e) => setTermsAccepted(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+          />
+          <span className="text-slate-700">
+            I accept the{" "}
+            {settings?.terms_and_conditions ? (
+              <details className="inline">
+                <summary className="cursor-pointer text-primary-600">
+                  Terms &amp; Conditions
+                </summary>
+                <div className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-xs text-slate-600">
+                  {settings.terms_and_conditions}
+                </div>
+              </details>
+            ) : (
+              "Terms & Conditions"
+            )}
+          </span>
+        </label>
+
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
           <Button variant="outline" onClick={onClose}>
             Cancel
@@ -359,7 +436,7 @@ function BookingModal({
           <Button
             onClick={() => bookMutation.mutate()}
             loading={bookMutation.isPending}
-            disabled={!topic || !selectedSlot}
+            disabled={!topic || !selectedSlot || !termsAccepted}
           >
             Book session (${counsellor.hourly_rate})
           </Button>
@@ -501,8 +578,29 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
   const toast = useToast();
   const queryClient = useQueryClient();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [rating, setRating] = useState("5");
-  const [feedbackText, setFeedbackText] = useState("");
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [rebookOpen, setRebookOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  // Report 3 §2.2 — the 8 feedback fields.
+  const [fb, setFb] = useState<{
+    session_usefulness: SessionFeedback["session_usefulness"];
+    usefulness_text: string;
+    counsellor_empathy: SessionFeedback["counsellor_empathy"];
+    session_ending: SessionFeedback["session_ending"];
+    would_rechoose: SessionFeedback["would_rechoose"];
+    rechoose_text: string;
+    improvement_suggestions: string;
+    rating: string;
+  }>({
+    session_usefulness: "",
+    usefulness_text: "",
+    counsellor_empathy: "",
+    session_ending: "",
+    would_rechoose: "",
+    rechoose_text: "",
+    improvement_suggestions: "",
+    rating: "8",
+  });
 
   const { data: followups } = useQuery({
     queryKey: ["counseling", "followups", session.id],
@@ -513,13 +611,32 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
   const feedbackMut = useMutation({
     mutationFn: () =>
       submitSessionFeedback(session.id, {
-        rating: Number(rating),
-        experience_text: feedbackText,
+        ...fb,
+        rating: Number(fb.rating),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["counseling", "my-sessions"] });
       toast.success("Feedback submitted.");
       setFeedbackOpen(false);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  // Report 3 §1.16: counselee cancels with a reason, then gets a rebook prompt.
+  const cancelMut = useMutation({
+    mutationFn: () => cancelSession(session.id, "counselee", cancelReason),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["counseling", "my-sessions"] });
+      const tier = data.cancellation?.refund_tier ?? "none";
+      toast.success(
+        tier === "full"
+          ? "Session cancelled — full refund."
+          : tier === "half"
+            ? "Session cancelled — 50% refund."
+            : "Session cancelled — no refund (under 4 hours).",
+      );
+      setCancelOpen(false);
+      setRebookOpen(true);
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -543,6 +660,8 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
   });
 
   const pendingFollowups = (followups ?? []).filter((f) => f.status === "proposed");
+  const set = (k: keyof typeof fb) => (e: { target: { value: string } }) =>
+    setFb((prev) => ({ ...prev, [k]: e.target.value }));
 
   return (
     <div className="flex flex-col gap-2">
@@ -553,10 +672,19 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
         </Button>
       )}
 
-      {/* Follow-up proposals */}
+      {/* Report 3 §1.16: counselee cancel (confirmed/pending sessions) */}
+      {(session.status === "confirmed" || session.status === "pending") && (
+        <Button size="sm" variant="danger" onClick={() => setCancelOpen(true)}>
+          Cancel
+        </Button>
+      )}
+
+      {/* Follow-up proposals (Report 3 §2.7/§2.8: reminder + payment via confirm) */}
       {pendingFollowups.length > 0 && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-2">
-          <div className="text-xs font-medium text-amber-800">Follow-up proposed:</div>
+          <div className="text-xs font-medium text-amber-800">
+            Follow-up proposed — confirm and pay to lock it in:
+          </div>
           {pendingFollowups.map((fu) => (
             <div key={fu.id} className="mt-1 flex items-center gap-2">
               <span className="text-xs text-amber-700">
@@ -567,7 +695,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
                 onClick={() => confirmFuMut.mutate(fu.id)}
                 loading={confirmFuMut.isPending}
               >
-                Confirm
+                Confirm &amp; pay
               </Button>
               <Button
                 size="sm"
@@ -582,40 +710,174 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
         </div>
       )}
 
-      {/* Feedback modal */}
-      {feedbackOpen && (
-        <Modal open onClose={() => setFeedbackOpen(false)} title="Session Feedback" size="sm">
-          <div className="space-y-4">
+      {/* Cancel modal (Report 3 §1.16) */}
+      {cancelOpen && (
+        <Modal open onClose={() => setCancelOpen(false)} title="Cancel session" size="sm">
+          <div className="space-y-3">
             <div>
-              <Label htmlFor="rating" required>
-                Rating (1-5)
-              </Label>
-              <select
-                id="rating"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                value={rating}
-                onChange={(e) => setRating(e.target.value)}
-              >
-                <option value="5">★★★★★ Excellent</option>
-                <option value="4">★★★★☆ Good</option>
-                <option value="3">★★★☆☆ Average</option>
-                <option value="2">★★☆☆☆ Below average</option>
-                <option value="1">★☆☆☆☆ Poor</option>
-              </select>
-            </div>
-            <div>
-              <Label htmlFor="feedback" required>
-                Your experience
+              <Label htmlFor="cancel-reason" required>
+                Reason for cancellation
               </Label>
               <textarea
-                id="feedback"
+                id="cancel-reason"
                 rows={3}
                 className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                value={feedbackText}
-                onChange={(e) => setFeedbackText(e.target.value)}
-                placeholder="How was your counselling experience?"
-                required
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Tell us why you need to cancel…"
               />
+            </div>
+            <p className="text-xs text-slate-500">
+              Refund: full if &gt;24h before the session, 50% if &gt;4h, none under 4h.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setCancelOpen(false)}>
+                Keep session
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => cancelMut.mutate()}
+                loading={cancelMut.isPending}
+                disabled={!cancelReason.trim()}
+              >
+                Cancel session
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Rebook prompt (Report 3 §1.16) */}
+      {rebookOpen && (
+        <Modal open onClose={() => setRebookOpen(false)} title="Book another session?" size="sm">
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Your session was cancelled. Would you like to book another timeslot with this
+              counsellor or browse other counsellors?
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRebookOpen(false)}>
+                Not now
+              </Button>
+              <Button
+                onClick={() => {
+                  setRebookOpen(false);
+                  window.location.hash = "#browse";
+                  window.location.reload();
+                }}
+              >
+                Browse counsellors
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Feedback modal — 8 fields (Report 3 §2.2) */}
+      {feedbackOpen && (
+        <Modal open onClose={() => setFeedbackOpen(false)} title="Session Feedback" size="md">
+          <div className="space-y-3">
+            {/* 1 */}
+            <div>
+              <Label required>1. Was the session useful?</Label>
+              <select
+                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+                value={fb.session_useful}
+                onChange={set("session_usefulness")}
+              >
+                <option value="">Select…</option>
+                <option value="very_useful">Very useful</option>
+                <option value="useful">Useful</option>
+                <option value="somewhat_useful">Somewhat useful</option>
+                <option value="not_useful">Not useful</option>
+              </select>
+            </div>
+            {/* 2 */}
+            <div>
+              <Label>2. A few words on how it was (or wasn&apos;t) useful</Label>
+              <textarea
+                rows={2}
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                value={fb.usefulness_text}
+                onChange={set("usefulness_text")}
+              />
+            </div>
+            {/* 3 */}
+            <div>
+              <Label required>3. Was the counsellor friendly and empathetic?</Label>
+              <select
+                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+                value={fb.counsellor_empathy}
+                onChange={set("counsellor_empathy")}
+              >
+                <option value="">Select…</option>
+                <option value="very_much">Very much</option>
+                <option value="somewhat">Somewhat</option>
+                <option value="not_much">Not much</option>
+              </select>
+            </div>
+            {/* 4 */}
+            <div>
+              <Label>4. How did the session end?</Label>
+              <select
+                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+                value={fb.session_ending}
+                onChange={set("session_ending")}
+              >
+                <option value="">Select…</option>
+                <option value="on_time">Ended on time</option>
+                <option value="before_time">Ended before time</option>
+                <option value="late">Ended late</option>
+              </select>
+            </div>
+            {/* 5 */}
+            <div>
+              <Label required>5. Would you choose this counsellor again?</Label>
+              <select
+                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+                value={fb.would_rechoose}
+                onChange={set("would_rechoose")}
+              >
+                <option value="">Select…</option>
+                <option value="yes">Yes</option>
+                <option value="maybe">Maybe</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+            {/* 6 */}
+            <div>
+              <Label>6. Why would you (or wouldn&apos;t you) choose them again?</Label>
+              <textarea
+                rows={2}
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                value={fb.rechoose_text}
+                onChange={set("rechoose_text")}
+              />
+            </div>
+            {/* 7 */}
+            <div>
+              <Label>7. How can we improve the counselling service?</Label>
+              <textarea
+                rows={2}
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                value={fb.improvement_suggestions}
+                onChange={set("improvement_suggestions")}
+              />
+            </div>
+            {/* 8 */}
+            <div>
+              <Label required>8. Rate the counsellor (1 = very poor, 10 = excellent)</Label>
+              <select
+                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+                value={fb.rating}
+                onChange={set("rating")}
+              >
+                {Array.from({ length: 10 }, (_, i) => 10 - i).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
               <Button variant="outline" onClick={() => setFeedbackOpen(false)}>
@@ -624,7 +886,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
               <Button
                 onClick={() => feedbackMut.mutate()}
                 loading={feedbackMut.isPending}
-                disabled={!feedbackText}
+                disabled={!fb.session_useful || !fb.counsellor_empathy || !fb.would_rechoose}
               >
                 Submit feedback
               </Button>

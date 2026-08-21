@@ -214,6 +214,10 @@ class SessionContent(models.Model):
     )
     # Optional text content (for text format or transcript)
     text_content = models.TextField(_("text content"), blank=True, default="")
+    # Report 3 OS.1: uploaded document (PDF/Word/PPT) for document format.
+    document = models.FileField(
+        _("document"), upload_to="session_documents/", null=True, blank=True
+    )
     duration_seconds = models.PositiveIntegerField(_("duration (seconds)"), null=True, blank=True)
     order = models.PositiveIntegerField(_("order"), default=0)
     # Per SRS §2.4.1.1 (Interlinking contents and assessments): contents
@@ -369,6 +373,23 @@ class LiveSession(models.Model):
     status = models.CharField(
         _("status"), max_length=20, choices=STATUS_CHOICES, default="scheduled"
     )
+    # Report 3 OL.1: advance vs ongoing scheduling mode.
+    schedule_mode = models.CharField(
+        _("schedule mode"),
+        max_length=10,
+        choices=[("advance", "Advance"), ("ongoing", "Ongoing")],
+        default="advance",
+    )
+    depends_on = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dependent_sessions",
+    )
+    # Report 3 section 7.4: reschedule audit trail on the session itself.
+    rescheduled_from = models.DateTimeField(_("rescheduled from"), null=True, blank=True)
+    reschedule_reason = models.TextField(_("reschedule reason"), blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -448,6 +469,8 @@ class CourseRegistration(models.Model):
         default="not_started",
     )
     # For scheduled courses: the start time from which duration countdown begins
+    # Report 3 section 1.1: registration-form snapshot (profile-prefilled).
+    registration_form = models.JSONField(_("registration form"), default=dict, blank=True)
     started_at = models.DateTimeField(_("started at"), null=True, blank=True)
     completed_at = models.DateTimeField(_("completed at"), null=True, blank=True)
     registered_at = models.DateTimeField(auto_now_add=True)
@@ -534,6 +557,16 @@ class AssignmentReport(models.Model):
         default="",
         help_text=_("File type of uploaded report: pdf, ppt, word, etc."),
     )
+    # Report 3 section 3.6: real uploaded report file (PDF/PPT/Word).
+    report_file = models.FileField(
+        _("report file upload"),
+        upload_to="assignment_reports/",
+        null=True,
+        blank=True,
+    )
+    # Report 3 section 3.3: trainer can grant late-submission permission
+    # after the submission_deadline has passed.
+    late_submission_approved = models.BooleanField(_("late submission approved"), default=False)
 
     # Trainer review fields (filled when status moves to 'reviewed')
     status = models.CharField(
@@ -798,3 +831,42 @@ class SessionReschedule(models.Model):
         if self.old_start_time and self.new_start_time:
             return int((self.new_start_time - self.old_start_time).total_seconds())
         return 0
+
+
+class LiveSessionRequest(models.Model):
+    """Report 3 section 7.5/OS.4: a candidate's request for the trainer to
+    schedule a live session (with preferred times)."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending - trainer has not scheduled yet"),
+        ("scheduled", "Trainer scheduled a session"),
+        ("declined", "Trainer declined"),
+    ]
+
+    course = models.ForeignKey(
+        TrainingCourse, on_delete=models.CASCADE, related_name="live_session_requests"
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="live_session_requests",
+    )
+    preferred_times = models.JSONField(_("preferred times"), default=list, blank=True)
+    note = models.TextField(_("note"), blank=True, default="")
+    status = models.CharField(_("status"), max_length=10, choices=STATUS_CHOICES, default="pending")
+    scheduled_session = models.ForeignKey(
+        LiveSession,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="originating_requests",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("live session request")
+        verbose_name_plural = _("live session requests")
+
+    def __str__(self) -> str:
+        return f"{self.student.email} -> {self.course.title} ({self.status})"

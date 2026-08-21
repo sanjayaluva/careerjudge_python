@@ -35,7 +35,9 @@ import {
   getProgressSummary,
   listAssignmentReports,
   listMyCourses,
+  listProgress,
   submitAssignmentReport,
+  submitAssignmentReportFile,
   updateProgress,
   type InteractiveQuestion,
   type ProgressSummary,
@@ -100,6 +102,31 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
   // Current content index (for sequential navigation)
   const [currentIdx, setCurrentIdx] = useState(0);
   const current = flatContent[currentIdx];
+
+  // Report 3 §5.1: content sequencing. When content_sequencing_enabled is on, the
+  // candidate must complete each content in order before advancing.
+  const contentSequencingEnabled = course.content_sequencing_enabled;
+  const { data: progressRecords } = useQuery({
+    queryKey: ["training", "progress-records", registration?.id],
+    queryFn: () => listProgress(registration!.id),
+    enabled: !!registration && contentSequencingEnabled,
+  });
+  // Set of completed session_content IDs (only relevant when enforcing).
+  const completedContentIds = new Set(
+    (progressRecords ?? [])
+      .filter((p) => p.content_type === "session_content" && p.is_completed)
+      .map((p) => p.content_id),
+  );
+  const currentCompleted = current ? completedContentIds.has(current.content.id) : false;
+  // A content item is unlocked if sequencing is off, or it's the first
+  // incomplete content, or it's already completed.
+  const isUnlocked = (idx: number) => {
+    if (!contentSequencingEnabled) return true;
+    if (idx === 0) return true;
+    // Unlocked if the previous content is completed
+    const prev = flatContent[idx - 1];
+    return completedContentIds.has(prev.content.id);
+  };
 
   if (!registration) {
     return (
@@ -191,11 +218,23 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
                 </span>
                 <Button
                   onClick={() => setCurrentIdx(Math.min(flatContent.length - 1, currentIdx + 1))}
-                  disabled={currentIdx === flatContent.length - 1}
+                  disabled={
+                    currentIdx === flatContent.length - 1 || (contentSequencingEnabled && !currentCompleted)
+                  }
+                  title={
+                    contentSequencingEnabled && !currentCompleted
+                      ? "Complete this content to unlock the next (sequential mode)"
+                      : undefined
+                  }
                 >
                   Next →
                 </Button>
               </div>
+              {contentSequencingEnabled && !currentCompleted && (
+                <p className="mt-2 text-xs text-amber-600">
+                  Sequential mode: mark this content as completed to unlock the next.
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -218,20 +257,33 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
             </CardHeader>
             <CardContent>
               <div className="max-h-96 space-y-1 overflow-y-auto">
-                {flatContent.map((item, idx) => (
-                  <button
-                    key={item.content.id}
-                    onClick={() => setCurrentIdx(idx)}
-                    className={`block w-full rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                      idx === currentIdx ? "bg-primary-50 text-primary-900" : "hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className="font-medium">{item.content.title}</div>
-                    <div className="text-slate-400">
-                      {item.lessonTitle} → {item.sessionTitle}
-                    </div>
-                  </button>
-                ))}
+                {flatContent.map((item, idx) => {
+                  const locked = contentSequencingEnabled && !isUnlocked(idx);
+                  const completed = completedContentIds.has(item.content.id);
+                  return (
+                    <button
+                      key={item.content.id}
+                      onClick={() => !locked && setCurrentIdx(idx)}
+                      disabled={locked}
+                      className={`block w-full rounded-md px-3 py-2 text-left text-xs transition-colors ${
+                        idx === currentIdx
+                          ? "bg-primary-50 text-primary-900"
+                          : locked
+                            ? "cursor-not-allowed text-slate-300"
+                            : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-medium">
+                        <span>{item.content.title}</span>
+                        {completed && <span className="text-emerald-500">✓</span>}
+                        {locked && <span title="Locked">🔒</span>}
+                      </div>
+                      <div className="text-slate-400">
+                        {item.lessonTitle} → {item.sessionTitle}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -327,6 +379,9 @@ function ContentPlayer({
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["training", "progress-summary", registrationId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["training", "progress-records", registrationId],
       });
     },
   });
@@ -508,6 +563,7 @@ function AssignmentsPanel({
   const queryClient = useQueryClient();
   const [submittingFor, setSubmittingFor] = useState<number | null>(null);
   const [reportText, setReportText] = useState("");
+  const [reportFile, setReportFile] = useState<File | null>(null);
 
   const { data: existingReports } = useQuery({
     queryKey: ["training", "assignment-reports", registrationId],
@@ -515,11 +571,20 @@ function AssignmentsPanel({
   });
 
   const submitMutation = useMutation({
-    mutationFn: () =>
-      submitAssignmentReport(registrationId, {
+    mutationFn: () => {
+      // Report 3 §3.6: if a file is attached, submit via multipart upload.
+      if (reportFile) {
+        return submitAssignmentReportFile(registrationId, {
+          assignment: submittingFor!,
+          report_text: reportText,
+          file: reportFile,
+        });
+      }
+      return submitAssignmentReport(registrationId, {
         assignment: submittingFor!,
         report_text: reportText,
-      }),
+      });
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["training", "assignment-reports", registrationId],
@@ -527,6 +592,7 @@ function AssignmentsPanel({
       toast.success("Report submitted. The trainer will review it.");
       setSubmittingFor(null);
       setReportText("");
+      setReportFile(null);
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -561,7 +627,7 @@ function AssignmentsPanel({
                     <Badge variant={existingReport.status === "reviewed" ? "success" : "warning"}>
                       {existingReport.status}
                       {existingReport.trainer_score != null &&
-                        ` (${existingReport.trainer_score}/100)`}
+                        ` (${existingReport.trainer_score}/10)`}
                     </Badge>
                   ) : a.report_submission_enabled ? (
                     <Button size="sm" variant="outline" onClick={() => setSubmittingFor(a.id)}>
@@ -573,12 +639,28 @@ function AssignmentsPanel({
                 </div>
               </div>
 
+              {/* Report 3 §3.3: deadline + mandatory indicators */}
+              {a.report_submission_enabled && (
+                <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                  {a.is_mandatory && <Badge variant="warning">Report mandatory</Badge>}
+                  {a.submission_deadline && (
+                    <span className="text-slate-500">
+                      Deadline: {new Date(a.submission_deadline).toLocaleString()}
+                      {new Date(a.submission_deadline) < new Date() &&
+                        !existingReport?.late_submission_approved && (
+                          <span className="ml-1 font-medium text-danger">
+                            (passed — ask trainer to approve late submission)
+                          </span>
+                        )}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* Report submission form */}
               {submittingFor === a.id && (
                 <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-                  <Label htmlFor={`report-${a.id}`} required>
-                    Your report
-                  </Label>
+                  <Label htmlFor={`report-${a.id}`}>Your report (text)</Label>
                   <textarea
                     id={`report-${a.id}`}
                     rows={4}
@@ -587,12 +669,20 @@ function AssignmentsPanel({
                     onChange={(e) => setReportText(e.target.value)}
                     placeholder="Write your report..."
                   />
+                  <Label htmlFor={`file-${a.id}`}>Or upload a file (PDF / PPT / Word)</Label>
+                  <input
+                    id={`file-${a.id}`}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.ppt,.pptx"
+                    onChange={(e) => setReportFile(e.target.files?.[0] ?? null)}
+                    className="block w-full text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-700 hover:file:bg-primary-100"
+                  />
                   <div className="flex gap-2">
                     <Button
                       size="sm"
                       onClick={() => submitMutation.mutate()}
                       loading={submitMutation.isPending}
-                      disabled={!reportText}
+                      disabled={!reportText && !reportFile}
                     >
                       Submit
                     </Button>
@@ -602,6 +692,7 @@ function AssignmentsPanel({
                       onClick={() => {
                         setSubmittingFor(null);
                         setReportText("");
+                        setReportFile(null);
                       }}
                     >
                       Cancel

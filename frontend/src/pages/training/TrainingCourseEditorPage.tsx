@@ -229,6 +229,7 @@ function CourseForm({
     schedule_type: string;
     duration_days: number | null;
     price: string;
+    content_sequencing_enabled?: boolean;
   };
   categories: { id: number; name: string }[];
   loading: boolean;
@@ -244,6 +245,7 @@ function CourseForm({
     course?.duration_days ? String(course.duration_days) : "30",
   );
   const [price, setPrice] = useState(course?.price ?? "0");
+  const [contentSequencingEnabled, setEnforceSequence] = useState(course?.content_sequencing_enabled ?? false);
 
   return (
     <Card>
@@ -261,6 +263,7 @@ function CourseForm({
               course_type: courseType,
               schedule_type: scheduleType,
               price,
+              content_sequencing_enabled: contentSequencingEnabled,
             };
             if (categoryId) payload.category = Number(categoryId);
             if (scheduleType === "scheduled") {
@@ -394,6 +397,26 @@ function CourseForm({
             <p className="mt-1 text-xs text-slate-500">
               Set to 0 for free courses. Students pay this on registration.
             </p>
+          </div>
+
+          {/* Report 3 §5.1: content sequencing toggle */}
+          <div className="flex items-center gap-3 rounded-md border border-slate-200 p-3">
+            <input
+              id="content_sequencing_enabled"
+              type="checkbox"
+              checked={contentSequencingEnabled}
+              onChange={(e) => setEnforceSequence(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+            />
+            <div>
+              <Label htmlFor="content_sequencing_enabled" className="cursor-pointer">
+                Enforce content sequence
+              </Label>
+              <p className="text-xs text-slate-500">
+                When on, candidates must complete contents in order and cannot skip ahead. When off,
+                free navigation.
+              </p>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">

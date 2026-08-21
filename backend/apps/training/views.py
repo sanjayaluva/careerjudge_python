@@ -31,11 +31,13 @@ from .models import (
     CourseAssessment,
     CourseLesson,
     CourseMessage,
+    CourseModificationRequest,
     CourseProgress,
     CourseRegistration,
     LessonTopic,
     LiveSession,
     LiveSessionConsent,
+    LiveSessionRequest,
     SessionContent,
     TopicSession,
     TrainingCategory,
@@ -47,11 +49,13 @@ from .serializers import (
     CourseAssessmentSerializer,
     CourseLessonSerializer,
     CourseMessageSerializer,
+    CourseModificationRequestSerializer,
     CourseProgressSerializer,
     CourseRegistrationSerializer,
     InteractiveQuestionSerializer,
     LessonTopicSerializer,
     LiveSessionConsentSerializer,
+    LiveSessionRequestSerializer,
     LiveSessionSerializer,
     SessionContentSerializer,
     TopicSessionSerializer,
@@ -74,6 +78,7 @@ class HasTrainingPermission(HasModulePermission):
         "lessons": "change",
         "live_sessions": "change",
         "assessments": "change",
+        "completion_parameters": "change",
         "register": "add",
         "registrations": "view",
         "progress": "change",
@@ -82,10 +87,16 @@ class HasTrainingPermission(HasModulePermission):
         "messages": "add",
         "assignment_reports": "add",
         "review_report": "change",
+        "approve_late_submission": "change",
+        "request_update": "change",
         "consent": "add",
         "consents": "view",
         "interactive_questions": "change",
         "notify_students": "change",
+        "reschedule": "change",
+        # CourseModificationRequestViewSet + LiveSessionRequestViewSet custom actions
+        "approve": "change",
+        "decline": "change",
         "zoom_config": "view",
         "zoom_create_meeting": "change",
         # Nested resource actions (CourseLessonViewSet, LessonTopicViewSet, etc.)
@@ -320,18 +331,87 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(detail=True, methods=["get", "post"], url_path="completion-parameters")
+    def completion_parameters(self, request, pk=None):
+        """Report 3 §6.1: list or set course-completion parameters.
+
+        GET: returns all CourseCompletionParameter rows for this course.
+        POST body (set/replace the full set):
+            {
+              "parameters": [
+                {"content_type": "session_content", "content_id": 12, "is_mandatory": true},
+                {"content_type": "assignment",      "content_id": 7,  "is_mandatory": true},
+                ...
+              ]
+            }
+        Posting replaces the full set (idempotent) so the trainer's 'Set
+        Parameters' form reflects exactly what they checked.
+        """
+        from .models import CourseCompletionParameter
+        from .serializers import CourseCompletionParameterSerializer
+
+        course = self.get_object()
+        if request.method == "GET":
+            params = course.completion_parameters.all()
+            return Response(
+                {
+                    "message": "OK",
+                    "data": CourseCompletionParameterSerializer(params, many=True).data,
+                },
+                status=status.HTTP_200_OK,
+            )
+        # POST: replace the full set
+        parameters = request.data.get("parameters", [])
+        if not isinstance(parameters, list):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "parameters must be a list.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        CourseCompletionParameter.objects.filter(course=course).delete()
+        new_objs = [
+            CourseCompletionParameter(
+                course=course,
+                content_type=p.get("content_type"),
+                content_id=p.get("content_id"),
+                is_mandatory=bool(p.get("is_mandatory", True)),
+            )
+            for p in parameters
+            if p.get("content_type") and p.get("content_id")
+        ]
+        CourseCompletionParameter.objects.bulk_create(new_objs)
+        return Response(
+            {
+                "message": f"Saved {len(new_objs)} completion parameter(s).",
+                "data": CourseCompletionParameterSerializer(
+                    course.completion_parameters.all(), many=True
+                ).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
     @action(detail=True, methods=["post"])
     def register(self, request, pk=None):
-        """Student registers for a course (SRS §6).
+        """Student registers for a course (SRS §6 + Report 3 §1).
 
-        Creates a CourseRegistration. For free courses (price=0), payment
-        is auto-completed. For paid courses, payment_status='pending'
-        (the payment gateway integration is a separate step). For
-        scheduled courses, started_at is set immediately per SRS §6
-        rule: 'If training course is scheduled, course duration starts
-        from this time'.
+        Captures a registration form (prefilled from the user's profile +
+        any extra answers in the request body), creates a CourseRegistration,
+        and creates a Payment record. For free courses (price=0) payment is
+        auto-completed and the course commences immediately. For paid courses
+        a Stripe Checkout session is created and its URL returned so the
+        frontend can redirect; the webhook flips payment_status to 'paid'
+        (payments/services._update_module_payment_status).
+
+        Per SRS §6: for scheduled courses, started_at is set when payment
+        completes (so the duration countdown begins then).
         """
         from django.utils import timezone
+
+        from apps.payments.services import create_stripe_checkout_session, get_or_create_payment
 
         course = self.get_object()
         if course.status != "published":
@@ -345,6 +425,16 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Build the registration-form snapshot: profile fields + any extra
+        # answers the candidate provided in the request body (Report 3 §1.1).
+        profile = getattr(request.user, "profile", None)
+        registration_form = {
+            "full_name": request.user.full_name,
+            "email": request.user.email,
+            "phone": getattr(profile, "phone", "") if profile else "",
+            "extra_answers": request.data.get("extra_answers", {}),
+        }
+
         # Free courses (price == 0) are auto-paid — no payment gateway needed
         is_free = float(course.price) == 0
         payment_status = "paid" if is_free else "pending"
@@ -356,7 +446,13 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
             defaults={
                 "payment_status": payment_status,
                 "completion_status": completion_status,
-                "started_at": timezone.now() if course.schedule_type == "scheduled" else None,
+                "registration_form": registration_form,
+                # For scheduled courses the duration countdown begins at
+                # registration when free, or when payment completes when paid
+                # (set in payments/services._update_module_payment_status).
+                "started_at": (
+                    timezone.now() if (is_free and course.schedule_type == "scheduled") else None
+                ),
             },
         )
         if not created:
@@ -367,10 +463,37 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 },
                 status=status.HTTP_200_OK,
             )
+
+        # Create a Payment record + (for paid courses) a Stripe Checkout URL.
+        payment = get_or_create_payment(
+            request.user,
+            module="training",
+            item_id=course.id,
+            amount=course.price,
+            description=f"Registration: {course.title}",
+        )
+        checkout_url = None
+        if not is_free:
+            success_url = request.build_absolute_uri("/training/my-courses/?payment=success")
+            cancel_url = request.build_absolute_uri("/training/?payment=cancelled")
+            checkout_url = create_stripe_checkout_session(payment, success_url, cancel_url)
+
+        message = (
+            "Registration created. You can start the course now."
+            if is_free
+            else (
+                "Registration created. Complete payment to start the course."
+                if checkout_url is None
+                else "Registration created. Redirecting to payment…"
+            )
+        )
         return Response(
             {
-                "message": f"Registration created. {'You can start the course now.' if is_free else 'Payment pending.'}",
-                "data": CourseRegistrationSerializer(reg).data,
+                "message": message,
+                "data": {
+                    **CourseRegistrationSerializer(reg).data,
+                    "checkout_url": checkout_url,
+                },
             },
             status=status.HTTP_201_CREATED,
         )
@@ -396,6 +519,61 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         return Response(
             {"message": "OK", "data": CourseRegistrationSerializer(regs, many=True).data},
             status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="request-update")
+    def request_update(self, request, pk=None):
+        """Report 3 §7.1/§7.2: trainer requests admin approval to update or
+        delete a PUBLISHED course.
+
+        POST body: {"request_type": "update" | "delete", "reason": "..."}
+        Creates a pending CourseModificationRequest and notifies cj_admin. Only the
+        course's trainer (or admin) may request. The admin approves/declines
+        via the CourseModificationRequestViewSet.
+        """
+        course = self.get_object()
+        user = request.user
+        user_role_name = user.role.name if user.role_id else None
+        is_trainer_or_admin = course.created_by_id == user.id or user_role_name == "cj_admin"
+        if not is_trainer_or_admin:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the course trainer or admin can request changes.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        req_type = request.data.get("request_type")
+        if req_type not in ("update", "delete"):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "request_type must be 'update' or 'delete'.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        reason = (request.data.get("reason") or "").strip()
+        if not reason:
+            return Response(
+                {"error": {"code": "validation_error", "message": "reason is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        cur = CourseModificationRequest.objects.create(
+            course=course,
+            trainer=user,
+            request_type=req_type,
+            reason=reason,
+        )
+        return Response(
+            {
+                "message": "Request submitted. An admin will review it.",
+                "data": CourseModificationRequestSerializer(cur).data,
+            },
+            status=status.HTTP_201_CREATED,
         )
 
     @action(detail=False, methods=["get"])
@@ -606,6 +784,32 @@ class CourseRegistrationViewSet(ModelViewSet):
             round((len(completed) / len(progress_records)) * 100, 1) if progress_records else 0.0
         )
 
+        # Report 3 §6: completion against MANDATORY parameters. If the trainer
+        # has marked any contents mandatory, compute what fraction of those
+        # mandatory contents the student has completed (this is the figure that
+        # determines true course completion). Falls back to completion_pct when
+        # no mandatory params are set.
+        mandatory_params = list(reg.course.completion_parameters.filter(is_mandatory=True))
+        mandatory_completion_pct = None
+        mandatory_completed_count = None
+        mandatory_total_count = None
+        if mandatory_params:
+            completed_keys = {
+                (p.content_type, p.content_id) for p in progress_records if p.is_completed
+            }
+            mandatory_total_count = len(mandatory_params)
+            mandatory_completed_count = sum(
+                1 for mp in mandatory_params if (mp.content_type, mp.content_id) in completed_keys
+            )
+            mandatory_completion_pct = (
+                round((mandatory_completed_count / mandatory_total_count) * 100, 1)
+                if mandatory_total_count
+                else 0.0
+            )
+            # Override completion_pct with the mandatory figure when set — this
+            # is what 'course completion' actually means per SRS §2.6.
+            completion_pct = mandatory_completion_pct
+
         return Response(
             {
                 "message": "OK",
@@ -613,6 +817,9 @@ class CourseRegistrationViewSet(ModelViewSet):
                     "completion_percentage": completion_pct,
                     "completed_count": len(completed),
                     "total_count": len(progress_records),
+                    "mandatory_completion_percentage": mandatory_completion_pct,
+                    "mandatory_completed_count": mandatory_completed_count,
+                    "mandatory_total_count": mandatory_total_count,
                     "total_time_spent_seconds": total_time_spent,
                     "total_time_allowed_seconds": total_time_allowed,
                     "time_left_seconds": time_left,
@@ -748,15 +955,50 @@ class CourseRegistrationViewSet(ModelViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Report 3 §3.3: enforce submission deadline. After the deadline,
+        # submission requires trainer approval (late_submission_approved).
+        from django.utils import timezone
+
+        existing = AssignmentReport.objects.filter(
+            assignment=assignment, student=request.user
+        ).first()
+        deadline_passed = (
+            assignment.submission_deadline is not None
+            and assignment.submission_deadline < timezone.now()
+        )
+        late_ok = bool(existing and existing.late_submission_approved)
+        if deadline_passed and not late_ok:
+            return Response(
+                {
+                    "error": {
+                        "code": "deadline_passed",
+                        "message": (
+                            "The submission deadline for this assignment has passed. "
+                            "Ask the trainer to approve a late submission."
+                        ),
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Report 3 §3.6: accept an uploaded file (multipart) OR a URL.
+        report_file = request.data.get("report_file")
         report, created = AssignmentReport.objects.update_or_create(
             assignment=assignment,
             student=request.user,
             defaults={
                 "report_text": request.data.get("report_text", ""),
                 "report_file_url": request.data.get("report_file_url", ""),
+                "report_file": (
+                    report_file if report_file else (existing.report_file if existing else None)
+                ),
                 "status": "submitted",
+                # A new submission resets the late-approval flag.
+                "late_submission_approved": False,
             },
         )
+
         return Response(
             {"message": "Report submitted.", "data": AssignmentReportSerializer(report).data},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -794,16 +1036,105 @@ class CourseRegistrationViewSet(ModelViewSet):
                 {"error": {"code": "not_found", "message": "Report not found."}},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        # Report 3 §3.8: trainer rates on a 0-10 scale.
+        trainer_score = request.data.get("trainer_score")
+        if trainer_score is not None:
+            try:
+                trainer_score = float(trainer_score)
+            except (TypeError, ValueError):
+                trainer_score = None
+            if trainer_score is not None and not (0 <= trainer_score <= 10):
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "trainer_score must be between 0 and 10.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         from django.utils import timezone
 
-        report.trainer_score = request.data.get("trainer_score")
+        report.trainer_score = trainer_score
         report.trainer_feedback = request.data.get("trainer_feedback", "")
         report.reviewed_by = user
         report.reviewed_at = timezone.now()
         report.status = "reviewed"
         report.save()
+        # Report 3 §3.8: notify the student that their report was reviewed.
+        try:
+            from apps.notifications.models import notify_user
+
+            score_str = f"{trainer_score:g}/10" if trainer_score is not None else "—"
+            notify_user(
+                reg.student,
+                f"Report reviewed: {report.assignment.title}",
+                f"Your report for '{report.assignment.title}' was reviewed. "
+                f"Score: {score_str}.",
+                "session",
+                f"/training/{reg.course_id}",
+            )
+        except Exception:
+            pass
         return Response(
             {"message": "Report reviewed.", "data": AssignmentReportSerializer(report).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="approve-late-submission")
+    def approve_late_submission(self, request, pk=None):
+        """Trainer approves a late assignment submission after the deadline
+        has passed (Report 3 §3.3).
+
+        POST body: {"report_id": 42}  (report must already exist)
+        """
+        reg = self.get_object()
+        user = request.user
+        user_role_name = user.role.name if user.role_id else None
+        is_trainer_or_admin = reg.course.created_by_id == user.id or user_role_name == "cj_admin"
+        if not is_trainer_or_admin:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the course trainer or admin can approve late submissions.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        report_id = request.data.get("report_id")
+        report = AssignmentReport.objects.filter(
+            id=report_id,
+            student=reg.student,
+            assignment__session__topic__lesson__course=reg.course,
+        ).first()
+        if not report:
+            return Response(
+                {"error": {"code": "not_found", "message": "Report not found."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        report.late_submission_approved = True
+        report.save(update_fields=["late_submission_approved"])
+        # Notify the student they can now submit.
+        try:
+            from apps.notifications.models import notify_user
+
+            notify_user(
+                reg.student,
+                f"Late submission approved: {report.assignment.title}",
+                "Your trainer has approved a late submission. You can now submit your report.",
+                "session",
+                f"/training/{reg.course_id}",
+            )
+        except Exception:
+            pass
+        return Response(
+            {
+                "message": "Late submission approved.",
+                "data": AssignmentReportSerializer(report).data,
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -932,13 +1263,17 @@ class LiveSessionViewSet(ModelViewSet):
         """Student consents or declines to attend a live session (SRS §5).
 
         POST /api/training/live-sessions/<id>/consent/
-        body: {"status": "consented" | "declined"}
+        body: {"status": "consented" | "rejected"}
 
         Creates a LiveSessionConsent record. A notification is sent to the
         trainer via the post_save signal (apps/training/signals.py).
         """
         live_session = self.get_object()
         status_val = request.data.get("status", "consented")
+        # Accept the canonical "declined" plus remote's legacy "rejected"
+        # spelling; always store the canonical model choice.
+        if status_val == "rejected":
+            status_val = "declined"
         if status_val not in ("consented", "declined"):
             return Response(
                 {
@@ -1032,20 +1367,14 @@ class LiveSessionViewSet(ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
-    @action(detail=True, methods=["post"])
+    @action(detail=True, methods=["post"], url_path="reschedule")
     def reschedule(self, request, pk=None):
-        """Trainer reschedules a live session with reason (Doc 3 Issues 6.4, OL-2).
+        """Report 3 §7.4/OL.2: trainer reschedules a session to a new time.
 
-        POST /api/training/live-sessions/<id>/reschedule/
-        body: {
-            "new_start_time": "2026-08-15T10:00:00Z",
-            "reason": "Public holiday",
-            "push_forward": true  // if true, all subsequent sessions shifted
-        }
+        POST body: {"scheduled_at": "2026-08-10T10:00:00Z", "reason": "..."}
+        Records the previous time in rescheduled_from + the reason, then
+        notifies all registered students.
         """
-
-        from .models import SessionReschedule
-
         live_session = self.get_object()
         user_role_name = request.user.role.name if request.user.role_id else None
         is_trainer_or_admin = (
@@ -1056,82 +1385,65 @@ class LiveSessionViewSet(ModelViewSet):
                 {
                     "error": {
                         "code": "forbidden",
-                        "message": "Only the trainer or admin can reschedule sessions.",
+                        "message": "Only the trainer or admin can reschedule a session.",
                     }
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
-
-        new_start_time = request.data.get("new_start_time")
-        reason = request.data.get("reason", "")
-        push_forward = request.data.get("push_forward", False)
-
-        if not new_start_time:
+        new_time = request.data.get("scheduled_at")
+        reason = (request.data.get("reason") or "").strip()
+        if not new_time:
             return Response(
-                {"error": {"code": "validation_error", "message": "new_start_time is required."}},
+                {"error": {"code": "validation_error", "message": "scheduled_at is required."}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        old_start_time = live_session.scheduled_at
-        if not old_start_time:
+        if not reason:
             return Response(
-                {
-                    "error": {
-                        "code": "validation_error",
-                        "message": "Session has no scheduled time.",
-                    }
-                },
+                {"error": {"code": "validation_error", "message": "reason is required."}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        from django.utils import timezone
 
-        # Parse new time
-        from django.utils.dateparse import parse_datetime
+        # Parse + record the previous time.
+        try:
+            from datetime import datetime
 
-        new_dt = parse_datetime(new_start_time)
-        if not new_dt:
+            parsed = datetime.fromisoformat(str(new_time).replace("Z", "+00:00"))
+        except ValueError:
             return Response(
-                {"error": {"code": "validation_error", "message": "Invalid datetime format."}},
+                {"error": {"code": "validation_error", "message": "Invalid scheduled_at format."}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        # Create reschedule record
-        reschedule = SessionReschedule.objects.create(
-            live_session=live_session,
-            old_start_time=old_start_time,
-            new_start_time=new_dt,
-            reason=reason,
-            rescheduled_by=request.user,
-            push_forward_remaining=push_forward,
+        live_session.rescheduled_from = live_session.scheduled_at
+        live_session.reschedule_reason = reason
+        live_session.scheduled_at = (
+            parsed if timezone.is_aware(parsed) else timezone.make_aware(parsed)
         )
+        live_session.save(update_fields=["scheduled_at", "rescheduled_from", "reschedule_reason"])
+        # Notify registered students.
+        from apps.notifications.models import notify_user
 
-        # Update the session's scheduled time
-        live_session.scheduled_at = new_dt
-        live_session.save(update_fields=["scheduled_at"])
-
-        # If push_forward is True, shift all subsequent sessions by the same delta
-        if push_forward:
-            delta = new_dt - old_start_time
-            subsequent = LiveSession.objects.filter(
-                course=live_session.course,
-                scheduled_at__gt=old_start_time,
-            ).exclude(pk=live_session.pk)
-            for session in subsequent:
-                session.scheduled_at = session.scheduled_at + delta
-                session.save(update_fields=["scheduled_at"])
-
+        regs = CourseRegistration.objects.filter(
+            course=live_session.course, payment_status="paid"
+        ).select_related("student")
+        new_str = live_session.scheduled_at.strftime("%Y-%m-%d %H:%M")
+        for reg in regs:
+            notify_user(
+                reg.student,
+                f"Session rescheduled: {live_session.title}",
+                f"Moved to {new_str}. Reason: {reason}.",
+                "session",
+                f"/training/{live_session.course_id}?live_session={live_session.id}",
+            )
         return Response(
-            {
-                "message": "Session rescheduled."
-                + (" Subsequent sessions pushed forward." if push_forward else ""),
-                "data": {
-                    "reschedule_id": reschedule.id,
-                    "old_start_time": old_start_time.isoformat(),
-                    "new_start_time": new_dt.isoformat(),
-                    "push_forward": push_forward,
-                },
-            },
+            {"message": "Session rescheduled.", "data": LiveSessionSerializer(live_session).data},
             status=status.HTTP_200_OK,
         )
+
+
+# ---------------------------------------------------------------------------
+# Session Content → Interactive Questions (SRS §2.3.1 Timeliner)
+# ---------------------------------------------------------------------------
 
 
 class SessionContentViewSet(ModelViewSet):
@@ -1193,3 +1505,226 @@ class CourseAssessmentViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = CourseAssessmentSerializer
     http_method_names = ["get", "head", "options", "patch", "delete", "post"]
+
+
+# ---------------------------------------------------------------------------
+# Course Update Request (Report 3 §7.1/§7.2) — admin approval workflow
+# ---------------------------------------------------------------------------
+
+
+class CourseModificationRequestViewSet(ModelViewSet):
+    """List/course-update requests + admin approve/decline actions.
+
+    Trainers see their own requests; admins see all. Approve/decline are
+    admin-only and notify the requesting trainer.
+    """
+
+    queryset = CourseModificationRequest.objects.select_related("course", "trainer", "reviewed_by")
+    permission_classes = [IsAuthenticated, HasTrainingPermission]
+    serializer_class = CourseModificationRequestSerializer
+    http_method_names = ["get", "head", "options", "post"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        user_role_name = user.role.name if user.role_id else None
+        if user_role_name == "cj_admin" or user.is_superuser:
+            return qs
+        # Trainers see only their own requests
+        return qs.filter(trainer=user)
+
+    def list(self, request, *args, **kwargs):
+        resp = super().list(request, *args, **kwargs)
+        return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        # Creation happens via /courses/<id>/request-update/ (which scopes to
+        # the course). Block direct creation here to keep the audit trail clean.
+        return Response(
+            {
+                "error": {
+                    "code": "forbidden",
+                    "message": "Submit requests via POST /courses/<id>/request-update/.",
+                }
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve(self, request, pk=None):
+        """Admin approves a course update/delete request (Report 3 §7.1/§7.2)."""
+        cur = self.get_object()
+        user = request.user
+        user_role_name = user.role.name if user.role_id else None
+        if user_role_name != "cj_admin" and not user.is_superuser:
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can approve."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if cur.status != "pending":
+            return Response(
+                {
+                    "error": {
+                        "code": "invalid_state",
+                        "message": f"Request is already {cur.status}.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from django.utils import timezone
+
+        cur.status = "approved"
+        cur.reviewed_by = user
+        cur.reviewed_at = timezone.now()
+        cur.review_comment = request.data.get("admin_note", "")
+        cur.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_comment"])
+
+        # For delete requests, archive the course on approval.
+        if cur.request_type == "delete":
+            cur.course.status = "archived"
+            cur.course.save(update_fields=["status", "updated_at"])
+
+        # Notify the requesting trainer.
+        try:
+            from apps.notifications.models import notify_user
+
+            action_word = "deleted" if cur.request_type == "delete" else "may now edit"
+            notify_user(
+                cur.trainer,
+                f"Course {cur.request_type} approved: {cur.course.title}",
+                f"Your request to {cur.request_type} '{cur.course.title}' was approved. "
+                f"The course {action_word}.",
+                "success",
+                f"/training/{cur.course_id}",
+            )
+        except Exception:
+            pass
+        return Response(
+            {"message": "Request approved.", "data": CourseModificationRequestSerializer(cur).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="decline")
+    def decline(self, request, pk=None):
+        """Admin declines a course update/delete request."""
+        cur = self.get_object()
+        user = request.user
+        user_role_name = user.role.name if user.role_id else None
+        if user_role_name != "cj_admin" and not user.is_superuser:
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can decline."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if cur.status != "pending":
+            return Response(
+                {
+                    "error": {
+                        "code": "invalid_state",
+                        "message": f"Request is already {cur.status}.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from django.utils import timezone
+
+        cur.status = "rejected"
+        cur.reviewed_by = user
+        cur.reviewed_at = timezone.now()
+        cur.review_comment = request.data.get("admin_note", "")
+        cur.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_comment"])
+        try:
+            from apps.notifications.models import notify_user
+
+            notify_user(
+                cur.trainer,
+                f"Course {cur.request_type} request declined: {cur.course.title}",
+                f"Your request to {cur.request_type} '{cur.course.title}' was declined. "
+                f"{cur.review_comment}",
+                "warning",
+                f"/training/{cur.course_id}",
+            )
+        except Exception:
+            pass
+        return Response(
+            {"message": "Request declined.", "data": CourseModificationRequestSerializer(cur).data},
+            status=status.HTTP_200_OK,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Live Session Request (Report 3 §7.5/OS.4) — candidate schedule requests
+# ---------------------------------------------------------------------------
+
+
+class LiveSessionRequestViewSet(ModelViewSet):
+    """Candidate requests for the trainer to schedule a live session, plus
+    trainer scheduling against a request.
+
+    Candidates create requests; trainers list their course's requests and
+    schedule a session (which notifies the candidate).
+    """
+
+    queryset = LiveSessionRequest.objects.select_related("course", "student")
+    permission_classes = [IsAuthenticated, HasTrainingPermission]
+    serializer_class = LiveSessionRequestSerializer
+    http_method_names = ["get", "head", "options", "post"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        user_role_name = user.role.name if user.role_id else None
+        if user_role_name in ("cj_admin", "trainer") or user.is_superuser:
+            # Trainers see requests for their own courses
+            if user_role_name == "trainer":
+                return qs.filter(course__created_by=user)
+            return qs
+        # Candidates see their own requests
+        return qs.filter(student=user)
+
+    def list(self, request, *args, **kwargs):
+        resp = super().list(request, *args, **kwargs)
+        return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        course_id = request.data.get("course")
+        if not course_id:
+            return Response(
+                {"error": {"code": "validation_error", "message": "course is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        lsr = LiveSessionRequest.objects.create(
+            course_id=course_id,
+            student=request.user,
+            preferred_times=request.data.get("preferred_times", []),
+            note=request.data.get("note", ""),
+        )
+        # Notify the trainer.
+        try:
+            from apps.notifications.models import notify_user
+
+            course = lsr.course
+            if course.created_by:
+                notify_user(
+                    course.created_by,
+                    f"Live-session request: {course.title}",
+                    f"{request.user.full_name or request.user.email} requested a live session. "
+                    f"Note: {lsr.note}",
+                    "session",
+                    f"/training/{course.id}",
+                )
+        except Exception:
+            pass
+        return Response(
+            {"message": "Request sent to trainer.", "data": LiveSessionRequestSerializer(lsr).data},
+            status=status.HTTP_201_CREATED,
+        )

@@ -5,7 +5,6 @@ from rest_framework import serializers
 from .models import (
     CounselingCategory,
     CounselingSession,
-    CounselingSettings,
     CounsellorProfile,
     FollowupSession,
     SessionCancellation,
@@ -26,6 +25,14 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
     user_email = serializers.CharField(source="user.email", read_only=True)
     full_name = serializers.CharField(source="user.full_name", read_only=True)
     bio = serializers.CharField(source="user.profile.bio", read_only=True, default="")
+    # Report 3 §1.7: expose gender / avatar / language / location so the
+    # browse view shows them to candidates.
+    gender = serializers.CharField(source="user.profile.gender", read_only=True, default="")
+    avatar = serializers.ImageField(source="user.profile.avatar", read_only=True, default=None)
+    language = serializers.CharField(
+        source="user.profile.language_of_communication", read_only=True, default=""
+    )
+    location = serializers.CharField(source="user.profile.location", read_only=True, default="")
     hourly_rate = serializers.DecimalField(
         source="user.profile.hourly_rate",
         max_digits=10,
@@ -42,15 +49,6 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
     cancellation_count = serializers.IntegerField(
         source="user.profile.cancellation_count", read_only=True, default=0
     )
-    # Doc 3 fields (read from UserProfile)
-    gender = serializers.CharField(source="user.profile.gender", read_only=True, default="")
-    avatar = serializers.SerializerMethodField()
-    language_of_communication = serializers.CharField(
-        source="user.profile.language_of_communication", read_only=True, default=""
-    )
-    geographical_location = serializers.CharField(
-        source="user.profile.geographical_location", read_only=True, default=""
-    )
     category_names = serializers.SerializerMethodField()
     upcoming_slot_count = serializers.SerializerMethodField()
 
@@ -62,16 +60,16 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
             "user_email",
             "full_name",
             "bio",
+            "gender",
+            "avatar",
+            "language",
+            "location",
             "hourly_rate",
             "meeting_url",
             "categories",
             "category_names",
             "is_available",
             "cancellation_count",
-            "gender",
-            "avatar",
-            "language_of_communication",
-            "geographical_location",
             "upcoming_slot_count",
             "created_at",
             "updated_at",
@@ -82,14 +80,14 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
             "user_email",
             "full_name",
             "bio",
+            "gender",
+            "avatar",
+            "language",
+            "location",
             "hourly_rate",
             "meeting_url",
             "is_available",
             "cancellation_count",
-            "gender",
-            "avatar",
-            "language_of_communication",
-            "geographical_location",
             "upcoming_slot_count",
             "category_names",
             "created_at",
@@ -98,15 +96,6 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
 
     def get_category_names(self, obj):
         return [c.get_name_display() for c in obj.categories.all()]
-
-    def get_avatar(self, obj):
-        """Return avatar URL or empty string if no avatar."""
-        try:
-            if obj.user.profile.avatar:
-                return obj.user.profile.avatar.url
-        except (AttributeError, ValueError):
-            pass
-        return ""
 
     def get_upcoming_slot_count(self, obj):
         from django.utils import timezone
@@ -197,14 +186,13 @@ class SessionCancellationSerializer(serializers.ModelSerializer):
 
 
 class SessionSummarySerializer(serializers.ModelSerializer):
-    """Serializer for counsellor's post-session summary (Doc 3)."""
-
     class Meta:
         model = SessionSummary
         fields = [
             "id",
             "session",
             "counsellor",
+            # Report 3 §2.4 (6 fields)
             "client_details",
             "summary",
             "provisional_diagnosis",
@@ -212,6 +200,7 @@ class SessionSummarySerializer(serializers.ModelSerializer):
             "session_smoothness",
             "smoothness_reason",
             "followup_recommended",
+            # legacy
             "recommendations",
             "created_at",
         ]
@@ -219,18 +208,13 @@ class SessionSummarySerializer(serializers.ModelSerializer):
 
 
 class SessionFeedbackSerializer(serializers.ModelSerializer):
-    """Serializer for counselee's post-session feedback (Doc 3).
-
-    Per Doc 3 feedback form (8 questions).
-    """
-
     class Meta:
         model = SessionFeedback
         fields = [
             "id",
             "session",
             "counselee",
-            # Doc 3 feedback form fields
+            # Report 3 §2.2 (8 fields)
             "session_usefulness",
             "usefulness_text",
             "counsellor_empathy",
@@ -238,9 +222,8 @@ class SessionFeedbackSerializer(serializers.ModelSerializer):
             "would_rechoose",
             "rechoose_text",
             "improvement_suggestions",
-            "counsellor_rating",
-            # Legacy fields (backward compatibility)
-            "rating",
+            "rating",  # 1-10 scale
+            # legacy
             "experience_text",
             "counsellor_effectiveness",
             "created_at",
@@ -268,12 +251,3 @@ class FollowupSessionSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "counsellor_name", "counselee_name", "created_at"]
-
-
-class CounselingSettingsSerializer(serializers.ModelSerializer):
-    """Serializer for counseling settings (terms, cancellation policy)."""
-
-    class Meta:
-        model = CounselingSettings
-        fields = ["id", "terms_and_conditions", "cancellation_policy", "updated_at"]
-        read_only_fields = ["id", "updated_at"]

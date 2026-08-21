@@ -155,11 +155,26 @@ def validate_question_config(question: Question) -> list[str]:
 
     # --- Rank (6a/6b) ---
     elif qtype in ("RANK_SIMPLE", "RANK_THEN_RATE"):
-        rank_options = q.options.filter(option_type="RANK").count()
-        if rank_options < 2:
-            errors.append(f"Rank requires at least 2 options (has {rank_options}).")
+        rank_options = list(q.options.filter(option_type="RANK"))
+        if len(rank_options) < 2:
+            errors.append(f"Rank requires at least 2 options (has {len(rank_options)}).")
         if qtype == "RANK_THEN_RATE" and (not q.rating_scale_points or q.rating_scale_points < 2):
             errors.append("Rank-then-Rate requires rating_scale_points ≥ 2.")
+        # Report 2 §1/§2: each option must be tagged to a different section,
+        # and number of options = number of sections. So N options must carry
+        # N distinct non-empty section tags.
+        tags = [o.section_tag.strip() for o in rank_options]
+        if any(not t for t in tags):
+            errors.append(
+                "Rank requires every option to have a section_tag (the profile "
+                "variable / section it feeds into)."
+            )
+        elif len(set(tags)) != len(tags):
+            errors.append(
+                "Rank requires each option to be tagged to a DIFFERENT section. "
+                "Two or more options share the same section_tag. "
+                "(Rule: number of options = number of sections.)"
+            )
 
     # --- Rating (7) ---
     elif qtype == "STANDARD_RATING_SCALE":
@@ -170,13 +185,35 @@ def validate_question_config(question: Question) -> list[str]:
 
     # --- Forced Choice (8a/8b) ---
     elif qtype in ("FORCED_CHOICE_SINGLE_LEVEL", "FORCED_CHOICE_TWO_LEVEL"):
-        fc_options = q.options.filter(option_type="FORCED_CHOICE").count()
-        if fc_options < 2:
-            errors.append(f"Forced-Choice requires at least 2 options (has {fc_options}).")
-        # Check predefined_score is set
-        for o in q.options.filter(option_type="FORCED_CHOICE"):
-            if o.predefined_score is None or o.predefined_score == 0:
-                errors.append(f"Option '{o.text_value}' is missing a predefined_score.")
+        fc_options = list(q.options.filter(option_type="FORCED_CHOICE"))
+        if len(fc_options) < 2:
+            errors.append(f"Forced-Choice requires at least 2 options (has {len(fc_options)}).")
+        # Report 2 §3/§4: the two paired options must be tagged to DIFFERENT
+        # sections (two options from the same section cannot be paired).
+        tags = [o.section_tag.strip() for o in fc_options]
+        if any(not t for t in tags):
+            errors.append("Forced-Choice requires every option to have a section_tag.")
+        elif len(set(tags)) != len(tags):
+            errors.append(
+                "Forced-Choice: the two options must be tagged to DIFFERENT "
+                "sections. Two options from the same section cannot be paired."
+            )
+        # Report 2 §3/§4: selection vs non-selection scoring. Rule:
+        # selection_score > non_selection_score >= 0 for every option.
+        for o in fc_options:
+            sel = o.selection_score
+            nonsel = o.non_selection_score
+            if nonsel < 0:
+                errors.append(
+                    f"Option '{o.text_value}' has a negative non_selection_score "
+                    f"({nonsel}). Non-selection score must be >= 0."
+                )
+                break
+            if sel <= nonsel:
+                errors.append(
+                    f"Option '{o.text_value}': selection_score ({sel}) must be "
+                    f"greater than non_selection_score ({nonsel})."
+                )
                 break
         # Two-level needs rating_scale_points
         if qtype == "FORCED_CHOICE_TWO_LEVEL" and (

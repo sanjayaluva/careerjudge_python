@@ -50,3 +50,40 @@ class ChangePasswordView(APIView):
             {"message": "Password changed successfully.", "data": {}},
             status=status.HTTP_200_OK,
         )
+
+
+class AvatarUploadView(APIView):
+    """POST /api/me/avatar/ — upload the current user's avatar (Report 3 §1.5).
+
+    Accepts a multipart file upload under the ``avatar`` field and stores it
+    on the user's UserProfile.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        avatar = request.FILES.get("avatar")
+        if not avatar:
+            return Response(
+                {"error": {"code": "validation_error", "message": "avatar file is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        profile = getattr(request.user, "profile", None)
+        if profile is None:
+            # Create the profile lazily for users that don't have one yet.
+            from .models import UserProfile
+
+            profile = UserProfile.objects.create(user=request.user)
+        profile.avatar = avatar
+        profile.save(update_fields=["avatar"])
+        return Response(
+            {
+                "message": "Avatar uploaded.",
+                "data": {
+                    "avatar": (
+                        request.build_absolute_uri(profile.avatar.url) if profile.avatar else None
+                    )
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

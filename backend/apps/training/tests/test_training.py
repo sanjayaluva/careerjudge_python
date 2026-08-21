@@ -232,6 +232,49 @@ def test_non_scheduled_course_leaves_started_at_null(student_client, individual_
     assert reg.started_at is None
 
 
+def test_registration_captures_registration_form_snapshot(
+    student_client, individual_user, trainer_user
+):
+    """Report 3 §1.1: registration stores a form snapshot (profile-prefilled
+    + extra answers)."""
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    resp = student_client.post(
+        f"/api/training/courses/{course.id}/register/",
+        {"extra_answers": {"goal": "career switch", "experience": "3 years"}},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    reg = CourseRegistration.objects.get(course=course, student=individual_user)
+    assert reg.registration_form["email"] == individual_user.email
+    assert reg.registration_form["full_name"] == individual_user.full_name
+    assert reg.registration_form["extra_answers"]["goal"] == "career switch"
+
+
+def test_registration_creates_payment_record(student_client, individual_user, trainer_user):
+    """Report 3 §1.3: paid-course registration creates a Payment record."""
+    from apps.payments.models import Payment
+
+    course = TrainingCourse.objects.create(
+        title="Paid", created_by=trainer_user, status="published", price="49.99"
+    )
+    resp = student_client.post(f"/api/training/courses/{course.id}/register/")
+    assert resp.status_code == 201
+    assert Payment.objects.filter(
+        user=individual_user, module="training", item_id=course.id
+    ).exists()
+
+
+def test_registration_notifies_trainer(student_client, individual_user, trainer_user):
+    """Report 3 §1.2/§1.5: successful registration fires a notification to
+    the course trainer."""
+    from apps.notifications.models import Notification
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    student_client.post(f"/api/training/courses/{course.id}/register/")
+    # The notifications signal (remote) notifies trainer + admin + helpdesk.
+    assert Notification.objects.filter(recipient=trainer_user).exists()
+
+
 def test_my_courses_returns_only_own_registrations(
     student_client, individual_user, trainer_user, db
 ):
@@ -474,16 +517,107 @@ def test_trainer_reviews_report(trainer_client, trainer_user, individual_user):
 
     resp = trainer_client.post(
         f"/api/training/registrations/{reg.id}/review-report/",
-        {"report_id": report.id, "trainer_score": 85, "trainer_feedback": "Good work"},
+        {"report_id": report.id, "trainer_score": 8.5, "trainer_feedback": "Good work"},
         format="json",
     )
     assert resp.status_code == 200, f"Got {resp.status_code}: {resp.data}"
     report.refresh_from_db()
     assert report.status == "reviewed"
-    assert report.trainer_score == 85
+    assert report.trainer_score == 8.5
     assert report.trainer_feedback == "Good work"
     assert report.reviewed_by == trainer_user
     assert report.reviewed_at is not None
+
+
+def test_trainer_review_rejects_score_above_10(trainer_client, trainer_user, individual_user):
+    """Report 3 §3.8: trainer rating is on a 0-10 scale."""
+    from apps.training.models import (
+        Assignment,
+        AssignmentReport,
+        CourseLesson,
+        LessonTopic,
+        TopicSession,
+    )
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="T1", order=1)
+    session = TopicSession.objects.create(topic=topic, title="S1", order=1)
+    assignment = Assignment.objects.create(
+        session=session, title="A1", report_submission_enabled=True
+    )
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    report = AssignmentReport.objects.create(
+        assignment=assignment, student=individual_user, report_text="content"
+    )
+
+    resp = trainer_client.post(
+        f"/api/training/registrations/{reg.id}/review-report/",
+        {"report_id": report.id, "trainer_score": 85},
+        format="json",
+    )
+    assert resp.status_code == 400
+    assert resp.data["error"]["code"] == "validation_error"
+
+
+def test_submission_after_deadline_requires_approval(
+    trainer_client, trainer_user, student_client, individual_user
+):
+    """Report 3 §3.3: after the deadline, submission is blocked unless the
+    trainer approves a late submission."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.training.models import (
+        Assignment,
+        CourseLesson,
+        LessonTopic,
+        TopicSession,
+    )
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="T1", order=1)
+    session = TopicSession.objects.create(topic=topic, title="S1", order=1)
+    # Deadline already passed
+    assignment = Assignment.objects.create(
+        session=session,
+        title="A1",
+        report_submission_enabled=True,
+        submission_deadline=timezone.now() - timedelta(hours=1),
+    )
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+
+    # 1) Student cannot submit after the deadline
+    resp = student_client.post(
+        f"/api/training/registrations/{reg.id}/assignment_reports/",
+        {"assignment": assignment.id, "report_text": "late"},
+        format="json",
+    )
+    assert resp.status_code == 403
+    assert resp.data["error"]["code"] == "deadline_passed"
+
+    # 2) Trainer approves late submission
+    from apps.training.models import AssignmentReport
+
+    report = AssignmentReport.objects.create(
+        assignment=assignment, student=individual_user, report_text=""
+    )
+    resp = trainer_client.post(
+        f"/api/training/registrations/{reg.id}/approve-late-submission/",
+        {"report_id": report.id},
+        format="json",
+    )
+    assert resp.status_code == 200
+
+    # 3) Now the student can submit
+    resp = student_client.post(
+        f"/api/training/registrations/{reg.id}/assignment_reports/",
+        {"assignment": assignment.id, "report_text": "late content"},
+        format="json",
+    )
+    assert resp.status_code in (200, 201), resp.data
 
 
 def test_student_cannot_review_report(student_client, individual_user, trainer_user):
@@ -710,3 +844,270 @@ def test_paid_course_stays_pending(student_client, individual_user, trainer_user
     reg = CourseRegistration.objects.get(course=course, student=individual_user)
     assert reg.payment_status == "pending"
     assert reg.completion_status == "not_started"
+
+
+# ---------------------------------------------------------------------------
+# Course Update Request workflow (Report 3 §7.1/§7.2)
+# ---------------------------------------------------------------------------
+
+
+def test_trainer_can_request_course_update(trainer_client, trainer_user):
+    """Report 3 §7.1: trainer requests admin approval to update a published course."""
+    from apps.training.models import CourseModificationRequest
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/request-update/",
+        {"request_type": "update", "reason": "Fix lesson 2 typo"},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    cur = CourseModificationRequest.objects.get(course=course)
+    assert cur.request_type == "update"
+    assert cur.status == "pending"
+    assert cur.trainer == trainer_user
+
+
+def test_non_trainer_cannot_request_update(student_client, trainer_user):
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    resp = student_client.post(
+        f"/api/training/courses/{course.id}/request-update/",
+        {"request_type": "update", "reason": "x"},
+        format="json",
+    )
+    assert resp.status_code == 403
+
+
+def test_admin_approve_delete_archives_course(admin_client, trainer_client, trainer_user):
+    """Report 3 §7.2: when admin approves a delete request, the course is archived."""
+    from apps.training.models import CourseModificationRequest
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    trainer_client.post(
+        f"/api/training/courses/{course.id}/request-update/",
+        {"request_type": "delete", "reason": "Obsolete"},
+        format="json",
+    )
+    cur = CourseModificationRequest.objects.get(course=course)
+    resp = admin_client.post(
+        f"/api/training/course-update-requests/{cur.id}/approve/",
+        {"admin_note": "OK"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    course.refresh_from_db()
+    assert course.status == "archived"
+    cur.refresh_from_db()
+    assert cur.status == "approved"
+
+
+def test_non_admin_cannot_approve_request(trainer_client, trainer_user):
+    from apps.training.models import CourseModificationRequest
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    cur = CourseModificationRequest.objects.create(
+        course=course, trainer=trainer_user, request_type="update", reason="x"
+    )
+    resp = trainer_client.post(
+        f"/api/training/course-update-requests/{cur.id}/approve/",
+        format="json",
+    )
+    assert resp.status_code == 403
+
+
+def test_admin_decline_keeps_course_and_notifies(admin_client, trainer_client, trainer_user):
+    from apps.notifications.models import Notification
+    from apps.training.models import CourseModificationRequest
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    trainer_client.post(
+        f"/api/training/courses/{course.id}/request-update/",
+        {"request_type": "update", "reason": "x"},
+        format="json",
+    )
+    cur = CourseModificationRequest.objects.get(course=course)
+    admin_client.post(
+        f"/api/training/course-update-requests/{cur.id}/decline/",
+        {"admin_note": "Not now"},
+        format="json",
+    )
+    course.refresh_from_db()
+    assert course.status == "published"  # unchanged
+    cur.refresh_from_db()
+    assert cur.status == "rejected"
+    assert Notification.objects.filter(recipient=trainer_user, title__contains="declined").exists()
+
+
+# ---------------------------------------------------------------------------
+# Live Session Request (Report 3 §7.5/OS.4)
+# ---------------------------------------------------------------------------
+
+
+def test_student_can_request_live_session(student_client, individual_user, trainer_user):
+    """Report 3 §7.5: candidate requests the trainer schedule a live session."""
+    from apps.training.models import LiveSessionRequest
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    resp = student_client.post(
+        "/api/training/live-session-requests/",
+        {"course": course.id, "note": "Prefer mornings", "preferred_times": ["2026-08-10T09:00"]},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    lsr = LiveSessionRequest.objects.get(course=course, student=individual_user)
+    assert lsr.status == "pending"
+
+
+def test_trainer_sees_own_course_live_session_requests(
+    trainer_client, trainer_user, individual_user
+):
+    from apps.training.models import LiveSessionRequest
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    LiveSessionRequest.objects.create(course=course, student=individual_user, note="hi")
+    resp = trainer_client.get("/api/training/live-session-requests/")
+    assert resp.status_code == 200
+    data = resp.data["data"]
+    results = data.get("results", data) if isinstance(data, dict) else data
+    assert len(results) == 1
+
+
+# ---------------------------------------------------------------------------
+# Completion Parameters (Report 3 §6)
+# ---------------------------------------------------------------------------
+
+
+def test_trainer_can_set_completion_parameters(trainer_client, trainer_user):
+    """Report 3 §6.1: trainer sets which contents are mandatory for completion."""
+    from apps.training.models import (
+        CourseCompletionParameter,
+        CourseLesson,
+        LessonTopic,
+        SessionContent,
+        TopicSession,
+    )
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
+    lesson = CourseLesson.objects.create(course=course, title="L", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="T", order=1)
+    session = TopicSession.objects.create(topic=topic, title="S", order=1)
+    sc = SessionContent.objects.create(session=session, title="Content 1", order=1)
+
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/completion-parameters/",
+        {
+            "parameters": [
+                {"content_type": "session_content", "content_id": sc.id, "is_mandatory": True},
+            ]
+        },
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    assert CourseCompletionParameter.objects.filter(course=course, is_mandatory=True).count() == 1
+
+
+def test_progress_summary_uses_mandatory_params(admin_client, trainer_user, individual_user):
+    """Report 3 §6: completion % is computed against mandatory parameters
+    when set, not all progress records."""
+    from apps.training.models import (
+        CourseCompletionParameter,
+        CourseLesson,
+        CourseProgress,
+        CourseRegistration,
+        LessonTopic,
+        SessionContent,
+        TopicSession,
+    )
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="T", order=1)
+    session = TopicSession.objects.create(topic=topic, title="S", order=1)
+    sc1 = SessionContent.objects.create(session=session, title="C1", order=1)
+    sc2 = SessionContent.objects.create(session=session, title="C2", order=2)
+    # Only sc1 is mandatory
+    CourseCompletionParameter.objects.create(
+        course=course, content_type="session_content", content_id=sc1.id, is_mandatory=True
+    )
+    reg = CourseRegistration.objects.create(
+        course=course, student=individual_user, payment_status="paid"
+    )
+    # Student completed sc2 (non-mandatory) but NOT sc1 (mandatory)
+    CourseProgress.objects.create(
+        registration=reg,
+        content_type="session_content",
+        content_id=sc2.id,
+        is_completed=True,
+    )
+    resp = admin_client.get(f"/api/training/registrations/{reg.id}/progress_summary/")
+    assert resp.status_code == 200
+    data = resp.data["data"]
+    # Mandatory completion = 0/1 = 0% (sc1 not done) -> overrides completion_pct
+    assert data["mandatory_total_count"] == 1
+    assert data["mandatory_completed_count"] == 0
+    assert data["completion_percentage"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Live Session reschedule (Report 3 §7.4/OL.2)
+# ---------------------------------------------------------------------------
+
+
+def test_trainer_can_reschedule_live_session(trainer_client, trainer_user, individual_user):
+    """Report 3 §7.4: trainer reschedules a session; the old time + reason are recorded."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.training.models import CourseRegistration, LiveSession
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    original = timezone.now() + timedelta(days=2)
+    ls = LiveSession.objects.create(
+        course=course, title="Q&A", scheduled_at=original, duration_minutes=60
+    )
+    CourseRegistration.objects.create(course=course, student=individual_user, payment_status="paid")
+    new_time = (timezone.now() + timedelta(days=5)).isoformat()
+    resp = trainer_client.post(
+        f"/api/training/live-sessions/{ls.id}/reschedule/",
+        {"scheduled_at": new_time, "reason": "Trainer unavailable"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    ls.refresh_from_db()
+    assert ls.rescheduled_from is not None
+    assert ls.reschedule_reason == "Trainer unavailable"
+
+
+def test_reschedule_requires_reason(trainer_client, trainer_user):
+    from django.utils import timezone
+
+    from apps.training.models import LiveSession
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    ls = LiveSession.objects.create(
+        course=course, title="Q&A", scheduled_at=timezone.now(), duration_minutes=60
+    )
+    resp = trainer_client.post(
+        f"/api/training/live-sessions/{ls.id}/reschedule/",
+        {"scheduled_at": "2026-12-01T10:00:00"},
+        format="json",
+    )
+    assert resp.status_code == 400
+
+
+def test_non_trainer_cannot_reschedule(student_client, trainer_user):
+    from django.utils import timezone
+
+    from apps.training.models import LiveSession
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    ls = LiveSession.objects.create(
+        course=course, title="Q&A", scheduled_at=timezone.now(), duration_minutes=60
+    )
+    resp = student_client.post(
+        f"/api/training/live-sessions/{ls.id}/reschedule/",
+        {"scheduled_at": "2026-12-01T10:00:00", "reason": "x"},
+        format="json",
+    )
+    assert resp.status_code == 403

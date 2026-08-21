@@ -21,11 +21,11 @@ Endpoints:
 from datetime import timedelta
 
 from django.utils import timezone
-from rest_framework import filters, status
+from rest_framework import filters, serializers, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import ModelViewSet, ViewSet
 
 from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
@@ -44,7 +44,6 @@ from .models import (
 from .serializers import (
     CounselingCategorySerializer,
     CounselingSessionSerializer,
-    CounselingSettingsSerializer,
     CounsellorProfileSerializer,
     FollowupSessionSerializer,
     SessionCancellationSerializer,
@@ -159,42 +158,15 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
     @action(detail=True, methods=["get"])
     def timeslots(self, request, pk=None):
         """List a counsellor's available timeslots (SRS §2.1: 'System shows
-        available timeslots of the counsellor for a week').
-
-        Per Doc 3 Issue 1.3: if less than 1 week of timeslots is available,
-        notify the counsellor + help desk.
-        """
+        available timeslots of the counsellor for a week')."""
         counsellor = self.get_object()
+        # Default: show slots from now to 3 weeks ahead (SRS §3.1 max)
         weeks = int(request.query_params.get("weeks", 3))
         from_date = timezone.now()
         to_date = from_date + timedelta(weeks=weeks)
         slots = counsellor.timeslots.filter(
             start_time__gte=from_date, start_time__lte=to_date
         ).order_by("start_time")
-
-        # Per Doc 3 Issue 1.3: check if at least 1 week of timeslots is available
-        one_week_ahead = from_date + timedelta(weeks=1)
-        available_count = counsellor.timeslots.filter(
-            status="available", start_time__gte=from_date, start_time__lte=one_week_ahead
-        ).count()
-        if available_count == 0:
-            from apps.notifications.models import notify_role, notify_user
-
-            notify_user(
-                counsellor.user,
-                "Timeslot update needed",
-                "You have no available timeslots in the next week. Please add timeslots.",
-                "warning",
-                "/counseling",
-            )
-            notify_role(
-                "cj_admin",
-                "Counsellor timeslot warning",
-                f"Counsellor {counsellor.full_name} has no available timeslots in the next week.",
-                "warning",
-                "/counseling",
-            )
-
         return Response(
             {"message": "OK", "data": TimeSlotSerializer(slots, many=True).data},
             status=status.HTTP_200_OK,
@@ -257,18 +229,34 @@ class TimeSlotViewSet(ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
-        # Per Doc 3 Issue 1.2: timeslots limited to next 3 weeks
-        start_time = serializer.validated_data.get("start_time")
-        if start_time:
-            from datetime import timedelta as _td
+        # Report 3 §1.2: enforce max-weeks-ahead limit (admin-configurable).
 
-            max_date = timezone.now() + _td(weeks=3)
-            if start_time > max_date:
+        max_weeks = CounselingSettings.get().max_weeks_ahead
+        start = serializer.validated_data.get("start_time")
+        if start:
+            from datetime import timedelta
+
+            from django.utils import timezone
+
+            horizon = timezone.now() + timedelta(weeks=max_weeks)
+            # Allow naive datetimes from the serializer to slip through; only
+            # compare when both sides are aware (or coerce).
+            try:
+                if timezone.is_aware(start) and start > horizon:
+                    raise ValueError
+                if not timezone.is_aware(start):
+                    start_aware = timezone.make_aware(start) if start > timezone.now() else start
+                    if timezone.is_aware(start_aware) and start_aware > horizon:
+                        raise ValueError
+            except ValueError:
                 return Response(
                     {
                         "error": {
                             "code": "validation_error",
-                            "message": "Timeslots can only be created up to 3 weeks in advance.",
+                            "message": (
+                                f"Timeslots cannot be more than {max_weeks} weeks ahead "
+                                f"(admin-configurable limit)."
+                            ),
                         }
                     },
                     status=status.HTTP_400_BAD_REQUEST,
@@ -278,6 +266,64 @@ class TimeSlotViewSet(ModelViewSet):
             {"message": "Time slot created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
         )
+
+    def _check_ownership(self, instance):
+        """Only the counsellor who owns the slot (or an admin) may modify/delete it."""
+        user_role_name = self.request.user.role.name if self.request.user.role_id else None
+        return instance.counsellor.user_id == self.request.user.id or user_role_name == "cj_admin"
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if not self._check_ownership(instance):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "You can only manage your own timeslots.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if not self._check_ownership(instance):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "You can only manage your own timeslots.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if not self._check_ownership(instance):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "You can only manage your own timeslots.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        # Report 3 §1.1: block editing/deleting a slot that's already booked.
+        if instance.status == "booked":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Cannot delete a timeslot that is already booked.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +364,7 @@ class CounselingSessionViewSet(ModelViewSet):
         )
 
     def create(self, request, *args, **kwargs):
-        """Book a counselling session (SRS §2.1).
+        """Book a counselling session (SRS §2.1, Report 3 §1.8/§1.10).
 
         Body:
             {
@@ -327,12 +373,26 @@ class CounselingSessionViewSet(ModelViewSet):
                 "category": 1,
                 "topic": "Career advice",
                 "description": "...",
-                "mode": "online"
+                "mode": "online",
+                "terms_accepted": true
             }
 
         Creates a pending session + marks the timeslot as booked.
-        The counselee is the authenticated user.
+        The counselee is the authenticated user. Per Report 3 §1.8 the
+        counselee must accept the terms; per §1.10 the counsellor + helpdesk
+        are notified of the new booking.
         """
+        # Report 3 §1.8: terms must be explicitly accepted.
+        if not request.data.get("terms_accepted"):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "You must accept the Terms & Conditions to book.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -351,15 +411,36 @@ class CounselingSessionViewSet(ModelViewSet):
 
         counsellor = serializer.validated_data["counsellor"]
         # Capture the fee at booking time
-        serializer.save(
+        session = serializer.save(
             counselee=request.user,
             fee=counsellor.hourly_rate,
             status="pending",
             payment_status="pending",
+            terms_accepted=True,
         )
         # Mark the timeslot as booked
         timeslot.status = "booked"
         timeslot.save(update_fields=["status"])
+
+        # Report 3 §1.10: notify the counsellor + helpdesk of the new booking.
+        from apps.notifications.models import notify_role, notify_user
+
+        counselee_name = request.user.full_name or request.user.email
+        slot_str = timeslot.start_time.strftime("%Y-%m-%d %H:%M")
+        notify_user(
+            counsellor.user,
+            f"New booking: {counselee_name}",
+            f"{counselee_name} booked a session for {slot_str}. "
+            f"Topic: {session.topic}. Please confirm within the confirm window.",
+            "session",
+            f"/counseling?session={session.id}",
+        )
+        notify_role(
+            "helpdesk",
+            f"New counselling booking: {counselee_name}",
+            f"{counselee_name} booked a session with {counsellor.full_name} on {slot_str}.",
+            "session",
+        )
 
         return Response(
             {
@@ -393,14 +474,15 @@ class CounselingSessionViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
-        """Cancel a session with refund logic (SRS §2.2).
+        """Cancel a session with refund logic (SRS §2.2, Report 3 §1.15/§1.16).
 
-        Refund rules:
-          - 24+ hours before: full refund
-          - 4+ hours before: 50% refund
-          - <4 hours before: no refund
+        Refund rules (thresholds admin-configurable via CounselingSettings):
+          - > full_refund_within_hours (default 24) before: full refund
+          - > half_refund_within_hours (default 4) before: 50% refund
+          - less: no refund
 
         Body: {"reason": "...", "cancelled_by": "counselee" | "counsellor"}
+        Only the session's counselee, its counsellor, or an admin may cancel.
         """
         session = self.get_object()
         if session.status in ("cancelled", "completed"):
@@ -414,18 +496,49 @@ class CounselingSessionViewSet(ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        cancelled_by = request.data.get("cancelled_by", "counselee")
+        # Only the counselee, the counsellor, or an admin may cancel.
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_admin = user_role_name == "cj_admin" or request.user.is_superuser
+        is_counselee = session.counselee_id == request.user.id
+        is_counsellor = session.counsellor.user_id == request.user.id
+        if not (is_admin or is_counselee or is_counsellor):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the counselee, the counsellor, or an admin can cancel.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Infer cancelled_by from the caller when not explicitly provided.
+        default_by = "counsellor" if is_counsellor and not is_counselee else "counselee"
+        cancelled_by = request.data.get("cancelled_by", default_by)
         reason = request.data.get("reason", "")
 
-        # Compute refund tier based on time until session
+        # Report 3 §1.16: reason is required for cancellations.
+        if not reason.strip():
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "A reason is required to cancel.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Compute refund tier based on time until session (admin-configurable).
+        settings = CounselingSettings.get()
         now = timezone.now()
         session_time = session.timeslot.start_time
         hours_until = (session_time - now).total_seconds() / 3600
 
-        if hours_until >= 24:
+        if hours_until >= settings.full_refund_within_hours:
             refund_tier = "full"
             refund_amount = session.fee
-        elif hours_until >= 4:
+        elif hours_until >= settings.half_refund_within_hours:
             refund_tier = "half"
             refund_amount = session.fee / 2
         else:
@@ -464,9 +577,6 @@ class CounselingSessionViewSet(ModelViewSet):
                 "data": {
                     "session": CounselingSessionSerializer(session).data,
                     "cancellation": SessionCancellationSerializer(cancellation).data,
-                    # Per Doc 3 Issue 1.16: suggest rebooking
-                    "suggested_action": "Would you like to book another counsellor or timeslot?",
-                    "cancellation_policy": CounselingSettings.get().cancellation_policy,
                 },
             },
             status=status.HTTP_200_OK,
@@ -512,14 +622,20 @@ class CounselingSessionViewSet(ModelViewSet):
                 {"message": "OK", "data": SessionSummarySerializer(session.summary).data},
                 status=status.HTTP_200_OK,
             )
-        # POST: create or update
+        # POST: create or update (Report 3 §2.4 — 6 summary fields)
         summary, _ = SessionSummary.objects.update_or_create(
             session=session,
             defaults={
                 "counsellor": request.user,
+                "client_details": request.data.get("client_details", ""),
                 "summary": request.data.get("summary", ""),
-                "recommendations": request.data.get("recommendations", ""),
+                "provisional_diagnosis": request.data.get("provisional_diagnosis", ""),
+                "case_prognosis": request.data.get("case_prognosis", ""),
+                "session_smoothness": request.data.get("session_smoothness", ""),
+                "smoothness_reason": request.data.get("smoothness_reason", ""),
                 "followup_recommended": bool(request.data.get("followup_recommended", False)),
+                # legacy
+                "recommendations": request.data.get("recommendations", ""),
             },
         )
         return Response(
@@ -574,7 +690,17 @@ class CounselingSessionViewSet(ModelViewSet):
             session=session,
             defaults={
                 "counselee": request.user,
+                # Report 3 §2.2 — 8 feedback fields
+                "session_usefulness": request.data.get("session_usefulness", ""),
+                "usefulness_text": request.data.get("usefulness_text", ""),
+                "counsellor_empathy": request.data.get("counsellor_empathy", ""),
+                "session_ending": request.data.get("session_ending", ""),
+                "would_rechoose": request.data.get("would_rechoose", ""),
+                "rechoose_text": request.data.get("rechoose_text", ""),
+                "improvement_suggestions": request.data.get("improvement_suggestions", ""),
+                "counsellor_rating": int(request.data.get("rating", 5)),
                 "rating": int(request.data.get("rating", 5)),
+                # legacy
                 "experience_text": request.data.get("experience_text", ""),
                 "counsellor_effectiveness": request.data.get("counsellor_effectiveness", ""),
             },
@@ -617,39 +743,12 @@ class CounselingSessionViewSet(ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def my_sessions(self, request):
-        """Counselee views their own sessions.
-
-        Also auto-cancels sessions that haven't been confirmed by the
-        counsellor within 6 hours of booking (Doc 3 Issue 1.12).
-        """
-        self._auto_cancel_unconfirmed_sessions()
+        """Counselee views their own sessions."""
         sessions = self.get_queryset().filter(counselee=request.user)
         return Response(
             {"message": "OK", "data": CounselingSessionSerializer(sessions, many=True).data},
             status=status.HTTP_200_OK,
         )
-
-    def _auto_cancel_unconfirmed_sessions(self):
-        """Auto-cancel pending sessions where 6 hours have passed since
-        booking without counsellor confirmation. Per Doc 3 Issue 1.12."""
-        from datetime import timedelta
-
-        cutoff = timezone.now() - timedelta(hours=6)
-        expired = CounselingSession.objects.filter(
-            status="pending",
-            booked_at__lt=cutoff,
-        )
-        for session in expired:
-            session.status = "cancelled"
-            session.save(update_fields=["status"])
-            # Create cancellation record
-            SessionCancellation.objects.create(
-                session=session,
-                cancelled_by="system",
-                reason="Auto-cancelled: counsellor did not confirm within 6 hours.",
-                refund_tier="full",
-                refund_amount=session.fee,
-            )
 
 
 # ---------------------------------------------------------------------------
@@ -733,25 +832,62 @@ class FollowupSessionViewSet(ModelViewSet):
 
 
 # ---------------------------------------------------------------------------
-# CounselingSettings ViewSet — admin manages terms & cancellation policy
-# Per Doc 3 Issues 1.9, 1.11
+# Report 3 §1.9/§1.11/§1.2/§1.12 — global counseling settings (admin-only)
 # ---------------------------------------------------------------------------
 
 
-class CounselingSettingsViewSet(ModelViewSet):
-    """GET/PATCH /api/counseling/settings/
+class CounselingSettingsViewSet(ViewSet):
+    """Retrieve or update the counseling-module settings singleton
+    (terms & conditions, refund policy, max_weeks_ahead, confirm window,
+    refund thresholds).
 
-    Singleton — only one row (pk=1). Admin can edit terms & conditions
-    and cancellation/refund policy.
+    GET    /api/counseling/settings/        — any authenticated user (so the
+                                              booking form can show terms)
+    PATCH  /api/counseling/settings/        — cj_admin only.
     """
 
-    serializer_class = CounselingSettingsSerializer
-    queryset = CounselingSettings.objects.all()
-    http_method_names = ["get", "head", "options", "patch"]
+    permission_classes = [IsAuthenticated, HasCounselingPermission]
 
-    def get_permissions(self):
-        if self.action in ("list", "retrieve"):
-            # Anyone authenticated can view terms/policy
-            return [IsAuthenticated()]
-        # Only admin can edit
-        return [IsAuthenticated()]
+    def list(self, request):
+
+        return Response(
+            {"message": "OK", "data": _CounselingSettingsData(CounselingSettings.get()).data},
+            status=status.HTTP_200_OK,
+        )
+
+    def retrieve(self, request, pk=None):
+        # Treat as a singleton — pk ignored; same as list.
+        return self.list(request)
+
+    def partial_update(self, request, pk=None):
+        user_role_name = request.user.role.name if request.user.role_id else None
+        if user_role_name != "cj_admin" and not request.user.is_superuser:
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can edit settings."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        settings = CounselingSettings.get()
+        serializer = _CounselingSettingsData(settings, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {"message": "Settings updated.", "data": serializer.data},
+            status=status.HTTP_200_OK,
+        )
+
+
+class _CounselingSettingsData(serializers.ModelSerializer):
+    """Lightweight serializer for the settings singleton (defined here to keep
+    the view + serializer together)."""
+
+    class Meta:
+        model = CounselingSettings
+        fields = [
+            "terms_and_conditions",
+            "cancellation_policy",
+            "max_weeks_ahead",
+            "confirm_window_hours",
+            "full_refund_within_hours",
+            "half_refund_within_hours",
+        ]

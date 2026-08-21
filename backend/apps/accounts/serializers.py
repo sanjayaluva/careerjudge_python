@@ -254,12 +254,25 @@ class UserWriteSerializer(serializers.ModelSerializer):
             "is_trial_user",
             "role",
             "password",
+            # Report 3 §1.17: counselling categories to tag the counsellor with
+            # at creation time. Only meaningful when role='counsellor'.
+            "counsellor_categories",
         ]
         extra_kwargs = {
             "password": {"write_only": True, "required": False, "allow_blank": True},
             "email": {"required": False},  # allow PATCH without email
             "full_name": {"required": False},
         }
+
+    counsellor_categories = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        write_only=True,
+        help_text=(
+            "Counselling category IDs to tag the counsellor with at creation "
+            "(Report 3 §1.17). Only meaningful when role='counsellor'."
+        ),
+    )
 
     def validate_email(self, value: str) -> str:
         """Email must be unique, but exclude the current instance on update."""
@@ -275,6 +288,7 @@ class UserWriteSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data: dict) -> User:
+        categories = validated_data.pop("counsellor_categories", None)
         password = validated_data.pop("password", None)
         # Use create_user to properly hash the password and normalize email
         user = User.objects.create_user(**validated_data)
@@ -289,6 +303,19 @@ class UserWriteSerializer(serializers.ModelSerializer):
             user.set_password(random_pw)
             user.save(update_fields=["password"])
         UserProfile.objects.get_or_create(user=user)
+        # Report 3 §1.17: when creating a counsellor, auto-create their
+        # CounsellorProfile + tag it with the admin-selected categories.
+        if user.role and user.role.name == "counsellor":
+            try:
+                from apps.counseling.models import CounselingCategory, CounsellorProfile
+
+                profile, _created = CounsellorProfile.objects.get_or_create(user=user)
+                if categories:
+                    cats = CounselingCategory.objects.filter(id__in=categories)
+                    profile.categories.set(cats)
+            except Exception:
+                # counseling app unavailable — skip silently
+                pass
         return user
 
     def update(self, instance: User, validated_data: dict) -> User:

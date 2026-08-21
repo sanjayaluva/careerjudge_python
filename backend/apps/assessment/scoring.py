@@ -53,6 +53,103 @@ def score_question(
     return scorer(question, raw_answer, sub_question_index)
 
 
+def score_question_by_section(
+    question: Question,
+    raw_answer: dict[str, Any] | None,
+    sub_question_index: int = 0,
+) -> dict[str, tuple[float, float]] | None:
+    """Return per-section-tag scores for psychometric question types.
+
+    For RANK / RANK_RATE / FORCED_CHOICE / FORCED_CHOICE_RATED, returns a
+    dict mapping each option's ``section_tag`` → ``(raw_score, max_score)``
+    so the caller (``calculate_session_scores``) can route each option's
+    score into the AssessmentSection that the tag resolves to.
+
+    Returns ``None`` for non-psychometric types (caller should use the
+    normal single-section aggregation path via ``score_question``).
+
+    Options with an empty ``section_tag`` are grouped under the empty
+    string "" key (caller decides how to handle — typically falls back to
+    the question's own section).
+    """
+    if question.scoring_type not in ("RANK", "RANK_RATE", "FORCED_CHOICE", "FORCED_CHOICE_RATED"):
+        return None
+
+    opts_qs = question.options
+    if sub_question_index:
+        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    options = list(opts_qs.all().order_by("order"))
+    n = len(options)
+
+    # Seed every option's tag with a (0, 0) entry so tags with no score
+    # contribution still appear (max_score tracking).
+    result: dict[str, list[float]] = {}  # tag -> [raw, max]
+    for opt in options:
+        result.setdefault(opt.section_tag or "", [0.0, 0.0])
+
+    if question.scoring_type == "RANK":
+        # Each option ranked r -> score (N - r + 1). Each option's achievable
+        # max is N (if it were ranked 1). Assign that max to the option's OWN
+        # tag (NOT every tag) so the per-section max sum equals N.
+        ranking = (raw_answer or {}).get("ranking", [])
+        max_per_opt = float(n) if n > 0 else 1.0
+        for opt in options:
+            result[opt.section_tag or ""][1] += max_per_opt
+        if ranking and len(ranking) == n:
+            for rank_pos, opt_id in enumerate(ranking):
+                opt = next((o for o in options if o.id == opt_id), None)
+                if opt is None:
+                    continue
+                result[opt.section_tag or ""][0] += float(n - rank_pos)
+        return {t: (v[0], v[1]) for t, v in result.items()}
+
+    if question.scoring_type == "RANK_RATE":
+        # score per option = rank_score * rating; max per option = N * max_rating.
+        # Assign each option's max to its own tag.
+        max_rating = question.rating_scale_points or 5
+        max_per_opt = float(n * max_rating)
+        for opt in options:
+            result[opt.section_tag or ""][1] += max_per_opt
+        ranking = (raw_answer or {}).get("ranking", [])
+        ratings = (raw_answer or {}).get("ratings", {})
+        if ranking and len(ranking) == n:
+            for rank_pos, opt_id in enumerate(ranking):
+                opt = next((o for o in options if o.id == opt_id), None)
+                if opt is None:
+                    continue
+                rating = ratings.get(str(opt_id), ratings.get(opt_id, 0))
+                result[opt.section_tag or ""][0] += float(n - rank_pos) * float(rating)
+        return {t: (v[0], v[1]) for t, v in result.items()}
+
+    # FORCED_CHOICE / FORCED_CHOICE_RATED — exactly 2 options per pair.
+    # Selected → selection_score (* rating if rated); non-selected → non_selection_score.
+    selected_id = (raw_answer or {}).get("selected_option_id")
+    rating = (raw_answer or {}).get("rating", 0)
+    max_rating = question.rating_scale_points or 5
+
+    for opt in options:
+        tag = opt.section_tag or ""
+        is_selected = opt.id == selected_id
+        if question.scoring_type == "FORCED_CHOICE":
+            raw = float(opt.selection_score) if is_selected else float(opt.non_selection_score)
+            mx = float(max(opt.selection_score, opt.non_selection_score))
+        else:  # FORCED_CHOICE_RATED
+            if is_selected and rating:
+                raw = float(opt.selection_score) * float(rating)
+                mx = float(opt.selection_score) * float(max_rating)
+            elif is_selected:
+                raw = 0.0  # rating required for the selected option
+                mx = float(opt.selection_score) * float(max_rating)
+            else:
+                raw = float(opt.non_selection_score)
+                mx = max(
+                    float(opt.selection_score) * float(max_rating), float(opt.non_selection_score)
+                )
+        result[tag][0] += raw
+        result[tag][1] += mx
+    return {t: (v[0], v[1]) for t, v in result.items()}
+
+
 def _get_max_score(question: Question, sub_question_index: int = 0) -> float:
     """Get the maximum possible score for a question.
 
@@ -77,29 +174,34 @@ def _get_max_score(question: Question, sub_question_index: int = 0) -> float:
     elif st == "NEGATIVE":
         return 1.0
     elif st == "RANK":
-        # Per Doc 2: max = sum of rank values = N*(N+1)/2
+        # A complete ranking always sums to N(N+1)/2 (rank 1 -> N ... rank
+        # N -> 1), so that is the true achievable total for the question.
         n = opts_qs.count()
         return float(n * (n + 1) / 2) if n > 0 else 1.0
     elif st == "RANK_RATE":
-        # Per Doc 2: max = max_rating x N*(N+1)/2
         n = opts_qs.count()
         max_rating = question.rating_scale_points or 5
-        return float(max_rating * n * (n + 1) / 2) if n > 0 else 1.0
+        # Complete ranking sums rank-values to N(N+1)/2; each option can
+        # also earn the max rating, so the true achievable total is that
+        # sum times the max rating.
+        return float(max_rating * n * (n + 1) / 2)
     elif st == "RATING":
         return float(question.rating_scale_points or 5)
     elif st == "FORCED_CHOICE":
-        # Per Doc 2: max = max(selection_score) + max(non_selection_score)
         opts = list(opts_qs.all())
+        # The pair pays selection (one option) + non-selection (the other):
+        # max achievable = max(selection) + max(non-selection).
         max_sel = max((o.selection_score for o in opts), default=1.0)
-        max_non_sel = max((o.non_selection_score for o in opts), default=0.0)
-        return float(max_sel + max_non_sel)
+        max_non = max((o.non_selection_score for o in opts), default=0.0)
+        return float(max_sel + max_non)
     elif st == "FORCED_CHOICE_RATED":
-        # Per Doc 2: max = max(selection_score x max_rating) + max(non_selection_score)
         opts = list(opts_qs.all())
         max_rating = question.rating_scale_points or 5
-        max_sel = max((o.selection_score for o in opts), default=1.0)
-        max_non_sel = max((o.non_selection_score for o in opts), default=0.0)
-        return float(max_sel * max_rating + max_non_sel)
+        # Selected earns selection_score * rating; non-selected earns its
+        # non_selection_score: max = max(sel*max_rating) + max(non_selection).
+        best_sel = max((o.selection_score * max_rating for o in opts), default=1.0)
+        best_non = max((o.non_selection_score for o in opts), default=0.0)
+        return float(best_sel + best_non)
     return 1.0
 
 
@@ -350,60 +452,53 @@ def _score_negative(
 def _score_rank(
     question: Question, raw_answer: dict, sub_question_index: int = 0
 ) -> tuple[float, float]:
-    """Score = rank value per option, grouped by section_tag.
+    """Rank scoring (SRS 00_scoring_rules.json §RANK + Report 2 §1).
 
-    Per Doc 2 (Psychometric Review):
-    - Each option is tagged to a different section (section_tag field)
-    - Number of options = number of sections
-    - Rank value = N - rank_position (0-indexed), so rank 0 → N, rank 1 → N-1, etc.
-    - The score for each option = its rank value
-    - Total score = sum of all rank values
-    - Section summary = sum of rank values of all options (across all rank
-      questions in the assessment) tagged to that section
+    Each option assigned rank ``r`` (1 = highest) receives a score of
+    ``N - r + 1``. The option's score is posted to its tagged section
+    (handled in ``calculate_session_scores`` via ``score_question_by_section``).
+
+    Returns ``(total_score, total_max_score)`` where total = sum of all
+    option scores (= N if all options are ranked) and total max = N.
 
     raw_answer = {"ranking": [3, 1, 4, 2]} — option IDs in rank order
-    (first = rank 1, last = rank N)
+    (first element = rank 1).
     """
     opts_qs = question.options
     if sub_question_index:
         opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all().order_by("order"))
     n = len(options)
-
-    # Max score = sum of all rank values = N + (N-1) + ... + 1 = N*(N+1)/2
     max_score = float(n * (n + 1) / 2) if n > 0 else 1.0
 
     ranking = raw_answer.get("ranking", [])
     if not ranking or len(ranking) != n:
         return 0.0, max_score
 
-    # Score = sum of rank values for each option
-    # Rank position 0 (first in ranking) gets rank value N
-    # Rank position 1 gets N-1, etc.
+    # rank_pos is 0-indexed: ranking[0] is rank 1 → score N, ranking[1] is
+    # rank 2 → score N-1, … ranking[n-1] is rank N → score 1.
     score = 0.0
-    for rank_pos, _ in enumerate(ranking):
-        rank_value = n - rank_pos  # Rank 1 → N, Rank 2 → N-1, etc.
-        score += rank_value
-
+    for rank_pos, _opt_id in enumerate(ranking):
+        score += float(n - rank_pos)
     return score, max_score
 
 
 # ---------------------------------------------------------------------------
-# RANK_RATE: rank value x rating value, grouped by section_tag
+# RANK_RATE: rank score x rating score
 # Used by: Rank-then-Rate (6b)
-# Per Doc 2 (Psychometric Review):
-# - Same section tagging as Simple Rank
-# - Score per option = rank_value x rating_value
-# - Section summary = sum of (rank x rating) for all options tagged to that section
 # ---------------------------------------------------------------------------
 
 
 def _score_rank_rate(
     question: Question, raw_answer: dict, sub_question_index: int = 0
 ) -> tuple[float, float]:
-    """Score per option = rank_value x rating_value. Total = sum.
+    """Rank-then-rate scoring (SRS §RANK_RATE + Report 2 §2).
 
-    raw_answer = {"ranking": [3, 1, 4, 2], "ratings": {3: 5, 1: 3, 4: 1, 2: 4}}
+    Per option: score = rank_score * rating_score, where
+    rank_score = (N - rank + 1). Each option's score is posted to its tagged
+    section. Total = sum across options.
+
+    raw_answer = {"ranking": [3, 1, 4, 2], "ratings": {"3": 5, "1": 3, ...}}
     """
     opts_qs = question.options
     if sub_question_index:
@@ -411,9 +506,7 @@ def _score_rank_rate(
     options = list(opts_qs.all().order_by("order"))
     n = len(options)
     max_rating = question.rating_scale_points or 5
-    # Max score = sum of (rank_value x max_rating) for all positions
-    # = max_rating x (N + (N-1) + ... + 1) = max_rating x N*(N+1)/2
-    max_score = float(max_rating * n * (n + 1) / 2) if n > 0 else 1.0
+    max_score = float(max_rating * n * (n + 1) / 2)
 
     ranking = raw_answer.get("ranking", [])
     ratings = raw_answer.get("ratings", {})
@@ -423,10 +516,9 @@ def _score_rank_rate(
 
     score = 0.0
     for rank_pos, opt_id in enumerate(ranking):
-        rank_value = n - rank_pos  # Rank 1 → N, Rank 2 → N-1, etc.
+        rank_score = n - rank_pos  # Rank 1 → n, Rank n → 1
         rating = ratings.get(str(opt_id), ratings.get(opt_id, 0))
-        score += rank_value * float(rating)
-
+        score += rank_score * float(rating)
     return score, max_score
 
 
@@ -459,23 +551,25 @@ def _score_rating(
 
 
 # ---------------------------------------------------------------------------
-# FORCED_CHOICE: selection vs non-selection scoring
+# FORCED_CHOICE: predefined score per option
 # Used by: Forced-Choice Single Level (8a)
-# Per Doc 2 (Psychometric Review):
-# - Two options in a pair are tagged to DIFFERENT sections
-# - The candidate selects one option from the pair
-# - Selected option gets selection_score
-# - Unselected option gets non_selection_score
-# - Rule: selection_score > non_selection_score, both >= 0
-# - Total score = selection_score + non_selection_score
-# - Section summary = sum of scores for all options tagged to that section
 # ---------------------------------------------------------------------------
 
 
 def _score_forced_choice(
     question: Question, raw_answer: dict, sub_question_index: int = 0
 ) -> tuple[float, float]:
-    """Score = selection_score for selected + non_selection_score for unselected.
+    """Forced-choice scoring (Report 2 §3 — selection vs non-selection).
+
+    Each question has exactly 2 options, each tagged to its OWN section.
+    The SELECTED option earns its ``selection_score``; the NON-selected
+    option earns its ``non_selection_score``. Both scores are posted (to
+    different sections) via ``score_question_by_section``.
+
+    Total = selection_score (of selected) + non_selection_score (of the other).
+    Total max = max(selection_score, non_selection_score) across the pair
+    (the candidate can earn at most the larger of the two for the section
+    that gets it). See ``_get_max_score``.
 
     raw_answer = {"selected_option_id": 2}
     """
@@ -483,45 +577,38 @@ def _score_forced_choice(
     if sub_question_index:
         opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all())
-
-    if not options:
-        return 0.0, 1.0
-
-    # Max score = max(selection_score) + max(non_selection_score) across all options
     max_sel = max((o.selection_score for o in options), default=1.0)
     max_non_sel = max((o.non_selection_score for o in options), default=0.0)
     max_score = float(max_sel + max_non_sel)
 
     selected_id = raw_answer.get("selected_option_id")
     if not selected_id:
+        # No answer → both options score 0
         return 0.0, max_score
 
-    score = 0.0
+    total = 0.0
     for opt in options:
         if opt.id == selected_id:
-            score += float(opt.selection_score)
+            total += float(opt.selection_score)
         else:
-            score += float(opt.non_selection_score)
-
-    return score, max_score
+            total += float(opt.non_selection_score)
+    return total, max_score
 
 
 # ---------------------------------------------------------------------------
-# FORCED_CHOICE_RATED: (selection_score x rating) for selected +
-#                       non_selection_score for unselected
+# FORCED_CHOICE_RATED: predefined score x rating
 # Used by: Forced-Choice Two-Level (8b)
-# Per Doc 2 (Psychometric Review):
-# - Same pairing rules as Forced-Choice Single Level
-# - Selected option: final_score = selection_score x rating
-# - Unselected option: final_score = non_selection_score
-# - Total = sum of all option scores
 # ---------------------------------------------------------------------------
 
 
 def _score_forced_choice_rated(
     question: Question, raw_answer: dict, sub_question_index: int = 0
 ) -> tuple[float, float]:
-    """Score = (selection_score x rating) for selected + non_selection_score for unselected.
+    """Forced-choice two-level scoring (Report 2 §4).
+
+    The SELECTED option earns ``selection_score * rating`` (rating only
+    applies to the selected option). The NON-selected option earns its
+    ``non_selection_score``. Both posted to their own sections.
 
     raw_answer = {"selected_option_id": 2, "rating": 4}
     """
@@ -529,14 +616,10 @@ def _score_forced_choice_rated(
     if sub_question_index:
         opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all())
-
-    if not options:
-        return 0.0, 1.0
-
     max_rating = question.rating_scale_points or 5
-    max_sel = max((o.selection_score for o in options), default=1.0)
-    max_non_sel = max((o.non_selection_score for o in options), default=0.0)
-    max_score = float(max_sel * max_rating + max_non_sel)
+    best_sel = max((o.selection_score * max_rating for o in options), default=1.0)
+    best_non = max((o.non_selection_score for o in options), default=0.0)
+    max_score = float(best_sel + best_non)
 
     selected_id = raw_answer.get("selected_option_id")
     rating = raw_answer.get("rating", 0)
@@ -544,14 +627,15 @@ def _score_forced_choice_rated(
     if not selected_id:
         return 0.0, max_score
 
-    score = 0.0
+    total = 0.0
     for opt in options:
         if opt.id == selected_id:
-            score += float(opt.selection_score) * float(rating)
+            if rating:
+                total += float(opt.selection_score) * float(rating)
+            # No rating → selected option scores 0 (rating is required)
         else:
-            score += float(opt.non_selection_score)
-
-    return score, max_score
+            total += float(opt.non_selection_score)
+    return total, max_score
 
 
 # ---------------------------------------------------------------------------
@@ -770,6 +854,14 @@ def calculate_session_scores(session):
     ):
         override_map[(aq.question_id, aq.sub_question_index)] = aq.score_override
 
+    # Build a section_tag → AssessmentSection map for psychometric routing.
+    # Options carry a portable ``section_tag`` label (set at question creation);
+    # when scored, each option's contribution must be routed to the
+    # AssessmentSection whose title matches the tag. Unresolved tags fall back
+    # to the attempt's own section (the question's assigned parent section).
+    all_assessment_sections = list(AssessmentSection.objects.filter(assessment=session.assessment))
+    tag_to_section_id: dict[str, int | None] = {s.title: s.id for s in all_assessment_sections}
+
     leaf_scores: dict[int, dict] = {}  # section_id -> {raw, max}
     total_raw = 0.0
     total_max = 0.0
@@ -805,12 +897,34 @@ def calculate_session_scores(session):
         total_raw += attempt.score or 0.0
         total_max += attempt.max_score or 0.0
 
-        sid = attempt.section_id
-        if sid:
-            if sid not in leaf_scores:
-                leaf_scores[sid] = {"raw": 0.0, "max": 0.0}
-            leaf_scores[sid]["raw"] += attempt.score or 0.0
-            leaf_scores[sid]["max"] += attempt.max_score or 0.0
+        # ── Psychometric per-section routing (Report 2) ──
+        # For psychometric types, split the attempt's score across the
+        # sections each option is tagged to (via score_question_by_section).
+        # Non-psychometric types aggregate the whole attempt into one section.
+        by_section = score_question_by_section(
+            attempt.question,
+            attempt.raw_answer if attempt.status == "attempted" else None,
+            attempt.sub_question_index,
+        )
+        if by_section:
+            for tag, (raw, mx) in by_section.items():
+                target_sid = tag_to_section_id.get(tag) if tag else None
+                if target_sid is None:
+                    # Unresolved tag → fall back to the attempt's own section
+                    target_sid = attempt.section_id
+                if target_sid is None:
+                    continue
+                if target_sid not in leaf_scores:
+                    leaf_scores[target_sid] = {"raw": 0.0, "max": 0.0}
+                leaf_scores[target_sid]["raw"] += raw
+                leaf_scores[target_sid]["max"] += mx
+        else:
+            sid = attempt.section_id
+            if sid:
+                if sid not in leaf_scores:
+                    leaf_scores[sid] = {"raw": 0.0, "max": 0.0}
+                leaf_scores[sid]["raw"] += attempt.score or 0.0
+                leaf_scores[sid]["max"] += attempt.max_score or 0.0
 
     # ── Step 2: Build the section hierarchy for the assessment ──
     # Load all sections (ordered deepest-first for the roll-up pass below)

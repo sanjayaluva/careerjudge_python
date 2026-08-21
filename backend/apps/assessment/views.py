@@ -60,6 +60,52 @@ from .serializers import (
 )
 
 
+def _ensure_section_tags_have_sections(assessment, parent_section, question) -> None:
+    """Ensure every distinct ``section_tag`` on a psychometric question's
+    options has a matching ``AssessmentSection`` in the assessment.
+
+    Per Report 2 Common Issue 3: psychometric options carry a portable
+    ``section_tag`` label (e.g. "Leadership"). For the scoring engine to
+    route each option's score into a real section, each tag must resolve to
+    an AssessmentSection. This helper:
+
+      - For each distinct non-empty tag, looks for an existing
+        AssessmentSection in this assessment whose ``title`` matches the tag.
+      - If none exists, creates a new leaf section under ``parent_section``
+        with the tag as its title (so the question's option scores roll up
+        under the assigned parent).
+
+    Tags that already match a section title (case-sensitive) are left alone.
+    Options with no ``section_tag`` (e.g. STANDARD_RATING_SCALE) are skipped.
+    """
+    tags = {
+        (opt.section_tag or "").strip()
+        for opt in question.options.all()
+        if (opt.section_tag or "").strip()
+    }
+    if not tags:
+        return
+    existing_titles = set(
+        AssessmentSection.objects.filter(assessment=assessment).values_list("title", flat=True)
+    )
+    # Determine the next order under the parent for any new sections.
+    next_order = AssessmentSection.objects.filter(
+        assessment=assessment, parent=parent_section
+    ).count()
+    for tag in sorted(tags):
+        if tag in existing_titles:
+            continue
+        AssessmentSection.objects.create(
+            assessment=assessment,
+            parent=parent_section,
+            title=tag,
+            level=parent_section.level + 1,
+            order=next_order,
+        )
+        next_order += 1
+        existing_titles.add(tag)
+
+
 class HasAssessmentPermission(HasModulePermission):
     module = "assessment"
     action_map = {
@@ -131,7 +177,16 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
                 or self.request.user.is_superuser
             )
             if not is_manager:
-                qs = qs.filter(status="published")
+                if role_name == "trainer":
+                    # Report 3 §4.2: trainers can author assessments using the
+                    # CJ Question Bank but see only their OWN assessments
+                    # (plus published ones they can take). They must NOT see
+                    # the entire assessment pool.
+                    from django.db.models import Q
+
+                    qs = qs.filter(Q(status="published") | Q(created_by=self.request.user))
+                else:
+                    qs = qs.filter(status="published")
 
         return qs
 
@@ -671,6 +726,16 @@ class AssessmentQuestionViewSet(ModelViewSet):
         # No auto-expand needed — the player reads sub_question_count from the
         # Question and renders N sub-question screens.
 
+        # Psychometric option->section resolution (Report 2 Common Issue 3):
+        # Each psychometric option carries a portable ``section_tag`` label.
+        # For the scoring engine to route each option's score into a real
+        # AssessmentSection, ensure every distinct tag has a matching
+        # AssessmentSection in this assessment. Tags without a matching
+        # section title get a new leaf section created under the assigned
+        # parent. (Standard rating has no section_tag — skipped.)
+        if question_cat == "psychometric":
+            _ensure_section_tags_have_sections(assessment, section, question)
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -1067,11 +1132,19 @@ class SessionViewSet(ModelViewSet):
                 elif q.question_type.startswith("FORCED_CHOICE"):
                     correct_answer = {
                         "type": "FORCED_CHOICE",
+                        "note": (
+                            "Scoring is by selection vs non-selection. The selected "
+                            "option earns selection_score (x rating if two-level); "
+                            "the non-selected option earns non_selection_score. "
+                            "Each option's score posts to its section_tag's section."
+                        ),
                         "options": [
                             {
                                 "id": o.id,
                                 "text": o.text_value,
-                                "predefined_score": o.predefined_score,
+                                "section_tag": o.section_tag,
+                                "selection_score": o.selection_score,
+                                "non_selection_score": o.non_selection_score,
                             }
                             for o in q.options.all().order_by("order")
                         ],
@@ -1079,8 +1152,17 @@ class SessionViewSet(ModelViewSet):
                 elif q.question_type.startswith("RANK"):
                     correct_answer = {
                         "type": "RANK",
-                        "correct_order": [
-                            {"id": o.id, "text": o.text_value, "order": o.order}
+                        "note": (
+                            "No single 'correct order' — any complete ranking is valid. "
+                            "Each option ranked r scores (N - r + 1), posted to that "
+                            "option's section_tag's section."
+                        ),
+                        "options": [
+                            {
+                                "id": o.id,
+                                "text": o.text_value,
+                                "section_tag": o.section_tag,
+                            }
                             for o in q.options.all().order_by("order")
                         ],
                     }

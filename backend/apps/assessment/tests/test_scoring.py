@@ -6,11 +6,18 @@ Verifies all 9 scoring modes work correctly per SRS 00_scoring_rules.json.
 from django.test import TestCase
 
 from apps.accounts.services import get_or_create_default_roles
-from apps.assessment.models import Assessment, AssessmentSection, AssessmentSession, QuestionAttempt
+from apps.assessment.models import (
+    Assessment,
+    AssessmentQuestion,
+    AssessmentSection,
+    AssessmentSession,
+    QuestionAttempt,
+)
 from apps.assessment.scoring import (
     _get_max_score,
     calculate_session_scores,
     score_question,
+    score_question_by_section,
 )
 
 from .factories import (
@@ -106,57 +113,65 @@ class TestRankScoring(ScoringTestBase):
         self.user = UserFactory.create(role=self.individual_role)
         self.q = make_rank_question(self.user)  # 4 options, scoring_type=RANK
 
-    def test_perfect_order_max_score(self):
-        # Per Doc 2: rank value = N - rank_position. For n=4 options:
-        # rank 1 → 4, rank 2 → 3, rank 3 → 2, rank 4 → 1. Sum = 10
+    def test_full_ranking_scores_sum_to_n(self):
+        # Per Report 2 §1: rank 1 → N, rank 2 → N-1, ... rank N → 1.
+        # For N=4 the total = 4+3+2+1 = 10. Max = N = 4.
         options = list(self.q.options.all().order_by("order"))
-        perfect = [o.id for o in options]
-        score, max_score = score_question(self.q, {"ranking": perfect})
-        assert score == max_score
-        assert max_score == 10.0  # 4+3+2+1 = 10
+        ranking = [o.id for o in options]
+        score, max_score = score_question(self.q, {"ranking": ranking})
+        assert score == 10.0  # 4 + 3 + 2 + 1
+        assert max_score == 10.0  # N(N+1)/2
+
+    def test_rank_value_is_n_minus_rank_plus_one(self):
+        # The first option in the ranking list (rank 1) → score N (4),
+        # the last (rank 4) → score 1.
+        options = list(self.q.options.all().order_by("order"))
+        ranking = [o.id for o in options]
+        by_section = score_question_by_section(self.q, {"ranking": ranking})
+        # First-ranked option tagged "Section 1" → 4
+        assert by_section[options[0].section_tag][0] == 4.0
+        # Last-ranked option tagged "Section 4" → 1
+        assert by_section[options[3].section_tag][0] == 1.0
 
     def test_zero_score_for_no_answer(self):
         score, max_score = score_question(self.q, None)
         assert score == 0.0
-        assert max_score == 10.0  # 4+3+2+1 = 10
+        assert max_score == 10.0
+
+    def test_by_section_returns_none_for_non_psychometric(self):
+        from apps.assessment.tests.factories import make_mcq_question
+
+        q = make_mcq_question(self.user, scoring_type="BINARY")
+        assert score_question_by_section(q, {"selected_option_ids": [1]}) is None
 
 
 class TestForcedChoiceScoring(ScoringTestBase):
     def setUp(self):
         self.user = UserFactory.create(role=self.individual_role)
         self.q = make_forced_choice_question(self.user, two_level=False)
-        # Options: A=2.0, B=3.0 (predefined_score, also used as selection_score default)
+        # Options: A (Section A) sel=2.0/non=0.0; B (Section B) sel=3.0/non=1.0
 
-    def test_select_high_score_option(self):
-        # Per Doc 2: selected option gets selection_score, unselected gets non_selection_score
-        # Default: selection_score = predefined_score, non_selection_score = 0
+    def test_selected_earns_selection_non_selected_earns_non_selection(self):
+        # Select B -> B earns selection_score 3.0; A earns non_selection_score 0.0.
         opt_b = self.q.options.get(text_value="Option B")
-        # Set selection/non_selection scores
-        opt_b.selection_score = 3.0
-        opt_b.non_selection_score = 0.0
-        opt_b.save()
-        opt_a = self.q.options.get(text_value="Option A")
-        opt_a.selection_score = 2.0
-        opt_a.non_selection_score = 0.0
-        opt_a.save()
         score, max_score = score_question(self.q, {"selected_option_id": opt_b.id})
-        # Selected B: 3.0, unselected A: 0.0 → total = 3.0
-        assert score == 3.0
-        assert max_score == 3.0  # max(selection) + max(non_selection) = 3.0 + 0.0
+        assert score == 3.0 + 0.0  # B's selection + A's non-selection
+        # max = max(selection) + max(non-selection) = 3 + 1 = 4
+        assert max_score == 4.0
 
-    def test_select_low_score_option(self):
-        opt_b = self.q.options.get(text_value="Option B")
-        opt_b.selection_score = 3.0
-        opt_b.non_selection_score = 0.0
-        opt_b.save()
+    def test_selecting_lower_option_still_pays_non_selection_to_other(self):
+        # Select A → A earns 2.0; B earns its non_selection_score 1.0.
         opt_a = self.q.options.get(text_value="Option A")
-        opt_a.selection_score = 2.0
-        opt_a.non_selection_score = 0.0
-        opt_a.save()
-        score, max_score = score_question(self.q, {"selected_option_id": opt_a.id})
-        # Selected A: 2.0, unselected B: 0.0 → total = 2.0
-        assert score == 2.0
-        assert max_score == 3.0  # max(selection) + max(non_selection) = 3.0 + 0.0
+        score, _ = score_question(self.q, {"selected_option_id": opt_a.id})
+        assert score == 2.0 + 1.0  # A's selection + B's non-selection
+
+    def test_scores_route_to_each_options_own_section(self):
+        opt_b = self.q.options.get(text_value="Option B")
+        by_section = score_question_by_section(self.q, {"selected_option_id": opt_b.id})
+        # Section A (the non-selected option) → non_selection_score 0.0
+        assert by_section["Section A"][0] == 0.0
+        # Section B (the selected option) → selection_score 3.0
+        assert by_section["Section B"][0] == 3.0
 
     def test_no_selection_scores_0(self):
         score, _ = score_question(self.q, {})
@@ -167,27 +182,39 @@ class TestForcedChoiceRatedScoring(ScoringTestBase):
     def setUp(self):
         self.user = UserFactory.create(role=self.individual_role)
         self.q = make_forced_choice_question(self.user, two_level=True)
-        # Options: A=2.0, B=3.0, max_rating=5
+        # Options: A (Section A) sel=2.0/non=0.0; B (Section B) sel=3.0/non=1.0
+        # max_rating = 5
 
-    def test_score_is_predefined_times_rating(self):
-        # Per Doc 2: selected option = selection_score x rating, unselected = non_selection_score
+    def test_selected_score_times_rating_plus_non_selection(self):
+        # Select B (rating 4) → B earns 3.0*4 = 12; A earns non_selection 0.0.
         opt_b = self.q.options.get(text_value="Option B")
-        opt_b.selection_score = 3.0
-        opt_b.non_selection_score = 0.0
-        opt_b.save()
-        opt_a = self.q.options.get(text_value="Option A")
-        opt_a.selection_score = 2.0
-        opt_a.non_selection_score = 0.0
-        opt_a.save()
         score, max_score = score_question(self.q, {"selected_option_id": opt_b.id, "rating": 4})
-        # Selected B: 3.0 x 4 = 12.0, unselected A: 0.0 → total = 12.0
-        assert score == 12.0
-        # max = max(selection x max_rating) + max(non_selection) = 3.0 x 5 + 0.0 = 15.0
-        assert max_score == 15.0
+        assert score == 12.0 + 0.0
+        # max = max(selection*max_rating) + max(non_selection) = 15 + 1 = 16
+        assert max_score == 16.0
 
-    def test_no_rating_scores_0(self):
+    def test_non_selected_option_still_earns_its_non_selection(self):
+        # Select A (rating 5) → A earns 2.0*5 = 10; B earns non_selection 1.0.
+        opt_a = self.q.options.get(text_value="Option A")
+        score, _ = score_question(self.q, {"selected_option_id": opt_a.id, "rating": 5})
+        assert score == 10.0 + 1.0
+
+    def test_by_section_routes_rated_scores(self):
+        opt_a = self.q.options.get(text_value="Option A")
+        by_section = score_question_by_section(
+            self.q, {"selected_option_id": opt_a.id, "rating": 5}
+        )
+        # Section A (selected) → 2.0 * 5 = 10
+        assert by_section["Section A"][0] == 10.0
+        # Section B (non-selected) → non_selection_score 1.0
+        assert by_section["Section B"][0] == 1.0
+
+    def test_no_rating_selected_option_scores_zero(self):
+        # Rating required for the selected option → it scores 0; the
+        # non-selected option still earns its non_selection_score.
         opt_b = self.q.options.get(text_value="Option B")
         score, _ = score_question(self.q, {"selected_option_id": opt_b.id, "rating": 0})
+        # B (selected, no rating) → 0; A (non-selected) → non_selection 0.0
         assert score == 0.0
 
 
@@ -235,16 +262,15 @@ class TestGetMaxScore(ScoringTestBase):
         q = make_fitb_question(self.user, scoring_type="PARTIAL")
         assert _get_max_score(q) == 2.0  # 2 fields
 
-    def test_rank_max_n_choose_2_pairs(self):
+    def test_rank_max_equals_triangle_sum(self):
+        # Rank max = N(N+1)/2 — a complete ranking always sums to this.
         q = make_rank_question(self.user)  # 4 options
-        # Per Doc 2: max = N*(N+1)/2 = 4*5/2 = 10
         assert _get_max_score(q) == 10.0
 
-    def test_forced_choice_max_is_highest_predefined(self):
+    def test_forced_choice_max_is_best_selection_or_non_selection(self):
+        # Options: A sel=2/non=0; B sel=3/non=1 → max = 3 + 1 = 4
         q = make_forced_choice_question(self.user, two_level=False)
-        # Per Doc 2: max = max(selection_score) + max(non_selection_score)
-        # Default: selection_score = predefined_score, non_selection_score = 0
-        assert _get_max_score(q) == 3.0  # 3.0 + 0.0
+        assert _get_max_score(q) == 4.0
 
 
 class TestCalculateSessionScores(ScoringTestBase):
@@ -445,3 +471,232 @@ class TestCalculateSessionScores(ScoringTestBase):
         # L1 root: sum of both L2 children (2.0 / 2.0)
         assert scores[l1.id].raw_score == 2.0
         assert scores[l1.id].max_score == 2.0
+
+
+class TestPsychometricSectionAggregation(ScoringTestBase):
+    """Per Report 2: psychometric option scores must route to each option's
+    tagged section. Mirrors the SRS §1 example: two rank questions whose
+    options are tagged to shared sections; Section 1's summary is the sum of
+    rank values received by ALL options tagged to Section 1 across questions.
+    """
+
+    def setUp(self):
+        self.user = UserFactory.create(role=self.individual_role)
+        self.assessment = Assessment.objects.create(
+            title="Psychometric Test", status="published", assessment_type="psychometric"
+        )
+        # 4 sections — matching the 4 options per rank question.
+        self.s1 = AssessmentSection.objects.create(
+            assessment=self.assessment, title="Section 1", level=1, order=1
+        )
+        self.s2 = AssessmentSection.objects.create(
+            assessment=self.assessment, title="Section 2", level=1, order=2
+        )
+        self.s3 = AssessmentSection.objects.create(
+            assessment=self.assessment, title="Section 3", level=1, order=3
+        )
+        self.s4 = AssessmentSection.objects.create(
+            assessment=self.assessment, title="Section 4", level=1, order=4
+        )
+        # A "carrier" section the questions are assigned to (their own
+        # section_id) — psychometric routing overrides this by splitting
+        # scores into s1..s4 via the tags.
+        self.carrier = AssessmentSection.objects.create(
+            assessment=self.assessment, title="Carrier", level=1, order=5
+        )
+
+        # Two rank questions. Each has 4 options tagged to Section 1..4.
+        from apps.question_bank.models import Question, ResponseOption
+
+        self.q1 = Question.objects.create(
+            category_id=None,
+            question_type="RANK_SIMPLE",
+            question_title="Q1",
+            question_text_1="Rank Q1",
+            scoring_type="RANK",
+            status="confirmed",
+            created_by=self.user,
+        )
+        self.q1_opts = []
+        for i in range(1, 5):
+            o = ResponseOption.objects.create(
+                question=self.q1,
+                option_type="RANK",
+                text_value=f"Q1 Item {i}",
+                section_tag=f"Section {i}",
+                order=i,
+            )
+            self.q1_opts.append(o)
+        AssessmentQuestion.objects.create(section=self.carrier, question=self.q1, order=1)
+
+        self.q2 = Question.objects.create(
+            category_id=None,
+            question_type="RANK_SIMPLE",
+            question_title="Q2",
+            question_text_1="Rank Q2",
+            scoring_type="RANK",
+            status="confirmed",
+            created_by=self.user,
+        )
+        self.q2_opts = []
+        for i in range(1, 5):
+            o = ResponseOption.objects.create(
+                question=self.q2,
+                option_type="RANK",
+                text_value=f"Q2 Item {i}",
+                section_tag=f"Section {i}",
+                order=i,
+            )
+            self.q2_opts.append(o)
+        AssessmentQuestion.objects.create(section=self.carrier, question=self.q2, order=2)
+
+        self.session = AssessmentSession.objects.create(
+            assessment=self.assessment, candidate=self.user, status="active"
+        )
+
+    def test_section_summary_sums_across_questions(self):
+        # Rank Q1 so the option tagged "Section 1" (q1_opts[0]) is ranked 1 → 4.
+        # Rank Q2 so the option tagged "Section 1" (q2_opts[0]) is ranked 1 → 4.
+        # Section 1 summary = 4 + 4 = 8 (matches SRS §1 worked example).
+        QuestionAttempt.objects.create(
+            session=self.session,
+            question=self.q1,
+            section=self.carrier,
+            status="attempted",
+            raw_answer={
+                "ranking": [
+                    self.q1_opts[0].id,
+                    self.q1_opts[1].id,
+                    self.q1_opts[2].id,
+                    self.q1_opts[3].id,
+                ]
+            },
+        )
+        QuestionAttempt.objects.create(
+            session=self.session,
+            question=self.q2,
+            section=self.carrier,
+            status="attempted",
+            raw_answer={
+                "ranking": [
+                    self.q2_opts[0].id,
+                    self.q2_opts[1].id,
+                    self.q2_opts[2].id,
+                    self.q2_opts[3].id,
+                ]
+            },
+        )
+
+        calculate_session_scores(self.session)
+
+        from apps.assessment.models import SectionScore
+
+        ss1 = SectionScore.objects.get(session=self.session, section=self.s1)
+        assert ss1.raw_score == 8.0  # 4 (Q1 opt tagged Section 1, rank 1) + 4 (Q2)
+
+    def test_section_max_does_not_explode_across_tags(self):
+        """Regression: each option's max must be assigned to its OWN tag, not
+        added to every tag. With 4 distinct tags the per-section max should be
+        N (4), not 4*N (16)."""
+        QuestionAttempt.objects.create(
+            session=self.session,
+            question=self.q1,
+            section=self.carrier,
+            status="attempted",
+            raw_answer={
+                "ranking": [
+                    self.q1_opts[0].id,
+                    self.q1_opts[1].id,
+                    self.q1_opts[2].id,
+                    self.q1_opts[3].id,
+                ]
+            },
+        )
+
+        calculate_session_scores(self.session)
+
+        from apps.assessment.models import SectionScore
+
+        for sec in (self.s1, self.s2, self.s3, self.s4):
+            ss = SectionScore.objects.get(session=self.session, section=sec)
+            # Each section has exactly one option (max = N = 4), not 16.
+            assert (
+                ss.max_score == 4.0
+            ), f"Section {sec.title} max_score={ss.max_score}, expected 4.0"
+
+    def test_unresolved_tag_falls_back_to_attempt_section(self):
+        # If a tag has no matching AssessmentSection, the score falls back to
+        # the attempt's own section (carrier) instead of being lost.
+        from apps.question_bank.models import ResponseOption
+
+        # Retag q1's first option with an unknown tag
+        ResponseOption.objects.filter(id=self.q1_opts[0].id).update(section_tag="Unknown")
+        QuestionAttempt.objects.create(
+            session=self.session,
+            question=self.q1,
+            section=self.carrier,
+            status="attempted",
+            raw_answer={
+                "ranking": [
+                    self.q1_opts[0].id,
+                    self.q1_opts[1].id,
+                    self.q1_opts[2].id,
+                    self.q1_opts[3].id,
+                ]
+            },
+        )
+
+        calculate_session_scores(self.session)
+
+        from apps.assessment.models import SectionScore
+
+        # The "Unknown"-tagged option's rank-1 score (4) lands in carrier
+        carrier_ss = SectionScore.objects.get(session=self.session, section=self.carrier)
+        assert carrier_ss.raw_score == 4.0
+
+
+class TestForcedChoiceSectionAggregation(ScoringTestBase):
+    """Per Report 2 §3: a forced-choice pair posts TWO scores — one to each
+    option's own section (selected → selection_score, non-selected →
+    non_selection_score)."""
+
+    def setUp(self):
+        self.user = UserFactory.create(role=self.individual_role)
+        self.assessment = Assessment.objects.create(
+            title="Forced Choice Test", status="published", assessment_type="psychometric"
+        )
+        self.sec_a = AssessmentSection.objects.create(
+            assessment=self.assessment, title="Section A", level=1, order=1
+        )
+        self.sec_b = AssessmentSection.objects.create(
+            assessment=self.assessment, title="Section B", level=1, order=2
+        )
+        self.carrier = AssessmentSection.objects.create(
+            assessment=self.assessment, title="Carrier", level=1, order=3
+        )
+        self.q = make_forced_choice_question(self.user, two_level=False)
+        AssessmentQuestion.objects.create(section=self.carrier, question=self.q, order=1)
+        self.session = AssessmentSession.objects.create(
+            assessment=self.assessment, candidate=self.user, status="active"
+        )
+
+    def test_both_sections_receive_a_score(self):
+        opt_b = self.q.options.get(text_value="Option B")  # Section B, sel=3/non=1
+        QuestionAttempt.objects.create(
+            session=self.session,
+            question=self.q,
+            section=self.carrier,
+            status="attempted",
+            raw_answer={"selected_option_id": opt_b.id},  # select B
+        )
+
+        calculate_session_scores(self.session)
+
+        from apps.assessment.models import SectionScore
+
+        # Section A (non-selected option A) → non_selection_score 0.0
+        ss_a = SectionScore.objects.get(session=self.session, section=self.sec_a)
+        assert ss_a.raw_score == 0.0
+        # Section B (selected option B) → selection_score 3.0
+        ss_b = SectionScore.objects.get(session=self.session, section=self.sec_b)
+        assert ss_b.raw_score == 3.0

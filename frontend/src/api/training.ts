@@ -22,8 +22,10 @@ export interface SessionContent {
   id: number;
   session: number;
   title: string;
-  content_format: "video" | "audio" | "text";
+  content_format: "video" | "audio" | "text" | "document";
   content_url: string;
+  /** Report 3 §OS.1: uploaded document (PDF/Word/PPT) URL. */
+  document: string | null;
   text_content: string;
   duration_seconds: number | null;
   order: number;
@@ -38,6 +40,10 @@ export interface Assignment {
   description: string;
   resource_url: string;
   report_submission_enabled: boolean;
+  /** Report 3 §3.4: mandatory vs optional report submission. */
+  is_mandatory: boolean;
+  /** Report 3 §3.3: deadline after which submission requires trainer approval. */
+  submission_deadline: string | null;
   report_instructions: string;
   order: number;
 }
@@ -93,11 +99,17 @@ export interface LiveSession {
   title: string;
   description: string;
   mode: "online" | "offline";
+  /** Report 3 §OL.1: advance vs ongoing scheduling. */
+  schedule_mode: "advance" | "ongoing";
+  depends_on: number | null;
   meeting_url: string;
   venue: string;
   scheduled_at: string;
   duration_minutes: number;
   status: string;
+  /** Report 3 §7.4: reschedule audit. */
+  rescheduled_from: string | null;
+  reschedule_reason: string;
   created_at: string;
 }
 
@@ -114,6 +126,8 @@ export interface TrainingCourse {
   duration_days: number | null;
   price: string;
   status: "draft" | "published" | "archived";
+  /** Report 3 §5.1: enforce sequential content navigation (no skipping). */
+  content_sequencing_enabled: boolean;
   created_by: number | null;
   created_by_name: string | null;
   registration_count: number;
@@ -136,6 +150,8 @@ export interface TrainingCourseListItem {
   duration_days: number | null;
   price: string;
   status: string;
+  /** Report 3 §5.1: enforce sequential content navigation (no skipping). */
+  content_sequencing_enabled: boolean;
   created_by: number | null;
   created_by_name: string | null;
   registration_count: number;
@@ -152,6 +168,8 @@ export interface CourseRegistration {
   student_email: string;
   payment_status: string;
   completion_status: string;
+  /** Report 3 §1.1: registration-form snapshot (profile-prefilled + answers). */
+  registration_form: Record<string, unknown>;
   started_at: string | null;
   completed_at: string | null;
   registered_at: string;
@@ -179,6 +197,10 @@ export interface ProgressSummary {
   last_content: { content_type: string; content_id: number } | null;
   completion_status: string;
   started_at: string | null;
+  /** Report 3 §6: mandatory-parameter completion figures (null if no params set). */
+  mandatory_completion_percentage: number | null;
+  mandatory_completed_count: number | null;
+  mandatory_total_count: number | null;
 }
 
 export interface CourseMessage {
@@ -202,6 +224,10 @@ export interface AssignmentReport {
   student_email: string;
   report_text: string;
   report_file_url: string;
+  /** Report 3 §3.6: uploaded report file (PDF/PPT/Word). */
+  report_file: string | null;
+  /** Report 3 §3.3: trainer granted late-submission permission. */
+  late_submission_approved: boolean;
   status: string;
   trainer_score: number | null;
   trainer_feedback: string;
@@ -305,8 +331,118 @@ export function publishCourse(id: number): Promise<{ id: number; status: string 
   return apiPost(`${BASE}/courses/${id}/publish/`);
 }
 
-export function registerForCourse(courseId: number): Promise<CourseRegistration> {
-  return apiPost<CourseRegistration>(`${BASE}/courses/${courseId}/register/`);
+// ---------------------------------------------------------------------------
+// Report 3 §6 — completion parameters
+// ---------------------------------------------------------------------------
+
+export interface CompletionParameter {
+  id?: number;
+  content_type: "session_content" | "assignment" | "assessment" | "live_session";
+  content_id: number;
+  is_mandatory: boolean;
+}
+
+export function listCompletionParameters(courseId: number): Promise<CompletionParameter[]> {
+  return apiGet<CompletionParameter[]>(`${BASE}/courses/${courseId}/completion-parameters/`);
+}
+
+export function setCompletionParameters(
+  courseId: number,
+  parameters: CompletionParameter[],
+): Promise<CompletionParameter[]> {
+  return apiPost<CompletionParameter[]>(`${BASE}/courses/${courseId}/completion-parameters/`, {
+    parameters,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Report 3 §7 — course update requests (trainer -> admin approval workflow)
+// ---------------------------------------------------------------------------
+
+export interface CourseUpdateRequest {
+  id: number;
+  course: number;
+  course_title: string;
+  requested_by: number;
+  requested_by_name: string | null;
+  request_type: "update" | "delete";
+  reason: string;
+  status: "pending" | "approved" | "declined";
+  admin_note: string;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export function requestCourseUpdate(
+  courseId: number,
+  payload: { request_type: "update" | "delete"; reason: string },
+): Promise<CourseUpdateRequest> {
+  return apiPost<CourseUpdateRequest>(`${BASE}/courses/${courseId}/request-update/`, payload);
+}
+
+export function listCourseUpdateRequests(): Promise<CourseUpdateRequest[]> {
+  return apiGet<CourseUpdateRequest[]>(`${BASE}/course-update-requests/`);
+}
+
+export function approveCourseUpdateRequest(
+  id: number,
+  adminNote?: string,
+): Promise<CourseUpdateRequest> {
+  return apiPost<CourseUpdateRequest>(
+    `${BASE}/course-update-requests/${id}/approve/`,
+    adminNote ? { admin_note: adminNote } : {},
+  );
+}
+
+export function declineCourseUpdateRequest(
+  id: number,
+  adminNote?: string,
+): Promise<CourseUpdateRequest> {
+  return apiPost<CourseUpdateRequest>(
+    `${BASE}/course-update-requests/${id}/decline/`,
+    adminNote ? { admin_note: adminNote } : {},
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Report 3 §7.5/OS.4 — candidate live-session requests
+// ---------------------------------------------------------------------------
+
+export interface LiveSessionRequestItem {
+  id: number;
+  course: number;
+  course_title: string;
+  student: number;
+  student_name: string | null;
+  preferred_times: string[];
+  note: string;
+  status: "pending" | "scheduled" | "declined";
+  created_at: string;
+}
+
+export function requestLiveSession(
+  courseId: number,
+  payload: { preferred_times?: string[]; note?: string },
+): Promise<LiveSessionRequestItem> {
+  return apiPost<LiveSessionRequestItem>(`${BASE}/live-session-requests/`, {
+    course: courseId,
+    ...payload,
+  });
+}
+
+export function listLiveSessionRequests(): Promise<LiveSessionRequestItem[]> {
+  return apiGet<LiveSessionRequestItem[]>(`${BASE}/live-session-requests/`);
+}
+
+export function registerForCourse(
+  courseId: number,
+  extraAnswers?: Record<string, string>,
+): Promise<CourseRegistration & { checkout_url: string | null }> {
+  return apiPost<CourseRegistration & { checkout_url: string | null }>(
+    `${BASE}/courses/${courseId}/register/`,
+    extraAnswers ? { extra_answers: extraAnswers } : undefined,
+  );
 }
 
 export function listCourseRegistrations(courseId: number): Promise<CourseRegistration[]> {
@@ -568,6 +704,28 @@ export function submitAssignmentReport(
   );
 }
 
+/**
+ * Report 3 §3.6: submit an assignment report with an uploaded file
+ * (PDF/PPT/Word). Uses multipart/form-data so the file reaches the backend's
+ * request.data as a real upload.
+ */
+export function submitAssignmentReportFile(
+  registrationId: number,
+  payload: { assignment: number; report_text?: string; file: File },
+): Promise<AssignmentReport> {
+  const form = new FormData();
+  form.append("assignment", String(payload.assignment));
+  if (payload.report_text) form.append("report_text", payload.report_text);
+  form.append("report_file", payload.file);
+  return apiPost<AssignmentReport>(
+    `${BASE}/registrations/${registrationId}/assignment_reports/`,
+    form,
+  );
+}
+
+/**
+ * Report 3 §3.8: trainer reviews a report. trainer_score is on a 0-10 scale.
+ */
 export function reviewAssignmentReport(
   registrationId: number,
   payload: { report_id: number; trainer_score?: number; trainer_feedback?: string },
@@ -575,6 +733,19 @@ export function reviewAssignmentReport(
   return apiPost<AssignmentReport>(
     `${BASE}/registrations/${registrationId}/review-report/`,
     payload,
+  );
+}
+
+/**
+ * Report 3 §3.3: trainer approves a late submission after the deadline.
+ */
+export function approveLateSubmission(
+  registrationId: number,
+  reportId: number,
+): Promise<AssignmentReport> {
+  return apiPost<AssignmentReport>(
+    `${BASE}/registrations/${registrationId}/approve-late-submission/`,
+    { report_id: reportId },
   );
 }
 
@@ -601,6 +772,17 @@ export function notifyLiveSessionStudents(
   return apiPost<{ notified_count: number }>(
     `${BASE}/live-sessions/${liveSessionId}/notify_students/`,
   );
+}
+
+/**
+ * Report 3 §7.4: trainer reschedules a live session (records the previous
+ * time + reason, notifies registered students).
+ */
+export function rescheduleLiveSession(
+  liveSessionId: number,
+  payload: { scheduled_at: string; reason: string },
+): Promise<LiveSession> {
+  return apiPost<LiveSession>(`${BASE}/live-sessions/${liveSessionId}/reschedule/`, payload);
 }
 
 // ---------------------------------------------------------------------------

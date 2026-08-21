@@ -1,7 +1,7 @@
 /**
  * Counseling API client.
  */
-import { apiGet, apiGetPaged, apiPost } from "./client";
+import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
 
 const BASE = "/counseling";
 
@@ -23,6 +23,11 @@ export interface CounsellorProfile {
   full_name: string;
   bio: string;
   qualifications: string;
+  /** Report 3 §1.7: profile details shown to candidates when browsing. */
+  gender: string;
+  avatar: string | null;
+  language: string;
+  location: string;
   hourly_rate: string;
   meeting_url: string;
   categories: number[];
@@ -81,9 +86,16 @@ export interface SessionSummary {
   id: number;
   session: number;
   counsellor: number | null;
+  /** Report 3 §2.4 (6 fields) */
+  client_details: string;
   summary: string;
-  recommendations: string;
+  provisional_diagnosis: string;
+  case_prognosis: string;
+  session_smoothness: "" | "yes" | "somewhat" | "no";
+  smoothly_reason: string;
   followup_recommended: boolean;
+  /** legacy */
+  recommendations: string;
   created_at: string;
 }
 
@@ -91,10 +103,40 @@ export interface SessionFeedback {
   id: number;
   session: number;
   counselee: number;
+  /** Report 3 §2.2 (8 fields) */
+  session_usefulness: "" | "very_useful" | "useful" | "somewhat_useful" | "not_useful";
+  usefulness_text: string;
+  counsellor_empathy: "" | "very_much" | "somewhat" | "not_much";
+  session_ending: "" | "on_time" | "before_time" | "late";
+  would_rechoose: "" | "yes" | "maybe" | "no";
+  rechoose_text: string;
+  improvement_suggestions: string;
+  /** 1-10 scale (10 = excellent) */
   rating: number;
+  /** legacy */
   experience_text: string;
   counsellor_effectiveness: string;
   created_at: string;
+}
+
+/** Report 3 §1.9/§1.11/§1.2/§1.12 — admin-managed counseling settings. */
+export interface CounselingSettings {
+  terms_and_conditions: string;
+  cancellation_policy: string;
+  max_weeks_ahead: number;
+  confirm_window_hours: number;
+  full_refund_within_hours: number;
+  half_refund_within_hours: number;
+}
+
+export function getCounselingSettings(): Promise<CounselingSettings> {
+  return apiGet<CounselingSettings>(`${BASE}/settings/`);
+}
+
+export function updateCounselingSettings(
+  payload: Partial<CounselingSettings>,
+): Promise<CounselingSettings> {
+  return apiPatch<CounselingSettings>(`${BASE}/settings/1/`, payload);
 }
 
 export interface FollowupSession {
@@ -173,6 +215,19 @@ export function createTimeSlot(
   });
 }
 
+/** Report 3 §1.1: counsellor edits one of their own timeslots. */
+export function updateTimeSlot(
+  timeslotId: number,
+  payload: { start_time?: string; end_time?: string; status?: string },
+): Promise<TimeSlot> {
+  return apiPatch<TimeSlot>(`${BASE}/timeslots/${timeslotId}/`, payload);
+}
+
+/** Report 3 §1.1: counsellor deletes one of their own (unbooked) timeslots. */
+export function deleteTimeSlot(timeslotId: number): Promise<void> {
+  return apiDelete(`${BASE}/timeslots/${timeslotId}/`);
+}
+
 // ---------------------------------------------------------------------------
 // Session API
 // ---------------------------------------------------------------------------
@@ -192,11 +247,10 @@ export function bookSession(payload: {
   description?: string;
   mode?: string;
   category?: number;
+  /** Report 3 §1.8: the user must explicitly accept the terms. */
+  terms_accepted?: boolean;
 }): Promise<CounselingSession> {
-  return apiPost<CounselingSession>(`${BASE}/sessions/`, {
-    ...payload,
-    terms_accepted: true,
-  });
+  return apiPost<CounselingSession>(`${BASE}/sessions/`, payload);
 }
 
 export function confirmSession(sessionId: number): Promise<CounselingSession> {
@@ -232,7 +286,9 @@ export function getSessionSummary(sessionId: number): Promise<SessionSummary | n
 
 export function saveSessionSummary(
   sessionId: number,
-  payload: { summary: string; recommendations?: string; followup_recommended?: boolean },
+  payload: Partial<Omit<SessionSummary, "id" | "session" | "counsellor" | "created_at">> & {
+    summary: string;
+  },
 ): Promise<SessionSummary> {
   return apiPost<SessionSummary>(`${BASE}/sessions/${sessionId}/summary/`, payload);
 }
@@ -247,7 +303,9 @@ export function getSessionFeedback(sessionId: number): Promise<SessionFeedback |
 
 export function submitSessionFeedback(
   sessionId: number,
-  payload: { rating: number; experience_text: string; counsellor_effectiveness?: string },
+  payload: Partial<Omit<SessionFeedback, "id" | "session" | "counselee" | "created_at">> & {
+    rating: number;
+  },
 ): Promise<SessionFeedback> {
   return apiPost<SessionFeedback>(`${BASE}/sessions/${sessionId}/feedback/`, payload);
 }

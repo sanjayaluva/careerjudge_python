@@ -2,7 +2,7 @@
 
 > **Purpose:** This file gives a new AI agent (e.g., Z.ai Code) the full
 > project context to continue development without any information loss.
-> Last updated: 30 July 2026.
+> Last updated: 18 August 2026 (Reports 2 & 3 branch).
 
 ## Quick Start for New Agent
 
@@ -49,7 +49,8 @@ https://github.com/sanjayaluva/careerjudge_python
 | 12 | Tasks | ✅ Complete | 24 tests | SRS 09 admin task management |
 | 13 | Notifications | ✅ Active | — | In-app bell icon, signal-based, 8 event types |
 
-**Total: 496 backend tests (80% coverage) + 30 frontend tests — all passing**
+**Total: 536 backend tests (80% coverage) + 30 frontend tests — all passing**
+(on the Reports 2&3 branch; main remains at 496 until merged)
 
 ## Key Recent Work (Last 30+ Commits)
 
@@ -100,6 +101,8 @@ Run `python manage.py migrate` after cloning. Key recent migrations:
 - 0010_feedback_report_fields (display_mode, replay_mode, option_layout, hotspot_visibility)
 - 0011_question_sub_question_count_and_more (sub_question_count, sub_question_text_2_list)
 - 0012_question_sub_question_texts_and_more (sub_question_texts)
+- 0013_psychometric_option_sections (section_tag, selection_score, non_selection_score) — Reports 2&3 branch
+- training 0004-0006 + accounts 0008/0009 + counseling 0003 — Reports 2&3 branch
 
 ## Environment Setup
 
@@ -136,10 +139,17 @@ npm run dev
 
 ## Pending Work
 
-1. **2 new review docs** (psychometric questions + course/counselling) — not yet provided by client
+1. **Reports 2 & 3 implementation** — DONE on branch
+   `feat/reports-2-3-psychometric-training-counseling` (LOCAL ONLY, not
+   pushed — user pushes after their docs updates). Covers psychometric
+   option→section scoring (Report 2) + Training & Counselling feedback
+   (Report 3). See WORKLOG Task 63-70. 536 backend + 30 frontend tests green.
 2. **Full end-to-end regression testing** of all question types in a live session
 3. **Production deployment** — provision prod cloud VM + CI/CD pipeline
 4. **Edge case testing** — hotspot click accuracy on production-sized images, flash timing on slower devices
+5. **Deferred small items from Report 3**: Zoom OAuth auto-create (manual URL
+   works), email notification channel (in-app bell only), followup Stripe
+   payment wiring, admin UI for editing counseling settings text (API ready).
 
 ## Key Files to Read
 

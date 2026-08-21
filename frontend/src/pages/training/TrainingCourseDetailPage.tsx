@@ -44,13 +44,21 @@ import {
   deleteCourseAssessment,
   deleteLiveSession,
   getZoomConfig,
+  listCompletionParameters,
   listCourseRegistrations,
+  listCourseUpdateRequests,
   listMyCourses,
   notifyLiveSessionStudents,
   publishCourse,
   registerForCourse,
+  requestCourseUpdate,
+  rescheduleLiveSession,
   retrieveCourse,
   SCHEDULE_TYPES,
+  setCompletionParameters,
+  type CompletionParameter,
+  type CourseUpdateRequest,
+  type TrainingCourse,
 } from "@/api/training";
 import { extractApiError } from "@/api/client";
 import { listAssessments } from "@/api/assessment";
@@ -191,7 +199,9 @@ export default function TrainingCourseDetailPage() {
             Live Sessions ({course.live_sessions.length})
           </TabsTrigger>
           <TabsTrigger value="assessments">Assessments ({course.assessments.length})</TabsTrigger>
+          {canManage && <TabsTrigger value="completion">Completion</TabsTrigger>}
           {canManage && <TabsTrigger value="registrations">Registrations</TabsTrigger>}
+          {canManage && <TabsTrigger value="update-requests">Update Requests</TabsTrigger>}
         </TabsList>
 
         {/* === OVERVIEW TAB === */}
@@ -386,6 +396,7 @@ export default function TrainingCourseDetailPage() {
                               >
                                 Notify
                               </Button>
+                              <RescheduleLiveSessionButton liveSessionId={s.id} courseId={cid} />
                               <DeleteLiveSessionButton liveSessionId={s.id} courseId={cid} />
                             </div>
                           </TableCell>
@@ -452,6 +463,16 @@ export default function TrainingCourseDetailPage() {
         {canManage && (
           <TabsContent value="registrations">
             <RegistrationsTab courseId={cid} />
+          </TabsContent>
+        )}
+        {canManage && (
+          <TabsContent value="completion">
+            <CompletionParametersTab course={course} />
+          </TabsContent>
+        )}
+        {canManage && (
+          <TabsContent value="update-requests">
+            <CourseUpdateRequestsTab courseId={cid} />
           </TabsContent>
         )}
       </Tabs>
@@ -966,6 +987,308 @@ function DeleteAssessmentButton({
       <Button size="sm" variant="outline" onClick={() => setConfirming(false)}>
         No
       </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Report 3 §6 — Completion Parameters tab (trainer sets mandatory contents)
+// ---------------------------------------------------------------------------
+
+function CompletionParametersTab({ course }: { course: TrainingCourse }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const cid = course.id;
+
+  // Flatten all contents/assignments for the checkbox list
+  const allItems: {
+    content_type: CompletionParameter["content_type"];
+    content_id: number;
+    label: string;
+  }[] = [];
+  for (const lesson of course.lessons) {
+    for (const topic of lesson.topics) {
+      for (const session of topic.sessions) {
+        for (const c of session.contents) {
+          allItems.push({
+            content_type: "session_content",
+            content_id: c.id,
+            label: `${lesson.title} → ${session.title} → ${c.title}`,
+          });
+        }
+        for (const a of session.assignments) {
+          allItems.push({
+            content_type: "assignment",
+            content_id: a.id,
+            label: `${lesson.title} → ${session.title} → ${a.title} (assignment)`,
+          });
+        }
+      }
+    }
+  }
+
+  const { data: existing } = useQuery({
+    queryKey: ["training", "completion-parameters", cid],
+    queryFn: () => listCompletionParameters(cid),
+  });
+
+  const mandatorySet = new Set(
+    (existing ?? []).filter((p) => p.is_mandatory).map((p) => `${p.content_type}:${p.content_id}`),
+  );
+  const [checked, setChecked] = useState<Set<string>>(new Set(mandatorySet));
+
+  // Sync when loaded
+  if (existing && checked.size === 0 && mandatorySet.size > 0 && checked !== mandatorySet) {
+    setChecked(new Set(mandatorySet));
+  }
+
+  const toggle = (key: string) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const params: CompletionParameter[] = allItems
+        .filter((it) => checked.has(`${it.content_type}:${it.content_id}`))
+        .map((it) => ({
+          content_type: it.content_type,
+          content_id: it.content_id,
+          is_mandatory: true,
+        }));
+      return setCompletionParameters(cid, params);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["training", "completion-parameters", cid],
+      });
+      toast.success("Completion parameters saved.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Set Completion Parameters</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-slate-500">
+          Check the contents a candidate MUST complete to finish the course. The completion % shown
+          to candidates is computed against these mandatory items.
+        </p>
+        {allItems.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">
+            No course content yet. Add content in the Structure tab first.
+          </p>
+        ) : (
+          <div className="max-h-96 space-y-1 overflow-y-auto">
+            {allItems.map((it) => {
+              const key = `${it.content_type}:${it.content_id}`;
+              return (
+                <label
+                  key={key}
+                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked.has(key)}
+                    onChange={() => toggle(key)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+                  />
+                  <span className="text-slate-700">{it.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+          Save parameters
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Report 3 §7 — Course Update Requests tab (trainer requests / admin approves)
+// ---------------------------------------------------------------------------
+
+function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [reqType, setReqType] = useState<"update" | "delete">("update");
+  const [reason, setReason] = useState("");
+
+  const { data: requests } = useQuery({
+    queryKey: ["training", "course-update-requests"],
+    queryFn: () => listCourseUpdateRequests(),
+  });
+  const courseRequests = (requests ?? []).filter((r) => r.course === courseId);
+
+  const requestMutation = useMutation({
+    mutationFn: () => requestCourseUpdate(courseId, { request_type: reqType, reason }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["training", "course-update-requests"],
+      });
+      toast.success("Request submitted. An admin will review it.");
+      setShowForm(false);
+      setReason("");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Course Update Requests</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-slate-500">
+          Published courses can only be modified or deleted with admin approval. Submit a request;
+          an admin will approve or decline it.
+        </p>
+
+        {courseRequests.length === 0 ? (
+          <p className="py-2 text-sm text-slate-500">No requests yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {courseRequests.map((r: CourseUpdateRequest) => (
+              <div key={r.id} className="rounded-md border border-slate-200 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium capitalize">
+                    {r.request_type} request —{" "}
+                    <Badge
+                      variant={
+                        r.status === "approved"
+                          ? "success"
+                          : r.status === "declined"
+                            ? "danger"
+                            : "warning"
+                      }
+                    >
+                      {r.status}
+                    </Badge>
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {new Date(r.created_at).toLocaleString()}
+                  </span>
+                </div>
+                <p className="mt-1 text-slate-600">{r.reason}</p>
+                {r.admin_note && (
+                  <p className="mt-1 text-xs text-slate-500">Admin note: {r.admin_note}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!showForm ? (
+          <Button variant="outline" onClick={() => setShowForm(true)}>
+            + Request update / delete
+          </Button>
+        ) : (
+          <div className="space-y-2 rounded-md border border-slate-200 p-3">
+            <select
+              className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+              value={reqType}
+              onChange={(e) => setReqType(e.target.value as "update" | "delete")}
+            >
+              <option value="update">Update published course</option>
+              <option value="delete">Delete published course</option>
+            </select>
+            <textarea
+              rows={2}
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Reason for the change…"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={() => requestMutation.mutate()}
+                loading={requestMutation.isPending}
+                disabled={!reason.trim()}
+              >
+                Submit request
+              </Button>
+              <Button variant="outline" onClick={() => setShowForm(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RescheduleLiveSessionButton({
+  liveSessionId,
+  courseId,
+}: {
+  liveSessionId: number;
+  courseId: number;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [reason, setReason] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: () => rescheduleLiveSession(liveSessionId, { scheduled_at: scheduledAt, reason }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["training", "courses", courseId] });
+      toast.success("Session rescheduled. Registered students notified.");
+      setOpen(false);
+      setScheduledAt("");
+      setReason("");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (!open) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        Reschedule
+      </Button>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-slate-200 p-2">
+      <input
+        type="datetime-local"
+        className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+        value={scheduledAt}
+        onChange={(e) => setScheduledAt(e.target.value)}
+      />
+      <input
+        type="text"
+        placeholder="Reason (required)"
+        className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <div className="flex gap-1">
+        <Button
+          size="sm"
+          onClick={() => mutation.mutate()}
+          loading={mutation.isPending}
+          disabled={!scheduledAt || !reason.trim()}
+        >
+          Save
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }

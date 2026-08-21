@@ -228,7 +228,12 @@ def test_cannot_book_unavailable_timeslot(counselee_client, counselee_user, coun
     timeslot = _make_timeslot(counsellor, status="booked")
     resp = counselee_client.post(
         "/api/counseling/sessions/",
-        {"counsellor": counsellor.id, "timeslot": timeslot.id, "topic": "Test"},
+        {
+            "counsellor": counsellor.id,
+            "timeslot": timeslot.id,
+            "topic": "Test",
+            "terms_accepted": True,
+        },
         format="json",
     )
     assert resp.status_code == 400
@@ -336,7 +341,7 @@ def test_cancel_4h_before_half_refund(counselee_client, counselee_user, counsell
     )
     resp = counselee_client.post(
         f"/api/counseling/sessions/{session.id}/cancel/",
-        {"cancelled_by": "counselee"},
+        {"cancelled_by": "counselee", "reason": "Cannot attend"},
         format="json",
     )
     assert resp.status_code == 200
@@ -358,7 +363,7 @@ def test_cancel_under_4h_no_refund(counselee_client, counselee_user, counsellor_
     )
     resp = counselee_client.post(
         f"/api/counseling/sessions/{session.id}/cancel/",
-        {"cancelled_by": "counselee"},
+        {"cancelled_by": "counselee", "reason": "Cannot attend"},
         format="json",
     )
     assert resp.status_code == 200
@@ -558,3 +563,448 @@ def test_counselee_confirms_followup(counselee_client, counselee_user, counsello
     assert followup.status == "confirmed"
     assert followup.confirmed_session is not None
     assert followup.confirmed_session.status == "confirmed"
+
+
+# ---------------------------------------------------------------------------
+# Report 3 Counselling — notification wiring (helpdesk + counselee + counsellor)
+# ---------------------------------------------------------------------------
+
+
+def test_booking_notifies_counsellor_and_helpdesk(
+    counselee_client, counselee_user, counsellor_user
+):
+    """Report 3 §1.10: a new booking fires notifications to the counsellor + helpdesk."""
+    from apps.accounts.models import Role
+    from apps.notifications.models import Notification
+
+    # Ensure the helpdesk role + a helpdesk user exist
+    helpdesk_role, _ = Role.objects.get_or_create(name="helpdesk")
+    helpdesk_user = UserFactory.create(role=helpdesk_role, email="helpdesk@test.com")
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    resp = counselee_client.post(
+        "/api/counseling/sessions/",
+        {
+            "counsellor": counsellor.id,
+            "timeslot": timeslot.id,
+            "topic": "Career",
+            "terms_accepted": True,
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    assert Notification.objects.filter(
+        recipient=counsellor_user, title__contains="New booking"
+    ).exists()
+    assert Notification.objects.filter(
+        recipient=helpdesk_user, title__contains="counselling booking"
+    ).exists()
+
+
+def test_booking_requires_terms_acceptance(counselee_client, counselee_user, counsellor_user):
+    """Report 3 §1.8: terms must be explicitly accepted."""
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    resp = counselee_client.post(
+        "/api/counseling/sessions/",
+        {"counsellor": counsellor.id, "timeslot": timeslot.id, "topic": "Career"},
+        format="json",
+    )
+    assert resp.status_code == 400
+    assert resp.data["error"]["code"] == "validation_error"
+    assert "Terms" in resp.data["error"]["message"]
+
+
+def test_confirm_notifies_counselee(counsellor_client, counselee_user, counsellor_user):
+    """Report 3 §1.13: confirming a booking notifies the counselee."""
+    from apps.notifications.models import Notification
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee=counsellor.hourly_rate,
+    )
+    resp = counsellor_client.post(f"/api/counseling/sessions/{session.id}/confirm/")
+    assert resp.status_code == 200
+    assert Notification.objects.filter(
+        recipient=counselee_user, title__contains="confirmed"
+    ).exists()
+
+
+# ---------------------------------------------------------------------------
+# Report 3 Counselling §2.2 — feedback form (8 fields, 1-10 scale)
+# ---------------------------------------------------------------------------
+
+
+def test_feedback_eight_fields_and_10_point_scale(
+    counselee_client, counselee_user, counsellor_user
+):
+    """Report 3 §2.2: feedback accepts the 8 fields + a 1-10 rating."""
+    from apps.counseling.models import SessionFeedback
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee=counsellor.hourly_rate,
+        status="completed",
+    )
+    resp = counselee_client.post(
+        f"/api/counseling/sessions/{session.id}/feedback/",
+        {
+            "session_usefulness": "very_useful",
+            "useful_reason": "Great advice",
+            "counsellor_empathy": "very_much",
+            "session_ended": "on_time",
+            "would_rechoose": "yes",
+            "rechoose_reason": "Very helpful",
+            "improvement_suggestions": "More examples",
+            "rating": 9,
+        },
+        format="json",
+    )
+    assert resp.status_code in (200, 201), resp.data
+    fb = SessionFeedback.objects.get(session=session)
+    assert fb.session_usefulness == "very_useful"
+    assert fb.rating == 9
+
+
+# ---------------------------------------------------------------------------
+# Report 3 Counselling §2.4 — session summary (6 fields)
+# ---------------------------------------------------------------------------
+
+
+def test_summary_six_fields(counsellor_client, counselee_user, counsellor_user):
+    """Report 3 §2.4: summary accepts the 6 mandatory/optional fields."""
+    from apps.counseling.models import SessionSummary
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee=counsellor.hourly_rate,
+        status="completed",
+    )
+    resp = counsellor_client.post(
+        f"/api/counseling/sessions/{session.id}/summary/",
+        {
+            "client_details": "Client seeking career change",
+            "summary": "Discussed options",
+            "provisional_diagnosis": "Career indecision",
+            "case_prognosis": "Good with guidance",
+            "session_smoothness": "yes",
+            "smoothly_reason": "Engaged client",
+            "followup_recommended": True,
+        },
+        format="json",
+    )
+    assert resp.status_code in (200, 201), resp.data
+    sm = SessionSummary.objects.get(session=session)
+    assert sm.client_details == "Client seeking career change"
+    assert sm.session_smoothness == "yes"
+    assert sm.followup_recommended is True
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.1/§1.2 — timeslot edit/delete + 3-week limit
+# ---------------------------------------------------------------------------
+
+
+def test_counsellor_can_delete_own_available_timeslot(counsellor_client, counsellor_user):
+    """Report 3 §1.1: a counsellor can delete their own (unbooked) timeslot."""
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor, status="available")
+    resp = counsellor_client.delete(f"/api/counseling/timeslots/{timeslot.id}/")
+    assert resp.status_code in (200, 204), resp.data
+    assert not TimeSlot.objects.filter(id=timeslot.id).exists()
+
+
+def test_cannot_delete_booked_timeslot(counsellor_client, counsellor_user, counselee_user):
+    """Report 3 §1.1: a booked timeslot cannot be deleted."""
+    from apps.counseling.models import CounselingSession
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor, status="booked")
+    CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee=counsellor.hourly_rate,
+    )
+    resp = counsellor_client.delete(f"/api/counseling/timeslots/{timeslot.id}/")
+    assert resp.status_code == 403
+    assert "booked" in resp.data["error"]["message"]
+
+
+def test_non_owner_cannot_edit_timeslot(counselee_client, counsellor_user):
+    """Report 3 §1.1: only the owning counsellor (or admin) can edit a slot."""
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    resp = counselee_client.patch(
+        f"/api/counseling/timeslots/{timeslot.id}/",
+        {"status": "blocked"},
+        format="json",
+    )
+    assert resp.status_code == 403
+
+
+def test_timeslot_rejects_beyond_max_weeks(counsellor_client, counsellor_user):
+    """Report 3 §1.2: cannot create a timeslot beyond the max_weeks_ahead limit."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    counsellor = _make_counsellor(counsellor_user)
+    too_far = (timezone.now() + timedelta(weeks=10)).isoformat()
+    resp = counsellor_client.post(
+        "/api/counseling/timeslots/",
+        {"counsellor": counsellor.id, "start_time": too_far, "end_time": too_far},
+        format="json",
+    )
+    assert resp.status_code == 400
+    assert "weeks" in resp.data["error"]["message"]
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.9/§1.11 — counseling settings (terms + refund policy)
+# ---------------------------------------------------------------------------
+
+
+def test_anyone_can_read_settings(counselee_client):
+    """Settings (terms, refund policy) are readable by any authed user so the
+    booking form can display them."""
+    resp = counselee_client.get("/api/counseling/settings/")
+    assert resp.status_code == 200
+    assert "terms_and_conditions" in resp.data["data"]
+
+
+def test_only_admin_can_update_settings(counselee_client, admin_client):
+    from apps.counseling.models import CounselingSettings
+
+    # counselee cannot patch
+    resp = counselee_client.patch(
+        "/api/counseling/settings/1/",
+        {"terms_and_conditions": "New terms"},
+        format="json",
+    )
+    assert resp.status_code == 403
+    # admin can patch
+    resp = admin_client.patch(
+        "/api/counseling/settings/1/",
+        {"terms_and_conditions": "New terms", "max_weeks_ahead": 5},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    assert CounselingSettings.get().terms_and_conditions == "New terms"
+    assert CounselingSettings.get().max_weeks_ahead == 5
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.17 — counsellor category tagging on add-user
+# ---------------------------------------------------------------------------
+
+
+def test_admin_creating_counsellor_tags_categories(admin_client, admin_user):
+    """Report 3 §1.17: when admin creates a counsellor, the selected
+    counselling categories are linked to the new CounsellorProfile."""
+    from apps.accounts.models import ModuleRight, User
+    from apps.accounts.services import get_or_create_default_roles
+    from apps.counseling.models import CounselingCategory, CounsellorProfile
+
+    # The counseling admin fixture only grants counseling perms; user creation
+    # also needs accounts.add.
+    ModuleRight.objects.get_or_create(role=admin_user.role, module="accounts", action="add")
+    roles = get_or_create_default_roles()
+    cat1 = CounselingCategory.objects.create(name="career")
+    cat2 = CounselingCategory.objects.create(name="learning")
+
+    resp = admin_client.post(
+        "/api/accounts/users/",
+        {
+            "email": "newcounsellor@test.com",
+            "full_name": "New Counsellor",
+            "role": roles["counsellor"].id,
+            "counsellor_categories": [cat1.id, cat2.id],
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    user = User.objects.get(email="newcounsellor@test.com")
+    profile = CounsellorProfile.objects.get(user=user)
+    assert set(profile.categories.values_list("id", flat=True)) == {cat1.id, cat2.id}
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.5 — avatar upload
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Report 3 1.5 - avatar upload
+# ---------------------------------------------------------------------------
+
+
+def test_user_can_upload_avatar(counselee_client, counselee_user):
+    """Report 3 1.5: a user can upload their avatar via POST /api/me/avatar/."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    # 1x1 transparent PNG
+    hex_png = (
+        "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+        "1f15c4890000000d49444154789c63fcffff3f0300060002fea13581ea"
+        "0000000049454e44ae426082"
+    )
+    upload = SimpleUploadedFile("avatar.png", bytes.fromhex(hex_png), content_type="image/png")
+    resp = counselee_client.post("/api/me/avatar", {"avatar": upload}, format="multipart")
+    assert resp.status_code == 200, resp.data
+    counselee_user.refresh_from_db()
+    assert bool(counselee_user.profile.avatar)
+
+
+def test_avatar_requires_file(counselee_client):
+    resp = counselee_client.post("/api/me/avatar", {}, format="multipart")
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.15/§1.16 — configurable refunds + reason + ownership on cancel
+# ---------------------------------------------------------------------------
+
+
+def test_cancel_requires_reason(counselee_client, counselee_user, counsellor_user):
+    """Report 3 §1.16: a cancellation reason is required."""
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor, hours_from_now=48)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee="100.00",
+        status="confirmed",
+    )
+    resp = counselee_client.post(
+        f"/api/counseling/sessions/{session.id}/cancel/",
+        {"cancelled_by": "counselee"},
+        format="json",
+    )
+    assert resp.status_code == 400
+
+
+def test_unrelated_user_cannot_cancel(counselee_client, counsellor_user):
+    """Only the counselee, the counsellor, or admin may cancel."""
+    from apps.accounts.tests.factories import UserFactory
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor, hours_from_now=48)
+    from apps.accounts.services import get_or_create_default_roles
+
+    other = UserFactory.create(
+        role=get_or_create_default_roles()["individual"], email="other@test.com"
+    )
+    session = CounselingSession.objects.create(
+        counselee=other,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee="100.00",
+        status="confirmed",
+    )
+    resp = counselee_client.post(
+        f"/api/counseling/sessions/{session.id}/cancel/",
+        {"cancelled_by": "counselee", "reason": "x"},
+        format="json",
+    )
+    # The session list is scoped to the counselee, so an unrelated user gets a
+    # 404 (no existence leak) rather than a 403.
+    assert resp.status_code == 404
+
+
+def test_refund_thresholds_are_configurable(counselee_client, counselee_user, counsellor_user):
+    """Report 3 §1.15: admin can change the refund thresholds; a 10h-before
+    cancel earns a half refund when full_refund_within_hours is raised to 48."""
+    from apps.counseling.models import CounselingSettings
+
+    settings = CounselingSettings.get()
+    settings.full_refund_within_hours = 48
+    settings.save(update_fields=["full_refund_within_hours"])
+
+    counsellor = _make_counsellor(counsellor_user, hourly_rate="100.00")
+    timeslot = _make_timeslot(counsellor, hours_from_now=10)  # 10h: was full, now half
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee="100.00",
+        status="confirmed",
+    )
+    resp = counselee_client.post(
+        f"/api/counseling/sessions/{session.id}/cancel/",
+        {"cancelled_by": "counselee", "reason": "conflict"},
+        format="json",
+    )
+    assert resp.status_code == 200
+    assert resp.data["data"]["cancellation"]["refund_tier"] == "half"
+
+
+# ---------------------------------------------------------------------------
+# Report 3 §1.3/§1.12 — maintenance command
+# ---------------------------------------------------------------------------
+
+
+def test_maintenance_auto_cancels_stale_pending(counselee_user, counsellor_user):
+    """§1.12: a pending booking older than the confirm window is auto-cancelled
+    and the counselee notified."""
+    from datetime import timedelta
+
+    from django.core.management import call_command
+    from django.utils import timezone
+
+    from apps.notifications.models import Notification
+
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor, hours_from_now=48)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="x",
+        fee="100.00",
+        status="pending",
+    )
+    # booked_at is auto_now_add; force it into the past via a queryset update.
+    CounselingSession.objects.filter(id=session.id).update(
+        booked_at=timezone.now() - timedelta(hours=10)  # past the 6h window
+    )
+    call_command("counseling_maintenance", "--confirm", verbosity=0)
+    session.refresh_from_db()
+    assert session.status == "cancelled"
+    timeslot.refresh_from_db()
+    assert timeslot.status == "available"
+    assert Notification.objects.filter(recipient=counselee_user, title__contains="expired").exists()
+
+
+def test_maintenance_notifies_slot_shortage(counsellor_user):
+    """§1.3: a counsellor with no near-term available slots is notified."""
+    from django.core.management import call_command
+
+    from apps.notifications.models import Notification
+
+    _make_counsellor(counsellor_user)  # no near-term slots -> shortage
+    call_command("counseling_maintenance", "--slots", verbosity=0)
+    assert Notification.objects.filter(
+        recipient=counsellor_user, title__contains="Timeslot update"
+    ).exists()

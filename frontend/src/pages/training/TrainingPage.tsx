@@ -66,6 +66,12 @@ export default function TrainingPage() {
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["training", "my-courses"] });
       void queryClient.invalidateQueries({ queryKey: TRAINING_KEY });
+      // Report 3 §1.3: paid courses return a Stripe checkout URL — redirect.
+      if (data.checkout_url) {
+        toast.success("Redirecting to payment…");
+        window.location.href = data.checkout_url;
+        return;
+      }
       toast.success(
         data.payment_status === "paid"
           ? "Registered! You can start the course now."

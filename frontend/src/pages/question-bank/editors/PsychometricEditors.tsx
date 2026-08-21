@@ -14,6 +14,7 @@ import { createEmptyOption, type OptionData } from "./shared";
 interface RatingScaleEditorProps {
   data: {
     question_text_1: string;
+    question_text_2: string;
     rating_scale_points: string;
     rating_direction: string;
     scaleLabels: string[];
@@ -68,6 +69,15 @@ export function RatingEditor({ data, onChange }: RatingScaleEditorProps) {
           onChange={(html) => onChange({ ...data, question_text_1: html })}
           minHeight={80}
           placeholder="Enter the statement to rate…"
+        />
+      </div>
+      <div>
+        <Label htmlFor="qtext2">Additional statement (optional)</Label>
+        <WysiwygEditorLite
+          value={data.question_text_2}
+          onChange={(html) => onChange({ ...data, question_text_2: html })}
+          minHeight={60}
+          placeholder="Optional secondary text shown to the candidate…"
         />
       </div>
 
@@ -169,6 +179,7 @@ export function RatingEditor({ data, onChange }: RatingScaleEditorProps) {
 interface RankEditorProps {
   data: {
     question_text_1: string;
+    question_text_2: string;
     options: OptionData[];
   };
   onChange: (data: RankEditorProps["data"]) => void;
@@ -193,7 +204,7 @@ export function RankEditor({ data, onChange }: RankEditorProps) {
     <div className="space-y-4">
       <div>
         <Label htmlFor="qtext1" required>
-          Question text
+          Question text (instructions / description)
         </Label>
         <WysiwygEditorLite
           value={data.question_text_1}
@@ -202,10 +213,27 @@ export function RankEditor({ data, onChange }: RankEditorProps) {
           placeholder="Rank the following items from highest (1) to lowest…"
         />
       </div>
+      <div>
+        <Label htmlFor="qtext2">Question statement (optional)</Label>
+        <WysiwygEditorLite
+          value={data.question_text_2}
+          onChange={(html) => onChange({ ...data, question_text_2: html })}
+          minHeight={60}
+          placeholder="The question statement shown to the candidate (optional)…"
+        />
+      </div>
       <div className="space-y-2">
-        <Label>Items to Rank</Label>
+        <Label>Items to Rank (each tagged to a different section)</Label>
+        <p className="text-xs text-slate-500">
+          Rule: number of options = number of sections. Each item must be tagged to a DIFFERENT
+          section (e.g. &quot;Leadership&quot;, &quot;Creativity&quot;…). The rank an item receives
+          becomes that section&apos;s score.
+        </p>
         {data.options.map((opt, i) => (
-          <div key={i} className="flex items-center gap-3 rounded-md border border-slate-200 p-3">
+          <div
+            key={i}
+            className="flex flex-col gap-2 rounded-md border border-slate-200 p-3 sm:flex-row sm:items-center"
+          >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-600">
               {i + 1}
             </span>
@@ -213,6 +241,12 @@ export function RankEditor({ data, onChange }: RankEditorProps) {
               value={opt.text_value}
               onChange={(e) => updateOption(i, { ...opt, text_value: e.target.value })}
               placeholder="Enter item to rank..."
+              className="flex-1 text-sm"
+            />
+            <Input
+              value={opt.section_tag}
+              onChange={(e) => updateOption(i, { ...opt, section_tag: e.target.value })}
+              placeholder="Section tag (e.g. Leadership)"
               className="flex-1 text-sm"
             />
             <button
@@ -241,6 +275,9 @@ export function RankEditor({ data, onChange }: RankEditorProps) {
           fallback="(no question text)"
           className="mb-2 text-sm text-slate-900"
         />
+        {data.question_text_2 && (
+          <RichText html={data.question_text_2} className="mb-2 text-sm text-slate-700" />
+        )}
         <div className="space-y-1">
           {data.options.map((opt, i) => (
             <div key={i} className="flex items-center gap-2 text-sm text-slate-700">
@@ -248,11 +285,17 @@ export function RankEditor({ data, onChange }: RankEditorProps) {
                 {i + 1}
               </span>
               {opt.text_value || `(item ${i + 1})`}
+              {opt.section_tag && (
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">
+                  → {opt.section_tag}
+                </span>
+              )}
             </div>
           ))}
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          Score: Rank 1 = {data.options.length} pts, Rank 2 = {data.options.length - 1} pts, etc.
+          Score: item ranked 1 = {data.options.length} pts (posted to that item&apos;s section),
+          rank 2 = {data.options.length - 1} pts, etc.
         </p>
       </div>
     </div>
@@ -266,6 +309,7 @@ export function RankEditor({ data, onChange }: RankEditorProps) {
 interface RankRateEditorProps {
   data: {
     question_text_1: string;
+    question_text_2: string;
     rating_scale_points: string;
     options: OptionData[];
   };
@@ -292,13 +336,22 @@ export function RankRateEditor({ data, onChange }: RankRateEditorProps) {
     <div className="space-y-4">
       <div>
         <Label htmlFor="qtext1" required>
-          Question text
+          Question text (instructions / description)
         </Label>
         <WysiwygEditorLite
           value={data.question_text_1}
           onChange={(html) => onChange({ ...data, question_text_1: html })}
           minHeight={80}
           placeholder="Rank and rate the following items…"
+        />
+      </div>
+      <div>
+        <Label htmlFor="qtext2">Question statement (optional)</Label>
+        <WysiwygEditorLite
+          value={data.question_text_2}
+          onChange={(html) => onChange({ ...data, question_text_2: html })}
+          minHeight={60}
+          placeholder="The question statement shown to the candidate (optional)…"
         />
       </div>
       <div>
@@ -314,8 +367,15 @@ export function RankRateEditor({ data, onChange }: RankRateEditorProps) {
       </div>
       <div className="space-y-2">
         <Label>Items (candidate ranks 1-N, then rates each on {scalePoints}-point scale)</Label>
+        <p className="text-xs text-slate-500">
+          Each item must be tagged to a DIFFERENT section. Score per item = rank value × rating,
+          posted to that item&apos;s section.
+        </p>
         {data.options.map((opt, i) => (
-          <div key={i} className="flex items-center gap-3 rounded-md border border-slate-200 p-3">
+          <div
+            key={i}
+            className="flex flex-col gap-2 rounded-md border border-slate-200 p-3 sm:flex-row sm:items-center"
+          >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-600">
               {i + 1}
             </span>
@@ -323,6 +383,12 @@ export function RankRateEditor({ data, onChange }: RankRateEditorProps) {
               value={opt.text_value}
               onChange={(e) => updateOption(i, { ...opt, text_value: e.target.value })}
               placeholder="Enter item..."
+              className="flex-1 text-sm"
+            />
+            <Input
+              value={opt.section_tag}
+              onChange={(e) => updateOption(i, { ...opt, section_tag: e.target.value })}
+              placeholder="Section tag"
               className="flex-1 text-sm"
             />
             <button
@@ -351,6 +417,9 @@ export function RankRateEditor({ data, onChange }: RankRateEditorProps) {
           fallback="(no question text)"
           className="mb-2 text-sm text-slate-900"
         />
+        {data.question_text_2 && (
+          <RichText html={data.question_text_2} className="mb-2 text-sm text-slate-700" />
+        )}
         <div className="space-y-1">
           {data.options.map((opt, i) => (
             <div key={i} className="flex items-center gap-3 text-sm text-slate-700">
@@ -358,6 +427,11 @@ export function RankRateEditor({ data, onChange }: RankRateEditorProps) {
                 <option>Rank {i + 1}</option>
               </select>
               <span>{opt.text_value || `(item ${i + 1})`}</span>
+              {opt.section_tag && (
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">
+                  → {opt.section_tag}
+                </span>
+              )}
               <select className="ml-auto h-7 rounded border border-slate-200 text-xs" disabled>
                 {Array.from({ length: scalePoints }).map((_, p) => (
                   <option key={p}>{p + 1}</option>
@@ -383,6 +457,7 @@ interface ForcedChoiceEditorProps {
   questionType: string;
   data: {
     question_text_1: string;
+    question_text_2: string;
     rating_scale_points: string;
     options: OptionData[];
   };
@@ -401,7 +476,6 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
     onChange({
       ...data,
       options: [
-        ...data.options,
         { ...createEmptyOption(nextOrder, "FORCED_CHOICE") },
         { ...createEmptyOption(nextOrder + 1, "FORCED_CHOICE") },
       ],
@@ -414,13 +488,22 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
     <div className="space-y-4">
       <div>
         <Label htmlFor="qtext1" required>
-          Question text
+          Question text (instructions / description)
         </Label>
         <WysiwygEditorLite
           value={data.question_text_1}
           onChange={(html) => onChange({ ...data, question_text_1: html })}
           minHeight={80}
           placeholder={isTwoLevel ? "Select one option and rate it…" : "Select one option…"}
+        />
+      </div>
+      <div>
+        <Label htmlFor="qtext2">Question statement (optional)</Label>
+        <WysiwygEditorLite
+          value={data.question_text_2}
+          onChange={(html) => onChange({ ...data, question_text_2: html })}
+          minHeight={60}
+          placeholder="The question statement shown to the candidate (optional)…"
         />
       </div>
       {isTwoLevel && (
@@ -439,11 +522,13 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
       <div className="space-y-3">
         <Label>Option Pairs (exactly 2 options per question)</Label>
         <p className="text-xs text-slate-500">
-          Each forced-choice question has exactly 2 options. Set predefined scores for each.
-          {isTwoLevel && " Candidate selects one, then rates it."}
+          Each forced-choice question has exactly 2 options. The two options must be tagged to
+          DIFFERENT sections. Scoring is by selection vs non-selection: the selected option earns
+          its selection score{isTwoLevel ? " × rating" : ""}; the non-selected option earns its
+          non-selection score. Rule: selection &gt; non-selection ≥ 0.
         </p>
         {data.options.map((opt, i) => (
-          <div key={i} className="rounded-md border border-slate-200 p-3">
+          <div key={i} className="space-y-2 rounded-md border border-slate-200 p-3">
             <div className="flex items-start gap-3">
               <div className="flex-1">
                 <Input
@@ -453,18 +538,6 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
                   className="text-sm"
                 />
               </div>
-              <div className="w-28">
-                <Label className="text-xs text-slate-500">Predefined score</Label>
-                <Input
-                  type="number"
-                  value={opt.predefined_score}
-                  onChange={(e) =>
-                    updateOption(i, { ...opt, predefined_score: Number(e.target.value) })
-                  }
-                  className="text-sm"
-                  step="0.5"
-                />
-              </div>
               <button
                 type="button"
                 className="rounded px-2 py-1 text-xs text-danger hover:bg-danger-50"
@@ -472,6 +545,43 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
               >
                 Remove
               </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div>
+                <Label className="text-xs text-slate-500">Section tag</Label>
+                <Input
+                  value={opt.section_tag}
+                  onChange={(e) => updateOption(i, { ...opt, section_tag: e.target.value })}
+                  placeholder="e.g. Leadership"
+                  className="text-xs"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500">Selection score</Label>
+                <Input
+                  type="number"
+                  value={opt.selection_score}
+                  onChange={(e) =>
+                    updateOption(i, { ...opt, selection_score: Number(e.target.value) })
+                  }
+                  className="text-xs"
+                  step="0.5"
+                  min="0"
+                />
+              </div>
+              <div className="col-span-2 sm:col-span-1">
+                <Label className="text-xs text-slate-500">Non-selection score</Label>
+                <Input
+                  type="number"
+                  value={opt.non_selection_score}
+                  onChange={(e) =>
+                    updateOption(i, { ...opt, non_selection_score: Number(e.target.value) })
+                  }
+                  className="text-xs"
+                  step="0.5"
+                  min="0"
+                />
+              </div>
             </div>
           </div>
         ))}
@@ -494,21 +604,31 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
           fallback="(no question text)"
           className="mb-2 text-sm text-slate-900"
         />
+        {data.question_text_2 && (
+          <RichText html={data.question_text_2} className="mb-2 text-sm text-slate-700" />
+        )}
         <div className="space-y-1">
           {data.options.map((opt, i) => (
-            <label key={i} className="flex items-center gap-2 text-sm">
+            <label key={i} className="flex flex-wrap items-center gap-2 text-sm">
               <input type="radio" name="fc-preview" className="h-4 w-4" readOnly />
               <span className="text-slate-700">{opt.text_value || `(option ${i + 1})`}</span>
-              <span className="ml-auto text-xs text-slate-400">score: {opt.predefined_score}</span>
+              {opt.section_tag && (
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">
+                  → {opt.section_tag}
+                </span>
+              )}
+              <span className="ml-auto text-xs text-slate-400">
+                sel: {opt.selection_score} / non: {opt.non_selection_score}
+              </span>
             </label>
           ))}
         </div>
-        {isTwoLevel && (
-          <p className="mt-2 text-xs text-slate-500">
-            After selecting, candidate rates on {data.rating_scale_points || "N"}-point scale. Final
-            = predefined × rating.
-          </p>
-        )}
+        <p className="mt-2 text-xs text-slate-500">
+          {isTwoLevel
+            ? `Selected → selection × rating; non-selected → non-selection.`
+            : `Selected → selection score; non-selected → non-selection score.`}{" "}
+          Both options&apos; sections receive a score.
+        </p>
       </div>
     </div>
   );
