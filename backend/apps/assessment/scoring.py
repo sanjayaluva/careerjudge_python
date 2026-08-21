@@ -75,9 +75,7 @@ def score_question_by_section(
     if question.scoring_type not in ("RANK", "RANK_RATE", "FORCED_CHOICE", "FORCED_CHOICE_RATED"):
         return None
 
-    opts_qs = question.options
-    if sub_question_index:
-        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    opts_qs = question.options.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all().order_by("order"))
     n = len(options)
 
@@ -156,9 +154,7 @@ def _get_max_score(question: Question, sub_question_index: int = 0) -> float:
     When ``sub_question_index`` is provided, only counts options belonging
     to that sub-question.
     """
-    opts_qs = question.options
-    if sub_question_index:
-        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    opts_qs = question.options.filter(sub_question_index=sub_question_index)
     st = question.scoring_type
     if st in ("BINARY", "BINARY_FUZZY"):
         return 1.0
@@ -166,11 +162,10 @@ def _get_max_score(question: Question, sub_question_index: int = 0) -> float:
         # Max = number of scoreable items.
         # For FITB multi-field: 1 per option (field).
         # For Match: 1 per pair = half the options (half A, half B).
-        n_opts = opts_qs.count()
-        has_match = opts_qs.filter(option_type__in=["MATCH_A", "MATCH_B"]).exists()
-        if has_match:
-            return float(n_opts / 2)  # pairs
-        return float(n_opts)
+        n_match_a = opts_qs.filter(option_type="MATCH_A").count()
+        if n_match_a:
+            return float(n_match_a)  # pairs; MATCH_DUMMY distractors excluded
+        return float(opts_qs.count())
     elif st == "NEGATIVE":
         return 1.0
     elif st == "RANK":
@@ -237,9 +232,7 @@ def _score_binary(
     if not selected_ids and "selected_option_id" in raw_answer:
         selected_ids = [raw_answer["selected_option_id"]]
 
-    opts_qs = question.options
-    if sub_question_index:
-        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    opts_qs = question.options.filter(sub_question_index=sub_question_index)
     correct_options = list(opts_qs.filter(is_correct=True))
     if not correct_options:
         return 0.0, 1.0
@@ -275,15 +268,17 @@ def _score_binary_fuzzy(
     max_score = 1.0
     candidate_text = raw_answer.get("text", "").strip()
     if not candidate_text:
+        # The player submits FITB answers in the unified list format.
+        answers_list = raw_answer.get("answers", [])
+        candidate_text = (answers_list[0] if answers_list else "").strip()
+    if not candidate_text:
         return 0.0, max_score
 
     if not question.case_sensitive:
         candidate_text = candidate_text.lower()
 
     # Get correct answers from the first option's correct_answers
-    opts_qs = question.options
-    if sub_question_index:
-        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    opts_qs = question.options.filter(sub_question_index=sub_question_index)
     opt = opts_qs.first()
     if not opt:
         return 0.0, max_score
@@ -329,16 +324,16 @@ def _score_partial(
     ``sub_question_index`` filters to only this sub-question's options
     (for multi-sub-question pooled types 1c-1h).
     """
-    opts_qs = question.options
-    if sub_question_index:
-        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    opts_qs = question.options.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all().order_by("order"))
     if not options:
         return 0.0, 0.0
 
-    # Detect Match-the-following by option_type
-    has_match = any(o.option_type in ("MATCH_A", "MATCH_B") for o in options)
-    max_score = float(len(options) / 2) if has_match else float(len(options))
+    # Detect Match-the-following by option_type. Scoreable pairs = the
+    # number of Group-A items; Group-B distractors (MATCH_DUMMY) are NOT
+    # pairs and must not inflate the max (retest: 0.0/7.5 -> must be 6/6).
+    n_match_a = sum(1 for o in options if o.option_type == "MATCH_A")
+    max_score = float(n_match_a) if n_match_a else float(len(options))
 
     # For FITB multi-field: raw_answer = {"answers": ["ans1", "ans2", ...]}
     answers = raw_answer.get("answers", [])
@@ -423,9 +418,7 @@ def _score_negative(
     if not selected_ids and "selected_option_id" in raw_answer:
         selected_ids = [raw_answer["selected_option_id"]]
 
-    opts_qs = question.options
-    if sub_question_index:
-        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    opts_qs = question.options.filter(sub_question_index=sub_question_index)
     correct_options = list(opts_qs.filter(is_correct=True))
     correct_ids = {o.id for o in correct_options}
 
@@ -464,9 +457,7 @@ def _score_rank(
     raw_answer = {"ranking": [3, 1, 4, 2]} — option IDs in rank order
     (first element = rank 1).
     """
-    opts_qs = question.options
-    if sub_question_index:
-        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    opts_qs = question.options.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all().order_by("order"))
     n = len(options)
     max_score = float(n * (n + 1) / 2) if n > 0 else 1.0
@@ -500,9 +491,7 @@ def _score_rank_rate(
 
     raw_answer = {"ranking": [3, 1, 4, 2], "ratings": {"3": 5, "1": 3, ...}}
     """
-    opts_qs = question.options
-    if sub_question_index:
-        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    opts_qs = question.options.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all().order_by("order"))
     n = len(options)
     max_rating = question.rating_scale_points or 5
@@ -573,9 +562,7 @@ def _score_forced_choice(
 
     raw_answer = {"selected_option_id": 2}
     """
-    opts_qs = question.options
-    if sub_question_index:
-        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    opts_qs = question.options.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all())
     max_sel = max((o.selection_score for o in options), default=1.0)
     max_non_sel = max((o.non_selection_score for o in options), default=0.0)
@@ -612,9 +599,7 @@ def _score_forced_choice_rated(
 
     raw_answer = {"selected_option_id": 2, "rating": 4}
     """
-    opts_qs = question.options
-    if sub_question_index:
-        opts_qs = opts_qs.filter(sub_question_index=sub_question_index)
+    opts_qs = question.options.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all())
     max_rating = question.rating_scale_points or 5
     best_sel = max((o.selection_score * max_rating for o in options), default=1.0)
