@@ -1534,8 +1534,13 @@ class CourseModificationRequestViewSet(ModelViewSet):
         return qs.filter(trainer=user)
 
     def list(self, request, *args, **kwargs):
-        resp = super().list(request, *args, **kwargs)
-        return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
+        # Serialize directly (NOT super().list()) so pagination cannot wrap
+        # the payload into {count, results} — the frontend expects an array.
+        qs = self.filter_queryset(self.get_queryset())
+        return Response(
+            {"message": "OK", "data": self.get_serializer(qs, many=True).data},
+            status=status.HTTP_200_OK,
+        )
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -1687,8 +1692,13 @@ class LiveSessionRequestViewSet(ModelViewSet):
         return qs.filter(student=user)
 
     def list(self, request, *args, **kwargs):
-        resp = super().list(request, *args, **kwargs)
-        return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
+        # Serialize directly (NOT super().list()) so pagination cannot wrap
+        # the payload into {count, results} — the frontend expects an array.
+        qs = self.filter_queryset(self.get_queryset())
+        return Response(
+            {"message": "OK", "data": self.get_serializer(qs, many=True).data},
+            status=status.HTTP_200_OK,
+        )
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()

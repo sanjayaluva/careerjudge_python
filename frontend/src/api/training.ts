@@ -382,7 +382,9 @@ export function requestCourseUpdate(
 }
 
 export function listCourseUpdateRequests(): Promise<CourseUpdateRequest[]> {
-  return apiGet<CourseUpdateRequest[]>(`${BASE}/course-update-requests/`);
+  return apiGet<CourseUpdateRequest[]>(`${BASE}/course-update-requests/`).then((r) =>
+    Array.isArray(r) ? r : ((r as unknown as { results?: CourseUpdateRequest[] }).results ?? []),
+  );
 }
 
 export function approveCourseUpdateRequest(
@@ -432,7 +434,9 @@ export function requestLiveSession(
 }
 
 export function listLiveSessionRequests(): Promise<LiveSessionRequestItem[]> {
-  return apiGet<LiveSessionRequestItem[]>(`${BASE}/live-session-requests/`);
+  return apiGet<LiveSessionRequestItem[]>(`${BASE}/live-session-requests/`).then((r) =>
+    Array.isArray(r) ? r : ((r as unknown as { results?: LiveSessionRequestItem[] }).results ?? []),
+  );
 }
 
 export function registerForCourse(
