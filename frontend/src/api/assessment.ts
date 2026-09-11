@@ -66,6 +66,12 @@ export interface AssessmentSession {
   percentage: number | null;
   /** Assessment-level total duration (seconds) — exposed via session API for the player timer. */
   total_duration_seconds: number | null;
+  /**
+   * Effective time budget (seconds): the assessment-level timer, or the sum
+   * of the per-level (section/question) timers when the timer is set lower
+   * down (SRS §5.2). Null when no timer is set.
+   */
+  aggregate_duration_seconds: number | null;
   /** Assessment-level navigation rule — exposed via session API for the player. */
   navigation_rule: string;
   /** Assessment-level display order — exposed via session API for the player. */
@@ -258,6 +264,16 @@ export interface SessionQuestion {
   max_score: number | null;
   answered_at: string | null;
   time_spent_seconds: number | null;
+  /**
+   * Per-level timer metadata (SRS §5.2). ``section_duration_seconds`` is the
+   * duration of the section that governs this question's section-level timer
+   * (the ancestor at the configured timer level); ``timer_section_id`` is
+   * that section's id — both null unless a section-level timer is configured.
+   * ``question_duration_seconds`` is this question's own per-question timer.
+   */
+  section_duration_seconds: number | null;
+  timer_section_id: number | null;
+  question_duration_seconds: number | null;
   question_detail: {
     id: number;
     question_title: string;

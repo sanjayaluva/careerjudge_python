@@ -1032,6 +1032,153 @@ class TestSessionFlow(AssessmentViewTestBase):
         assert results[0]["assessment"] == self.assessment.id
 
 
+class TestDeliveryCountAndTimers(AssessmentViewTestBase):
+    """Milestone 5 — delivery count (§4.1.1) + per-level timers (§5.2)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = UserFactory.create(role=get_or_create_role("cj_admin", is_system=True))
+        grant_assessment_perms(self.admin)
+        self.candidate = UserFactory.create(role=get_or_create_role("individual", is_system=True))
+        grant_assessment_perms(self.candidate, actions=("view",))
+
+    def _make_assessment(self, **kwargs):
+        return Assessment.objects.create(
+            title="Delivery Test",
+            status="published",
+            created_by=self.admin,
+            **kwargs,
+        )
+
+    def _assign_n_questions(self, section, n):
+        for i in range(n):
+            q = make_mcq_question(self.admin)
+            AssessmentQuestion.objects.create(section=section, question=q, order=i + 1)
+
+    def test_delivery_count_delivers_random_subset(self):
+        """delivery_count=k on a section of n>k questions delivers exactly k."""
+        assessment = self._make_assessment()
+        section = AssessmentSection.objects.create(
+            assessment=assessment, title="S1", level=1, order=1, delivery_count=3
+        )
+        self._assign_n_questions(section, 8)
+
+        self.client.force_authenticate(user=self.candidate)
+        resp = self.client.post(f"/api/assessments/{assessment.id}/start_session/")
+        assert resp.status_code == status.HTTP_201_CREATED
+        sid = resp.json()["data"]["id"]
+        session = AssessmentSession.objects.get(id=sid)
+        assert session.question_attempts.count() == 3
+
+    def test_delivery_count_selection_is_stable_across_resume(self):
+        """The random sub-selection persists — resuming returns the same set."""
+        assessment = self._make_assessment(attempt_rule="MULTIPLE_SESSION")
+        section = AssessmentSection.objects.create(
+            assessment=assessment, title="S1", level=1, order=1, delivery_count=4
+        )
+        self._assign_n_questions(section, 10)
+
+        self.client.force_authenticate(user=self.candidate)
+        start = self.client.post(f"/api/assessments/{assessment.id}/start_session/")
+        sid = start.json()["data"]["id"]
+        first = set(
+            QuestionAttempt.objects.filter(session_id=sid).values_list("question_id", flat=True)
+        )
+        assert len(first) == 4
+
+        # Suspend, then resume — the delivered set must not change.
+        self.client.post(f"/api/assessments/sessions/{sid}/suspend/")
+        resume = self.client.post(f"/api/assessments/{assessment.id}/start_session/")
+        assert resume.json()["data"]["id"] == sid
+        second = set(
+            QuestionAttempt.objects.filter(session_id=sid).values_list("question_id", flat=True)
+        )
+        assert first == second
+
+        # And the questions payload also returns exactly the delivered set.
+        qresp = self.client.get(f"/api/assessments/sessions/{sid}/questions/")
+        assert len(qresp.json()["data"]) == 4
+
+    def test_delivery_count_null_delivers_all(self):
+        assessment = self._make_assessment()
+        section = AssessmentSection.objects.create(
+            assessment=assessment, title="S1", level=1, order=1, delivery_count=None
+        )
+        self._assign_n_questions(section, 5)
+
+        self.client.force_authenticate(user=self.candidate)
+        resp = self.client.post(f"/api/assessments/{assessment.id}/start_session/")
+        sid = resp.json()["data"]["id"]
+        assert AssessmentSession.objects.get(id=sid).question_attempts.count() == 5
+
+    def test_delivery_count_larger_than_assigned_delivers_all(self):
+        assessment = self._make_assessment()
+        section = AssessmentSection.objects.create(
+            assessment=assessment, title="S1", level=1, order=1, delivery_count=99
+        )
+        self._assign_n_questions(section, 4)
+
+        self.client.force_authenticate(user=self.candidate)
+        resp = self.client.post(f"/api/assessments/{assessment.id}/start_session/")
+        sid = resp.json()["data"]["id"]
+        assert AssessmentSession.objects.get(id=sid).question_attempts.count() == 4
+
+    def test_aggregate_duration_sums_section_timers(self):
+        """§5.2: with a level-1 timer, aggregate = sum of the set section timers."""
+        assessment = self._make_assessment(timer_level="level1", total_duration_seconds=None)
+        AssessmentSection.objects.create(
+            assessment=assessment, title="S1", level=1, order=1, duration_seconds=120
+        )
+        AssessmentSection.objects.create(
+            assessment=assessment, title="S2", level=1, order=2, duration_seconds=180
+        )
+        # A section with no timer set must not contribute.
+        AssessmentSection.objects.create(
+            assessment=assessment, title="S3", level=1, order=3, duration_seconds=None
+        )
+        assert assessment.aggregate_duration_seconds() == 300
+
+    def test_aggregate_duration_assessment_level_uses_total(self):
+        assessment = self._make_assessment(timer_level="assessment", total_duration_seconds=600)
+        assert assessment.aggregate_duration_seconds() == 600
+
+    def test_aggregate_duration_question_level_sums_question_timers(self):
+        assessment = self._make_assessment(timer_level="question", total_duration_seconds=None)
+        section = AssessmentSection.objects.create(
+            assessment=assessment, title="S1", level=1, order=1
+        )
+        q1 = make_mcq_question(self.admin)
+        q2 = make_mcq_question(self.admin)
+        AssessmentQuestion.objects.create(
+            section=section, question=q1, order=1, duration_seconds=30
+        )
+        AssessmentQuestion.objects.create(
+            section=section, question=q2, order=2, duration_seconds=45
+        )
+        assert assessment.aggregate_duration_seconds() == 75
+
+    def test_questions_payload_carries_timer_and_order_metadata(self):
+        """The session-questions payload carries section + question durations."""
+        assessment = self._make_assessment(timer_level="level1", total_duration_seconds=None)
+        section = AssessmentSection.objects.create(
+            assessment=assessment, title="S1", level=1, order=1, duration_seconds=200
+        )
+        q1 = make_mcq_question(self.admin)
+        AssessmentQuestion.objects.create(
+            section=section, question=q1, order=1, duration_seconds=42
+        )
+
+        self.client.force_authenticate(user=self.candidate)
+        start = self.client.post(f"/api/assessments/{assessment.id}/start_session/")
+        sid = start.json()["data"]["id"]
+        resp = self.client.get(f"/api/assessments/sessions/{sid}/questions/")
+        assert resp.status_code == status.HTTP_200_OK
+        item = resp.json()["data"][0]
+        assert item["question_duration_seconds"] == 42
+        assert item["section_duration_seconds"] == 200
+        assert item["timer_section_id"] == section.id
+
+
 class TestAssessmentTypeEnforcement(AssessmentViewTestBase):
     """Verify that normal and psychometric questions cannot be mixed in one assessment.
 

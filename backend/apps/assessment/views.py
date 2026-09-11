@@ -62,6 +62,37 @@ from .serializers import (
 )
 
 
+def _seed_session_attempts(session) -> None:
+    """Create the ``QuestionAttempt`` rows a session will deliver.
+
+    Honors each leaf section's ``delivery_count`` (SRS §4.1.1): if a section
+    has a delivery_count set and it is less than the number of assigned
+    questions, that many questions are selected AT RANDOM for this session;
+    otherwise every assigned question is delivered (backward-compatible when
+    delivery_count is NULL or >= the assigned count).
+
+    The created rows ARE the persisted selection — resuming the session
+    re-uses the same rows (``get_or_create``), so the sub-selection is stable
+    across suspend/resume and refreshes.
+    """
+    import random
+
+    for section in session.assessment.sections.all().order_by("level", "order"):
+        assigned = list(section.questions.all().order_by("order"))
+        dc = section.delivery_count
+        if dc is not None and 0 < dc < len(assigned):
+            delivered = random.sample(assigned, dc)
+        else:
+            delivered = assigned
+        for aq in delivered:
+            QuestionAttempt.objects.get_or_create(
+                session=session,
+                question=aq.question,
+                sub_question_index=aq.sub_question_index,
+                defaults={"section": section, "status": "not_attempted"},
+            )
+
+
 def _ensure_section_tags_have_sections(assessment, parent_section, question) -> None:
     """Ensure every distinct ``section_tag`` on a psychometric question's
     options has a matching ``AssessmentSection`` in the assessment.
@@ -548,19 +579,9 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
             status="active",
         )
 
-        # Pre-create QuestionAttempt records for all questions in the assessment
-        sections = assessment.sections.all().order_by("level", "order")
-        for section in sections:
-            for aq in section.questions.all().order_by("order"):
-                QuestionAttempt.objects.get_or_create(
-                    session=session,
-                    question=aq.question,
-                    sub_question_index=aq.sub_question_index,
-                    defaults={
-                        "section": section,
-                        "status": "not_attempted",
-                    },
-                )
+        # Pre-create QuestionAttempt records for the questions this session
+        # will deliver — honoring each leaf section's delivery_count (§4.1.1).
+        _seed_session_attempts(session)
 
         return Response(
             {
@@ -854,16 +875,71 @@ class SessionViewSet(ModelViewSet):
         """
         session = self.get_object()
         if not session.question_attempts.exists():
-            for section in session.assessment.sections.all().order_by("level", "order"):
-                for aq in section.questions.all().order_by("order"):
-                    QuestionAttempt.objects.get_or_create(
-                        session=session,
-                        question=aq.question,
-                        sub_question_index=aq.sub_question_index,
-                        defaults={"section": section, "status": "not_attempted"},
-                    )
-        attempts = session.question_attempts.select_related("question", "section").all()
-        serializer = QuestionAttemptSerializer(attempts, many=True)
+            _seed_session_attempts(session)
+
+        assessment = session.assessment
+        attempts = list(session.question_attempts.select_related("question", "section").all())
+
+        # ── Per-level timer + display-order context for the player ──
+        # Build the section hierarchy so we can resolve, per question, the
+        # governing timer section (the ancestor at the configured timer level)
+        # and each assigned question's own duration (question-level timer).
+        sections_by_id = {s.id: s for s in assessment.sections.all()}
+        timer_level = assessment.timer_level
+        timer_level_num = (
+            int(timer_level[-1]) if timer_level in ("level1", "level2", "level3", "level4") else None
+        )
+
+        def _governing_section(leaf):
+            """Walk up to the ancestor section at the configured timer level."""
+            if timer_level_num is None or leaf is None:
+                return None
+            node = leaf
+            while node is not None:
+                if node.level == timer_level_num:
+                    return node
+                node = sections_by_id.get(node.parent_id)
+            return None
+
+        # leaf_section_id -> (timer_section_id, section_duration_seconds)
+        section_timer_map = {}
+        for s in sections_by_id.values():
+            gov = _governing_section(s)
+            section_timer_map[s.id] = (
+                (gov.id, gov.duration_seconds) if gov is not None else (None, None)
+            )
+        # (section_id, question_id, sub_question_index) -> per-question duration
+        aq_durations = {
+            (aq.section_id, aq.question_id, aq.sub_question_index): aq.duration_seconds
+            for aq in AssessmentQuestion.objects.filter(section__assessment=assessment)
+        }
+        # (section_id, question_id, sub_question_index) -> assigned display order
+        aq_order = {
+            (aq.section_id, aq.question_id, aq.sub_question_index): aq.order
+            for aq in AssessmentQuestion.objects.filter(section__assessment=assessment)
+        }
+
+        # ── Honor the configured per-level display order (SRS §5.1) ──
+        # Order the delivered attempts by section hierarchy (level, order) and
+        # then by each question's assigned order within its section. RANDOM
+        # display order is applied client-side over this delivered set.
+        def _sort_key(att):
+            sec = att.section
+            key = (att.section_id, att.question_id, att.sub_question_index)
+            return (
+                sec.level if sec is not None else 0,
+                sec.order if sec is not None else 0,
+                aq_order.get(key, 0),
+                att.id,
+            )
+
+        attempts.sort(key=_sort_key)
+
+        serializer = QuestionAttemptSerializer(
+            attempts,
+            many=True,
+            context={"section_timer_map": section_timer_map, "aq_durations": aq_durations},
+        )
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])

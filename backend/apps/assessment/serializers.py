@@ -29,6 +29,7 @@ class AssessmentSectionSerializer(serializers.ModelSerializer):
             "level",
             "order",
             "duration_seconds",
+            "delivery_count",
             "subsections",
         ]
         read_only_fields = ["id", "assessment"]
@@ -157,6 +158,11 @@ class AssessmentSessionSerializer(serializers.ModelSerializer):
     navigation_rule = serializers.CharField(source="assessment.navigation_rule", read_only=True)
     display_order = serializers.CharField(source="assessment.display_order", read_only=True)
     timer_level = serializers.CharField(source="assessment.timer_level", read_only=True)
+    # Effective time budget: assessment-level timer, or the sum of the
+    # per-level (section/question) timers when the timer is set lower down.
+    aggregate_duration_seconds = serializers.IntegerField(
+        source="assessment.aggregate_duration_seconds", read_only=True
+    )
 
     class Meta:
         model = AssessmentSession
@@ -175,6 +181,7 @@ class AssessmentSessionSerializer(serializers.ModelSerializer):
             "max_score",
             "percentage",
             "total_duration_seconds",
+            "aggregate_duration_seconds",
             "navigation_rule",
             "display_order",
             "timer_level",
@@ -192,6 +199,7 @@ class AssessmentSessionSerializer(serializers.ModelSerializer):
             "assessment_title",
             "candidate_name",
             "total_duration_seconds",
+            "aggregate_duration_seconds",
         ]
 
 
@@ -204,6 +212,15 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
     """
 
     question_detail = QuestionDetailSerializer(source="question", read_only=True)
+    # Per-level timer metadata for the player (populated when the view passes
+    # the timer context; None otherwise, e.g. the single-attempt answer echo).
+    # ``timer_section_id`` is the ancestor section that governs this
+    # question's section-level timer; ``section_duration_seconds`` is that
+    # section's duration. ``question_duration_seconds`` is this question's own
+    # per-question timer (used when timer_level='question').
+    section_duration_seconds = serializers.SerializerMethodField()
+    timer_section_id = serializers.SerializerMethodField()
+    question_duration_seconds = serializers.SerializerMethodField()
 
     class Meta:
         model = QuestionAttempt
@@ -219,9 +236,26 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
             "max_score",
             "answered_at",
             "time_spent_seconds",
+            "section_duration_seconds",
+            "timer_section_id",
+            "question_duration_seconds",
             "question_detail",
         ]
         read_only_fields = ["id", "score", "max_score", "answered_at", "question_detail"]
+
+    def _timer_section(self, obj):
+        section_map = self.context.get("section_timer_map") or {}
+        return section_map.get(obj.section_id, (None, None))
+
+    def get_timer_section_id(self, obj):
+        return self._timer_section(obj)[0]
+
+    def get_section_duration_seconds(self, obj):
+        return self._timer_section(obj)[1]
+
+    def get_question_duration_seconds(self, obj):
+        durations = self.context.get("aq_durations") or {}
+        return durations.get((obj.section_id, obj.question_id, obj.sub_question_index))
 
 
 class SectionScoreSerializer(serializers.ModelSerializer):

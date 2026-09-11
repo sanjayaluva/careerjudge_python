@@ -147,6 +147,40 @@ class Assessment(models.Model):
     def __str__(self) -> str:
         return self.title
 
+    def aggregate_duration_seconds(self):
+        """Effective total time budget for the assessment (SRS §5.2).
+
+        A timer is set at only ONE level. Level 0 (assessment) uses
+        ``total_duration_seconds`` directly. For a lower level, the aggregate
+        is the SUM of the timers set at that level across the assigned
+        variables/questions — never double-counting a parent and its
+        children, because only the configured ``timer_level`` contributes.
+
+        Returns ``None`` when no timer is set (backward-compatible: behaves
+        as an untimed assessment).
+        """
+        if self.timer_level in ("level1", "level2", "level3", "level4"):
+            level_num = int(self.timer_level[-1])
+            values = [
+                d
+                for d in self.sections.filter(level=level_num).values_list(
+                    "duration_seconds", flat=True
+                )
+                if d
+            ]
+            return sum(values) if values else None
+        if self.timer_level == "question":
+            values = [
+                d
+                for d in AssessmentQuestion.objects.filter(
+                    section__assessment=self, duration_seconds__isnull=False
+                ).values_list("duration_seconds", flat=True)
+                if d
+            ]
+            return sum(values) if values else None
+        # Assessment level (Level 0) or any unhandled value.
+        return self.total_duration_seconds
+
 
 class AssessmentSection(models.Model):
     """Hierarchical variable structure within an assessment (SRS Section 3).
@@ -178,6 +212,17 @@ class AssessmentSection(models.Model):
         null=True,
         blank=True,
         help_text=_("Time for this section. Only used if timer_level matches this level."),
+    )
+    delivery_count = models.PositiveIntegerField(
+        _("delivery count"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "SRS §4.1.1 — number of assigned questions to actually present during "
+            "delivery. Set on the last-level (leaf) variable that holds questions. "
+            "If set and less than the assigned count, that many questions are "
+            "selected at random per session. NULL (or >= assigned count) delivers all."
+        ),
     )
 
     class Meta:

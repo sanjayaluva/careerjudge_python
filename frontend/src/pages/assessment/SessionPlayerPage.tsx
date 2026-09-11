@@ -33,6 +33,7 @@ export default function SessionPlayerPage() {
   const [bookmarked, setBookmarked] = useState<Set<string>>(new Set());
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [questionTimeLeft, setQuestionTimeLeft] = useState<number | null>(null);
+  const [sectionTimeLeft, setSectionTimeLeft] = useState<number | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Tracks question IDs the candidate has already viewed (visited + navigated
@@ -146,7 +147,8 @@ export default function SessionPlayerPage() {
   });
 
   // Question-level timer: when timer_level='question', each question can
-  // have its own duration_seconds. Reset the per-question timer when the
+  // have its own duration_seconds (carried in the payload as
+  // question_duration_seconds). Reset the per-question timer when the
   // current question changes. Must be before early returns (hooks rule).
   const timerLevel = session?.timer_level ?? "assessment";
   useEffect(() => {
@@ -154,8 +156,28 @@ export default function SessionPlayerPage() {
       setQuestionTimeLeft(null);
       return;
     }
-    setQuestionTimeLeft(null);
+    const dur = questions[currentIndex].question_duration_seconds;
+    setQuestionTimeLeft(dur && dur > 0 ? dur : null);
   }, [currentIndex, timerLevel, questions]);
+
+  // Section-level timer: when timer_level is a variable level (level1..4),
+  // the section that governs the current question (timer_section_id) has a
+  // duration_seconds budget. The countdown resets when the governing section
+  // changes and, on expiry, locks that section by auto-advancing to the first
+  // question of the next section (mirroring the overall-timer expiry, which
+  // auto-submits). Must be before early returns (hooks rule).
+  const sectionTimerActive = ["level1", "level2", "level3", "level4"].includes(timerLevel);
+  const currentTimerSectionId =
+    questions && questions[currentIndex] ? questions[currentIndex].timer_section_id : null;
+  useEffect(() => {
+    if (!sectionTimerActive || !questions || !questions[currentIndex]) {
+      setSectionTimeLeft(null);
+      return;
+    }
+    const dur = questions[currentIndex].section_duration_seconds;
+    setSectionTimeLeft(dur && dur > 0 ? dur : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTimerSectionId, sectionTimerActive]);
 
   // Reset in-question sub-question index when the main question changes.
   useEffect(() => {
@@ -182,6 +204,39 @@ export default function SessionPlayerPage() {
     return () => clearInterval(qTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionTimeLeft]);
+
+  // Section-level timer countdown. On expiry, advance past the expiring
+  // section (locking it) or submit if it was the last section.
+  useEffect(() => {
+    if (sectionTimeLeft === null || sectionTimeLeft <= 0) return;
+    const expiringSectionId = currentTimerSectionId;
+    const sTimer = setInterval(() => {
+      setSectionTimeLeft((t) => {
+        if (t === null || t <= 1) {
+          clearInterval(sTimer);
+          // Find the last delivered question in the expiring section and jump
+          // to the one after it (the next section). Order-independent of the
+          // candidate's current position within the section.
+          if (questions) {
+            let lastIdx = -1;
+            questions.forEach((qq, i) => {
+              if (qq.timer_section_id === expiringSectionId) lastIdx = i;
+            });
+            const nextIdx = lastIdx + 1;
+            if (nextIdx > 0 && nextIdx < questions.length) {
+              setCurrentIndex(nextIdx);
+            } else {
+              submitMutation.mutate();
+            }
+          }
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(sTimer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionTimeLeft]);
 
   if (sessionLoading || questionsLoading) {
     return (
@@ -435,6 +490,19 @@ export default function SessionPlayerPage() {
             >
               <span className="text-xs">⏱</span>
               {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
+            </div>
+          )}
+          {/* Section-level timer (when timer_level='level1'..'level4') */}
+          {sectionTimeLeft !== null && sectionTimeLeft > 0 && (
+            <div
+              className={`flex items-center gap-1 rounded-lg px-3 py-1.5 font-mono text-base font-bold ${
+                sectionTimeLeft < 30
+                  ? "bg-danger-100 text-danger-700"
+                  : "bg-amber-100 text-amber-700"
+              }`}
+              title="Section time remaining"
+            >
+              Sec: {Math.floor(sectionTimeLeft / 60)}:{String(sectionTimeLeft % 60).padStart(2, "0")}
             </div>
           )}
           {/* Question-level timer (when timer_level='question') */}
