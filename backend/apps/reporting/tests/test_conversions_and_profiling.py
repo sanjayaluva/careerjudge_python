@@ -154,8 +154,12 @@ def test_stat_conversion_drives_cutoff(roles):
         stat_conversion="percentage",
     )
     ReportCutoff.objects.create(
-        report=report, section=sec_a, cutoff_score=60.0, cutoff_label="Avg",
-        above_description="ABOVE", below_description="BELOW",
+        report=report,
+        section=sec_a,
+        cutoff_score=60.0,
+        cutoff_label="Avg",
+        above_description="ABOVE",
+        below_description="BELOW",
     )
 
     d_pct = _build_descriptive(report, session)["cutoffs"][0]
@@ -184,8 +188,13 @@ def test_stat_conversion_drives_band_membership(roles):
         stat_conversion="percentage",
     )
     ReportBand.objects.create(
-        report=report, section=sec_a, target_type="section",
-        band_number=1, range_min=6, range_max=10, band_label="High STEN",
+        report=report,
+        section=sec_a,
+        target_type="section",
+        band_number=1,
+        range_min=6,
+        range_max=10,
+        band_label="High STEN",
     )
 
     bands_pct = _build_interpretative(report, session)["bands"]
@@ -209,8 +218,12 @@ def _profiling_setup(candidate_email):
     candidate = _make_user(candidate_email)
     assessment = Assessment.objects.create(title="Host", status="published")
     session = AssessmentSession.objects.create(
-        assessment=assessment, candidate=candidate, status="completed",
-        total_score=7.0, max_score=10.0, percentage=70.0,
+        assessment=assessment,
+        candidate=candidate,
+        status="completed",
+        total_score=7.0,
+        max_score=10.0,
+        percentage=70.0,
     )
     return solution, candidate, session
 
@@ -218,9 +231,13 @@ def _profiling_setup(candidate_email):
 def _mi(solution, candidate, stream, title, code, cat_pmi, cia_pmi, fmi):
     """A MatchIndex whose variable_details carry per-assessment PMI for CAT/CIA."""
     return MatchIndex.objects.create(
-        solution=solution, candidate=candidate,
-        career_stream=stream, career_title=title, career_code=code,
-        final_match_index=fmi, variable_mapping_index=fmi,
+        solution=solution,
+        candidate=candidate,
+        career_stream=stream,
+        career_title=title,
+        career_code=code,
+        final_match_index=fmi,
+        variable_mapping_index=fmi,
         variable_details=[
             {"variable": "v1", "assessment": "CAT", "pmi": cat_pmi, "vmi": 80.0},
             {"variable": "v2", "assessment": "CIA", "pmi": cia_pmi, "vmi": 60.0},
@@ -236,10 +253,15 @@ def test_pmi_d_produces_negative_gap_and_orders_descending(roles):
     _mi(solution, candidate, "Med", "CareerY", "Y", cat_pmi=90.0, cia_pmi=50.0, fmi=85.0)
 
     report = Report.objects.create(
-        title="Prof", report_type="descriptive", scope="profiling",
-        profiling_solution=solution, status="published",
-        include_raw_summary=False, include_pmi=True,
-        pmi_d_first_assessment="CAT", pmi_d_second_assessment="CIA",
+        title="Prof",
+        report_type="descriptive",
+        scope="profiling",
+        profiling_solution=solution,
+        status="published",
+        include_raw_summary=False,
+        include_pmi=True,
+        pmi_d_first_assessment="CAT",
+        pmi_d_second_assessment="CIA",
     )
     pmi = _build_profiling(report, session)["pmi"]
 
@@ -264,15 +286,25 @@ def test_pmi_d_bands_apply_to_negative_gap(roles):
     _mi(solution, candidate, "IT", "CareerX", "X", cat_pmi=75.2, cia_pmi=98.5, fmi=80.0)
 
     report = Report.objects.create(
-        title="Prof", report_type="descriptive", scope="profiling",
-        profiling_solution=solution, status="published",
-        include_raw_summary=False, include_pmi=True,
-        pmi_d_first_assessment="CAT", pmi_d_second_assessment="CIA",
+        title="Prof",
+        report_type="descriptive",
+        scope="profiling",
+        profiling_solution=solution,
+        status="published",
+        include_raw_summary=False,
+        include_pmi=True,
+        pmi_d_first_assessment="CAT",
+        pmi_d_second_assessment="CIA",
     )
     ReportBand.objects.create(
-        report=report, section=None, target_type="pmi_d",
-        band_number=5, range_min=-25, range_max=-5,
-        band_label="Moderate Gap", colour_code="Yellow",
+        report=report,
+        section=None,
+        target_type="pmi_d",
+        band_number=5,
+        range_min=-25,
+        range_max=-5,
+        band_label="Moderate Gap",
+        colour_code="Yellow",
     )
     gap = _build_profiling(report, session)["pmi"]["gap_index"]
     assert gap["careers"][0]["band"]["band_label"] == "Moderate Gap"
@@ -291,13 +323,22 @@ def test_fmi_target_band_resolves_against_fmi(roles):
     _mi(solution, candidate, "IT", "LowCareer", "L", cat_pmi=40, cia_pmi=40, fmi=45.0)
 
     report = Report.objects.create(
-        title="Prof", report_type="descriptive", scope="profiling",
-        profiling_solution=solution, status="published",
-        include_raw_summary=False, include_fmi=True,
+        title="Prof",
+        report_type="descriptive",
+        scope="profiling",
+        profiling_solution=solution,
+        status="published",
+        include_raw_summary=False,
+        include_fmi=True,
     )
     ReportBand.objects.create(
-        report=report, section=None, target_type="fmi",
-        band_number=1, range_min=75, range_max=100, band_label="Great match",
+        report=report,
+        section=None,
+        target_type="fmi",
+        band_number=1,
+        range_min=75,
+        range_max=100,
+        band_label="Great match",
     )
     fmi = _build_profiling(report, session)["fmi"]
     by_title = {f["career_title"]: f for f in fmi}
@@ -312,13 +353,23 @@ def test_pmi_target_band_scoped_by_assessment(roles):
     _mi(solution, candidate, "IT", "CareerX", "X", cat_pmi=75.2, cia_pmi=40.0, fmi=80.0)
 
     report = Report.objects.create(
-        title="Prof", report_type="descriptive", scope="profiling",
-        profiling_solution=solution, status="published",
-        include_raw_summary=False, include_pmi=True,
+        title="Prof",
+        report_type="descriptive",
+        scope="profiling",
+        profiling_solution=solution,
+        status="published",
+        include_raw_summary=False,
+        include_pmi=True,
     )
     ReportBand.objects.create(
-        report=report, section=None, target_type="pmi", assessment_label="CAT",
-        band_number=1, range_min=70, range_max=100, band_label="Strong",
+        report=report,
+        section=None,
+        target_type="pmi",
+        assessment_label="CAT",
+        band_number=1,
+        range_min=70,
+        range_max=100,
+        band_label="Strong",
     )
     pmi = _build_profiling(report, session)["pmi"]
     cat_entry = pmi["by_assessment"]["CAT"][0]

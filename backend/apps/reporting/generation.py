@@ -213,10 +213,8 @@ def _convert_score(value: float, conversion: str, norm: "_NormContext | None" = 
         return _percentile_rank(value, norm.population)
 
     if conversion in ("sten", "stenine"):
-        if norm is not None and norm.sd > 0:
-            z = (value - norm.mean) / norm.sd
-        else:
-            z = 0.0  # degenerate population -> mid-scale
+        # degenerate population (no/zero variance) -> mid-scale
+        z = (value - norm.mean) / norm.sd if norm is not None and norm.sd > 0 else 0.0
         if conversion == "sten":
             return int(max(1, min(10, round(5.5 + 2 * z))))
         return int(max(1, min(9, round(5 + 2 * z))))
@@ -347,9 +345,7 @@ def _build_typological(
         ss = session.section_scores.filter(section=tc.section).first()
         score = norm.convert(ss.percentage if ss else 0, report.stat_conversion)
         band = _match_band(section_bands.get(tc.section_id, []), score)
-        scored.append(
-            {"variable": tc.section.title, "code": tc.code, "score": score, "band": band}
-        )
+        scored.append({"variable": tc.section.title, "code": tc.code, "score": score, "band": band})
 
     # Sort by (converted) score descending, take top N
     scored.sort(key=lambda x: x["score"], reverse=True)
@@ -629,7 +625,9 @@ def _bands_by_target(report) -> dict[str, list]:
     return grouped
 
 
-def _match_band(bands: list, value: float | None, assessment_label: str | None = None) -> dict | None:
+def _match_band(
+    bands: list, value: float | None, assessment_label: str | None = None
+) -> dict | None:
     """Return the first band whose range contains ``value`` (reuses
     ReportBand.contains_score). When ``assessment_label`` is given, only bands
     scoped to that label (or with no label = applies to all) are considered.
@@ -639,9 +637,12 @@ def _match_band(bands: list, value: float | None, assessment_label: str | None =
     if value is None:
         return None
     for band in bands:
-        if assessment_label is not None and band.assessment_label:
-            if band.assessment_label != assessment_label:
-                continue
+        if (
+            assessment_label is not None
+            and band.assessment_label
+            and band.assessment_label != assessment_label
+        ):
+            continue
         if band.contains_score(value):
             return {
                 "band_number": band.band_number,

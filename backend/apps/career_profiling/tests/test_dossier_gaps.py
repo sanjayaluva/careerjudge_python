@@ -132,7 +132,9 @@ class TestBandGuards:
         solution = _make_solution(psychometrician_user)
         sa = _make_selected_assessment(solution)
         bd = _make_band_definition(sa, "V1")
-        Band.objects.create(band_definition=bd, band_number=1, range_min=0, range_max=50, band_code="L")
+        Band.objects.create(
+            band_definition=bd, band_number=1, range_min=0, range_max=50, band_code="L"
+        )
 
         resp = psy_client.post(
             f"/api/career-profiling/solutions/{solution.id}/band_rows/",
@@ -193,32 +195,52 @@ class TestBandGuards:
         sa2 = _make_selected_assessment(solution, "A2")
         # Only 1 variable (band_definition) on sa1 — fails "at least 2 variables"
         bd = _make_band_definition(sa1, "V1")
-        Band.objects.create(band_definition=bd, band_number=1, range_min=0, range_max=50, band_code="L")
-        Band.objects.create(band_definition=bd, band_number=2, range_min=50, range_max=100, band_code="H")
+        Band.objects.create(
+            band_definition=bd, band_number=1, range_min=0, range_max=50, band_code="L"
+        )
+        Band.objects.create(
+            band_definition=bd, band_number=2, range_min=50, range_max=100, band_code="H"
+        )
         bd2a = _make_band_definition(sa2, "V1")
         bd2b = _make_band_definition(sa2, "V2")
         for bd_ in (bd2a, bd2b):
-            Band.objects.create(band_definition=bd_, band_number=1, range_min=0, range_max=50, band_code="L")
-            Band.objects.create(band_definition=bd_, band_number=2, range_min=50, range_max=100, band_code="H")
+            Band.objects.create(
+                band_definition=bd_, band_number=1, range_min=0, range_max=50, band_code="L"
+            )
+            Band.objects.create(
+                band_definition=bd_, band_number=2, range_min=50, range_max=100, band_code="H"
+            )
 
         resp = psy_client.post(f"/api/career-profiling/solutions/{solution.id}/publish/")
         assert resp.status_code == 400
         assert "variables" in resp.json()["error"]["message"]
 
-    def test_publish_rejects_fewer_than_2_bands_per_variable(self, psy_client, psychometrician_user):
+    def test_publish_rejects_fewer_than_2_bands_per_variable(
+        self, psy_client, psychometrician_user
+    ):
         solution = _make_solution(psychometrician_user)
         sa1 = _make_selected_assessment(solution, "A1")
         sa2 = _make_selected_assessment(solution, "A2")
         bd1 = _make_band_definition(sa1, "V1")
         bd2 = _make_band_definition(sa1, "V2")
-        Band.objects.create(band_definition=bd1, band_number=1, range_min=0, range_max=100, band_code="ONLY")
-        Band.objects.create(band_definition=bd2, band_number=1, range_min=0, range_max=50, band_code="L")
-        Band.objects.create(band_definition=bd2, band_number=2, range_min=50, range_max=100, band_code="H")
+        Band.objects.create(
+            band_definition=bd1, band_number=1, range_min=0, range_max=100, band_code="ONLY"
+        )
+        Band.objects.create(
+            band_definition=bd2, band_number=1, range_min=0, range_max=50, band_code="L"
+        )
+        Band.objects.create(
+            band_definition=bd2, band_number=2, range_min=50, range_max=100, band_code="H"
+        )
         bd3a = _make_band_definition(sa2, "V1")
         bd3b = _make_band_definition(sa2, "V2")
         for bd_ in (bd3a, bd3b):
-            Band.objects.create(band_definition=bd_, band_number=1, range_min=0, range_max=50, band_code="L")
-            Band.objects.create(band_definition=bd_, band_number=2, range_min=50, range_max=100, band_code="H")
+            Band.objects.create(
+                band_definition=bd_, band_number=1, range_min=0, range_max=50, band_code="L"
+            )
+            Band.objects.create(
+                band_definition=bd_, band_number=2, range_min=50, range_max=100, band_code="H"
+            )
 
         resp = psy_client.post(f"/api/career-profiling/solutions/{solution.id}/publish/")
         assert resp.status_code == 400
@@ -251,8 +273,12 @@ class TestCriterionBandValidation:
         solution = _make_solution(created_by)
         sa = _make_selected_assessment(solution)
         bd = _make_band_definition(sa, "V1")
-        Band.objects.create(band_definition=bd, band_number=1, range_min=0, range_max=50, band_code="L")
-        Band.objects.create(band_definition=bd, band_number=2, range_min=50, range_max=100, band_code="H")
+        Band.objects.create(
+            band_definition=bd, band_number=1, range_min=0, range_max=50, band_code="L"
+        )
+        Band.objects.create(
+            band_definition=bd, band_number=2, range_min=50, range_max=100, band_code="H"
+        )
         return solution, bd
 
     def test_valid_band_code_accepted(self, psy_client, psychometrician_user):
@@ -352,7 +378,9 @@ class TestCriterionTemplateUpload:
         assert data["created_count"] == 4  # 2 careers x 2 variables
         assert data["error_count"] == 0
 
-        criteria = MappingCriterion.objects.filter(solution=solution, career_title="Computer Programmer")
+        criteria = MappingCriterion.objects.filter(
+            solution=solution, career_title="Computer Programmer"
+        )
         assert criteria.count() == 2
         analytical = criteria.get(section=bd1.section)
         assert analytical.criterion_band_code == "ANH1"
@@ -361,7 +389,9 @@ class TestCriterionTemplateUpload:
         assert logical.criterion_band_code == "LRL1"
         assert logical.rank_order is None  # empty column -> no rank
 
-        dba = MappingCriterion.objects.filter(solution=solution, career_title="Database Administrator")
+        dba = MappingCriterion.objects.filter(
+            solution=solution, career_title="Database Administrator"
+        )
         assert dba.get(section=bd1.section).rank_order is None  # "0" -> no rank
         assert dba.get(section=bd2.section).rank_order == 1
 

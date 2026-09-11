@@ -380,10 +380,7 @@ export interface CriteriaUploadResult {
 }
 
 /** Uploads a filled-in criteria CSV — creates/updates MappingCriterion rows. */
-export function uploadCriteriaCsv(
-  solutionId: number,
-  file: File,
-): Promise<CriteriaUploadResult> {
+export function uploadCriteriaCsv(solutionId: number, file: File): Promise<CriteriaUploadResult> {
   const form = new FormData();
   form.append("file", file);
   return apiPost(`${BASE}/solutions/${solutionId}/criteria-upload/`, form, {

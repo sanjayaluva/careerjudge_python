@@ -472,15 +472,15 @@ def _filter_full_attempt_candidates(
             continue
         if assessment_id not in required_by_assessment:
             required_by_assessment[assessment_id] = set(
-                AssessmentQuestion.objects.filter(
-                    section__assessment_id=assessment_id
-                ).values_list("question_id", flat=True)
+                AssessmentQuestion.objects.filter(section__assessment_id=assessment_id).values_list(
+                    "question_id", flat=True
+                )
             )
         required_qids = required_by_assessment[assessment_id]
         attempted_qids = set(
-            QuestionAttempt.objects.filter(
-                session_id=session_id, status="attempted"
-            ).values_list("question_id", flat=True)
+            QuestionAttempt.objects.filter(session_id=session_id, status="attempted").values_list(
+                "question_id", flat=True
+            )
         )
         if required_qids.issubset(attempted_qids):
             complete_session_ids.add(session_id)

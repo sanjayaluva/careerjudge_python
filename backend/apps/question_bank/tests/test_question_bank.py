@@ -502,9 +502,7 @@ class TestQuestionCRUD:
             format="json",
         )
         qid = create_resp.json()["data"]["id"]
-        sme_client.delete(
-            f"/api/question-bank/questions/{qid}/", {"reason": "x"}, format="json"
-        )
+        sme_client.delete(f"/api/question-bank/questions/{qid}/", {"reason": "x"}, format="json")
         dr = QuestionBankDeletionRequest.objects.get(target_type="question", target_id=qid)
         resp = admin_client.post(
             f"/api/question-bank/deletion-requests/{dr.id}/approve/", format="json"

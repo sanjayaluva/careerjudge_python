@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  JOIN_WINDOW_AFTER_END_MIN,
-  JOIN_WINDOW_BEFORE_MIN,
-  computeJoinWindow,
-} from "./joinWindow";
+import { JOIN_WINDOW_AFTER_END_MIN, JOIN_WINDOW_BEFORE_MIN, computeJoinWindow } from "./joinWindow";
 
 const START = "2026-09-11T10:00:00Z";
 const END = "2026-09-11T11:00:00Z";

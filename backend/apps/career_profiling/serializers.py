@@ -55,9 +55,7 @@ class BandSerializer(serializers.ModelSerializer):
         range_max = attrs.get("range_max", getattr(self.instance, "range_max", 100))
 
         if range_min < 0 or range_max > 100:
-            raise serializers.ValidationError(
-                "Band range must be between 0 and 100 (inclusive)."
-            )
+            raise serializers.ValidationError("Band range must be between 0 and 100 (inclusive).")
         if range_min >= range_max:
             raise serializers.ValidationError("range_min must be less than range_max.")
 

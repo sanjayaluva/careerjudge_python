@@ -276,10 +276,7 @@ export function bookSession(payload: {
   /** Report 3 §1.8: the user must explicitly accept the terms. */
   terms_accepted?: boolean;
 }): Promise<CounselingSession & { checkout_url: string | null }> {
-  return apiPost<CounselingSession & { checkout_url: string | null }>(
-    `${BASE}/sessions/`,
-    payload,
-  );
+  return apiPost<CounselingSession & { checkout_url: string | null }>(`${BASE}/sessions/`, payload);
 }
 
 /** H16/D8 §2.3: counsellor sets/updates the per-session meeting link. */

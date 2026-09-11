@@ -575,10 +575,7 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {roleFields.map((field) => (
-                <div
-                  key={field.name}
-                  className={field.type === "textarea" ? "sm:col-span-2" : ""}
-                >
+                <div key={field.name} className={field.type === "textarea" ? "sm:col-span-2" : ""}>
                   <Label htmlFor={`uf-profile-${field.name}`} required={field.required}>
                     {field.label}
                   </Label>

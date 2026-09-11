@@ -13,13 +13,7 @@ const BASE = "/invoicing";
 // Types
 // ---------------------------------------------------------------------------
 
-export type InvoiceStatus =
-  | "draft"
-  | "submitted"
-  | "approved"
-  | "rejected"
-  | "paid"
-  | "cancelled";
+export type InvoiceStatus = "draft" | "submitted" | "approved" | "rejected" | "paid" | "cancelled";
 
 export type InvoiceType =
   | "question_creation"

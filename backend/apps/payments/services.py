@@ -161,7 +161,11 @@ def refund_payment(payment: Payment, amount=None) -> bool:
         return False
 
     settings = PaymentSettings.get()
-    if settings.is_stripe_configured and payment.provider == "stripe" and payment.provider_session_id:
+    if (
+        settings.is_stripe_configured
+        and payment.provider == "stripe"
+        and payment.provider_session_id
+    ):
         try:
             import stripe
 

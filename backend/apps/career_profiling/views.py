@@ -157,7 +157,8 @@ class ProfilingSolutionViewSet(ModelViewSet):
                 {
                     "error": {
                         "code": "not_ready",
-                        "message": "Band definitions are incomplete:\n• " + "\n• ".join(band_errors),
+                        "message": "Band definitions are incomplete:\n• "
+                        + "\n• ".join(band_errors),
                         "details": {"errors": band_errors},
                     }
                 },
@@ -251,9 +252,7 @@ class ProfilingSolutionViewSet(ModelViewSet):
             return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
 
         bd_id = request.data.get("band_definition")
-        bd = BandDefinition.objects.filter(
-            id=bd_id, selected_assessment__solution=solution
-        ).first()
+        bd = BandDefinition.objects.filter(id=bd_id, selected_assessment__solution=solution).first()
         if not bd:
             return Response(
                 {
@@ -494,9 +493,7 @@ class ProfilingSolutionViewSet(ModelViewSet):
             return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
 
         bd_id = request.data.get("band_definition")
-        bd = BandDefinition.objects.filter(
-            id=bd_id, selected_assessment__solution=solution
-        ).first()
+        bd = BandDefinition.objects.filter(id=bd_id, selected_assessment__solution=solution).first()
         if not bd:
             return Response(
                 {
@@ -585,9 +582,9 @@ class ProfilingSolutionViewSet(ModelViewSet):
             if band_defs:
                 sample = ["IT Sector", "Computer Programmer", "", "ITCP"]
                 for bd in band_defs:
-                    first_code = bd.bands.order_by("band_number").values_list(
-                        "band_code", flat=True
-                    ).first()
+                    first_code = (
+                        bd.bands.order_by("band_number").values_list("band_code", flat=True).first()
+                    )
                     sample += [first_code or "", ""]
                 writer.writerow(sample)
             return response
@@ -635,7 +632,12 @@ class ProfilingSolutionViewSet(ModelViewSet):
                 decoded = file.read().decode("latin-1")
             except Exception as exc:
                 return Response(
-                    {"error": {"code": "validation_error", "message": f"Could not decode file: {exc}"}},
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": f"Could not decode file: {exc}",
+                        }
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 

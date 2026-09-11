@@ -37,7 +37,7 @@ beforeEach(() => {
 describe("<VerifyEmailPage />", () => {
   it("shows a password form up front instead of auto-verifying", () => {
     renderPage();
-    expect((document.getElementById("password") as HTMLInputElement)).toBeInTheDocument();
+    expect(document.getElementById("password") as HTMLInputElement).toBeInTheDocument();
     expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /set password/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /skip/i })).toBeInTheDocument();
@@ -49,7 +49,7 @@ describe("<VerifyEmailPage />", () => {
     vi.mocked(authApi.verifyEmail).mockResolvedValue(undefined);
     renderPage("tok-1");
 
-    await user.type((document.getElementById("password") as HTMLInputElement), "StrongP@ss1");
+    await user.type(document.getElementById("password") as HTMLInputElement, "StrongP@ss1");
     await user.type(screen.getByLabelText(/confirm password/i), "StrongP@ss1");
     await user.click(screen.getByRole("button", { name: /set password/i }));
 
@@ -76,7 +76,7 @@ describe("<VerifyEmailPage />", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.type((document.getElementById("password") as HTMLInputElement), "short");
+    await user.type(document.getElementById("password") as HTMLInputElement, "short");
     await user.type(screen.getByLabelText(/confirm password/i), "short");
     await user.click(screen.getByRole("button", { name: /set password/i }));
 
@@ -88,7 +88,7 @@ describe("<VerifyEmailPage />", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.type((document.getElementById("password") as HTMLInputElement), "StrongP@ss1");
+    await user.type(document.getElementById("password") as HTMLInputElement, "StrongP@ss1");
     await user.type(screen.getByLabelText(/confirm password/i), "Different1");
     await user.click(screen.getByRole("button", { name: /set password/i }));
 

@@ -887,7 +887,9 @@ class SessionViewSet(ModelViewSet):
         sections_by_id = {s.id: s for s in assessment.sections.all()}
         timer_level = assessment.timer_level
         timer_level_num = (
-            int(timer_level[-1]) if timer_level in ("level1", "level2", "level3", "level4") else None
+            int(timer_level[-1])
+            if timer_level in ("level1", "level2", "level3", "level4")
+            else None
         )
 
         def _governing_section(leaf):

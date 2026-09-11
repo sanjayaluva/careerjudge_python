@@ -280,7 +280,9 @@ export default function TaskDetailPage() {
                     <div
                       key={i}
                       className={
-                        i > 0 ? "space-y-1 border-t border-slate-100 pt-3 text-sm" : "space-y-1 text-sm"
+                        i > 0
+                          ? "space-y-1 border-t border-slate-100 pt-3 text-sm"
+                          : "space-y-1 text-sm"
                       }
                     >
                       {spec.qb_category && (

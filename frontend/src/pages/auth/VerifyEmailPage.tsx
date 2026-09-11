@@ -103,8 +103,8 @@ export default function VerifyEmailPage() {
       {status === "form" && (
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            You&apos;re verifying your email. Set a password now to finish setting up your
-            account, or skip and set one later from the sign-in page.
+            You&apos;re verifying your email. Set a password now to finish setting up your account,
+            or skip and set one later from the sign-in page.
           </p>
           <form onSubmit={handleSubmit(onSetPassword)} className="space-y-4" noValidate>
             <div>

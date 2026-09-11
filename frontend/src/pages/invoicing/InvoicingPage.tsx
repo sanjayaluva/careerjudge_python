@@ -47,7 +47,10 @@ import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 
-const STATUS_VARIANT: Record<InvoiceStatus, "default" | "success" | "warning" | "danger" | "primary" | "outline"> = {
+const STATUS_VARIANT: Record<
+  InvoiceStatus,
+  "default" | "success" | "warning" | "danger" | "primary" | "outline"
+> = {
   draft: "outline",
   submitted: "warning",
   approved: "primary",
@@ -176,7 +179,9 @@ export default function InvoicingPage() {
               ) : (
                 <InvoiceTable
                   invoices={pendingInvoices}
-                  renderActions={(inv) => <AdminReviewActions invoice={inv} onDone={invalidateAll} />}
+                  renderActions={(inv) => (
+                    <AdminReviewActions invoice={inv} onDone={invalidateAll} />
+                  )}
                 />
               )}
             </TabsContent>
@@ -191,7 +196,9 @@ export default function InvoicingPage() {
               ) : (
                 <InvoiceTable
                   invoices={allInvoices}
-                  renderActions={(inv) => <AdminReviewActions invoice={inv} onDone={invalidateAll} />}
+                  renderActions={(inv) => (
+                    <AdminReviewActions invoice={inv} onDone={invalidateAll} />
+                  )}
                 />
               )}
             </TabsContent>
@@ -361,7 +368,9 @@ function AdminReviewActions({ invoice, onDone }: { invoice: Invoice; onDone: () 
 
   const reviewMut = useMutation({
     mutationFn: () =>
-      reviewOpen === "reject" ? rejectInvoice(invoice.id, comment) : approveInvoice(invoice.id, comment),
+      reviewOpen === "reject"
+        ? rejectInvoice(invoice.id, comment)
+        : approveInvoice(invoice.id, comment),
     onSuccess: () => {
       onDone();
       toast.success(reviewOpen === "reject" ? "Invoice rejected." : "Invoice approved.");

@@ -93,18 +93,19 @@ def _band(bd, number, lo, hi, code):
 # which maps to 4 — but Executive still carries a value-5 perfect-match rule so
 # its table max stays 5.
 _CAT_VARS = [
-    ("Abstract", [(3, 40, 60, "ARM"), (4, 60, 80, "ARH1")], 70, "ARM",
-     [("ARM", "ARH1", 5)], 4),
-    ("Analytical", [(4, 60, 80, "ANH1")], 70, "ANH1",
-     [("ANH1", "ANH1", 5)], 2),
-    ("Verbal", [(3, 40, 60, "VRM"), (4, 60, 80, "VRH1")], 70, "VRM",
-     [("VRM", "VRH1", 5)], 5),
-    ("Quantitative", [(3, 40, 60, "QRM"), (4, 60, 80, "QRH1")], 70, "QRM",
-     [("QRM", "QRH1", 5)], 3),
-    ("Spatial", [(2, 20, 40, "SRL1")], 30, "SRL1",
-     [("SRL1", "SRL1", 5)], 6),
-    ("Executive", [(3, 40, 60, "EXM"), (4, 60, 80, "EXH1")], 50, "EXH1",
-     [("EXH1", "EXM", 4), ("EXH1", "EXH1", 5)], 1),
+    ("Abstract", [(3, 40, 60, "ARM"), (4, 60, 80, "ARH1")], 70, "ARM", [("ARM", "ARH1", 5)], 4),
+    ("Analytical", [(4, 60, 80, "ANH1")], 70, "ANH1", [("ANH1", "ANH1", 5)], 2),
+    ("Verbal", [(3, 40, 60, "VRM"), (4, 60, 80, "VRH1")], 70, "VRM", [("VRM", "VRH1", 5)], 5),
+    ("Quantitative", [(3, 40, 60, "QRM"), (4, 60, 80, "QRH1")], 70, "QRM", [("QRM", "QRH1", 5)], 3),
+    ("Spatial", [(2, 20, 40, "SRL1")], 30, "SRL1", [("SRL1", "SRL1", 5)], 6),
+    (
+        "Executive",
+        [(3, 40, 60, "EXM"), (4, 60, 80, "EXH1")],
+        50,
+        "EXH1",
+        [("EXH1", "EXM", 4), ("EXH1", "EXH1", 5)],
+        1,
+    ),
 ]
 
 
@@ -123,9 +124,7 @@ def _build_cat_assessment(solution, candidate, order, ranked):
             RankValue.objects.create(rank_definition=rank_def, rank_order=ro, rank_value=rv)
 
     for i, (title, bands, pct, crit_code, rules, rank_order) in enumerate(_CAT_VARS):
-        section = AssessmentSection.objects.create(
-            assessment=a, title=title, level=1, order=i + 1
-        )
+        section = AssessmentSection.objects.create(assessment=a, title=title, level=1, order=i + 1)
         bd = BandDefinition.objects.create(selected_assessment=sa, section=section)
         for number, lo, hi, code in bands:
             _band(bd, number, lo, hi, code)
@@ -182,9 +181,7 @@ def _build_cia_assessment(solution, candidate, order):
     for i, (title, bands, pct, crit_code, user_code, mcode, mval, rank_order) in enumerate(
         _CIA_VARS
     ):
-        section = AssessmentSection.objects.create(
-            assessment=a, title=title, level=1, order=i + 1
-        )
+        section = AssessmentSection.objects.create(assessment=a, title=title, level=1, order=i + 1)
         bd = BandDefinition.objects.create(selected_assessment=sa, section=section)
         for number, lo, hi, code in bands:
             _band(bd, number, lo, hi, code)

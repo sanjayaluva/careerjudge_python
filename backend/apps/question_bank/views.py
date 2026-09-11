@@ -250,9 +250,7 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
             if role_name in ("trainer", "sme"):
                 qs = qs.filter(created_by=self.request.user)
             elif role_name == "reviewer":
-                qs = qs.filter(
-                    Q(created_by=self.request.user) | ~Q(status="draft")
-                )
+                qs = qs.filter(Q(created_by=self.request.user) | ~Q(status="draft"))
 
         return qs
 
@@ -589,14 +587,18 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         category_id = data.get("category_id")
 
         if question_ids and not isinstance(question_ids, list):
-            return None, None, Response(
-                {
-                    "error": {
-                        "code": "validation_error",
-                        "message": "question_ids must be a list of ints.",
-                    }
-                },
-                status=status.HTTP_400_BAD_REQUEST,
+            return (
+                None,
+                None,
+                Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "question_ids must be a list of ints.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                ),
             )
 
         if not question_ids:
@@ -605,29 +607,39 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
             # Automatic/Manual Analysis "User specifies filter criteria and
             # clicks 'Extract'" step).
             if not category_id:
-                return None, None, Response(
-                    {
-                        "error": {
-                            "code": "validation_error",
-                            "message": "question_ids (list of ints) or category_id is required.",
-                        }
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
+                return (
+                    None,
+                    None,
+                    Response(
+                        {
+                            "error": {
+                                "code": "validation_error",
+                                "message": "question_ids (list of ints) or category_id is required.",
+                            }
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    ),
                 )
             questions = list(Question.objects.filter(category_id=category_id))
         else:
-            questions = list(Question.objects.filter(id__in=question_ids).select_related("category"))
+            questions = list(
+                Question.objects.filter(id__in=question_ids).select_related("category")
+            )
             found_ids = {q.id for q in questions}
             missing = set(question_ids) - found_ids
             if missing:
-                return None, None, Response(
-                    {
-                        "error": {
-                            "code": "validation_error",
-                            "message": f"Question IDs not found: {sorted(missing)}",
-                        }
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
+                return (
+                    None,
+                    None,
+                    Response(
+                        {
+                            "error": {
+                                "code": "validation_error",
+                                "message": f"Question IDs not found: {sorted(missing)}",
+                            }
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    ),
                 )
             if category_id:
                 questions = [q for q in questions if q.category_id == int(category_id)]
@@ -757,9 +769,7 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
             return error
 
         response = HttpResponse(content_type="text/csv")
-        response["Content-Disposition"] = (
-            'attachment; filename="psychometric_response_data.csv"'
-        )
+        response["Content-Disposition"] = 'attachment; filename="psychometric_response_data.csv"'
         fieldnames = [
             "question_id",
             "candidate_id",
@@ -1151,6 +1161,9 @@ class QuestionBankDeletionRequestViewSet(ModelViewSet):
         except Exception:
             pass
         return Response(
-            {"message": "Request declined.", "data": QuestionBankDeletionRequestSerializer(dr).data},
+            {
+                "message": "Request declined.",
+                "data": QuestionBankDeletionRequestSerializer(dr).data,
+            },
             status=status.HTTP_200_OK,
         )

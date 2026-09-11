@@ -39,7 +39,9 @@ def _make_session_two_sections():
         max_score=200.0,
         percentage=65.0,
     )
-    sec_a = AssessmentSection.objects.create(assessment=assessment, title="Verbal", level=1, order=1)
+    sec_a = AssessmentSection.objects.create(
+        assessment=assessment, title="Verbal", level=1, order=1
+    )
     sec_b = AssessmentSection.objects.create(
         assessment=assessment, title="Numerical", level=1, order=2
     )
@@ -58,15 +60,23 @@ def test_typological_top_variable_carries_matching_band():
     non-top (40%) variable isn't part of the type profile at all."""
     _assessment, _candidate, session, sec_a, sec_b = _make_session_two_sections()
     report = Report.objects.create(
-        title="Type", report_type="typological", scope="general",
-        assessment=_assessment, status="published",
+        title="Type",
+        report_type="typological",
+        scope="general",
+        assessment=_assessment,
+        status="published",
     )
     TypologicalCode.objects.create(report=report, section=sec_a, code="V", top_n=1)
     TypologicalCode.objects.create(report=report, section=sec_b, code="N", top_n=1)
     ReportBand.objects.create(
-        report=report, section=sec_a, target_type="section",
-        band_number=1, range_min=80, range_max=100,
-        band_label="Dominant", description="Strong verbal reasoning.",
+        report=report,
+        section=sec_a,
+        target_type="section",
+        band_number=1,
+        range_min=80,
+        range_max=100,
+        band_label="Dominant",
+        description="Strong verbal reasoning.",
     )
 
     result = _build_typological(report, session)
@@ -81,8 +91,11 @@ def test_typological_top_variable_carries_matching_band():
 def test_typological_variable_without_matching_band_has_none():
     _assessment, _candidate, session, sec_a, _sec_b = _make_session_two_sections()
     report = Report.objects.create(
-        title="Type", report_type="typological", scope="general",
-        assessment=_assessment, status="published",
+        title="Type",
+        report_type="typological",
+        scope="general",
+        assessment=_assessment,
+        status="published",
     )
     TypologicalCode.objects.create(report=report, section=sec_a, code="V", top_n=1)
     # No bands defined at all.
@@ -95,14 +108,22 @@ def test_typological_report_with_bands_renders_pdf():
     report whose top variable is banded."""
     _assessment, _candidate, session, sec_a, _sec_b = _make_session_two_sections()
     report = Report.objects.create(
-        title="Type", report_type="typological", scope="general",
-        assessment=_assessment, status="published",
+        title="Type",
+        report_type="typological",
+        scope="general",
+        assessment=_assessment,
+        status="published",
     )
     TypologicalCode.objects.create(report=report, section=sec_a, code="V", top_n=1)
     ReportBand.objects.create(
-        report=report, section=sec_a, target_type="section",
-        band_number=1, range_min=80, range_max=100,
-        band_label="Dominant", description="Strong verbal reasoning.",
+        report=report,
+        section=sec_a,
+        target_type="section",
+        band_number=1,
+        range_min=80,
+        range_max=100,
+        band_label="Dominant",
+        description="Strong verbal reasoning.",
     )
     rendered = generate_report_data(report, session)
     assert rendered["typological"]["top_variables"][0]["band"]["band_label"] == "Dominant"
@@ -131,8 +152,11 @@ def _tiny_png():
 def test_section_description_and_image_surface_in_generation_and_pdf():
     _assessment, _candidate, session, _sec_a, _sec_b = _make_session_two_sections()
     report = Report.objects.create(
-        title="Desc", report_type="descriptive", scope="general",
-        assessment=_assessment, status="published",
+        title="Desc",
+        report_type="descriptive",
+        scope="general",
+        assessment=_assessment,
+        status="published",
     )
     ReportSection.objects.create(
         report=report,
@@ -171,8 +195,12 @@ def test_section_serializer_accepts_multipart_image_upload():
 
     assessment = Assessment.objects.create(title="A", status="published")
     report = Report.objects.create(
-        title="Desc", report_type="descriptive", scope="general",
-        assessment=assessment, status="draft", created_by=admin,
+        title="Desc",
+        report_type="descriptive",
+        scope="general",
+        assessment=assessment,
+        status="draft",
+        created_by=admin,
     )
     resp = client.post(
         f"/api/reporting/reports/{report.id}/sections/",
@@ -199,13 +227,23 @@ def test_section_serializer_accepts_multipart_image_upload():
 def test_table_layout_builds_rows_from_section_scores_with_bands():
     _assessment, _candidate, session, sec_a, sec_b = _make_session_two_sections()
     report = Report.objects.create(
-        title="Desc", report_type="descriptive", scope="general",
-        assessment=_assessment, status="published", data_input_level="level1",
+        title="Desc",
+        report_type="descriptive",
+        scope="general",
+        assessment=_assessment,
+        status="published",
+        data_input_level="level1",
     )
     ReportBand.objects.create(
-        report=report, section=sec_a, target_type="section",
-        band_number=1, range_min=80, range_max=100,
-        band_label="High", colour_code="#16a34a", description="Excellent.",
+        report=report,
+        section=sec_a,
+        target_type="section",
+        band_number=1,
+        range_min=80,
+        range_max=100,
+        band_label="High",
+        colour_code="#16a34a",
+        description="Excellent.",
     )
     ReportSection.objects.create(
         report=report,
@@ -236,8 +274,11 @@ def test_table_layout_builds_rows_from_section_scores_with_bands():
 def test_graph_layout_is_recorded_but_scoped_out():
     _assessment, _candidate, session, _sec_a, _sec_b = _make_session_two_sections()
     report = Report.objects.create(
-        title="Desc", report_type="descriptive", scope="general",
-        assessment=_assessment, status="published",
+        title="Desc",
+        report_type="descriptive",
+        scope="general",
+        assessment=_assessment,
+        status="published",
     )
     ReportSection.objects.create(
         report=report,

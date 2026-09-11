@@ -719,11 +719,15 @@ class CounselingSessionViewSet(ModelViewSet):
             # counselee must never see counsellor-private notes (D8 §3.3).
             user_role_name = request.user.role.name if request.user.role_id else None
             if user_role_name != "cj_admin" and (
-                not session.counsellor_id
-                or session.counsellor.user_id != request.user.id
+                not session.counsellor_id or session.counsellor.user_id != request.user.id
             ):
                 return Response(
-                    {"error": {"code": "forbidden", "message": "Summary is counsellor/admin-only."}},
+                    {
+                        "error": {
+                            "code": "forbidden",
+                            "message": "Summary is counsellor/admin-only.",
+                        }
+                    },
                     status=status.HTTP_403_FORBIDDEN,
                 )
             if not hasattr(session, "summary"):

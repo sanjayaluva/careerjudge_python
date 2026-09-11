@@ -74,14 +74,14 @@ def sme_client(db, sme_user):
 
 def _make_question(category=None, **kwargs):
     category = category or Category.objects.create(name=f"Cat-{Question.objects.count()}")
-    defaults = dict(
-        category=category,
-        question_type="MCQ_TEXT_IMAGE",
-        question_title="T",
-        question_text_1="Q?",
-        scoring_type="BINARY",
-        status="confirmed",
-    )
+    defaults = {
+        "category": category,
+        "question_type": "MCQ_TEXT_IMAGE",
+        "question_title": "T",
+        "question_text_1": "Q?",
+        "scoring_type": "BINARY",
+        "status": "confirmed",
+    }
     defaults.update(kwargs)
     return Question.objects.create(**defaults)
 
@@ -366,7 +366,8 @@ class TestManualPsychometricPath:
         q = _make_question()
         assessment = Assessment.objects.create(title="A", status="published")
         young = _make_candidate(
-            "young@test.com", date_of_birth=datetime.date.today() - datetime.timedelta(days=20 * 365)
+            "young@test.com",
+            date_of_birth=datetime.date.today() - datetime.timedelta(days=20 * 365),
         )
         old = _make_candidate(
             "old@test.com", date_of_birth=datetime.date.today() - datetime.timedelta(days=50 * 365)

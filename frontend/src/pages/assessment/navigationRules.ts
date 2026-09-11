@@ -21,7 +21,8 @@
  * instead of only indirectly through the full player component.
  */
 
-export type NavigationRule = "FREE" | "PREV_SECTION" | "NO_BACKWARD_SECTION" | "NO_BACKWARD_QUESTION" | string;
+export type NavigationRule =
+  "FREE" | "PREV_SECTION" | "NO_BACKWARD_SECTION" | "NO_BACKWARD_QUESTION" | string;
 
 /** Section ids in delivery order, first occurrence wins (matches the order
  * questions are delivered in — see SessionPlayerPage's `sectionEntries`). */

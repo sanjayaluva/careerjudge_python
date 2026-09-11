@@ -31,9 +31,10 @@ export function computeJoinWindow(
 
   const start = new Date(startTime).getTime();
   if (Number.isNaN(start)) return { canJoin: false, label: "" };
-  const end = endTime && !Number.isNaN(new Date(endTime).getTime())
-    ? new Date(endTime).getTime()
-    : start + 60 * 60 * 1000;
+  const end =
+    endTime && !Number.isNaN(new Date(endTime).getTime())
+      ? new Date(endTime).getTime()
+      : start + 60 * 60 * 1000;
 
   const opensAt = start - JOIN_WINDOW_BEFORE_MIN * 60 * 1000;
   const closesAt = end + JOIN_WINDOW_AFTER_END_MIN * 60 * 1000;
@@ -53,10 +54,7 @@ export function computeJoinWindow(
 }
 
 /** React hook: ticks every second so the countdown label stays live. */
-export function useJoinWindow(
-  startTime?: string | null,
-  endTime?: string | null,
-): JoinWindowState {
+export function useJoinWindow(startTime?: string | null, endTime?: string | null): JoinWindowState {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {

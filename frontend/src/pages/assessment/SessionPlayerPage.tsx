@@ -546,7 +546,8 @@ export default function SessionPlayerPage() {
               }`}
               title="Section time remaining"
             >
-              Sec: {Math.floor(sectionTimeLeft / 60)}:{String(sectionTimeLeft % 60).padStart(2, "0")}
+              Sec: {Math.floor(sectionTimeLeft / 60)}:
+              {String(sectionTimeLeft % 60).padStart(2, "0")}
             </div>
           )}
           {/* Question-level timer (when timer_level='question') */}

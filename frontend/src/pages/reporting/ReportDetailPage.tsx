@@ -1774,9 +1774,8 @@ function LayoutTab({ reportId }: { reportId: number }) {
           )}
           {layout === "graph" && (
             <p className="text-xs text-amber-600 sm:col-span-2">
-              Graph rendering isn&apos;t implemented yet — the layout choice is saved, but the
-              PDF will show a note instead of a chart. Use &quot;Table&quot; for a rendered
-              layout.
+              Graph rendering isn&apos;t implemented yet — the layout choice is saved, but the PDF
+              will show a note instead of a chart. Use &quot;Table&quot; for a rendered layout.
             </p>
           )}
           <div className="flex items-center gap-2 sm:col-span-2">

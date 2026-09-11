@@ -117,9 +117,7 @@ def test_resume_point_is_the_most_recently_accessed_content(
 # ---------------------------------------------------------------------------
 
 
-def test_progress_summary_includes_assessment_scores(
-    student_client, individual_user, trainer_user
-):
+def test_progress_summary_includes_assessment_scores(student_client, individual_user, trainer_user):
     course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
     reg = CourseRegistration.objects.create(
         course=course, student=individual_user, payment_status="paid"
