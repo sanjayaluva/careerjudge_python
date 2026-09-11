@@ -204,6 +204,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     profile = UserProfileSerializer(read_only=True)
     role = serializers.SlugRelatedField(slug_field="name", read_only=True)
+    module_rights = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -218,6 +219,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_superuser",
             "is_staff",
             "role",
+            "module_rights",
             "profile",
             "created_at",
             "updated_at",
@@ -230,10 +232,23 @@ class UserSerializer(serializers.ModelSerializer):
             "is_superuser",
             "is_staff",
             "role",
+            "module_rights",
             "profile",
             "created_at",
             "updated_at",
         ]
+
+    def get_module_rights(self, obj) -> list[dict]:
+        """Effective ModuleRights for the user's role — the RBAC single source
+        of truth the frontend uses to gate nav + actions.
+
+        Reuses Role.effective_rights, which already folds in base_role
+        inheritance for custom roles, so any ModuleRight grant (system or
+        custom role) reaches the UI without a separate hardcoded map.
+        """
+        if not obj.role_id:
+            return []
+        return [{"module": r.module, "action": r.action} for r in obj.role.effective_rights]
 
 
 class UserWriteSerializer(serializers.ModelSerializer):

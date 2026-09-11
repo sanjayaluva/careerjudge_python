@@ -142,6 +142,7 @@ ROLE_PERMISSIONS = {
         ("career_profiling", "view"),
         ("career_profiling", "change"),
         ("reporting", "view"),
+        ("reporting", "generate_report"),
     ],
     "sme": [
         # SME: creates/edits/deletes OWN questions (unreviewed only).

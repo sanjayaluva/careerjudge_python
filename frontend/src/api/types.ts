@@ -39,6 +39,15 @@ export interface ApiErrorEnvelope {
 // Auth
 // ---------------------------------------------------------------------------
 
+/** A single effective module right — {module, action} pair, as granted via
+ *  the user's role (including anything inherited from a base_role). This is
+ *  the RBAC single source of truth: the frontend derives nav + action
+ *  gating from this list instead of a static per-role-name map. */
+export interface ModuleRightGrant {
+  module: string; // accounts, organizations, question_bank, assessment, etc.
+  action: ModuleAction;
+}
+
 export interface AuthUser {
   id: number;
   email: string;
@@ -47,6 +56,9 @@ export interface AuthUser {
   is_email_verified: boolean;
   is_superuser: boolean;
   is_staff: boolean;
+  /** Effective ModuleRights for the user's role. Absent on the slim login
+   *  response — populated once /api/me/ resolves (see useAuth.ts). */
+  module_rights?: ModuleRightGrant[];
 }
 
 export interface LoginResponse {
@@ -124,6 +136,7 @@ export interface User {
   is_superuser: boolean;
   is_staff: boolean;
   role: RoleName | null;
+  module_rights: ModuleRightGrant[];
   profile: UserProfile | null;
   created_at: string;
   updated_at: string;

@@ -13,6 +13,55 @@ class TestMeView:
         assert data["id"] == cj_admin_user.id
         assert "profile" in data
 
+    def test_get_me_includes_module_rights(self, authed_client, cj_admin_user):
+        """/api/me/ must expose the user's effective ModuleRights — the RBAC
+        single source of truth the frontend derives nav + action gating from."""
+        resp = authed_client.get("/api/me/")
+        assert resp.status_code == 200
+        rights = resp.json()["data"]["module_rights"]
+        assert {"module": "accounts", "action": "view"} in rights
+        assert {"module": "accounts", "action": "delete"} in rights
+
+    def test_get_me_module_rights_empty_when_no_role(self, client):
+        """A user with no role gets an empty module_rights list, not a crash."""
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        from .factories import UserFactory
+
+        user = UserFactory(role=None, email="no-role@test.com")
+        refresh = RefreshToken.for_user(user)
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+        resp = client.get("/api/me/")
+        assert resp.status_code == 200
+        assert resp.json()["data"]["module_rights"] == []
+
+    def test_get_me_module_rights_for_custom_role(self, client, individual_role):
+        """A custom role's own grants AND its base_role's inherited grants both
+        surface in module_rights — proving effective_rights (incl. base_role
+        inheritance) is what feeds the response, not just the role's own rows."""
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        from apps.accounts.models import ModuleRight, Role
+
+        from .factories import UserFactory
+
+        # base_role (individual) gets a grant that should be *inherited*.
+        ModuleRight.objects.create(role=individual_role, module="training", action="view")
+
+        custom_role = Role.objects.create(name="Custom QA Role", base_role=individual_role)
+        # the custom role gets its own additional grant.
+        ModuleRight.objects.create(role=custom_role, module="cms", action="approve")
+
+        user = UserFactory(role=custom_role, email="customrole@test.com")
+        refresh = RefreshToken.for_user(user)
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+
+        resp = client.get("/api/me/")
+        assert resp.status_code == 200
+        rights = resp.json()["data"]["module_rights"]
+        assert {"module": "cms", "action": "approve"} in rights  # own grant
+        assert {"module": "training", "action": "view"} in rights  # inherited
+
     def test_get_me_unauthenticated(self, client):
         resp = client.get("/api/me/")
         assert resp.status_code == 401

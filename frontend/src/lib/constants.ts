@@ -237,6 +237,29 @@ function roleListFor(module: ModuleKey): RoleName[] {
   );
 }
 
+/**
+ * Frontend ModuleKey → backend ModuleRight `module` code. Used by
+ * usePermissions to derive nav visibility from the effective module_rights
+ * returned by /api/me (see backend apps/accounts/models.py ModuleRight).
+ *
+ * "dashboard" and "profile" are universal (every authenticated user sees
+ * them) and "roles" is a cj_admin-only product decision (role management
+ * has no dedicated backend module — it rides on "accounts" same as "users"),
+ * so none of the three have an entry here; usePermissions special-cases them.
+ */
+export const MODULE_KEY_BACKEND_MODULE: Partial<Record<ModuleKey, string>> = {
+  users: "accounts",
+  organizations: "organizations",
+  question_bank: "question_bank",
+  assessments: "assessment",
+  career_profiling: "career_profiling",
+  reports: "reporting",
+  training: "training",
+  counseling: "counseling",
+  cms: "cms",
+  tasks: "tasks",
+};
+
 export const APP_NAME = "CareerJudge";
 
 export const API_BASE_URL =
