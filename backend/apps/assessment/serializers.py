@@ -6,6 +6,7 @@ from apps.question_bank.serializers import QuestionDetailSerializer, QuestionLis
 
 from .models import (
     Assessment,
+    AssessmentModificationRequest,
     AssessmentQuestion,
     AssessmentSection,
     AssessmentSession,
@@ -238,3 +239,48 @@ class SectionScoreSerializer(serializers.ModelSerializer):
             "percentage",
         ]
         read_only_fields = ["id", "raw_score", "max_score", "percentage", "section_title"]
+
+
+class AssessmentModificationRequestSerializer(serializers.ModelSerializer):
+    """SRS §2.2/§2.3: non-admin request to edit the title of / delete a
+    published assessment."""
+
+    assessment_title = serializers.CharField(source="assessment.title", read_only=True)
+    requester_name = serializers.CharField(
+        source="requester.full_name", read_only=True, default=None
+    )
+    reviewed_by_name = serializers.CharField(
+        source="reviewed_by.full_name", read_only=True, default=None
+    )
+
+    class Meta:
+        model = AssessmentModificationRequest
+        fields = [
+            "id",
+            "assessment",
+            "assessment_title",
+            "requester",
+            "requester_name",
+            "action",
+            "proposed_title",
+            "reason",
+            "status",
+            "review_comment",
+            "reviewed_by",
+            "reviewed_by_name",
+            "reviewed_at",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "assessment_title",
+            "requester",
+            "requester_name",
+            "action",
+            "proposed_title",
+            "status",
+            "reviewed_by",
+            "reviewed_by_name",
+            "reviewed_at",
+            "created_at",
+        ]

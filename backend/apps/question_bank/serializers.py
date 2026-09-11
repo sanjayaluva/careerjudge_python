@@ -9,6 +9,7 @@ from .models import (
     HotspotArea,
     MediaFile,
     Question,
+    QuestionBankDeletionRequest,
     QuestionReview,
     ResponseOption,
 )
@@ -446,3 +447,50 @@ class QuestionReviewCreateSerializer(serializers.ModelSerializer):
 
         question.save()
         return review
+
+
+# ---------------------------------------------------------------------------
+# QuestionBankDeletionRequest (D1 §2.2/§4.3)
+# ---------------------------------------------------------------------------
+
+
+class QuestionBankDeletionRequestSerializer(serializers.ModelSerializer):
+    """A non-admin's request to delete a category or question."""
+
+    requester_name = serializers.CharField(
+        source="requester.full_name", read_only=True, default=None
+    )
+    reviewed_by_name = serializers.CharField(
+        source="reviewed_by.full_name", read_only=True, default=None
+    )
+
+    class Meta:
+        model = QuestionBankDeletionRequest
+        fields = [
+            "id",
+            "target_type",
+            "target_id",
+            "target_label",
+            "requester",
+            "requester_name",
+            "reason",
+            "status",
+            "review_comment",
+            "reviewed_by",
+            "reviewed_by_name",
+            "reviewed_at",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "target_type",
+            "target_id",
+            "target_label",
+            "requester",
+            "requester_name",
+            "status",
+            "reviewed_by",
+            "reviewed_by_name",
+            "reviewed_at",
+            "created_at",
+        ]

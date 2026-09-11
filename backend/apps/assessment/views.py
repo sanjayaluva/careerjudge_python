@@ -45,6 +45,7 @@ from core.permissions import HasModulePermission
 
 from .models import (
     Assessment,
+    AssessmentModificationRequest,
     AssessmentQuestion,
     AssessmentSection,
     AssessmentSession,
@@ -52,6 +53,7 @@ from .models import (
 )
 from .serializers import (
     AssessmentListSerializer,
+    AssessmentModificationRequestSerializer,
     AssessmentQuestionSerializer,
     AssessmentSectionSerializer,
     AssessmentSerializer,
@@ -119,7 +121,15 @@ class HasAssessmentPermission(HasModulePermission):
         "submit_session": "view",
         "publish": "change",
         "readiness": "view",
+        # AssessmentModificationRequestViewSet custom actions (SRS §2.2/§2.3)
+        "approve": "change",
+        "decline": "change",
     }
+
+
+def _is_assessment_admin(user) -> bool:
+    """cj_admin (or superuser) bypasses the modification-request workflow."""
+    return bool(user.is_superuser or (user.role and user.role.name == "cj_admin"))
 
 
 class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
@@ -224,27 +234,55 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         # Interpretation: non-admin users cannot edit published assessments
         # (they must archive first). cj_admin can override and edit any
         # assessment regardless of status — this is the "Admin approval"
-        # path described in the SRS.
-        is_admin = request.user.is_superuser or (
-            request.user.role and request.user.role.name == "cj_admin"
-        )
+        # path described in the SRS. Archiving is always allowed directly —
+        # it is the designated escape hatch, not a title/content edit.
+        is_admin = _is_assessment_admin(request.user)
+        title_change = "title" in request.data and request.data.get("title") != instance.title
         if (
             instance.status == "published"
             and request.data.get("status") != "archived"
             and not is_admin
         ):
+            if not title_change:
+                return Response(
+                    {
+                        "error": {
+                            "code": "forbidden",
+                            "message": (
+                                "Cannot edit a published assessment. Archive it first, "
+                                "or contact a CareerJudge Admin to make the edit."
+                            ),
+                            "details": {},
+                        }
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            # §2.2: title changes on a published assessment go through
+            # admin approval instead of being applied (or blocked) directly.
+            reason = (request.data.get("reason") or "").strip()
+            if not reason:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "reason is required to request a title change.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            amr = AssessmentModificationRequest.objects.create(
+                assessment=instance,
+                requester=request.user,
+                action="edit",
+                proposed_title=request.data.get("title"),
+                reason=reason,
+            )
             return Response(
                 {
-                    "error": {
-                        "code": "forbidden",
-                        "message": (
-                            "Cannot edit a published assessment. Archive it first, "
-                            "or contact a CareerJudge Admin to make the edit."
-                        ),
-                        "details": {},
-                    }
+                    "message": "Title change request submitted. An admin will review it.",
+                    "data": AssessmentModificationRequestSerializer(amr).data,
                 },
-                status=status.HTTP_403_FORBIDDEN,
+                status=status.HTTP_201_CREATED,
             )
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
@@ -257,20 +295,33 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         # Same admin-override rule as update(): cj_admin can delete a
-        # published assessment; everyone else must archive first.
-        is_admin = request.user.is_superuser or (
-            request.user.role and request.user.role.name == "cj_admin"
-        )
+        # published assessment directly. Everyone else's delete on a
+        # published assessment goes through admin approval instead (§2.3).
+        is_admin = _is_assessment_admin(request.user)
         if instance.status == "published" and not is_admin:
+            reason = (request.data.get("reason") or "").strip()
+            if not reason:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "reason is required to request deletion.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            amr = AssessmentModificationRequest.objects.create(
+                assessment=instance,
+                requester=request.user,
+                action="delete",
+                reason=reason,
+            )
             return Response(
                 {
-                    "error": {
-                        "code": "forbidden",
-                        "message": "Cannot delete a published assessment. Archive it first.",
-                        "details": {},
-                    }
+                    "message": "Deletion request submitted. An admin will review it.",
+                    "data": AssessmentModificationRequestSerializer(amr).data,
                 },
-                status=status.HTTP_403_FORBIDDEN,
+                status=status.HTTP_201_CREATED,
             )
         instance.delete()
         return Response({"message": "Assessment deleted.", "data": {}}, status=status.HTTP_200_OK)
@@ -1275,6 +1326,159 @@ class SessionViewSet(ModelViewSet):
                     "section_scores": scores_debug,
                     "attempts": attempts_debug,
                 },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Assessment Modification Request (SRS §2.2/§2.3) — admin approval workflow
+# ---------------------------------------------------------------------------
+
+
+class AssessmentModificationRequestViewSet(ModelViewSet):
+    """List modification requests + admin approve/decline actions.
+
+    Requesters see only their own requests; admins see all. Approve/decline
+    are admin-only and notify the requester of the decision.
+    """
+
+    queryset = AssessmentModificationRequest.objects.select_related(
+        "assessment", "requester", "reviewed_by"
+    )
+    permission_classes = [IsAuthenticated, HasAssessmentPermission]
+    serializer_class = AssessmentModificationRequestSerializer
+    http_method_names = ["get", "head", "options", "post"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if _is_assessment_admin(user):
+            return qs
+        return qs.filter(requester=user)
+
+    def list(self, request, *args, **kwargs):
+        # Serialize directly (NOT super().list()) so pagination cannot wrap
+        # the payload into {count, results} — the frontend expects an array.
+        qs = self.filter_queryset(self.get_queryset())
+        return Response(
+            {"message": "OK", "data": self.get_serializer(qs, many=True).data},
+            status=status.HTTP_200_OK,
+        )
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        # Creation happens as a side effect of PATCH/DELETE on a published
+        # assessment for non-admin users. Block direct creation here to
+        # keep the audit trail clean.
+        return Response(
+            {
+                "error": {
+                    "code": "forbidden",
+                    "message": "Submit requests via PATCH or DELETE /assessments/<id>/.",
+                }
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve(self, request, pk=None):
+        """Admin approves a title-edit or delete request — applies the change."""
+        amr = self.get_object()
+        if not _is_assessment_admin(request.user):
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can approve."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if amr.status != "pending":
+            return Response(
+                {
+                    "error": {
+                        "code": "invalid_state",
+                        "message": f"Request is already {amr.status}.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        amr.status = "approved"
+        amr.reviewed_by = request.user
+        amr.reviewed_at = timezone.now()
+        amr.review_comment = request.data.get("admin_note", "")
+        amr.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_comment"])
+
+        # Snapshot the response data before applying the change — for
+        # 'delete', the assessment row (and this request, via cascade) is
+        # about to disappear.
+        data = AssessmentModificationRequestSerializer(amr).data
+
+        if amr.action == "edit":
+            amr.assessment.title = amr.proposed_title
+            amr.assessment.save(update_fields=["title", "updated_at"])
+        elif amr.action == "delete":
+            amr.assessment.delete()
+
+        try:
+            from apps.notifications.models import notify_user
+
+            action_word = "deleted" if amr.action == "delete" else "renamed"
+            notify_user(
+                amr.requester,
+                f"Assessment {amr.action} approved",
+                f"Your request was approved. The assessment has been {action_word}.",
+                "success",
+                "/assessments",
+            )
+        except Exception:
+            pass
+        return Response({"message": "Request approved.", "data": data}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="decline")
+    def decline(self, request, pk=None):
+        """Admin declines a title-edit or delete request."""
+        amr = self.get_object()
+        if not _is_assessment_admin(request.user):
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can decline."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if amr.status != "pending":
+            return Response(
+                {
+                    "error": {
+                        "code": "invalid_state",
+                        "message": f"Request is already {amr.status}.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        amr.status = "rejected"
+        amr.reviewed_by = request.user
+        amr.reviewed_at = timezone.now()
+        amr.review_comment = request.data.get("admin_note", "")
+        amr.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_comment"])
+        try:
+            from apps.notifications.models import notify_user
+
+            notify_user(
+                amr.requester,
+                f"Assessment {amr.action} request declined",
+                f"Your request to {amr.action} '{amr.assessment.title}' was declined. "
+                f"{amr.review_comment}",
+                "warning",
+                f"/assessments/{amr.assessment_id}",
+            )
+        except Exception:
+            pass
+        return Response(
+            {
+                "message": "Request declined.",
+                "data": AssessmentModificationRequestSerializer(amr).data,
             },
             status=status.HTTP_200_OK,
         )

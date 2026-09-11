@@ -129,13 +129,113 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert resp.json()["data"]["title"] == "Updated"
 
     def test_cannot_update_published_assessment_non_admin(self):
-        """Non-admin users cannot edit a published assessment (must archive first)."""
+        """SRS §2.2: non-admin editing the title of a published assessment
+        cannot apply the change directly — it creates a pending
+        AssessmentModificationRequest instead."""
+        from apps.assessment.models import AssessmentModificationRequest
+
         # Switch to a non-admin role (corp_admin) to test the restriction.
         corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
         grant_assessment_perms(corp_admin)
         self.client.force_authenticate(user=corp_admin)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
+        resp = self.client.patch(
+            f"/api/assessments/{a.id}/",
+            {"title": "Updated", "reason": "Fix typo"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        a.refresh_from_db()
+        assert a.title == "Test 1"  # unchanged
+        amr = AssessmentModificationRequest.objects.get(assessment=a)
+        assert amr.status == "pending"
+        assert amr.action == "edit"
+        assert amr.proposed_title == "Updated"
+        assert amr.requester == corp_admin
+
+    def test_update_published_assessment_without_reason_rejected(self):
+        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
+        grant_assessment_perms(corp_admin)
+        self.client.force_authenticate(user=corp_admin)
+        a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         resp = self.client.patch(f"/api/assessments/{a.id}/", {"title": "Updated"}, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_update_published_assessment_non_title_field_still_blocked(self):
+        """Only title edits go through the request→approve flow — other
+        field edits on a published assessment remain blocked for non-admins."""
+        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
+        grant_assessment_perms(corp_admin)
+        self.client.force_authenticate(user=corp_admin)
+        a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
+        resp = self.client.patch(
+            f"/api/assessments/{a.id}/", {"total_duration_seconds": 900}, format="json"
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_admin_approve_title_change_applies_it(self):
+        from apps.assessment.models import AssessmentModificationRequest
+
+        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
+        grant_assessment_perms(corp_admin)
+        client = APIClient()
+        client.force_authenticate(user=corp_admin)
+        a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
+        client.patch(
+            f"/api/assessments/{a.id}/",
+            {"title": "New Title", "reason": "Fix typo"},
+            format="json",
+        )
+        amr = AssessmentModificationRequest.objects.get(assessment=a)
+        resp = self.client.post(
+            f"/api/assessment-modification-requests/{amr.id}/approve/", format="json"
+        )
+        assert resp.status_code == status.HTTP_200_OK, resp.data
+        a.refresh_from_db()
+        assert a.title == "New Title"
+        amr.refresh_from_db()
+        assert amr.status == "approved"
+
+    def test_admin_decline_title_change_keeps_title(self):
+        from apps.assessment.models import AssessmentModificationRequest
+
+        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
+        grant_assessment_perms(corp_admin)
+        client = APIClient()
+        client.force_authenticate(user=corp_admin)
+        a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
+        client.patch(
+            f"/api/assessments/{a.id}/",
+            {"title": "New Title", "reason": "Fix typo"},
+            format="json",
+        )
+        amr = AssessmentModificationRequest.objects.get(assessment=a)
+        resp = self.client.post(
+            f"/api/assessment-modification-requests/{amr.id}/decline/", format="json"
+        )
+        assert resp.status_code == status.HTTP_200_OK, resp.data
+        a.refresh_from_db()
+        assert a.title == "Test 1"
+        amr.refresh_from_db()
+        assert amr.status == "rejected"
+
+    def test_non_admin_cannot_approve_modification_request(self):
+        from apps.assessment.models import AssessmentModificationRequest
+
+        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
+        grant_assessment_perms(corp_admin)
+        client = APIClient()
+        client.force_authenticate(user=corp_admin)
+        a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
+        client.patch(
+            f"/api/assessments/{a.id}/",
+            {"title": "New Title", "reason": "Fix typo"},
+            format="json",
+        )
+        amr = AssessmentModificationRequest.objects.get(assessment=a)
+        resp = client.post(
+            f"/api/assessment-modification-requests/{amr.id}/approve/", format="json"
+        )
         assert resp.status_code == status.HTTP_403_FORBIDDEN
 
     def test_cj_admin_can_update_published_assessment(self):
@@ -155,13 +255,30 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert not Assessment.objects.filter(id=a.id).exists()
 
     def test_cannot_delete_published_assessment_non_admin(self):
-        """Non-admin users cannot delete a published assessment."""
+        """SRS §2.3: non-admin deleting a published assessment cannot delete
+        it directly — it creates a pending AssessmentModificationRequest."""
+        from apps.assessment.models import AssessmentModificationRequest
+
+        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
+        grant_assessment_perms(corp_admin)
+        self.client.force_authenticate(user=corp_admin)
+        a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
+        resp = self.client.delete(
+            f"/api/assessments/{a.id}/", {"reason": "Obsolete"}, format="json"
+        )
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        assert Assessment.objects.filter(id=a.id).exists()
+        amr = AssessmentModificationRequest.objects.get(assessment=a)
+        assert amr.status == "pending"
+        assert amr.action == "delete"
+
+    def test_delete_published_assessment_without_reason_rejected(self):
         corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
         grant_assessment_perms(corp_admin)
         self.client.force_authenticate(user=corp_admin)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         resp = self.client.delete(f"/api/assessments/{a.id}/")
-        assert resp.status_code == status.HTTP_403_FORBIDDEN
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_cj_admin_can_delete_published_assessment(self):
         """cj_admin can override the publish-lock and delete any assessment."""
@@ -169,6 +286,40 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         resp = self.client.delete(f"/api/assessments/{a.id}/")
         assert resp.status_code == status.HTTP_200_OK
         assert not Assessment.objects.filter(id=a.id).exists()
+
+    def test_admin_approve_delete_request_deletes_assessment(self):
+        from apps.assessment.models import AssessmentModificationRequest
+
+        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
+        grant_assessment_perms(corp_admin)
+        client = APIClient()
+        client.force_authenticate(user=corp_admin)
+        a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
+        client.delete(f"/api/assessments/{a.id}/", {"reason": "Obsolete"}, format="json")
+        amr = AssessmentModificationRequest.objects.get(assessment=a)
+        resp = self.client.post(
+            f"/api/assessment-modification-requests/{amr.id}/approve/", format="json"
+        )
+        assert resp.status_code == status.HTTP_200_OK, resp.data
+        assert not Assessment.objects.filter(id=a.id).exists()
+
+    def test_admin_decline_delete_request_keeps_assessment(self):
+        from apps.assessment.models import AssessmentModificationRequest
+
+        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
+        grant_assessment_perms(corp_admin)
+        client = APIClient()
+        client.force_authenticate(user=corp_admin)
+        a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
+        client.delete(f"/api/assessments/{a.id}/", {"reason": "Obsolete"}, format="json")
+        amr = AssessmentModificationRequest.objects.get(assessment=a)
+        resp = self.client.post(
+            f"/api/assessment-modification-requests/{amr.id}/decline/", format="json"
+        )
+        assert resp.status_code == status.HTTP_200_OK, resp.data
+        assert Assessment.objects.filter(id=a.id).exists()
+        amr.refresh_from_db()
+        assert amr.status == "rejected"
 
     def test_publish_assessment(self):
         """A fully configured assessment (with sections + questions) can be published."""
@@ -413,14 +564,22 @@ class TestPsychometricianAssessmentAccess(AssessmentViewTestBase):
         assert a.status == "published"
 
     def test_psychometrician_cannot_edit_published_assessment(self):
-        """Non-admin psychometrician is still subject to the publish-lock."""
+        """Non-admin psychometrician is still subject to the publish-lock —
+        title edits go through the request→approve flow instead of applying."""
+        from apps.assessment.models import AssessmentModificationRequest
+
         a = Assessment.objects.create(
             title="Psy Published", status="published", created_by=self.psy
         )
         resp = self.client.patch(
-            f"/api/assessments/{a.id}/", {"title": "Try Update"}, format="json"
+            f"/api/assessments/{a.id}/",
+            {"title": "Try Update", "reason": "typo"},
+            format="json",
         )
-        assert resp.status_code == status.HTTP_403_FORBIDDEN
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        a.refresh_from_db()
+        assert a.title == "Psy Published"
+        assert AssessmentModificationRequest.objects.filter(assessment=a, status="pending").exists()
 
     def test_psychometrician_can_create_section_in_own_assessment(self):
         """Psychometrician can build sections in their own assessment."""

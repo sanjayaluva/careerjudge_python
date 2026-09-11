@@ -4,6 +4,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AssessmentModificationRequestViewSet,
     AssessmentQuestionViewSet,
     AssessmentSectionViewSet,
     AssessmentViewSet,
@@ -19,6 +20,12 @@ app_name = "assessment"
 # so its more-specific pattern wins.
 router = DefaultRouter()
 router.register("assessments", AssessmentViewSet, basename="assessment")
+# SRS 03_assessment_configuration.json §2.2/§2.3
+router.register(
+    "assessment-modification-requests",
+    AssessmentModificationRequestViewSet,
+    basename="assessment-modification-request",
+)
 
 session_router = DefaultRouter()
 session_router.register("assessments/sessions", SessionViewSet, basename="session")

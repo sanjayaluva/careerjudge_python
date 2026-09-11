@@ -115,6 +115,52 @@ def _next_order(queryset, field="order"):
     return (getattr(last, field, -1) + 1) if last else 0
 
 
+def _is_training_admin(user) -> bool:
+    user_role_name = user.role.name if user.role_id else None
+    return bool(user.is_superuser or user_role_name == "cj_admin")
+
+
+def _require_course_edit_allowed(request, course):
+    """Doc 7 §5: once a course leaves 'draft', a non-admin trainer must go
+    through the existing request_update/CourseModificationRequest flow
+    (POST /courses/<id>/request-update/) rather than mutating the course or
+    its structure directly. cj_admin always bypasses this check.
+
+    A trainer creating structure for the FIRST time (course still 'draft')
+    is never gated. Once published/archived, a trainer may mutate again
+    only if they hold an approved 'update' request that hasn't already
+    been consumed by a prior edit (tracked via course.updated_at, since
+    CourseModificationRequest carries no field-level diff to "apply").
+
+    Returns a Response to short-circuit with if not allowed, else None.
+    """
+    user = request.user
+    if _is_training_admin(user) or course.status == "draft":
+        return None
+    cur = (
+        CourseModificationRequest.objects.filter(
+            course=course, trainer=user, request_type="update", status="approved"
+        )
+        .order_by("-reviewed_at")
+        .first()
+    )
+    if cur and cur.reviewed_at and cur.reviewed_at > course.updated_at:
+        return None
+    return Response(
+        {
+            "error": {
+                "code": "approval_required",
+                "message": (
+                    "This course is published. Submit a course update request "
+                    "(POST /courses/<id>/request-update/) and wait for admin "
+                    "approval before editing its structure."
+                ),
+            }
+        },
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Category ViewSet
 # ---------------------------------------------------------------------------
@@ -213,6 +259,9 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         """Override to return wrapped envelope (matching create/retrieve)."""
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
+        denied = _require_course_edit_allowed(request, instance)
+        if denied:
+            return denied
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -1161,9 +1210,15 @@ class CourseLessonViewSet(ModelViewSet):
                 {"message": "OK", "data": LessonTopicSerializer(topics, many=True).data},
                 status=status.HTTP_200_OK,
             )
+        denied = _require_course_edit_allowed(request, lesson.course)
+        if denied:
+            return denied
         serializer = LessonTopicSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(lesson=lesson, order=_next_order(lesson.topics))
+        # Consume the approval used above, if any, by touching the parent
+        # course's updated_at (see _require_course_edit_allowed).
+        lesson.course.save(update_fields=["updated_at"])
         return Response(
             {"message": "Topic created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
@@ -1187,9 +1242,14 @@ class LessonTopicViewSet(ModelViewSet):
                 {"message": "OK", "data": TopicSessionSerializer(sessions, many=True).data},
                 status=status.HTTP_200_OK,
             )
+        course = topic.lesson.course
+        denied = _require_course_edit_allowed(request, course)
+        if denied:
+            return denied
         serializer = TopicSessionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(topic=topic, order=_next_order(topic.sessions))
+        course.save(update_fields=["updated_at"])
         return Response(
             {"message": "Session created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
@@ -1213,9 +1273,14 @@ class TopicSessionViewSet(ModelViewSet):
                 {"message": "OK", "data": SessionContentSerializer(contents, many=True).data},
                 status=status.HTTP_200_OK,
             )
+        course = session.topic.lesson.course
+        denied = _require_course_edit_allowed(request, course)
+        if denied:
+            return denied
         serializer = SessionContentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(session=session, order=_next_order(session.contents))
+        course.save(update_fields=["updated_at"])
         return Response(
             {"message": "Content created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
@@ -1231,9 +1296,14 @@ class TopicSessionViewSet(ModelViewSet):
                 {"message": "OK", "data": AssignmentSerializer(assignments, many=True).data},
                 status=status.HTTP_200_OK,
             )
+        course = session.topic.lesson.course
+        denied = _require_course_edit_allowed(request, course)
+        if denied:
+            return denied
         serializer = AssignmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(session=session, order=_next_order(session.assignments))
+        course.save(update_fields=["updated_at"])
         return Response(
             {"message": "Assignment created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,

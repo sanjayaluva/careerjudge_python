@@ -371,3 +371,67 @@ class SectionScore(models.Model):
         else:
             self.percentage = 0
         super().save(*args, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# AssessmentModificationRequest — non-admin requests admin approval to edit
+# the title of, or delete, a PUBLISHED assessment. Per SRS
+# 03_assessment_configuration.json §2.2/§2.3.
+# ---------------------------------------------------------------------------
+
+
+class AssessmentModificationRequest(models.Model):
+    """Non-admin's request to edit the title of, or delete, a published assessment.
+
+    Per SRS §2.2/§2.3: 'After going live, user cannot directly edit
+    Assessment Title. An edit request is sent to Admin for approval.'
+    Deletion of a published assessment follows the same request→approve
+    pattern.
+    """
+
+    ACTION_CHOICES = [
+        ("edit", "Edit Title"),
+        ("delete", "Delete Assessment"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending Admin Review"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    assessment = models.ForeignKey(
+        Assessment, on_delete=models.CASCADE, related_name="modification_requests"
+    )
+    requester = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="assessment_modification_requests",
+    )
+    action = models.CharField(_("action"), max_length=10, choices=ACTION_CHOICES)
+    proposed_title = models.CharField(
+        _("proposed title"),
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text=_("New title requested (only for action='edit')."),
+    )
+    reason = models.TextField(_("reason"), help_text=_("Reason for the edit/delete request"))
+    status = models.CharField(_("status"), max_length=10, choices=STATUS_CHOICES, default="pending")
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assessment_modification_reviews",
+    )
+    review_comment = models.TextField(_("review comment"), blank=True, default="")
+    reviewed_at = models.DateTimeField(_("reviewed at"), null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("assessment modification request")
+        verbose_name_plural = _("assessment modification requests")
+
+    def __str__(self) -> str:
+        return f"{self.action} request for '{self.assessment.title}' ({self.status})"

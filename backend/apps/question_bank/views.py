@@ -3,6 +3,7 @@
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import filters, status
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,10 +12,11 @@ from rest_framework.viewsets import ModelViewSet
 from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
 
-from .models import Category, Question
+from .models import Category, Question, QuestionBankDeletionRequest
 from .serializers import (
     CategorySerializer,
     CategoryTreeSerializer,
+    QuestionBankDeletionRequestSerializer,
     QuestionCreateSerializer,
     QuestionDetailSerializer,
     QuestionListSerializer,
@@ -36,7 +38,16 @@ class HasQuestionBankPermission(HasModulePermission):
         "submit_for_review": "change",
         "validate_config": "view",
         "psychometric_analysis": "change",  # psychometrician-only: computes indices
+        # QuestionBankDeletionRequestViewSet custom actions (D1 §2.2/§4.3)
+        "approve": "change",
+        "decline": "change",
     }
+
+
+def _is_qb_admin(user) -> bool:
+    """cj_admin (or superuser) bypasses the deletion-request workflow."""
+    role_name = user.role.name if user.role_id else None
+    return bool(user.is_superuser or role_name == "cj_admin")
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +119,35 @@ class CategoryViewSet(ActionSerializerMixin, ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
+        # D1 §2.2: a non-admin's delete is NOT applied immediately — it
+        # creates a pending QuestionBankDeletionRequest for CJ Admin to
+        # review. cj_admin deletes directly (override).
+        if not _is_qb_admin(request.user):
+            reason = (request.data.get("reason") or "").strip()
+            if not reason:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "reason is required to request deletion.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            dr = QuestionBankDeletionRequest.objects.create(
+                target_type="category",
+                target_id=instance.id,
+                target_label=instance.name,
+                requester=request.user,
+                reason=reason,
+            )
+            return Response(
+                {
+                    "message": "Deletion request submitted. An admin will review it.",
+                    "data": QuestionBankDeletionRequestSerializer(dr).data,
+                },
+                status=status.HTTP_201_CREATED,
+            )
         instance.delete()
         return Response({"message": "Category deleted.", "data": {}}, status=status.HTTP_200_OK)
 
@@ -256,21 +296,49 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        # Deleting rules mirror editing: cj_admin can delete any question;
-        # other roles can only delete draft/sent_back questions.
-        user_role_name = request.user.role.name if request.user.role_id else None
-        is_admin = user_role_name == "cj_admin"
-        if not is_admin and not instance.can_be_edited:
+        # Deleting rules mirror editing: cj_admin can delete any question
+        # directly; other roles can only delete draft/sent_back questions,
+        # and even then the delete is NOT applied immediately — it creates
+        # a pending QuestionBankDeletionRequest for CJ Admin to review
+        # (D1 §2.2/§4.3).
+        is_admin = _is_qb_admin(request.user)
+        if not is_admin:
+            if not instance.can_be_edited:
+                return Response(
+                    {
+                        "error": {
+                            "code": "forbidden",
+                            "message": f"Question cannot be deleted in '{instance.status}' status. "
+                            f"CJ Admin can delete any question regardless of status.",
+                            "details": {"current_status": instance.status},
+                        }
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            reason = (request.data.get("reason") or "").strip()
+            if not reason:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "reason is required to request deletion.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            dr = QuestionBankDeletionRequest.objects.create(
+                target_type="question",
+                target_id=instance.id,
+                target_label=instance.question_title,
+                requester=request.user,
+                reason=reason,
+            )
             return Response(
                 {
-                    "error": {
-                        "code": "forbidden",
-                        "message": f"Question cannot be deleted in '{instance.status}' status. "
-                        f"CJ Admin can delete any question regardless of status.",
-                        "details": {"current_status": instance.status},
-                    }
+                    "message": "Deletion request submitted. An admin will review it.",
+                    "data": QuestionBankDeletionRequestSerializer(dr).data,
                 },
-                status=status.HTTP_403_FORBIDDEN,
+                status=status.HTTP_201_CREATED,
             )
         instance.delete()
         return Response({"message": "Question deleted.", "data": {}}, status=status.HTTP_200_OK)
@@ -575,5 +643,154 @@ class QuestionReviewListView(APIView):
         serializer = QuestionReviewSerializer(reviews, many=True)
         return Response(
             {"message": "OK", "data": serializer.data},
+            status=status.HTTP_200_OK,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Question Bank Deletion Request (D1 §2.2/§4.3) — admin approval workflow
+# ---------------------------------------------------------------------------
+
+
+class QuestionBankDeletionRequestViewSet(ModelViewSet):
+    """List deletion requests + admin approve/decline actions.
+
+    Requesters see only their own requests; admins see all. Approve/decline
+    are admin-only and notify the requester of the decision.
+    """
+
+    queryset = QuestionBankDeletionRequest.objects.select_related("requester", "reviewed_by")
+    permission_classes = [IsAuthenticated, HasQuestionBankPermission]
+    serializer_class = QuestionBankDeletionRequestSerializer
+    http_method_names = ["get", "head", "options", "post"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if _is_qb_admin(user):
+            return qs
+        return qs.filter(requester=user)
+
+    def list(self, request, *args, **kwargs):
+        # Serialize directly (NOT super().list()) so pagination cannot wrap
+        # the payload into {count, results} — the frontend expects an array.
+        qs = self.filter_queryset(self.get_queryset())
+        return Response(
+            {"message": "OK", "data": self.get_serializer(qs, many=True).data},
+            status=status.HTTP_200_OK,
+        )
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        # Creation happens as a side effect of DELETE /categories/<id>/ or
+        # DELETE /questions/<id>/ for non-admin users. Block direct creation
+        # here to keep the audit trail clean.
+        return Response(
+            {
+                "error": {
+                    "code": "forbidden",
+                    "message": "Submit requests via DELETE /categories/<id>/ or /questions/<id>/.",
+                }
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def _target_object(self, dr):
+        model = Category if dr.target_type == "category" else Question
+        return model.objects.filter(id=dr.target_id).first()
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve(self, request, pk=None):
+        """Admin approves a deletion request — performs the real delete."""
+        dr = self.get_object()
+        if not _is_qb_admin(request.user):
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can approve."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if dr.status != "pending":
+            return Response(
+                {
+                    "error": {
+                        "code": "invalid_state",
+                        "message": f"Request is already {dr.status}.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from django.utils import timezone
+
+        dr.status = "approved"
+        dr.reviewed_by = request.user
+        dr.reviewed_at = timezone.now()
+        dr.review_comment = request.data.get("admin_note", "")
+        dr.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_comment"])
+
+        # Perform the real delete. Snapshot the response data first, since
+        # the target may not carry a FK back to this request.
+        data = QuestionBankDeletionRequestSerializer(dr).data
+        target = self._target_object(dr)
+        if target is not None:
+            target.delete()
+
+        try:
+            from apps.notifications.models import notify_user
+
+            notify_user(
+                dr.requester,
+                f"Deletion approved: {dr.target_label or dr.target_type}",
+                f"Your request to delete {dr.target_type} '{dr.target_label}' was approved and deleted.",
+                "success",
+                "/question-bank",
+            )
+        except Exception:
+            pass
+        return Response({"message": "Request approved.", "data": data}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="decline")
+    def decline(self, request, pk=None):
+        """Admin declines a deletion request."""
+        dr = self.get_object()
+        if not _is_qb_admin(request.user):
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can decline."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if dr.status != "pending":
+            return Response(
+                {
+                    "error": {
+                        "code": "invalid_state",
+                        "message": f"Request is already {dr.status}.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from django.utils import timezone
+
+        dr.status = "rejected"
+        dr.reviewed_by = request.user
+        dr.reviewed_at = timezone.now()
+        dr.review_comment = request.data.get("admin_note", "")
+        dr.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_comment"])
+        try:
+            from apps.notifications.models import notify_user
+
+            notify_user(
+                dr.requester,
+                f"Deletion request declined: {dr.target_label or dr.target_type}",
+                f"Your request to delete {dr.target_type} '{dr.target_label}' was declined. "
+                f"{dr.review_comment}",
+                "warning",
+                "/question-bank",
+            )
+        except Exception:
+            pass
+        return Response(
+            {"message": "Request declined.", "data": QuestionBankDeletionRequestSerializer(dr).data},
             status=status.HTTP_200_OK,
         )
