@@ -109,6 +109,14 @@ export interface PolarMatchRule {
   match_value: number;
 }
 
+export interface MappingRule {
+  id: number;
+  band_definition: number;
+  criterion_band_code: string;
+  user_band_code: string;
+  value: number;
+}
+
 export interface MatchIndex {
   id: number;
   solution: number;
@@ -217,6 +225,24 @@ export function createBandDefinition(
   return apiPost<BandDefinition>(`${BASE}/solutions/${solutionId}/bands/`, payload);
 }
 
+export function listBandRows(solutionId: number): Promise<Band[]> {
+  return apiGet<Band[]>(`${BASE}/solutions/${solutionId}/band_rows/`);
+}
+
+export function createBand(
+  solutionId: number,
+  payload: {
+    band_definition: number;
+    band_number: number;
+    range_min: number;
+    range_max: number;
+    band_code: string;
+    sub_variable_name?: string;
+  },
+): Promise<Band> {
+  return apiPost<Band>(`${BASE}/solutions/${solutionId}/band_rows/`, payload);
+}
+
 // ---------------------------------------------------------------------------
 // Mapping Criteria
 // ---------------------------------------------------------------------------
@@ -310,6 +336,26 @@ export function createPolarMatchRule(
   },
 ): Promise<PolarMatchRule> {
   return apiPost<PolarMatchRule>(`${BASE}/solutions/${solutionId}/polar_match_rules/`, payload);
+}
+
+// ---------------------------------------------------------------------------
+// Mapping Rules (SRS §4.1.2 — standard n x n mapping-rule table)
+// ---------------------------------------------------------------------------
+
+export function listMappingRules(solutionId: number): Promise<MappingRule[]> {
+  return apiGet<MappingRule[]>(`${BASE}/solutions/${solutionId}/mapping_rules/`);
+}
+
+export function createMappingRule(
+  solutionId: number,
+  payload: {
+    band_definition: number;
+    criterion_band_code: string;
+    user_band_code: string;
+    value: number;
+  },
+): Promise<MappingRule> {
+  return apiPost<MappingRule>(`${BASE}/solutions/${solutionId}/mapping_rules/`, payload);
 }
 
 // ---------------------------------------------------------------------------

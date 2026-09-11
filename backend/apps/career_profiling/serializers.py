@@ -8,6 +8,7 @@ from .models import (
     Band,
     BandDefinition,
     MappingCriterion,
+    MappingRule,
     MatchIndex,
     PolarMatchRule,
     PolarRankValue,
@@ -91,6 +92,21 @@ class PolarMatchRuleSerializer(serializers.ModelSerializer):
             "user_band_code",
             "match_code",
             "match_value",
+        ]
+        read_only_fields = ["id"]
+
+
+class MappingRuleSerializer(serializers.ModelSerializer):
+    """Writable serializer for the standard mapping-rule table (SRS §4.1.2)."""
+
+    class Meta:
+        model = MappingRule
+        fields = [
+            "id",
+            "band_definition",
+            "criterion_band_code",
+            "user_band_code",
+            "value",
         ]
         read_only_fields = ["id"]
 

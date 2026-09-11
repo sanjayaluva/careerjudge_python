@@ -11,6 +11,7 @@ Builds the rendered_data JSON for a GeneratedReport based on:
 Per SRS 04_general_report_generation.json + 06_profiling_report_generation.json
 """
 
+import statistics
 from typing import Any
 
 from apps.assessment.models import AssessmentSession
@@ -59,17 +60,26 @@ def generate_report_data(report, session: AssessmentSession) -> dict[str, Any]:
             "passed": (session.percentage or 0) >= 40,
         }
 
+    # --- Norm context (H4): drives statistical conversions + thresholds ---
+    norm = _build_norm_context(report, session)
+    data["stat_conversion_norm"] = {
+        "population_size": len(norm.population),
+        "mean": round(norm.mean, 4),
+        "sd": round(norm.sd, 4),
+        "fell_back": norm.fell_back,
+    }
+
     # --- Section breakdown (filtered by data_input_level) ---
     if report.include_section_breakdown:
-        data["section_breakdown"] = _build_section_breakdown(report, session)
+        data["section_breakdown"] = _build_section_breakdown(report, session, norm)
 
     # --- Report-type-specific logic ---
     if report.report_type == "descriptive":
-        data["descriptive"] = _build_descriptive(report, session)
+        data["descriptive"] = _build_descriptive(report, session, norm)
     elif report.report_type == "typological":
-        data["typological"] = _build_typological(report, session)
+        data["typological"] = _build_typological(report, session, norm)
     elif report.report_type == "interpretative":
-        data["interpretative"] = _build_interpretative(report, session)
+        data["interpretative"] = _build_interpretative(report, session, norm)
     elif report.report_type == "group":
         data["group"] = _build_group(report, session)
 
@@ -98,23 +108,109 @@ def generate_report_data(report, session: AssessmentSession) -> dict[str, Any]:
     return data
 
 
-def _convert_score(raw: float, max_score: float, conversion: str) -> float:
-    """Convert a raw score to the configured statistical conversion type."""
+def _compute_norm(population: list[float]) -> tuple[float, float]:
+    """Compute a norm (mean, population SD) from a list of scores.
+
+    Returns (mean, sd). When fewer than two data points are available the SD
+    is 0.0 (callers treat sd==0 as "cannot norm" and fall back gracefully).
+    """
+    values = [float(v) for v in population if v is not None]
+    if not values:
+        return (0.0, 0.0)
+    if len(values) < 2:
+        return (values[0], 0.0)
+    return (statistics.fmean(values), statistics.pstdev(values))
+
+
+def _percentile_rank(value: float, population: list[float]) -> float:
+    """Percentile rank (0..100) of ``value`` within ``population``.
+
+    Uses the mid-rank convention: (count below + 0.5 * count equal) / n * 100,
+    so a value equal to the population median maps near 50.
+    """
+    values = [float(v) for v in population if v is not None]
+    if not values:
+        return 0.0
+    below = sum(1 for v in values if v < value)
+    equal = sum(1 for v in values if v == value)
+    return round((below + 0.5 * equal) / len(values) * 100, 2)
+
+
+class _NormContext:
+    """Norm statistics for a report, driving statistical conversions (H4).
+
+    The norm population is the set of section-score percentages available for
+    the report (for a single-session general report: every SectionScore in the
+    session). ``mean``/``sd`` feed STEN/STENINE z-scores; ``population`` feeds
+    percentile ranks. ``fell_back`` records whether SD==0 forced a mid-scale
+    fallback for STEN/STENINE.
+    """
+
+    def __init__(self, population: list[float]):
+        self.population = [float(v) for v in population if v is not None]
+        self.mean, self.sd = _compute_norm(self.population)
+        self.fell_back = self.sd == 0
+
+    def convert(self, value: float | None, conversion: str) -> float:
+        return _convert_score(value or 0.0, conversion, self)
+
+
+def _build_norm_context(report, session: AssessmentSession) -> _NormContext:
+    """Build the norm population for a report from the session's section scores.
+
+    Norm-population source (H4 assumption): all SectionScore percentages for
+    the session. This is the population of section scores "available for the
+    report" for a single-session general report, and it guarantees every
+    cutoff/band section is represented in the percentile population.
+    """
+    percentages = list(session.section_scores.values_list("percentage", flat=True))
+    return _NormContext(percentages)
+
+
+def _convert_score(value: float, conversion: str, norm: "_NormContext | None" = None) -> float:
+    """Convert a percentage ``value`` to the configured statistical conversion.
+
+    ``value`` is a percentage in 0..100. Norm-based conversions (percentile,
+    STEN, STENINE) require a ``_NormContext`` computed over the report's
+    population; when it is missing or degenerate the function falls back
+    gracefully (percentile -> the percentage; STEN/STENINE -> mid-scale).
+
+      - percentage : value unchanged (rounded to 2dp)
+      - percentile : candidate's percentile rank in the population (0..100)
+      - sten       : round(5.5 + 2z) clamped to 1..10 (integer)
+      - stenine    : round(5 + 2z)   clamped to 1..9  (integer)
+
+    where z = (value - mean) / sd over the norm population.
+    """
+    if conversion == "percentage":
+        return round(value, 2)
+
+    if conversion == "percentile":
+        if norm is None or not norm.population:
+            return round(value, 2)
+        return _percentile_rank(value, norm.population)
+
+    if conversion in ("sten", "stenine"):
+        if norm is not None and norm.sd > 0:
+            z = (value - norm.mean) / norm.sd
+        else:
+            z = 0.0  # degenerate population -> mid-scale
+        if conversion == "sten":
+            return int(max(1, min(10, round(5.5 + 2 * z))))
+        return int(max(1, min(9, round(5 + 2 * z))))
+
+    return round(value, 2)
+
+
+def _raw_convert_score(raw: float, max_score: float, conversion: str) -> float:
+    """Convert a raw/max score pair (percentage conversions only).
+
+    Retained for callers that only need a percentage-scale conversion without
+    a norm population.
+    """
     if max_score <= 0:
         return 0.0
-    percentage = (raw / max_score) * 100
-    if conversion == "percentage":
-        return round(percentage, 2)
-    elif conversion == "percentile":
-        # Simplified: would need norming data for accurate percentile
-        return round(percentage, 2)
-    elif conversion == "sten":
-        # STEN: 1-10 scale, mean=5.5, SD=2
-        return round(max(1, min(10, (percentage / 10) + 0.5)), 1)
-    elif conversion == "stenine":
-        # STENINE: 1-9 scale, mean=5, SD=2
-        return round(max(1, min(9, (percentage / 100) * 8 + 1)), 1)
-    return round(percentage, 2)
+    return _convert_score((raw / max_score) * 100, conversion, None)
 
 
 def _filter_sections_by_level(sections, level: str):
@@ -134,14 +230,18 @@ def _filter_sections_by_level(sections, level: str):
     return [s for s in sections if s.section.level == target_level]
 
 
-def _build_section_breakdown(report, session: AssessmentSession) -> list[dict]:
+def _build_section_breakdown(
+    report, session: AssessmentSession, norm: "_NormContext | None" = None
+) -> list[dict]:
     """Build per-variable score breakdown, filtered by data input level."""
+    if norm is None:
+        norm = _build_norm_context(report, session)
     all_scores = list(session.section_scores.select_related("section").all())
     filtered = _filter_sections_by_level(all_scores, report.data_input_level)
 
     result = []
     for ss in filtered:
-        converted = _convert_score(ss.raw_score, ss.max_score, report.stat_conversion)
+        converted = norm.convert(ss.percentage, report.stat_conversion)
         result.append(
             {
                 "section_id": ss.section_id,
@@ -157,17 +257,24 @@ def _build_section_breakdown(report, session: AssessmentSession) -> list[dict]:
     return result
 
 
-def _build_descriptive(report, session: AssessmentSession) -> dict:
+def _build_descriptive(
+    report, session: AssessmentSession, norm: "_NormContext | None" = None
+) -> dict:
     """Build descriptive report data: cutoff comparisons per variable.
 
     Per SRS §3.1: scores are presented in tables/graphs and explained
-    against a cut-off.
+    against a cut-off. The candidate's score is expressed in the report's
+    selected statistical conversion (H4), and the cutoff (defined by the
+    psychometrician in that same scale) is compared against it.
     """
+    if norm is None:
+        norm = _build_norm_context(report, session)
     cutoff_data = []
     for cutoff in report.cutoffs.select_related("section").all():
-        # Find the candidate's score for this section
+        # Find the candidate's score for this section, converted to the
+        # selected scale so the cutoff bites on the same units the user chose.
         ss = session.section_scores.filter(section=cutoff.section).first()
-        candidate_score = ss.percentage if ss else 0
+        candidate_score = norm.convert(ss.percentage if ss else 0, report.stat_conversion)
         is_above = candidate_score >= cutoff.cutoff_score
 
         cutoff_data.append(
@@ -176,6 +283,7 @@ def _build_descriptive(report, session: AssessmentSession) -> dict:
                 "candidate_score": round(candidate_score, 2),
                 "cutoff_score": cutoff.cutoff_score,
                 "cutoff_label": cutoff.cutoff_label,
+                "conversion_type": report.stat_conversion,
                 "is_above_cutoff": is_above,
                 "description": cutoff.above_description if is_above else cutoff.below_description,
             }
@@ -184,26 +292,32 @@ def _build_descriptive(report, session: AssessmentSession) -> dict:
     return {"cutoffs": cutoff_data}
 
 
-def _build_typological(report, session: AssessmentSession) -> dict:
+def _build_typological(
+    report, session: AssessmentSession, norm: "_NormContext | None" = None
+) -> dict:
     """Build typological report data: top-N type profile.
 
     Per SRS §3.2: summary scores ordered descending, top N variables'
-    codes concatenated to form the type profile.
+    codes concatenated to form the type profile. Ordering uses the report's
+    selected statistical conversion (H4) so the "top" variables are ranked on
+    the same scale the user chose.
     """
+    if norm is None:
+        norm = _build_norm_context(report, session)
     codes = list(report.typological_codes.select_related("section").all())
     if not codes:
         return {"type_profile": "", "top_variables": []}
 
     top_n = codes[0].top_n if codes else 3
 
-    # Get candidate's scores for the coded variables
+    # Get candidate's scores for the coded variables (converted to the scale)
     scored = []
     for tc in codes:
         ss = session.section_scores.filter(section=tc.section).first()
-        score = ss.percentage if ss else 0
+        score = norm.convert(ss.percentage if ss else 0, report.stat_conversion)
         scored.append({"variable": tc.section.title, "code": tc.code, "score": score})
 
-    # Sort by score descending, take top N
+    # Sort by (converted) score descending, take top N
     scored.sort(key=lambda x: x["score"], reverse=True)
     top = scored[:top_n]
 
@@ -213,21 +327,43 @@ def _build_typological(report, session: AssessmentSession) -> dict:
     return {"type_profile": type_profile, "top_variables": top}
 
 
-def _build_interpretative(report, session: AssessmentSession) -> dict:
+def _build_interpretative(
+    report, session: AssessmentSession, norm: "_NormContext | None" = None
+) -> dict:
     """Build interpretative report data: band-based interpretation per variable.
 
-    Per SRS §3.3: scores analysed against score ranges defined by bands.
+    Per SRS §3.3: scores analysed against score ranges defined by bands. The
+    candidate's score is expressed in the report's selected statistical
+    conversion (H4), and each band bites on that converted value.
+
+    H6: bands carry a ``target_type``. In a general interpretative report the
+    relevant targets are ``section`` (default — the converted section score)
+    and ``raw_summary`` (the whole-assessment percentage). FMI/PMI/VMI targets
+    require profiling context and are resolved in ``_build_profiling`` instead.
     """
+    if norm is None:
+        norm = _build_norm_context(report, session)
     band_data = []
     for band in report.bands.select_related("section").all():
-        # Find the candidate's score for this section
-        ss = session.section_scores.filter(section=band.section).first()
-        candidate_score = ss.percentage if ss else 0
+        target = band.target_type or "section"
+        if target == "raw_summary":
+            candidate_score = round(session.percentage or 0, 2)
+            variable = "Raw Summary"
+        elif target == "section":
+            if band.section is None:
+                continue
+            ss = session.section_scores.filter(section=band.section).first()
+            candidate_score = norm.convert(ss.percentage if ss else 0, report.stat_conversion)
+            variable = band.section.title
+        else:
+            # fmi / pmi / vmi bands are profiling-only; not applicable here.
+            continue
 
         if band.contains_score(candidate_score):
             band_data.append(
                 {
-                    "variable": band.section.title,
+                    "variable": variable,
+                    "target_type": target,
                     "candidate_score": round(candidate_score, 2),
                     "band_number": band.band_number,
                     "band_label": band.band_label,
@@ -401,36 +537,40 @@ def _build_profiling(report, session: AssessmentSession) -> dict:
 
     profiling_data: dict[str, Any] = {}
 
+    # H6: group the report's bands by target_type so each profiling data
+    # input can be interpreted against the right band set.
+    bands_by_target = _bands_by_target(report)
+
     if report.include_raw_summary:
+        rs_band = _match_band(bands_by_target.get("raw_summary", []), session.percentage or 0)
         profiling_data["raw_summary"] = {
             "total_score": session.total_score,
             "max_score": session.max_score,
             "percentage": session.percentage,
+            "band": rs_band,
         }
 
     if report.include_fmi:
+        fmi_bands = bands_by_target.get("fmi", [])
         fmi_data = []
         for mi in match_indices:
             fmi_data.append(
                 {
+                    "career_stream": mi.career_stream,
                     "career_title": mi.career_title,
                     "final_match_index": mi.final_match_index,
                     "variable_mapping_index": mi.variable_mapping_index,
+                    "band": _match_band(fmi_bands, mi.final_match_index),
                 }
             )
         profiling_data["fmi"] = fmi_data
 
     if report.include_pmi:
-        # PMI would be computed per assessment — placeholder
-        profiling_data["pmi"] = {
-            "note": "PMI computation requires multi-assessment match indices.",
-            "match_indices": [
-                {"career": mi.career_title, "fmi": mi.final_match_index} for mi in match_indices
-            ],
-        }
+        profiling_data["pmi"] = _build_pmi(report, match_indices, bands_by_target.get("pmi", []))
 
     if report.include_vmi:
         # VMI from variable_details JSON
+        vmi_bands = bands_by_target.get("vmi", [])
         vmi_data = []
         for mi in match_indices:
             if mi.variable_details:
@@ -438,11 +578,143 @@ def _build_profiling(report, session: AssessmentSession) -> dict:
                     {
                         "career_title": mi.career_title,
                         "variable_details": mi.variable_details,
+                        "variable_mapping_index": mi.variable_mapping_index,
+                        "band": _match_band(vmi_bands, mi.variable_mapping_index),
                     }
                 )
         profiling_data["vmi"] = vmi_data
 
     return profiling_data
+
+
+def _bands_by_target(report) -> dict[str, list]:
+    """Group a report's bands by ``target_type`` (H6)."""
+    grouped: dict[str, list] = {}
+    for band in report.bands.all():
+        grouped.setdefault(band.target_type or "section", []).append(band)
+    return grouped
+
+
+def _match_band(bands: list, value: float | None, assessment_label: str | None = None) -> dict | None:
+    """Return the first band whose range contains ``value`` (reuses
+    ReportBand.contains_score). When ``assessment_label`` is given, only bands
+    scoped to that label (or with no label = applies to all) are considered.
+
+    Returns a serialisable band dict, or None when no band matches.
+    """
+    if value is None:
+        return None
+    for band in bands:
+        if assessment_label is not None and band.assessment_label:
+            if band.assessment_label != assessment_label:
+                continue
+        if band.contains_score(value):
+            return {
+                "band_number": band.band_number,
+                "band_label": band.band_label,
+                "range": f"{band.range_min}-{band.range_max}",
+                "description": band.description,
+                "colour_code": band.colour_code,
+            }
+    return None
+
+
+def _pmi_by_assessment(mi) -> dict[str, float]:
+    """Extract {assessment_label: PMI} from a MatchIndex's variable_details.
+
+    Each variable_details entry carries the per-assessment ``pmi`` (constant
+    across that assessment's variables — it is the AssessmentResult.pmi) plus
+    the ``assessment`` label. We take the first non-null pmi seen per label.
+    """
+    result: dict[str, float] = {}
+    for entry in mi.variable_details or []:
+        label = entry.get("assessment")
+        pmi = entry.get("pmi")
+        if label and pmi is not None and label not in result:
+            result[label] = pmi
+    return result
+
+
+def _build_pmi(report, match_indices, pmi_bands: list) -> dict[str, Any]:
+    """Build the PMI report section (SRS 06 §3.3) + PMI-D gap index (§3.3.3).
+
+    PMI is the per-assessment profile match. For each assessment we list the
+    careers with that assessment's PMI (ordered by PMI descending) and, when
+    PMI bands are defined for that assessment, the matching band.
+
+    PMI-D = A1PMI - A2PMI per career (§3.3.3), which may be negative. The
+    subtraction order (A1, A2) comes from the report's configured
+    pmi_d_first/second_assessment; when unset it falls back to the first two
+    assessment labels encountered. PMI-D careers are ordered by gap descending
+    (largest positive gap first, largest negative last), matching the §3.3.4
+    band layout that runs from ">40" down to "<-40".
+    """
+    # Collect per-assessment PMI per career, preserving label encounter order.
+    labels: list[str] = []
+    by_assessment: dict[str, list[dict]] = {}
+    per_career: list[tuple] = []  # (mi, {label: pmi})
+    for mi in match_indices:
+        pmis = _pmi_by_assessment(mi)
+        per_career.append((mi, pmis))
+        for label, pmi in pmis.items():
+            if label not in by_assessment:
+                by_assessment[label] = []
+                labels.append(label)
+            by_assessment[label].append(
+                {
+                    "career_stream": mi.career_stream,
+                    "career_title": mi.career_title,
+                    "career_code": mi.career_code,
+                    "pmi": pmi,
+                    "band": _match_band(pmi_bands, pmi, assessment_label=label),
+                }
+            )
+
+    # Order careers within each assessment by PMI descending.
+    for label in by_assessment:
+        by_assessment[label].sort(
+            key=lambda c: c["pmi"] if c["pmi"] is not None else float("-inf"), reverse=True
+        )
+
+    pmi_section: dict[str, Any] = {
+        "assessments": labels,
+        "by_assessment": by_assessment,
+    }
+
+    # --- PMI-D gap index (§3.3.3) ---
+    a1 = report.pmi_d_first_assessment or (labels[0] if labels else None)
+    a2 = report.pmi_d_second_assessment or (labels[1] if len(labels) > 1 else None)
+    if a1 and a2 and a1 != a2:
+        gap_careers = []
+        for mi, pmis in per_career:
+            a1_pmi = pmis.get(a1)
+            a2_pmi = pmis.get(a2)
+            if a1_pmi is None or a2_pmi is None:
+                continue
+            pmi_d = round(a1_pmi - a2_pmi, 2)
+            gap_careers.append(
+                {
+                    "career_stream": mi.career_stream,
+                    "career_title": mi.career_title,
+                    "career_code": mi.career_code,
+                    "a1_pmi": a1_pmi,
+                    "a2_pmi": a2_pmi,
+                    "pmi_d": pmi_d,
+                }
+            )
+        # Order by gap descending; band each PMI-D against its own bands.
+        gap_careers.sort(key=lambda c: c["pmi_d"], reverse=True)
+        pmid_bands = _bands_by_target(report).get("pmi_d", [])
+        for c in gap_careers:
+            c["band"] = _match_band(pmid_bands, c["pmi_d"])
+        pmi_section["gap_index"] = {
+            "first_assessment": a1,
+            "second_assessment": a2,
+            "formula": f"PMI-D = {a1}-PMI - {a2}-PMI",
+            "careers": gap_careers,
+        }
+
+    return pmi_section
 
 
 def select_profiling_data(

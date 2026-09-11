@@ -538,6 +538,8 @@ def _build_profiling(profiling: Any) -> str:
                 f"<table><thead><tr><th>Career</th><th>FMI</th><th>VMI</th></tr></thead>"
                 f"<tbody>{rows}</tbody></table>"
             )
+    if "pmi" in profiling:
+        parts.append(_build_pmi_section(profiling["pmi"]))
     if "vmi" in profiling:
         vmi_list = profiling["vmi"] or []
         if vmi_list:
@@ -565,6 +567,61 @@ def _build_profiling(profiling: Any) -> str:
     if not parts:
         return ""
     return "<h2>Profiling Results</h2>" + "".join(parts)
+
+
+def _build_pmi_section(pmi: Any) -> str:
+    """Build the PMI report (per-assessment) + PMI-D gap index (SRS 06 §3.3)."""
+    if not pmi or not isinstance(pmi, dict):
+        return ""
+    parts = ["<h3>Profile Match Index (PMI)</h3>"]
+    by_assessment = pmi.get("by_assessment") or {}
+    for label in pmi.get("assessments") or list(by_assessment.keys()):
+        careers = by_assessment.get(label) or []
+        if not careers:
+            continue
+        rows = ""
+        for c in careers:
+            band = c.get("band") or {}
+            rows += (
+                f"<tr>"
+                f"<td>{_esc(c.get('career_stream'))}</td>"
+                f"<td>{_esc(c.get('career_title'))}</td>"
+                f"<td>{_fmt(c.get('pmi'))}</td>"
+                f"<td>{_esc(band.get('band_label'))}</td>"
+                f"</tr>"
+            )
+        parts.append(
+            f"<p><strong>{_esc(label)}-PMI</strong></p>"
+            f"<table><thead><tr><th>Career Stream</th><th>Career</th>"
+            f"<th>PMI</th><th>Label</th></tr></thead><tbody>{rows}</tbody></table>"
+        )
+
+    gap = pmi.get("gap_index")
+    if gap and gap.get("careers"):
+        rows = ""
+        for c in gap["careers"]:
+            band = c.get("band") or {}
+            pmi_d = c.get("pmi_d")
+            badge_class = "badge-danger" if pmi_d is not None and pmi_d < 0 else "badge-success"
+            rows += (
+                f"<tr>"
+                f"<td>{_esc(c.get('career_stream'))}</td>"
+                f"<td>{_esc(c.get('career_title'))}</td>"
+                f"<td>{_fmt(c.get('a1_pmi'))}</td>"
+                f"<td>{_fmt(c.get('a2_pmi'))}</td>"
+                f"<td><span class='badge {badge_class}'>{_fmt(pmi_d)}</span></td>"
+                f"<td>{_esc(band.get('band_label'))}</td>"
+                f"</tr>"
+            )
+        parts.append(
+            f"<h3>PMI Gap Index (PMI-D)</h3>"
+            f"<p style='font-size:9pt;color:#64748b;'>{_esc(gap.get('formula'))}</p>"
+            f"<table><thead><tr><th>Career Stream</th><th>Career</th>"
+            f"<th>{_esc(gap.get('first_assessment'))}-PMI</th>"
+            f"<th>{_esc(gap.get('second_assessment'))}-PMI</th>"
+            f"<th>PMI-D</th><th>Label</th></tr></thead><tbody>{rows}</tbody></table>"
+        )
+    return "".join(parts)
 
 
 def _build_custom_sections(sections: Any) -> str:

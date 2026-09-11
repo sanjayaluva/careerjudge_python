@@ -40,7 +40,7 @@ from datetime import datetime
 
 from django.utils import timezone
 
-from apps.assessment.models import QuestionAttempt
+from apps.assessment.models import AssessmentQuestion, AssessmentSession, QuestionAttempt
 from apps.question_bank.models import Question
 
 # Per SRS 02 §2.2 / §2.3 / §3.2 / §3.3: top/bottom 27% of candidates by
@@ -58,9 +58,11 @@ class CandidateAttemptSummary:
     """Per-candidate data needed for psychometric computation."""
 
     candidate_id: int
+    session_id: int
     target_score: float  # score on the target question
     target_max_score: float
-    total_score: float  # sum of all question scores in this session
+    total_score: float  # sum of all question scores in this session (incl. target)
+    rest_score: float  # total_score minus the target question's own score
     is_correct: bool  # for MCQ: did they get it right?
 
 
@@ -183,14 +185,16 @@ def _fetch_target_attempts(
 
 
 def _build_summaries(attempts: list[QuestionAttempt]) -> list[CandidateAttemptSummary]:
-    """Build a per-candidate summary list with (target_score, total_score, is_correct).
+    """Build a per-candidate summary list with target/total/rest scores + is_correct.
 
-    Per SRS 02 §4 (MCQ discrimination) and §5 (non-MCQ total correlation):
-      - Total Score = sum of all question scores for each user (in the same
-        session). Note: we use session.total_score which is the assessment-
-        level aggregate, not just the target question's siblings. This
-        matches the SRS's intent of measuring the candidate's overall
-        performance to find top/bottom groups.
+    Per SRS 02:
+      - Total Score (session.total_score) = the assessment-level aggregate of
+        all question scores for the candidate, INCLUDING the target question.
+        Used to rank candidates into the top/bottom 27% groups for TDI/BDI
+        (§2.2/§2.3/§3.2/§3.3, which explicitly use "scores of all questions").
+      - Rest Score = Total Score minus the target question's own score. This is
+        the "sum of all questions EXCEPT the target question" that §4 (MCQ
+        discrimination) and §5 (non-MCQ item-total correlation) require.
     """
     summaries: list[CandidateAttemptSummary] = []
     for att in attempts:
@@ -201,13 +205,16 @@ def _build_summaries(attempts: list[QuestionAttempt]) -> list[CandidateAttemptSu
         # equivalent to score > 0. We use the 50% threshold to be safe
         # across scoring modes.
         is_correct = att.score >= (att.max_score * 0.5)
-        total_score = att.session.total_score or 0
+        total_score = float(att.session.total_score or 0)
+        target_score = float(att.score)
         summaries.append(
             CandidateAttemptSummary(
                 candidate_id=att.session.candidate_id,
-                target_score=float(att.score),
+                session_id=att.session_id,
+                target_score=target_score,
                 target_max_score=float(att.max_score),
-                total_score=float(total_score),
+                total_score=total_score,
+                rest_score=total_score - target_score,
                 is_correct=is_correct,
             )
         )
@@ -258,13 +265,13 @@ def _compute_discrimination_index(summaries: list[CandidateAttemptSummary]) -> f
     Formula:
       Discrimination = ((Mean-Correct - Mean-Incorrect) x sqrt(N1/N x N2/N)) / SD
 
-    Where:
+    Where (per §4, "scores of all questions EXCEPT target question"):
       N1 = number of users who got target CORRECT
       N2 = number of users who got target INCORRECT
       N  = total users
-      SD = standard deviation of total scores
-      Mean-Correct   = mean total score of users who got target correct
-      Mean-Incorrect = mean total score of users who got target incorrect
+      SD = standard deviation of rest scores (total minus target)
+      Mean-Correct   = mean rest score of users who got target correct
+      Mean-Incorrect = mean rest score of users who got target incorrect
 
     Returns None if SD is 0 (no variance) or if N1=0 or N2=0.
     """
@@ -280,13 +287,13 @@ def _compute_discrimination_index(summaries: list[CandidateAttemptSummary]) -> f
 
     n1 = len(correct_users)
     n2 = len(incorrect_users)
-    total_scores = [s.total_score for s in summaries]
-    sd = statistics.pstdev(total_scores) if n > 1 else 0.0
+    rest_scores = [s.rest_score for s in summaries]
+    sd = statistics.pstdev(rest_scores) if n > 1 else 0.0
     if sd == 0:
         return None
 
-    mean_correct = sum(s.total_score for s in correct_users) / n1
-    mean_incorrect = sum(s.total_score for s in incorrect_users) / n2
+    mean_correct = sum(s.rest_score for s in correct_users) / n1
+    mean_incorrect = sum(s.rest_score for s in incorrect_users) / n2
     n_coefficient = math.sqrt((n1 / n) * (n2 / n))
     mean_coefficient = (mean_correct - mean_incorrect) * n_coefficient
     return round(mean_coefficient / sd, 4)
@@ -324,7 +331,11 @@ def _compute_non_mcq(
     bdi = (sum(s.target_score for s in bottom_group) / len(bottom_group)) / max_score
     ddi = tdi - bdi
 
-    correlation = _compute_item_total_correlation(summaries)
+    # SRS 02 §5 note: the item-total correlation is computed only over users
+    # who attempted ALL questions in the assessment. The difficulty indices
+    # (§3) use the full sample above; only the correlation sample is filtered.
+    corr_summaries = _filter_full_attempt_candidates(summaries)
+    correlation = _compute_item_total_correlation(corr_summaries)
 
     return PsychometricResult(
         question_id=question.id,
@@ -338,6 +349,48 @@ def _compute_non_mcq(
     )
 
 
+def _filter_full_attempt_candidates(
+    summaries: list[CandidateAttemptSummary],
+) -> list[CandidateAttemptSummary]:
+    """Keep only candidates who attempted EVERY question in their assessment.
+
+    Per SRS 02 §5 note ("System pulls out only data of users who have attempted
+    ALL questions in the list"), the item-total correlation is restricted to
+    complete respondents. "All questions in the assessment" = the distinct set
+    of Question ids linked via AssessmentQuestion to any section of the
+    session's assessment. A candidate is kept only if their session has an
+    'attempted' QuestionAttempt for every one of those questions.
+
+    Note: if an assessment has no linked AssessmentQuestion rows (e.g. synthetic
+    data), the required set is empty and every candidate qualifies.
+    """
+    session_ids = {s.session_id for s in summaries}
+    assessment_by_session = dict(
+        AssessmentSession.objects.filter(id__in=session_ids).values_list("id", "assessment_id")
+    )
+    required_by_assessment: dict[int, set[int]] = {}
+    complete_session_ids: set[int] = set()
+    for session_id in session_ids:
+        assessment_id = assessment_by_session.get(session_id)
+        if assessment_id is None:
+            continue
+        if assessment_id not in required_by_assessment:
+            required_by_assessment[assessment_id] = set(
+                AssessmentQuestion.objects.filter(
+                    section__assessment_id=assessment_id
+                ).values_list("question_id", flat=True)
+            )
+        required_qids = required_by_assessment[assessment_id]
+        attempted_qids = set(
+            QuestionAttempt.objects.filter(
+                session_id=session_id, status="attempted"
+            ).values_list("question_id", flat=True)
+        )
+        if required_qids.issubset(attempted_qids):
+            complete_session_ids.add(session_id)
+    return [s for s in summaries if s.session_id in complete_session_ids]
+
+
 def _compute_item_total_correlation(
     summaries: list[CandidateAttemptSummary],
 ) -> float | None:
@@ -346,10 +399,10 @@ def _compute_item_total_correlation(
     Formula:
       ITC = Sum(Difference-Total x Difference-Target) / (SD-Total x SD-Target x N)
 
-    Where:
-      Difference-Total = Total Score - Mean-Total (per user)
+    Where (per §5, the "Total Score" excludes the target question):
+      Difference-Total = Rest Score - Mean-Total (per user)
       Difference-Target = Target Score - Mean-Target (per user)
-      SD-Total = standard deviation of total scores
+      SD-Total = standard deviation of rest scores (total minus target)
       SD-Target = standard deviation of target scores
       N = number of users
 
@@ -360,18 +413,18 @@ def _compute_item_total_correlation(
     if n < 2:
         return None
 
-    total_scores = [s.total_score for s in summaries]
+    rest_scores = [s.rest_score for s in summaries]
     target_scores = [s.target_score for s in summaries]
-    mean_total = sum(total_scores) / n
+    mean_total = sum(rest_scores) / n
     mean_target = sum(target_scores) / n
 
-    sd_total = statistics.pstdev(total_scores)
+    sd_total = statistics.pstdev(rest_scores)
     sd_target = statistics.pstdev(target_scores)
     if sd_total == 0 or sd_target == 0:
         return None
 
     sum_diff_product = sum(
-        (s.total_score - mean_total) * (s.target_score - mean_target) for s in summaries
+        (s.rest_score - mean_total) * (s.target_score - mean_target) for s in summaries
     )
     sd_n_product = sd_total * sd_target * n
     if sd_n_product == 0:

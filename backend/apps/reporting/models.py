@@ -125,6 +125,25 @@ class Report(models.Model):
     include_pmi = models.BooleanField(_("include PMI report"), default=False)
     include_vmi = models.BooleanField(_("include VMI report"), default=False)
 
+    # --- PMI Gap Index / PMI-D configuration (SRS 06 §3.3.3) ---
+    # PMI-D = A1PMI - A2PMI. The user specifies the subtraction order by naming
+    # the two assessment labels. When blank, the engine falls back to the first
+    # two assessment labels found in the match-index data (in encounter order).
+    pmi_d_first_assessment = models.CharField(
+        _("PMI-D first assessment (A1)"),
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=_("Assessment label used as the minuend (A1) in PMI-D = A1PMI - A2PMI."),
+    )
+    pmi_d_second_assessment = models.CharField(
+        _("PMI-D second assessment (A2)"),
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=_("Assessment label used as the subtrahend (A2) in PMI-D = A1PMI - A2PMI."),
+    )
+
     # --- Template / branding ---
     header_text = models.CharField(_("header text"), max_length=255, blank=True, default="")
     footer_text = models.CharField(_("footer text"), max_length=255, blank=True, default="")
@@ -235,21 +254,64 @@ class ReportCutoff(models.Model):
 
 
 class ReportBand(models.Model):
-    """Band definitions per variable for interpretative reports (SRS §3.3.1).
+    """Band definitions per variable for interpretative reports (SRS §3.3.1)
+    and per data-input for profiling reports (SRS 06 §3.1-3.4).
 
     Each band has:
       - range_min / range_max: score range
       - band_label: label shown for this band (e.g., "High", "Medium", "Low")
       - description: interpretative text for this band
       - colour_code: optional colour for visual display
+
+    ``target_type`` selects WHICH value the band interprets:
+      - section     -> the candidate's (converted) section score (default;
+                       general interpretative reports, SRS §3.3)
+      - fmi         -> the Final Match Index of a career (SRS 06 §3.2)
+      - pmi         -> the per-assessment Profile Match Index (SRS 06 §3.3),
+                       optionally scoped by ``assessment_label``
+      - vmi         -> the Variable Match Index (SRS 06 §3.4)
+      - raw_summary -> the raw summary percentage (SRS 06 §3.1)
     """
 
+    TARGET_TYPE_CHOICES = [
+        ("section", "Section score (interpretative)"),
+        ("fmi", "Final Match Index (FMI)"),
+        ("pmi", "Profile Match Index (PMI)"),
+        ("vmi", "Variable Match Index (VMI)"),
+        ("raw_summary", "Raw summary percentage"),
+        # Extension beyond the 5 H6 targets: PMI-D (gap index) banding, whose
+        # ranges may be negative (SRS 06 §3.3.4).
+        ("pmi_d", "PMI Gap Index (PMI-D)"),
+    ]
+
     report = models.ForeignKey(Report, on_delete=models.CASCADE, related_name="bands")
+    target_type = models.CharField(
+        _("target type"),
+        max_length=20,
+        choices=TARGET_TYPE_CHOICES,
+        default="section",
+        help_text=_("Which value this band interprets: section score, FMI, PMI, VMI, raw summary."),
+    )
     section = models.ForeignKey(
         "assessment.AssessmentSection",
         on_delete=models.CASCADE,
         related_name="report_bands",
-        help_text=_("The variable (section) this band applies to."),
+        null=True,
+        blank=True,
+        help_text=_(
+            "The variable (section) this band applies to. Required for "
+            "target_type='section'; leave blank for FMI/PMI/VMI/raw_summary bands."
+        ),
+    )
+    assessment_label = models.CharField(
+        _("assessment label"),
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=_(
+            "For PMI/VMI bands: scopes the band to a single assessment "
+            "(e.g., 'CAT'). Blank = applies to all assessments."
+        ),
     )
     band_number = models.PositiveIntegerField(_("band number"), default=1)
     range_min = models.FloatField(_("range min"), default=0)

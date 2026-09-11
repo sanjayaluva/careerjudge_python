@@ -3,17 +3,20 @@
 Implements the SRS §5.1-5.3 algorithm with three modes:
 
   STANDARD UNRANKED (SRS §4.1, no RankDefinition):
-    - mapping_score = max(0, MAX_MAPPING_SCORE - band_distance)
+    - mapping_score = MappingRule table value for (criterion_band, user_band)
+                      [user-defined n x n grid, SRS §4.1.2]; falls back to the
+                      heuristic max(0, MAX_MAPPING_SCORE - band_distance) ONLY
+                      when the variable has no MappingRule rows at all.
     - weight        = MappingCriterion.weight (default 1.0)
     - product_score = mapping_score x weight
-    - max_product   = MAX_MAPPING_SCORE x weight
+    - max_product   = max(table values) x weight   [5 x weight on fallback]
     - VMI           = (product_score / max_product) x 100
 
   STANDARD RANKED (SRS §4.1.3 + §4.1.4, RankDefinition without is_polar):
-    - mapping_score = max(0, MAX_MAPPING_SCORE - band_distance)  [same as unranked]
+    - mapping_score = MappingRule table value (same as unranked)
     - weight        = RankValue.rank_value looked up by criterion.rank_order
     - product_score = mapping_score x weight
-    - max_product   = MAX_MAPPING_SCORE x weight
+    - max_product   = max(table values) x weight   [5 x weight on fallback]
     - VMI           = (product_score / max_product) x 100
 
   POLAR (SRS §4.2, RankDefinition with is_polar=True; PolarMatchRule table required):
@@ -21,8 +24,10 @@ Implements the SRS §5.1-5.3 algorithm with three modes:
                       [HM=5, MM=3, LM=1 — NOT band-distance based]
     - weight        = PolarRankValue.rank_value looked up by (match_code, rank_order)
     - product_score = match_value x weight
-    - max_product   = MAX_POLAR_MATCH_VALUE x weight
-    - VMI           = (product_score / max_product) x 100
+    - VMI           = (product_score / (MAX_POLAR_MATCH_VALUE x weight)) x 100
+    - max_product   = MAX_POLAR_MATCH_VALUE x (HM rank value at rank_order)
+                      [SRS §5.2.2 — the denominator uses the HM rank value, not
+                      the actual match code's rank value]
 
 PMI per assessment = (sum_product / (max_product + max_product/100)) x 100
 FMI per career     = mean(PMI) across assessments
@@ -37,6 +42,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from django.contrib.auth import get_user_model
+from django.db.models import Max
 
 from apps.assessment.models import AssessmentSession
 
@@ -44,6 +50,7 @@ from .models import (
     Band,
     BandDefinition,
     MappingCriterion,
+    MappingRule,
     MatchIndex,
     PolarMatchRule,
     PolarRankValue,
@@ -94,6 +101,15 @@ class VariableResult:
     weight: float = 1.0
     product_score: float = 0.0
     vmi: float = 0.0  # 0-100
+    # Max-mapping denominator inputs (SRS §5.1.2 / §5.2.2). These describe the
+    # MAXIMUM possible product_score for this variable, which feeds the PMI
+    # denominator. For standard mode max_mapping_score is the highest value in
+    # the variable's mapping-rule table (5 when falling back to the heuristic)
+    # and max_weight == weight. For polar mode max_mapping_score is
+    # MAX_POLAR_MATCH_VALUE and max_weight is the HM (High Match) rank value at
+    # this variable's rank_order — NOT the actual match code's rank value.
+    max_mapping_score: float | None = None
+    max_weight: float = 1.0
 
 
 @dataclass
@@ -228,11 +244,20 @@ def _compute_for_career(
 
 
 def _max_product_for(v: VariableResult) -> float:
-    """Return the maximum possible product_score for a variable.
+    """Return the maximum possible product_score for a variable — the per-
+    variable contribution to the PMI denominator (SRS §5.1.2 / §5.2.2).
 
-    For standard modes: MAX_MAPPING_SCORE x weight.
-    For polar mode:     MAX_POLAR_MATCH_VALUE x weight.
+    Standard: (highest value in the variable's mapping-rule table) x rank_value
+              — 5 x rank_value when falling back to the heuristic. Do NOT
+              hardcode the band count.
+    Polar:    MAX_POLAR_MATCH_VALUE x (HM rank value at this rank_order).
+
+    Both inputs are precomputed on the VariableResult (max_mapping_score,
+    max_weight) so this stays a pure function of the row.
     """
+    if v.max_mapping_score is not None:
+        return v.max_mapping_score * v.max_weight
+    # Defensive fallback for rows produced before these fields were populated.
     base = MAX_POLAR_MATCH_VALUE if v.mode == "polar" else MAX_MAPPING_SCORE
     return base * v.weight
 
@@ -288,7 +313,28 @@ def _compute_standard_variable(
         return None
 
     distance = abs(criterion_band.band_number - candidate_band.band_number)
-    mapping_score = max(0, MAX_MAPPING_SCORE - distance)
+
+    # Mapping score: prefer the user-defined mapping-rule table (SRS §4.1.2);
+    # fall back to the legacy band-distance heuristic ONLY when the variable
+    # has no MappingRule rows at all. If the table exists but this specific
+    # (criterion, user) combo is missing, treat it as a config gap and skip.
+    if MappingRule.objects.filter(band_definition=band_def).exists():
+        rule = MappingRule.objects.filter(
+            band_definition=band_def,
+            criterion_band_code=criterion.criterion_band_code,
+            user_band_code=candidate_band.band_code,
+        ).first()
+        if rule is None:
+            return None
+        mapping_score = rule.value
+        # Max mapping score = the MAXIMUM value defined in this variable's
+        # table (do NOT hardcode the band count — SRS §5.1.2).
+        max_mapping_score = MappingRule.objects.filter(band_definition=band_def).aggregate(
+            m=Max("value")
+        )["m"]
+    else:
+        mapping_score = max(0, MAX_MAPPING_SCORE - distance)
+        max_mapping_score = MAX_MAPPING_SCORE
 
     # Ranked mode: look up rank_value from chart by rank_order
     if rank_def is not None and criterion.rank_order is not None:
@@ -303,7 +349,7 @@ def _compute_standard_variable(
         mode = "standard_unranked"
 
     product_score = mapping_score * weight
-    max_product = MAX_MAPPING_SCORE * weight
+    max_product = max_mapping_score * weight
     vmi = round((product_score / max_product) * 100, 2) if max_product > 0 else 0.0
 
     return VariableResult(
@@ -319,6 +365,8 @@ def _compute_standard_variable(
         weight=weight,
         product_score=product_score,
         vmi=vmi,
+        max_mapping_score=max_mapping_score,
+        max_weight=weight,
     )
 
 
@@ -361,8 +409,21 @@ def _compute_polar_variable(
 
     weight = float(polar_rv.rank_value)
     product_score = rule.match_value * weight
+    # Per-variable VMI uses the ACTUAL match code's rank value (SRS §5.2.1:
+    # "VMI = Product Score / (highest mapping score x respective ranking value)").
     max_product = MAX_POLAR_MATCH_VALUE * weight
     vmi = round((product_score / max_product) * 100, 2) if max_product > 0 else 0.0
+
+    # PMI denominator (SRS §5.2.2): the max uses the HM (High Match) rank value
+    # at this variable's rank_order — NOT the actual match code's rank value.
+    # Fall back to the actual weight only if the HM row is missing (partial
+    # config), so PMI stays well-defined.
+    hm_rv = PolarRankValue.objects.filter(
+        rank_definition=rank_def,
+        match_code="HM",
+        rank_order=criterion.rank_order,
+    ).first()
+    max_weight = float(hm_rv.rank_value) if hm_rv is not None else weight
 
     return VariableResult(
         variable=criterion.section.title,
@@ -375,6 +436,8 @@ def _compute_polar_variable(
         weight=weight,
         product_score=product_score,
         vmi=vmi,
+        max_mapping_score=MAX_POLAR_MATCH_VALUE,
+        max_weight=max_weight,
     )
 
 

@@ -25,7 +25,9 @@ from .models import (
 )
 from .serializers import (
     BandDefinitionSerializer,
+    BandSerializer,
     MappingCriterionSerializer,
+    MappingRuleSerializer,
     MatchIndexSerializer,
     PolarMatchRuleSerializer,
     ProfilingSolutionListSerializer,
@@ -49,6 +51,8 @@ class HasProfilingPermission(HasModulePermission):
         "rank_definitions": "change",
         "rank_definitions_delete": "change",
         "polar_match_rules": "change",
+        "mapping_rules": "change",
+        "band_rows": "change",
     }
 
 
@@ -172,6 +176,57 @@ class ProfilingSolutionViewSet(ModelViewSet):
                 {"message": "Band definition created.", "data": serializer.data},
                 status=status.HTTP_201_CREATED,
             )
+
+    @action(detail=True, methods=["get", "post"])
+    def band_rows(self, request, pk=None):
+        """List or create individual Band rows (SRS §4.1.1) nested under a
+        band_definition belonging to this solution.
+
+        GET /solutions/<id>/band_rows/
+          -> list of all bands across the solution's band_definitions
+
+        POST /solutions/<id>/band_rows/
+          body: {
+            "band_definition": 42,
+            "band_number": 1,
+            "range_min": 0,
+            "range_max": 20,
+            "band_code": "ANL2",
+            "sub_variable_name": ""   // optional (polar)
+          }
+        """
+        solution = self.get_object()
+        if request.method == "GET":
+            from .models import Band
+
+            bands = Band.objects.filter(
+                band_definition__selected_assessment__solution=solution
+            ).select_related("band_definition")
+            serializer = BandSerializer(bands, many=True)
+            return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+        bd_id = request.data.get("band_definition")
+        bd = BandDefinition.objects.filter(
+            id=bd_id, selected_assessment__solution=solution
+        ).first()
+        if not bd:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": f"band_definition {bd_id} not found in this solution.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = BandSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {"message": "Band created.", "data": serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=["get", "post"])
     def rank_definitions(self, request, pk=None):
@@ -364,6 +419,55 @@ class ProfilingSolutionViewSet(ModelViewSet):
         serializer.save()
         return Response(
             {"message": "Polar match rule created.", "data": serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["get", "post"])
+    def mapping_rules(self, request, pk=None):
+        """List or create MappingRules (SRS §4.1.2) for the solution's
+        standard band_definitions.
+
+        GET /solutions/<id>/mapping_rules/
+          -> list of all mapping rules in the solution
+
+        POST /solutions/<id>/mapping_rules/
+          body: {
+            "band_definition": 42,
+            "criterion_band_code": "ANH2",
+            "user_band_code": "ANH1",
+            "value": 4
+          }
+        """
+        solution = self.get_object()
+        if request.method == "GET":
+            from .models import MappingRule
+
+            rules = MappingRule.objects.filter(
+                band_definition__selected_assessment__solution=solution
+            ).select_related("band_definition")
+            serializer = MappingRuleSerializer(rules, many=True)
+            return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+        bd_id = request.data.get("band_definition")
+        bd = BandDefinition.objects.filter(
+            id=bd_id, selected_assessment__solution=solution
+        ).first()
+        if not bd:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": f"band_definition {bd_id} not found in this solution.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = MappingRuleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {"message": "Mapping rule created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
         )
 

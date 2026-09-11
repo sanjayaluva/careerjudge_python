@@ -55,8 +55,10 @@ class ReportBandSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "report",
+            "target_type",
             "section",
             "section_title",
+            "assessment_label",
             "band_number",
             "range_min",
             "range_max",
@@ -65,6 +67,20 @@ class ReportBandSerializer(serializers.ModelSerializer):
             "colour_code",
         ]
         read_only_fields = ["id", "section_title"]
+        extra_kwargs = {
+            # section is only required for target_type='section'; profiling
+            # bands (fmi/pmi/vmi/raw_summary/pmi_d) leave it blank.
+            "section": {"required": False, "allow_null": True},
+        }
+
+    def validate(self, attrs):
+        target = attrs.get("target_type", getattr(self.instance, "target_type", "section"))
+        section = attrs.get("section", getattr(self.instance, "section", None))
+        if target == "section" and section is None:
+            raise serializers.ValidationError(
+                {"section": "section is required when target_type='section'."}
+            )
+        return attrs
 
 
 class TypologicalCodeSerializer(serializers.ModelSerializer):
@@ -126,6 +142,8 @@ class ReportSerializer(serializers.ModelSerializer):
             "include_fmi",
             "include_pmi",
             "include_vmi",
+            "pmi_d_first_assessment",
+            "pmi_d_second_assessment",
             "header_text",
             "footer_text",
             "logo",
