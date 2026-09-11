@@ -84,6 +84,31 @@ class TaskLifecycleTests(TaskBaseTestCase):
         # Notification created for assignee
         self.assertEqual(self.sme.notifications.count(), 1)
 
+    def test_task_creation_notifies_helpdesk_and_admin(self):
+        """D9 §3.1: helpdesk (and admin) must be notified when a task is assigned."""
+        helpdesk_role, _ = Role.objects.get_or_create(
+            name="helpdesk", defaults={"is_system": True, "is_frozen": True}
+        )
+        helpdesk_user = User.objects.create_user(
+            email="helpdesk@test.com", password="pw12345", is_active=True, role=helpdesk_role
+        )
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(
+            "/api/tasks/",
+            {
+                "title": "Create MCQ for Quant",
+                "description": "Please create 5 MCQs under Quant > Algebra.",
+                "assigned_to": self.sme.id,
+                "assignee_role": "sme",
+                "priority": "high",
+                "due_date": (timezone.now() + timedelta(days=7)).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(helpdesk_user.notifications.count(), 1)
+        self.assertEqual(self.admin.notifications.count(), 1)
+
     def test_non_admin_cannot_create_task(self):
         self.client.force_authenticate(self.sme)
         resp = self.client.post(

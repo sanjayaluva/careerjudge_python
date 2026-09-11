@@ -12,6 +12,7 @@ from .models import (
     User,  # User is the concrete model from get_user_model()
     UserProfile,
 )
+from .services import create_email_verification_token, send_verification_email
 
 # ---------------------------------------------------------------------------
 # Auth serializers
@@ -302,6 +303,16 @@ class UserWriteSerializer(serializers.ModelSerializer):
             random_pw = get_random_string(length=12)
             user.set_password(random_pw)
             user.save(update_fields=["password"])
+            # Invited user: mint an activation token and send the same
+            # verification email self-registration uses, so they can
+            # actually activate their account (D9 §2.2-2.3).
+            if not user.is_active:
+                token = create_email_verification_token(user)
+                try:
+                    send_verification_email(user, token)
+                except Exception:
+                    # Email send failure should not block admin user creation
+                    pass
         UserProfile.objects.get_or_create(user=user)
         # Report 3 §1.17: when creating a counsellor, auto-create their
         # CounsellorProfile + tag it with the admin-selected categories.

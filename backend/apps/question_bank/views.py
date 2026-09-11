@@ -1,5 +1,6 @@
 """Views for the question_bank module."""
 
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import filters, status
 from rest_framework.permissions import IsAuthenticated
@@ -174,19 +175,25 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         if difficulty:
             qs = qs.filter(difficulty_level=difficulty)
 
-        # Filter by created_by (SME sees own questions)
+        # Filter by created_by (opt-in "mine" view, e.g. for admins/psychometricians)
         mine = params.get("mine")
         if mine == "true" and self.request.user.is_authenticated:
             qs = qs.filter(created_by=self.request.user)
 
-        # Report 3 §4.1/§4.2: trainers can author questions to build course
-        # assessments, but must see ONLY their own questions (not the full
-        # CJ Question Bank pool). Other authoring roles (sme, psychometrician,
-        # cj_admin) keep their existing access.
+        # Report 3 §4.1/§4.2 + D1 §3.1: trainers and SMEs author questions but
+        # must ALWAYS see ONLY their own questions (not the full CJ Question
+        # Bank pool) — this is not opt-in via ?mine=true. Reviewers may only
+        # see their own questions plus questions that have actually entered
+        # the review pipeline (i.e. not another user's private drafts).
+        # Other roles (psychometrician, cj_admin) keep their existing access.
         if self.request.user.is_authenticated:
             role_name = self.request.user.role.name if self.request.user.role_id else None
-            if role_name == "trainer":
+            if role_name in ("trainer", "sme"):
                 qs = qs.filter(created_by=self.request.user)
+            elif role_name == "reviewer":
+                qs = qs.filter(
+                    Q(created_by=self.request.user) | ~Q(status="draft")
+                )
 
         return qs
 

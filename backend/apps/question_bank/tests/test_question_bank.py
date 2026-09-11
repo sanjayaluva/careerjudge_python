@@ -100,6 +100,23 @@ def reviewer_client(db, reviewer_user):
 
 
 @pytest.fixture
+def other_sme_user(db, sme_role):
+    for action in ("view", "add", "change", "delete"):
+        ModuleRight.objects.get_or_create(role=sme_role, module="question_bank", action=action)
+    return UserFactory(role=sme_role, email="other-sme@test.com")
+
+
+@pytest.fixture
+def other_sme_client(db, other_sme_user):
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    c = APIClient()
+    refresh = RefreshToken.for_user(other_sme_user)
+    c.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+    return c
+
+
+@pytest.fixture
 def individual_client(db, individual_user):
     from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -381,6 +398,34 @@ class TestQuestionCRUD:
             format="json",
         )
         resp = sme_client.get("/api/question-bank/questions/?mine=true")
+        assert resp.status_code == 200
+
+    def test_sme_cannot_retrieve_another_sme_question(self, sme_client, other_sme_client):
+        """D1 §3.1: SMEs must only see their own questions, without needing ?mine=true."""
+        create_resp = other_sme_client.post(
+            "/api/question-bank/questions/",
+            {
+                "question_type": "MCQ_TEXT_IMAGE",
+                "question_title": "Other SME's Q Title",
+                "question_text_1": "Other SME's Q",
+                "scoring_type": "BINARY",
+            },
+            format="json",
+        )
+        qid = create_resp.json()["data"]["id"]
+
+        # Direct retrieve of another SME's question is blocked
+        resp = sme_client.get(f"/api/question-bank/questions/{qid}/")
+        assert resp.status_code == 404
+
+        # It also never shows up in the (unfiltered) list
+        resp = sme_client.get("/api/question-bank/questions/")
+        assert resp.status_code == 200
+        ids = [q["id"] for q in resp.json()["data"]["results"]]
+        assert qid not in ids
+
+        # But the owning SME can still see it
+        resp = other_sme_client.get(f"/api/question-bank/questions/{qid}/")
         assert resp.status_code == 200
 
 

@@ -476,7 +476,9 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
             />
             {!isEdit && (
               <p className="mt-1 text-xs text-slate-500">
-                Leave blank to auto-generate and email the user.
+                {isActive
+                  ? "Leave blank to auto-generate a password. Share it with the user manually."
+                  : "Leave blank to auto-generate a password and email the user an activation link."}
               </p>
             )}
           </div>

@@ -3,6 +3,7 @@
 from rest_framework import serializers
 
 from apps.notifications.models import notify_user
+from apps.notifications.signals import _notify_admin_and_helpdesk
 
 from .models import Task, TaskExtensionRequest, TaskProgressUpdate, TaskSpec
 
@@ -156,6 +157,13 @@ class TaskDetailSerializer(TaskListSerializer):
             f"Task {task.task_id} has been assigned to you. Due: {task.due_date or 'No due date'}.",
             "info",
             link=f"/tasks/{task.id}",
+        )
+        # Also notify admin + helpdesk (D9 §3.1)
+        _notify_admin_and_helpdesk(
+            f"Task assigned: {task.title}",
+            f"Task {task.task_id} was assigned to {task.assigned_to.full_name or task.assigned_to.email}.",
+            "info",
+            f"/tasks/{task.id}",
         )
         return task
 

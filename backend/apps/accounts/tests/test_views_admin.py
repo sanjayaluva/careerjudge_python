@@ -69,6 +69,54 @@ class TestUserCreate:
         )
         assert resp.status_code == 403
 
+    def test_invited_user_gets_verification_token_and_can_activate(
+        self, authed_client, individual_role, mailoutbox
+    ):
+        """D9 §2.2-2.3: an admin-created (invited) user must be able to activate."""
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import EmailVerificationToken
+
+        resp = authed_client.post(
+            "/api/accounts/users/",
+            {
+                "email": "invited@test.com",
+                "full_name": "Invited User",
+                "is_active": False,
+                "is_email_verified": False,
+                "role": individual_role.id,
+            },
+            format="json",
+        )
+        assert resp.status_code == 201
+        user = User.objects.get(email="invited@test.com")
+        assert user.is_active is False
+
+        token = EmailVerificationToken.objects.filter(user=user, used_at__isnull=True).first()
+        assert token is not None
+        assert len(mailoutbox) == 1
+
+        anon = APIClient()
+        verify_resp = anon.post(
+            "/api/auth/verify-email", {"token": str(token.token)}, format="json"
+        )
+        assert verify_resp.status_code == 200
+        user.refresh_from_db()
+        assert user.is_active is True
+        assert user.is_email_verified is True
+
+        # The admin generated a random password the invitee never saw; once
+        # they know a password (e.g. via reset), login must work now that
+        # the account is active.
+        user.set_password("KnownPass123!")
+        user.save(update_fields=["password"])
+        login_resp = anon.post(
+            "/api/auth/login",
+            {"email": user.email, "password": "KnownPass123!"},
+            format="json",
+        )
+        assert login_resp.status_code == 200
+
 
 @pytest.mark.django_db
 class TestUserRetrieve:

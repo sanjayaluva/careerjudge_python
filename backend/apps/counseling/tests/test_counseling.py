@@ -443,6 +443,38 @@ def test_counsellor_saves_summary(counsellor_client, counselee_user, counsellor_
     assert resp.data["data"]["followup_recommended"] is True
 
 
+def test_counselee_cannot_view_summary(
+    counselee_client, counsellor_client, admin_client, counselee_user, counsellor_user
+):
+    """D8 §3.3: the counsellor's private summary must not leak to the counselee."""
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="Test",
+        fee=counsellor.hourly_rate,
+        status="completed",
+    )
+    counsellor_client.post(
+        f"/api/counseling/sessions/{session.id}/summary/",
+        {"summary": "Private counsellor notes"},
+        format="json",
+    )
+
+    resp = counselee_client.get(f"/api/counseling/sessions/{session.id}/summary/")
+    assert resp.status_code == 403
+
+    resp = counsellor_client.get(f"/api/counseling/sessions/{session.id}/summary/")
+    assert resp.status_code == 200
+    assert resp.data["data"]["summary"] == "Private counsellor notes"
+
+    resp = admin_client.get(f"/api/counseling/sessions/{session.id}/summary/")
+    assert resp.status_code == 200
+    assert resp.data["data"]["summary"] == "Private counsellor notes"
+
+
 # ---------------------------------------------------------------------------
 # Feedback tests (SRS §2.3)
 # ---------------------------------------------------------------------------
