@@ -94,6 +94,12 @@ ROLE_PERMISSIONS = {
         ("tasks", "delete"),
         ("tasks", "assign"),
         ("tasks", "approve"),
+        # H14: CJ Admin reviews/approves/rejects/pays every invoice.
+        ("invoicing", "view"),
+        ("invoicing", "add"),
+        ("invoicing", "approve"),
+        ("invoicing", "reject"),
+        ("invoicing", "change"),
     ],
     "helpdesk": [
         ("training", "view"),
@@ -143,6 +149,9 @@ ROLE_PERMISSIONS = {
         ("career_profiling", "change"),
         ("reporting", "view"),
         ("reporting", "generate_report"),
+        # H14: empanelled role — bills CJ Admin for review work (Doc 4).
+        ("invoicing", "view"),
+        ("invoicing", "add"),
     ],
     "sme": [
         # SME: creates/edits/deletes OWN questions (unreviewed only).
@@ -153,6 +162,9 @@ ROLE_PERMISSIONS = {
         ("question_bank", "delete"),
         ("question_bank", "request_delete"),
         ("assessment", "view"),
+        # H14: empanelled role — bills CJ Admin for question authoring (Doc 4).
+        ("invoicing", "view"),
+        ("invoicing", "add"),
     ],
     "reviewer": [
         # Reviewer: reviews questions, approves/rejects. No create/edit/delete.
@@ -161,6 +173,9 @@ ROLE_PERMISSIONS = {
         ("question_bank", "approve"),
         ("question_bank", "reject"),
         ("assessment", "view"),
+        # H14: empanelled role — bills CJ Admin for review work (Doc 4).
+        ("invoicing", "view"),
+        ("invoicing", "add"),
     ],
     "trainer": [
         ("training", "view"),
@@ -177,6 +192,9 @@ ROLE_PERMISSIONS = {
         ("question_bank", "view"),
         ("question_bank", "add"),
         ("question_bank", "change"),
+        # H14: empanelled role — bills CJ Admin for training delivery (Doc 4).
+        ("invoicing", "view"),
+        ("invoicing", "add"),
     ],
     "group_admin": [
         ("accounts", "view"),
@@ -191,6 +209,9 @@ ROLE_PERMISSIONS = {
         ("accounts", "view"),
         ("assessment", "view"),
         ("reporting", "view"),
+        # H14: empanelled role — bills CJ Admin for counselling delivery (Doc 4).
+        ("invoicing", "view"),
+        ("invoicing", "add"),
     ],
     "channel_partner": [
         # Channel Partner: manages their own individual users + assessments
@@ -203,6 +224,9 @@ ROLE_PERMISSIONS = {
         ("assessment", "add"),
         ("reporting", "view"),
         ("reporting", "generate_report"),
+        # H14: empanelled role — bills CJ Admin for commission (Doc 4).
+        ("invoicing", "view"),
+        ("invoicing", "add"),
     ],
     "individual": [
         ("assessment", "view"),  # can take assessments

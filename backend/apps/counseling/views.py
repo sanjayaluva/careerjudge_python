@@ -71,6 +71,8 @@ class HasCounselingPermission(HasModulePermission):
         "followups": "change",
         "confirm_followup": "add",
         "my_sessions": "view",
+        # H16/D8 §2.3: counsellor sets the per-session meeting link.
+        "meeting_link": "change",
     }
 
 
@@ -411,11 +413,16 @@ class CounselingSessionViewSet(ModelViewSet):
 
         counsellor = serializer.validated_data["counsellor"]
         # Capture the fee at booking time
+        fee = counsellor.hourly_rate
+        # H15/D8 §2.1: a session is only 'paid' once the gateway/webhook says
+        # so — free sessions (fee=0) are the one exception, auto-marked paid
+        # exactly like free training courses (apps/training/views.py register()).
+        is_free = float(fee) == 0
         session = serializer.save(
             counselee=request.user,
-            fee=counsellor.hourly_rate,
+            fee=fee,
             status="pending",
-            payment_status="pending",
+            payment_status="paid" if is_free else "pending",
             terms_accepted=True,
         )
         # Mark the timeslot as booked
@@ -442,10 +449,36 @@ class CounselingSessionViewSet(ModelViewSet):
             "session",
         )
 
+        # H15/D8 §2.1/§3.3: route payment through the gateway — same pattern
+        # as apps/training/views.py CourseViewSet.register(). The webhook
+        # (apps/payments/services.py _update_module_payment_status) flips
+        # session.payment_status to 'paid'; nothing here assumes payment done.
+        from apps.payments.services import create_stripe_checkout_session, get_or_create_payment
+
+        payment = get_or_create_payment(
+            request.user,
+            module="counseling",
+            item_id=session.id,
+            amount=fee,
+            description=f"Counselling session with {counsellor.full_name}",
+        )
+        checkout_url = None
+        if not is_free:
+            success_url = request.build_absolute_uri("/counseling?payment=success")
+            cancel_url = request.build_absolute_uri("/counseling?payment=cancelled")
+            checkout_url = create_stripe_checkout_session(payment, success_url, cancel_url)
+
+        if is_free:
+            message = "Session booked. Awaiting counsellor confirmation."
+        elif checkout_url is None:
+            message = "Session booked. Complete payment to confirm your session."
+        else:
+            message = "Session booked. Redirecting to payment…"
+
         return Response(
             {
-                "message": "Session booked. Awaiting counsellor confirmation.",
-                "data": serializer.data,
+                "message": message,
+                "data": {**serializer.data, "checkout_url": checkout_url},
             },
             status=status.HTTP_201_CREATED,
         )
@@ -761,6 +794,35 @@ class CounselingSessionViewSet(ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=True, methods=["post"], url_path="meeting-link")
+    def meeting_link(self, request, pk=None):
+        """Counsellor sets/updates the per-session meeting link (H16/D8 §2.3).
+
+        Body: {"meeting_link": "https://zoom.us/j/..."}
+        Only the session's own counsellor (or an admin) may set it — this is
+        what the live-delivery Join-Session button on both dashboards links
+        to, gated by a countdown to the timeslot's start time.
+        """
+        session = self.get_object()
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_admin = user_role_name == "cj_admin" or request.user.is_superuser
+        if not is_admin and session.counsellor.user_id != request.user.id:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the assigned counsellor can set the meeting link.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        session.meeting_link = (request.data.get("meeting_link") or "").strip()
+        session.save(update_fields=["meeting_link"])
+        return Response(
+            {"message": "Meeting link updated.", "data": CounselingSessionSerializer(session).data},
+            status=status.HTTP_200_OK,
+        )
+
 
 # ---------------------------------------------------------------------------
 # FollowupSession ViewSet (confirm follow-up — SRS §3.3)
@@ -800,8 +862,12 @@ class FollowupSessionViewSet(ModelViewSet):
             end_time=followup.proposed_time + timedelta(hours=1),
             status="booked",
         )
-        # Create the new session
+        # Create the new session. H15/D8 §2.1/§3.3: payment_status must be
+        # set by the gateway/webhook, not assumed — mirrors the booking flow
+        # in CounselingSessionViewSet.create() above.
         original = followup.original_session
+        fee = followup.counsellor.hourly_rate
+        is_free = float(fee) == 0
         new_session = CounselingSession.objects.create(
             counselee=request.user,
             counsellor=followup.counsellor,
@@ -811,20 +877,44 @@ class FollowupSessionViewSet(ModelViewSet):
             description="Follow-up session",
             terms_accepted=True,
             status="confirmed",
-            payment_status="paid",  # Assume payment done
+            payment_status="paid" if is_free else "pending",
             mode=original.mode,
-            fee=followup.counsellor.hourly_rate,
+            fee=fee,
             confirmed_at=timezone.now(),
         )
         followup.confirmed_session = new_session
         followup.status = "confirmed"
         followup.save(update_fields=["confirmed_session", "status"])
+
+        from apps.payments.services import create_stripe_checkout_session, get_or_create_payment
+
+        payment = get_or_create_payment(
+            request.user,
+            module="counseling",
+            item_id=new_session.id,
+            amount=fee,
+            description=f"Follow-up session with {followup.counsellor.full_name}",
+        )
+        checkout_url = None
+        if not is_free:
+            success_url = request.build_absolute_uri("/counseling?payment=success")
+            cancel_url = request.build_absolute_uri("/counseling?payment=cancelled")
+            checkout_url = create_stripe_checkout_session(payment, success_url, cancel_url)
+
+        if is_free:
+            message = "Follow-up confirmed."
+        elif checkout_url is None:
+            message = "Follow-up confirmed. Complete payment to finalize."
+        else:
+            message = "Follow-up confirmed. Redirecting to payment…"
+
         return Response(
             {
-                "message": "Follow-up confirmed.",
+                "message": message,
                 "data": {
                     "followup": FollowupSessionSerializer(followup).data,
                     "session": CounselingSessionSerializer(new_session).data,
+                    "checkout_url": checkout_url,
                 },
             },
             status=status.HTTP_200_OK,

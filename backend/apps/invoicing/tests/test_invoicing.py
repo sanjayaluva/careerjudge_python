@@ -140,6 +140,48 @@ class InvoiceTests(InvoicingBaseTestCase):
         resp = self.client.get("/api/invoicing/invoices/pending/")
         self.assertEqual(resp.status_code, 200, resp.content)
 
+    def test_non_empanelled_role_forbidden_from_creating_invoice(self):
+        """H14: only empanelled roles (+ cj_admin) may create invoices."""
+        individual_role, _ = Role.objects.get_or_create(
+            name="individual", defaults={"is_system": True, "is_frozen": True}
+        )
+        individual = User.objects.create_user(
+            email="individual@inv-test.com",
+            password="pw12345",
+            is_active=True,
+            role=individual_role,
+        )
+        self.client.force_authenticate(individual)
+        resp = self.client.post(
+            "/api/invoicing/invoices/",
+            {"description": "Not allowed", "amount": "100.00"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 403, resp.content)
+
+    def test_empanelled_counsellor_can_create_invoice(self):
+        """H14: counsellor is an empanelled role (Doc 4)."""
+        counsellor_role, _ = Role.objects.get_or_create(
+            name="counsellor", defaults={"is_system": True, "is_frozen": True}
+        )
+        counsellor = User.objects.create_user(
+            email="counsellor@inv-test.com",
+            password="pw12345",
+            is_active=True,
+            role=counsellor_role,
+        )
+        self.client.force_authenticate(counsellor)
+        resp = self.client.post(
+            "/api/invoicing/invoices/",
+            {
+                "invoice_type": "counseling",
+                "description": "Counselled 5 sessions this month",
+                "amount": "2500.00",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+
     def test_non_admin_cannot_see_others_invoices(self):
         from apps.accounts.models import User
 

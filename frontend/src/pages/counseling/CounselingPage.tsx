@@ -52,6 +52,7 @@ import {
 import { extractApiError, apiPatch } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { CounsellorDashboard } from "./CounsellorDashboard";
+import { JoinSessionButton } from "./JoinSession";
 
 export default function CounselingPage() {
   const { user } = useAuth();
@@ -197,6 +198,8 @@ export default function CounselingPage() {
                     <TableHead>Scheduled</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Fee</TableHead>
+                    {/* H16/D8 §2.3: live-delivery — countdown + Join Session */}
+                    <TableHead>Meeting</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -228,6 +231,9 @@ export default function CounselingPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-500">${s.fee}</TableCell>
+                      <TableCell>
+                        {s.status === "confirmed" ? <JoinSessionButton session={s} /> : "—"}
+                      </TableCell>
                       <TableCell>
                         <SessionActionsForCounselee session={s} />
                       </TableCell>
@@ -286,11 +292,19 @@ function BookingModal({
         terms_accepted: termsAccepted,
       });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["counseling", "my-sessions"] });
       void queryClient.invalidateQueries({
         queryKey: ["counseling", "counsellors", counsellor.id, "timeslots"],
       });
+      // H15/D8 §2.1: paid sessions get a Stripe checkout URL — route through
+      // the gateway like training's registerForCourse(), instead of assuming
+      // payment is done.
+      if (data.checkout_url) {
+        toast.success("Redirecting to payment…");
+        window.location.href = data.checkout_url;
+        return;
+      }
       toast.success("Session booked! Awaiting counsellor confirmation.");
       onClose();
     },
@@ -643,8 +657,15 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
 
   const confirmFuMut = useMutation({
     mutationFn: (fuId: number) => confirmFollowup(fuId),
-    onSuccess: () => {
+    onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["counseling"] });
+      // H15/D8 §2.1/§3.3: route the follow-up payment through the gateway
+      // too — no longer assumed paid.
+      if (data.checkout_url) {
+        toast.success("Redirecting to payment…");
+        window.location.href = data.checkout_url;
+        return;
+      }
       toast.success("Follow-up confirmed! A new session has been created.");
     },
     onError: (err) => toast.error(extractApiError(err)),

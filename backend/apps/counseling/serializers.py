@@ -148,6 +148,7 @@ class CounselingSessionSerializer(serializers.ModelSerializer):
             "status",
             "payment_status",
             "mode",
+            "meeting_link",
             "fee",
             "booked_at",
             "confirmed_at",
@@ -163,6 +164,9 @@ class CounselingSessionSerializer(serializers.ModelSerializer):
             "timeslot_detail",
             "status",
             "payment_status",
+            # H16/D8 §2.3: only settable via the dedicated `meeting-link`
+            # action (counsellor-only), never via a plain PATCH.
+            "meeting_link",
             "fee",
             "booked_at",
             "confirmed_at",

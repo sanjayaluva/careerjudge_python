@@ -205,6 +205,7 @@ class ModuleRight(models.Model):
         ("cms", "CMS"),
         ("notifications", "Notifications"),
         ("tasks", "Task Management"),
+        ("invoicing", "Invoicing"),
     ]
 
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="rights")

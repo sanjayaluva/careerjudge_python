@@ -66,6 +66,8 @@ export interface CounselingSession {
   status: "pending" | "confirmed" | "completed" | "cancelled";
   payment_status: string;
   mode: "online" | "offline";
+  /** H16/D8 §2.3: per-session meeting link, set by the counsellor. */
+  meeting_link: string;
   fee: string;
   booked_at: string;
   confirmed_at: string | null;
@@ -249,8 +251,21 @@ export function bookSession(payload: {
   category?: number;
   /** Report 3 §1.8: the user must explicitly accept the terms. */
   terms_accepted?: boolean;
-}): Promise<CounselingSession> {
-  return apiPost<CounselingSession>(`${BASE}/sessions/`, payload);
+}): Promise<CounselingSession & { checkout_url: string | null }> {
+  return apiPost<CounselingSession & { checkout_url: string | null }>(
+    `${BASE}/sessions/`,
+    payload,
+  );
+}
+
+/** H16/D8 §2.3: counsellor sets/updates the per-session meeting link. */
+export function setSessionMeetingLink(
+  sessionId: number,
+  meetingLink: string,
+): Promise<CounselingSession> {
+  return apiPost<CounselingSession>(`${BASE}/sessions/${sessionId}/meeting-link/`, {
+    meeting_link: meetingLink,
+  });
 }
 
 export function confirmSession(sessionId: number): Promise<CounselingSession> {
@@ -327,6 +342,7 @@ export function proposeFollowup(sessionId: number, proposedTime: string): Promis
 export function confirmFollowup(followupId: number): Promise<{
   followup: FollowupSession;
   session: CounselingSession;
+  checkout_url: string | null;
 }> {
   return apiPost(`${BASE}/followups/${followupId}/confirm/`);
 }

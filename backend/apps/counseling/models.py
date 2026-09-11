@@ -208,6 +208,16 @@ class CounselingSession(models.Model):
     )
     mode = models.CharField(_("mode"), max_length=10, choices=MODE_CHOICES, default="online")
 
+    # Per-session meeting link (D8 §2.3: live-delivery layer). Set by the
+    # counsellor (via the `meeting-link` action) — distinct from the static
+    # UserProfile.meeting_url, which is only a default/fallback.
+    meeting_link = models.URLField(
+        _("meeting link"),
+        blank=True,
+        default="",
+        help_text=_("Per-session Zoom/Meet link set by the counsellor for this booking."),
+    )
+
     # Session fee (captured at booking time — counsellor's hourly_rate)
     fee = models.DecimalField(_("fee"), max_digits=10, decimal_places=2, default=0)
 

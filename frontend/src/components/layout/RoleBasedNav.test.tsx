@@ -48,14 +48,15 @@ describe("<RoleBasedNav />", () => {
     setUser("cj_admin");
     renderNav();
 
-    // cj_admin sees every nav item (13 total: dashboard, profile, users,
+    // cj_admin sees every nav item (14 total: dashboard, profile, users,
     // roles, organizations, question_bank, assessments, career_profiling,
-    // reports, training, counseling, cms, tasks).
+    // reports, training, counseling, cms, tasks, invoicing).
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(13);
+    expect(links).toHaveLength(14);
     expect(screen.getByText("CMS")).toBeInTheDocument();
     expect(screen.getByText("Roles & Permissions")).toBeInTheDocument();
     expect(screen.getByText("Users")).toBeInTheDocument();
+    expect(screen.getByText("Invoicing")).toBeInTheDocument();
   });
 
   it("shows only the allowed subset for individual", () => {
@@ -105,7 +106,7 @@ describe("<RoleBasedNav />", () => {
     expect(labels).not.toContain("Question Bank");
   });
 
-  it("shows the sme subset (Dashboard, Profile, Question Bank, Assessments, Tasks)", () => {
+  it("shows the sme subset (Dashboard, Profile, Question Bank, Assessments, Tasks, Invoicing)", () => {
     setUser("sme");
     renderNav();
 
@@ -115,12 +116,19 @@ describe("<RoleBasedNav />", () => {
       .map((a) => a.textContent?.trim() ?? "");
 
     expect(labels).toEqual(
-      expect.arrayContaining(["Dashboard", "Profile", "Question Bank", "Assessments", "Tasks"]),
+      expect.arrayContaining([
+        "Dashboard",
+        "Profile",
+        "Question Bank",
+        "Assessments",
+        "Tasks",
+        "Invoicing",
+      ]),
     );
-    expect(within(list).getAllByRole("link")).toHaveLength(5);
+    expect(within(list).getAllByRole("link")).toHaveLength(6);
   });
 
-  it("shows the reviewer subset (Dashboard, Profile, Question Bank, Assessments, Tasks)", () => {
+  it("shows the reviewer subset (Dashboard, Profile, Question Bank, Assessments, Tasks, Invoicing)", () => {
     setUser("reviewer");
     renderNav();
 
@@ -130,9 +138,16 @@ describe("<RoleBasedNav />", () => {
       .map((a) => a.textContent?.trim() ?? "");
 
     expect(labels).toEqual(
-      expect.arrayContaining(["Dashboard", "Profile", "Question Bank", "Assessments", "Tasks"]),
+      expect.arrayContaining([
+        "Dashboard",
+        "Profile",
+        "Question Bank",
+        "Assessments",
+        "Tasks",
+        "Invoicing",
+      ]),
     );
-    expect(within(list).getAllByRole("link")).toHaveLength(5);
+    expect(within(list).getAllByRole("link")).toHaveLength(6);
   });
 
   describe("module_rights-driven rendering (RBAC single source of truth)", () => {

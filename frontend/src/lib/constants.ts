@@ -37,7 +37,8 @@ export type ModuleKey =
   | "training"
   | "counseling"
   | "cms"
-  | "tasks";
+  | "tasks"
+  | "invoicing";
 
 export const ROLE_LABELS: Record<RoleName, string> = {
   cj_admin: "CareerJudge Admin",
@@ -92,6 +93,7 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "counseling",
     "cms",
     "tasks",
+    "invoicing",
   ],
   helpdesk: ["dashboard", "profile", "training", "counseling"],
   corp_admin: [
@@ -104,6 +106,7 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "training",
   ],
   corp_exclusive: ["dashboard", "profile", "users", "organizations", "assessments", "reports"],
+  // H14: empanelled role (Doc 4) — bills CJ Admin, so also sees Invoicing.
   psychometrician: [
     "dashboard",
     "profile",
@@ -112,10 +115,11 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "career_profiling",
     "reports",
     "tasks",
+    "invoicing",
   ],
-  sme: ["dashboard", "profile", "question_bank", "assessments", "tasks"],
-  reviewer: ["dashboard", "profile", "question_bank", "assessments", "tasks"],
-  trainer: ["dashboard", "profile", "assessments", "training", "tasks"],
+  sme: ["dashboard", "profile", "question_bank", "assessments", "tasks", "invoicing"],
+  reviewer: ["dashboard", "profile", "question_bank", "assessments", "tasks", "invoicing"],
+  trainer: ["dashboard", "profile", "assessments", "training", "tasks", "invoicing"],
   group_admin: ["dashboard", "profile", "organizations", "assessments"],
   counsellor: [
     "dashboard",
@@ -125,8 +129,17 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "reports",
     "counseling",
     "tasks",
+    "invoicing",
   ],
-  channel_partner: ["dashboard", "profile", "users", "organizations", "assessments", "reports"],
+  channel_partner: [
+    "dashboard",
+    "profile",
+    "users",
+    "organizations",
+    "assessments",
+    "reports",
+    "invoicing",
+  ],
   individual: [
     "dashboard",
     "profile",
@@ -228,6 +241,13 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "ClipboardList",
     roles: roleListFor("tasks"),
   },
+  {
+    key: "invoicing",
+    label: "Invoicing",
+    to: "/invoicing",
+    icon: "Receipt",
+    roles: roleListFor("invoicing"),
+  },
 ];
 
 /** Helper that returns the list of roles that can see a given module. */
@@ -258,6 +278,7 @@ export const MODULE_KEY_BACKEND_MODULE: Partial<Record<ModuleKey, string>> = {
   counseling: "counseling",
   cms: "cms",
   tasks: "tasks",
+  invoicing: "invoicing",
 };
 
 export const APP_NAME = "CareerJudge";
@@ -285,6 +306,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   counseling: "Counseling",
   cms: "CMS",
   tasks: "Task Management",
+  invoicing: "Invoicing",
 };
 
 /** Short description shown on the dashboard cards. */
@@ -302,4 +324,5 @@ export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
   counseling: "Schedule and track counseling sessions.",
   cms: "Manage static content and pages.",
   tasks: "Admin assigns + monitors tasks for SME / Reviewer / Trainer / Counsellor.",
+  invoicing: "Raise and track invoices for empanelled work; CJ Admin reviews and pays them.",
 };
