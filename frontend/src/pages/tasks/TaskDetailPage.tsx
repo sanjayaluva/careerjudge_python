@@ -179,7 +179,9 @@ export default function TaskDetailPage() {
   const canApprove = isAdmin && task.status === "awaiting_review";
   const canCancel = isAdmin && !["completed", "cancelled"].includes(task.status);
   const canRequestExtension = isAssignee && !["completed", "cancelled"].includes(task.status);
-  const canPostProgress = isAssignee || isAdmin;
+  // A cancelled task is no longer actionable — the assignee/admin can still
+  // view its history, but can't post further progress updates on it (D9).
+  const canPostProgress = (isAssignee || isAdmin) && task.status !== "cancelled";
   const canRequestUpdate = isAdmin && !["completed", "cancelled"].includes(task.status);
 
   return (
@@ -256,52 +258,73 @@ export default function TaskDetailPage() {
               </CardContent>
             </Card>
 
-            {task.spec && (
+            {/* D9: a task can carry multiple category/difficulty/type spec
+                rows (SME multi-category task sheet). `specs` is the full
+                list; fall back to the single-row `spec` for older data. */}
+            {(task.specs && task.specs.length > 0 ? task.specs : task.spec ? [task.spec] : [])
+              .length > 0 && (
               <Card className="mt-4">
                 <CardHeader>
-                  <CardTitle className="text-sm">Specification</CardTitle>
+                  <CardTitle className="text-sm">
+                    Specification
+                    {(task.specs?.length ?? 0) > 1 ? `s (${task.specs?.length})` : ""}
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-1 text-sm">
-                  {task.spec.qb_category && (
-                    <p>
-                      <strong>QB Category:</strong> {task.spec.qb_category}
-                    </p>
-                  )}
-                  {task.spec.qb_subcategory && (
-                    <p>
-                      <strong>Subcategory:</strong> {task.spec.qb_subcategory}
-                    </p>
-                  )}
-                  {task.spec.question_type && (
-                    <p>
-                      <strong>Question Type:</strong> {task.spec.question_type}
-                    </p>
-                  )}
-                  {task.spec.num_questions != null && (
-                    <p>
-                      <strong># Questions:</strong> {task.spec.num_questions}
-                    </p>
-                  )}
-                  {task.spec.num_options != null && (
-                    <p>
-                      <strong># Options:</strong> {task.spec.num_options}
-                    </p>
-                  )}
-                  {task.spec.num_correct_options != null && (
-                    <p>
-                      <strong># Correct:</strong> {task.spec.num_correct_options}
-                    </p>
-                  )}
-                  {task.spec.difficulty_level && (
-                    <p>
-                      <strong>Difficulty:</strong> {task.spec.difficulty_level}
-                    </p>
-                  )}
-                  {task.spec.cognitive_level && (
-                    <p>
-                      <strong>Cognitive Level:</strong> {task.spec.cognitive_level}
-                    </p>
-                  )}
+                <CardContent className="space-y-4">
+                  {(task.specs && task.specs.length > 0
+                    ? task.specs
+                    : task.spec
+                      ? [task.spec]
+                      : []
+                  ).map((spec, i) => (
+                    <div
+                      key={i}
+                      className={
+                        i > 0 ? "space-y-1 border-t border-slate-100 pt-3 text-sm" : "space-y-1 text-sm"
+                      }
+                    >
+                      {spec.qb_category && (
+                        <p>
+                          <strong>QB Category:</strong> {spec.qb_category}
+                        </p>
+                      )}
+                      {spec.qb_subcategory && (
+                        <p>
+                          <strong>Subcategory:</strong> {spec.qb_subcategory}
+                        </p>
+                      )}
+                      {spec.question_type && (
+                        <p>
+                          <strong>Question Type:</strong> {spec.question_type}
+                        </p>
+                      )}
+                      {spec.num_questions != null && (
+                        <p>
+                          <strong># Questions:</strong> {spec.num_questions}
+                        </p>
+                      )}
+                      {spec.num_options != null && (
+                        <p>
+                          <strong># Options:</strong> {spec.num_options}
+                        </p>
+                      )}
+                      {spec.num_correct_options != null && (
+                        <p>
+                          <strong># Correct:</strong> {spec.num_correct_options}
+                        </p>
+                      )}
+                      {spec.difficulty_level && (
+                        <p>
+                          <strong>Difficulty:</strong> {spec.difficulty_level}
+                        </p>
+                      )}
+                      {spec.cognitive_level && (
+                        <p>
+                          <strong>Cognitive Level:</strong> {spec.cognitive_level}
+                        </p>
+                      )}
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
             )}

@@ -16,7 +16,7 @@
  * completion + time spent.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   Alert,
@@ -101,6 +101,24 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
 
   // Current content index (for sequential navigation)
   const [currentIdx, setCurrentIdx] = useState(0);
+  // D7: resume from the last-accessed content once, when the progress
+  // summary and course content are both loaded — the backend already
+  // computes `last_content` (progress_summary's resume point); the player
+  // just needs to jump there instead of always starting at index 0.
+  const [hasResumed, setHasResumed] = useState(false);
+  const [resumedFrom, setResumedFrom] = useState(false);
+  useEffect(() => {
+    if (hasResumed || !progressSummary?.last_content || flatContent.length === 0) return;
+    const { content_type, content_id } = progressSummary.last_content;
+    if (content_type === "session_content") {
+      const idx = flatContent.findIndex((item) => item.content.id === content_id);
+      if (idx >= 0) {
+        setCurrentIdx(idx);
+        setResumedFrom(true);
+      }
+    }
+    setHasResumed(true);
+  }, [hasResumed, progressSummary, flatContent]);
   const current = flatContent[currentIdx];
 
   // Report 3 §5.1: content sequencing. When content_sequencing_enabled is on, the
@@ -171,6 +189,15 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
     <div className="space-y-4">
       {/* Progress Dashboard */}
       <ProgressDashboard summary={progressSummary} loading={progressLoading} />
+
+      {/* D7: resume-from-last-accessed banner */}
+      {resumedFrom && current && (
+        <Alert>
+          <AlertDescription>
+            Resuming from where you left off: <strong>{current.content.title}</strong>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Main Content Player */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -393,11 +420,14 @@ function ContentPlayer({
     onComplete();
   };
 
-  if (content.content_format === "video" && content.content_url) {
+  // D7: an uploaded media file takes priority over the URL/base64 field.
+  const mediaSrc = content.media_file || content.content_url;
+
+  if (content.content_format === "video" && mediaSrc) {
     return (
       <div className="space-y-3">
         <InteractiveVideoPlayer
-          contentUrl={content.content_url}
+          contentUrl={mediaSrc}
           questions={content.interactive_questions as InteractiveQuestion[]}
         />
         <Button onClick={markComplete} loading={trackProgress.isPending}>
@@ -407,10 +437,10 @@ function ContentPlayer({
     );
   }
 
-  if (content.content_format === "audio" && content.content_url) {
+  if (content.content_format === "audio" && mediaSrc) {
     return (
       <div className="space-y-3">
-        <audio controls className="w-full" src={content.content_url} onEnded={markComplete}>
+        <audio controls className="w-full" src={mediaSrc} onEnded={markComplete}>
           Your browser does not support audio playback.
         </audio>
         <Button onClick={markComplete} loading={trackProgress.isPending}>
@@ -426,6 +456,15 @@ function ContentPlayer({
         <div className="prose max-w-none rounded-md border border-slate-100 bg-slate-50 p-4 text-sm">
           {content.text_content || content.content_url || "No text content available."}
         </div>
+        {/* D7: minimal media embedding — an uploaded media file attached to
+            text content is shown inline alongside the text. */}
+        {content.media_file && (
+          <img
+            src={content.media_file}
+            alt={content.title}
+            className="max-w-full rounded-md border border-slate-100"
+          />
+        )}
         <Button onClick={markComplete} loading={trackProgress.isPending}>
           ✓ Mark as completed &amp; Continue
         </Button>
@@ -544,6 +583,55 @@ function ProgressDashboard({ summary, loading }: { summary?: ProgressSummary; lo
             </div>
           </div>
         </div>
+
+        {/* D7: score report — assessment + assignment-report scores rolled
+            into the progress summary (SRS §6 "Score report"). */}
+        {(summary.assessment_scores.length > 0 || summary.assignment_report_scores.length > 0) && (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Score Report
+              </div>
+              {summary.average_assessment_percentage != null && (
+                <Badge variant="primary">
+                  Avg. assessment score: {summary.average_assessment_percentage}%
+                </Badge>
+              )}
+            </div>
+            <div className="mt-2 space-y-1">
+              {summary.assessment_scores.map((s) => (
+                <div
+                  key={`assessment-${s.course_assessment_id}`}
+                  className="flex items-center justify-between text-xs text-slate-600"
+                >
+                  <span>{s.title}</span>
+                  <span>
+                    {s.status === "completed" ? (
+                      <Badge variant="success">{s.percentage}%</Badge>
+                    ) : (
+                      <Badge variant="outline">not attempted</Badge>
+                    )}
+                  </span>
+                </div>
+              ))}
+              {summary.assignment_report_scores.map((s) => (
+                <div
+                  key={`report-${s.assignment_id}`}
+                  className="flex items-center justify-between text-xs text-slate-600"
+                >
+                  <span>{s.assignment_title} (report)</span>
+                  <span>
+                    {s.trainer_score != null ? (
+                      <Badge variant="success">{s.trainer_score}/10</Badge>
+                    ) : (
+                      <Badge variant="outline">{s.status}</Badge>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

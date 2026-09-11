@@ -35,6 +35,7 @@ import {
   useToast,
 } from "@/components/ui";
 import {
+  type MatchIndex,
   type ProfilingSolution,
   addSolutionAssessment,
   computeSolution,
@@ -43,13 +44,14 @@ import {
   createPolarMatchRule,
   createRankDefinition,
   deleteRankDefinition,
+  downloadCriteriaTemplate,
   listAssessments,
   listMatchIndices,
   listPolarMatchRules,
   listRankDefinitions,
   publishSolution,
   retrieveSolution,
-  type MatchIndex,
+  uploadCriteriaCsv,
 } from "@/api/careerProfiling";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -210,7 +212,7 @@ export default function ProfilingSolutionDetailPage() {
 
         {/* Criteria Tab */}
         <TabsContent value="criteria">
-          <CriteriaTab solutionId={sid} canManage={canManage} />
+          <CriteriaTab solutionId={sid} solution={solution} canManage={canManage} />
         </TabsContent>
 
         {/* Rank Chart Tab — SRS §4.1.3 + §4.2.3 */}
@@ -610,10 +612,29 @@ function CreateBandDefinitionModal({
 // Criteria Tab
 // ---------------------------------------------------------------------------
 
-function CriteriaTab({ solutionId, canManage }: { solutionId: number; canManage: boolean }) {
+function CriteriaTab({
+  solutionId,
+  solution,
+  canManage,
+}: {
+  solutionId: number;
+  solution: ProfilingSolution;
+  canManage: boolean;
+}) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [addOpen, setAddOpen] = useState(false);
+
+  // Variables (sections) with their defined band codes — used to render a
+  // validated dropdown instead of free text (D5: criterion band dropdown).
+  const variableOptions =
+    solution.selected_assessments?.flatMap((sa) =>
+      (sa.band_definitions ?? []).map((bd) => ({
+        sectionId: bd.section,
+        label: `${sa.label} • ${bd.section_title}`,
+        bandCodes: (bd.bands ?? []).map((b) => b.band_code),
+      })),
+    ) ?? [];
 
   const { data: criteria } = useQuery({
     queryKey: ["career-profiling", "solutions", solutionId, "criteria"],
@@ -638,6 +659,34 @@ function CriteriaTab({ solutionId, canManage }: { solutionId: number; canManage:
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  // SRS §4.1.4: bulk criterion definition via CSV template upload.
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => uploadCriteriaCsv(solutionId, file),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["career-profiling", "solutions", solutionId, "criteria"],
+      });
+      toast.success(
+        `Upload complete: ${result.created_count} created, ${result.updated_count} updated` +
+          (result.error_count ? `, ${result.error_count} error(s) — see console.` : "."),
+      );
+      if (result.error_count) {
+        console.warn("Criteria upload errors:", result.errors, result.unmatched_variables);
+      }
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const handleDownloadTemplate = async () => {
+    const blob = await downloadCriteriaTemplate(solutionId);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `criteria_template_solution_${solutionId}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Group criteria by career title
   const careerGroups: Record<string, NonNullable<typeof criteria>> = {};
   for (const c of criteria ?? []) {
@@ -651,9 +700,30 @@ function CriteriaTab({ solutionId, canManage }: { solutionId: number; canManage:
         <div className="flex items-center justify-between">
           <CardTitle>Mapping Criteria ({criteria?.length ?? 0})</CardTitle>
           {canManage && (
-            <Button size="sm" onClick={() => setAddOpen(true)}>
-              + Add Criterion
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => void handleDownloadTemplate()}>
+                Download Template
+              </Button>
+              <label className="cursor-pointer">
+                <span className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                  {uploadMutation.isPending ? "Uploading…" : "Upload CSV"}
+                </span>
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  disabled={uploadMutation.isPending}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadMutation.mutate(file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              <Button size="sm" onClick={() => setAddOpen(true)}>
+                + Add Criterion
+              </Button>
+            </div>
           )}
         </div>
       </CardHeader>
@@ -696,6 +766,7 @@ function CriteriaTab({ solutionId, canManage }: { solutionId: number; canManage:
       {addOpen && (
         <CreateCriterionModal
           loading={createCriterionMutation.isPending}
+          variableOptions={variableOptions}
           onClose={() => setAddOpen(false)}
           onSubmit={(career, sectionId, code, weight) =>
             createCriterionMutation.mutate({
@@ -713,10 +784,12 @@ function CriteriaTab({ solutionId, canManage }: { solutionId: number; canManage:
 
 function CreateCriterionModal({
   loading,
+  variableOptions,
   onClose,
   onSubmit,
 }: {
   loading: boolean;
+  variableOptions: { sectionId: number; label: string; bandCodes: string[] }[];
   onClose: () => void;
   onSubmit: (career: string, sectionId: string, code: string, weight: number) => void;
 }) {
@@ -724,6 +797,11 @@ function CreateCriterionModal({
   const [sectionId, setSectionId] = useState("");
   const [code, setCode] = useState("");
   const [weight, setWeight] = useState("1.0");
+
+  // D5: criterion_band_code is a dropdown constrained to the band codes
+  // actually defined for the selected variable (not free text).
+  const selectedVariable = variableOptions.find((v) => String(v.sectionId) === sectionId);
+  const bandCodes = selectedVariable?.bandCodes ?? [];
 
   return (
     <Modal open onClose={onClose} title="Add Mapping Criterion" size="sm">
@@ -748,27 +826,52 @@ function CreateCriterionModal({
         </div>
         <div>
           <Label htmlFor="mc-section" required>
-            Variable (Section ID)
+            Variable
           </Label>
-          <Input
+          <select
             id="mc-section"
-            type="number"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
             value={sectionId}
-            onChange={(e) => setSectionId(e.target.value)}
+            onChange={(e) => {
+              setSectionId(e.target.value);
+              setCode(""); // reset band code — the choices depend on the variable
+            }}
             required
-          />
+          >
+            <option value="">Select a variable…</option>
+            {variableOptions.map((v) => (
+              <option key={v.sectionId} value={v.sectionId}>
+                {v.label}
+              </option>
+            ))}
+          </select>
+          {variableOptions.length === 0 && (
+            <p className="mt-1 text-xs text-amber-600">
+              No banded variables yet — define bands first (Bands tab).
+            </p>
+          )}
         </div>
         <div>
           <Label htmlFor="mc-code" required>
             Criterion Band Code
           </Label>
-          <Input
+          <select
             id="mc-code"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 disabled:bg-slate-50 disabled:text-slate-400"
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            placeholder="e.g., ANH1"
+            disabled={!sectionId || bandCodes.length === 0}
             required
-          />
+          >
+            <option value="">
+              {sectionId ? "Select a band code…" : "Select a variable first"}
+            </option>
+            {bandCodes.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <Label htmlFor="mc-weight">Weight</Label>

@@ -8,22 +8,15 @@ import { AuthLayout } from "@/components/layout/AuthLayout";
 import { Alert, AlertDescription, Button, Input, Label } from "@/components/ui";
 import { signup as apiSignup } from "@/api/auth";
 import { extractApiError } from "@/api/client";
-import { isEmail, isStrongPassword } from "@/lib/utils";
+import { isEmail } from "@/lib/utils";
 
-const schema = z
-  .object({
-    full_name: z.string().min(1, "Full name is required").max(255),
-    email: z.string().min(1, "Email is required").refine(isEmail, "Enter a valid email address"),
-    password: z
-      .string()
-      .min(8, "Password must be at least 8 characters")
-      .refine(isStrongPassword, "Password must contain a letter and a number"),
-    confirmPassword: z.string().min(1, "Please confirm your password"),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  });
+// Accounts audit gap (medium): self-signup no longer captures a password up
+// front — the candidate sets one when they follow the emailed verification
+// link (see VerifyEmailPage), i.e. only once email ownership is proven.
+const schema = z.object({
+  full_name: z.string().min(1, "Full name is required").max(255),
+  email: z.string().min(1, "Email is required").refine(isEmail, "Enter a valid email address"),
+});
 
 type FormValues = z.infer<typeof schema>;
 
@@ -39,7 +32,7 @@ export default function SignupPage() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { full_name: "", email: "", password: "", confirmPassword: "" },
+    defaultValues: { full_name: "", email: "" },
   });
 
   const onSubmit = async (values: FormValues) => {
@@ -48,7 +41,6 @@ export default function SignupPage() {
     try {
       await apiSignup({
         email: values.email,
-        password: values.password,
         full_name: values.full_name,
       });
       setSuccess({ email: values.email });
@@ -76,7 +68,7 @@ export default function SignupPage() {
         <Alert variant="success" className="mb-4">
           <AlertDescription>
             Account created for <strong>{success.email}</strong>. Click the activation link in your
-            email to complete registration.
+            email to verify it and set your password.
           </AlertDescription>
         </Alert>
         <div className="rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-600">
@@ -149,49 +141,9 @@ export default function SignupPage() {
           )}
         </div>
 
-        <div>
-          <Label htmlFor="password" required>
-            Password
-          </Label>
-          <Input
-            id="password"
-            type="password"
-            autoComplete="new-password"
-            placeholder="At least 8 characters"
-            hasError={Boolean(errors.password)}
-            aria-describedby={errors.password ? "password-error" : "password-hint"}
-            {...register("password")}
-          />
-          {errors.password ? (
-            <p id="password-error" className="mt-1 text-xs text-danger">
-              {errors.password.message}
-            </p>
-          ) : (
-            <p id="password-hint" className="mt-1 text-xs text-slate-500">
-              Use at least 8 characters with a letter and a number.
-            </p>
-          )}
-        </div>
-
-        <div>
-          <Label htmlFor="confirmPassword" required>
-            Confirm password
-          </Label>
-          <Input
-            id="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            placeholder="Re-enter your password"
-            hasError={Boolean(errors.confirmPassword)}
-            aria-describedby={errors.confirmPassword ? "confirmPassword-error" : undefined}
-            {...register("confirmPassword")}
-          />
-          {errors.confirmPassword && (
-            <p id="confirmPassword-error" className="mt-1 text-xs text-danger">
-              {errors.confirmPassword.message}
-            </p>
-          )}
-        </div>
+        <p className="text-xs text-slate-500">
+          You&apos;ll set your password after verifying your email — no need to choose one now.
+        </p>
 
         <Button type="submit" className="w-full" loading={submitting}>
           Create account

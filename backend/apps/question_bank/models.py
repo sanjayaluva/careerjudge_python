@@ -196,6 +196,32 @@ class Question(models.Model):
     order = models.PositiveIntegerField(_("order"), default=0)
     is_active = models.BooleanField(_("active"), default=True)
 
+    # --- Worked-out solution (D1 §3.1.1 input field: "worked-out solutions") ---
+    worked_solution = models.TextField(
+        _("worked-out solution"),
+        blank=True,
+        default="",
+        help_text=_(
+            "Model answer / worked-out solution shown to reviewers (and optionally "
+            "to the candidate in feedback). Plain or lightly-formatted text."
+        ),
+    )
+
+    # --- Periodic QB updation (D1 §4.3) — optional validity expiry. Past this
+    # date the question is surfaced by the 'expired' filter for periodic
+    # review (activate/inactivate) by the Psychometrician.
+    expires_at = models.DateTimeField(
+        _("expires at"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Optional validity expiry for periodic Question Bank review (D1 §4.3). "
+            "Once past this date, the question is eligible for the periodic "
+            "review filter (Question Expiry) and can be re-activated or "
+            "inactivated in bulk."
+        ),
+    )
+
     # --- Scoring configuration ---
     scoring_type = models.CharField(
         _("scoring type"), max_length=30, choices=SCORING_TYPE_CHOICES, default="BINARY"

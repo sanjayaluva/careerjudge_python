@@ -6,7 +6,8 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import Role, User
-from apps.tasks.models import Task, TaskExtensionRequest, TaskSpec
+from apps.notifications.models import Notification
+from apps.tasks.models import Concern, Task, TaskExtensionRequest, TaskSpec
 
 
 class TaskBaseTestCase(APITestCase):
@@ -83,6 +84,67 @@ class TaskLifecycleTests(TaskBaseTestCase):
         self.assertEqual(data["spec"]["num_questions"], 5)
         # Notification created for assignee
         self.assertEqual(self.sme.notifications.count(), 1)
+
+    def test_admin_can_create_sme_task_with_multiple_spec_rows(self):
+        """D9: SME multi-category task sheet — multiple category/difficulty/
+        type rows in a single task via the `specs` list."""
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(
+            "/api/tasks/",
+            {
+                "title": "Create MCQs across categories",
+                "description": "5 Easy Quant MCQs + 3 Hard Verbal FITB.",
+                "assigned_to": self.sme.id,
+                "assignee_role": "sme",
+                "specs": [
+                    {
+                        "qb_category": "Quant",
+                        "qb_subcategory": "Algebra",
+                        "question_type": "mcq_text",
+                        "num_questions": 5,
+                        "difficulty_level": "easy",
+                    },
+                    {
+                        "qb_category": "Verbal",
+                        "qb_subcategory": "Comprehension",
+                        "question_type": "fitb_text",
+                        "num_questions": 3,
+                        "difficulty_level": "hard",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        data = resp.json()["data"]
+        self.assertEqual(len(data["specs"]), 2)
+        categories = {row["qb_category"] for row in data["specs"]}
+        self.assertEqual(categories, {"Quant", "Verbal"})
+        # Backward-compat convenience: `spec` still exposes the first row.
+        self.assertEqual(data["spec"]["qb_category"], "Quant")
+        task = Task.objects.get(task_id=data["task_id"])
+        self.assertEqual(task.specs.count(), 2)
+
+    def test_updating_specs_replaces_existing_rows(self):
+        task = Task.objects.create(
+            title="T",
+            description="",
+            assigned_by=self.admin,
+            assigned_to=self.sme,
+            assignee_role="sme",
+        )
+        TaskSpec.objects.create(task=task, qb_category="Old", num_questions=1)
+        self.client.force_authenticate(self.admin)
+        resp = self.client.patch(
+            f"/api/tasks/{task.id}/",
+            {"specs": [{"qb_category": "New1", "num_questions": 2}, {"qb_category": "New2"}]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        task.refresh_from_db()
+        self.assertEqual(task.specs.count(), 2)
+        categories = set(task.specs.values_list("qb_category", flat=True))
+        self.assertEqual(categories, {"New1", "New2"})
 
     def test_task_creation_notifies_helpdesk_and_admin(self):
         """D9 §3.1: helpdesk (and admin) must be notified when a task is assigned."""
@@ -258,6 +320,82 @@ class TaskLifecycleTests(TaskBaseTestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, 403, resp.content)
+
+
+class CancelledTaskNoLongerActionableTests(TaskBaseTestCase):
+    """D9: a cancelled task should no longer be actionable, even though it
+    stays visible/readable for record-keeping."""
+
+    def _cancelled_task(self):
+        task = Task.objects.create(
+            title="Test",
+            description="",
+            assigned_by=self.admin,
+            assigned_to=self.sme,
+            assignee_role="sme",
+            status="in_progress",
+        )
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(
+            f"/api/tasks/{task.id}/cancel/",
+            {"reason": "No longer needed."},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        task.refresh_from_db()
+        return task
+
+    def test_assignee_cannot_start_cancelled_task(self):
+        task = self._cancelled_task()
+        self.client.force_authenticate(self.sme)
+        resp = self.client.post(f"/api/tasks/{task.id}/start/", {}, format="json")
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+    def test_assignee_cannot_submit_cancelled_task(self):
+        task = self._cancelled_task()
+        self.client.force_authenticate(self.sme)
+        resp = self.client.post(f"/api/tasks/{task.id}/submit/", {}, format="json")
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+    def test_assignee_cannot_post_progress_on_cancelled_task(self):
+        task = self._cancelled_task()
+        self.client.force_authenticate(self.sme)
+        resp = self.client.post(
+            f"/api/tasks/{task.id}/progress/", {"message": "still working"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn("cancelled", resp.json()["detail"].lower())
+
+    def test_admin_cannot_post_progress_on_cancelled_task(self):
+        task = self._cancelled_task()
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(f"/api/tasks/{task.id}/progress/", {"message": "hi"}, format="json")
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+    def test_assignee_cannot_request_extension_on_cancelled_task(self):
+        task = self._cancelled_task()
+        self.client.force_authenticate(self.sme)
+        resp = self.client.post(
+            f"/api/tasks/{task.id}/extensions/",
+            {"requested_due_date": (timezone.now() + timedelta(days=3)).isoformat()},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+    def test_admin_cannot_request_update_on_cancelled_task(self):
+        task = self._cancelled_task()
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(f"/api/tasks/{task.id}/request_update/", {}, format="json")
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+    def test_cancelled_task_is_still_visible_to_assignee(self):
+        """Cancelled tasks stay readable (audit trail) even though they're no
+        longer actionable — only the mutating endpoints are blocked."""
+        task = self._cancelled_task()
+        self.client.force_authenticate(self.sme)
+        resp = self.client.get(f"/api/tasks/{task.id}/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["status"], "cancelled")
 
 
 class TaskVisibilityTests(TaskBaseTestCase):
@@ -545,5 +683,160 @@ class TaskSpecTests(TaskBaseTestCase):
             difficulty_level="medium",
             cognitive_level="apply",
         )
-        self.assertEqual(task.spec.num_questions, 5)
-        self.assertEqual(task.spec.difficulty_level, "medium")
+        self.assertEqual(task.specs.count(), 1)
+        self.assertEqual(task.specs.first().num_questions, 5)
+        self.assertEqual(task.specs.first().difficulty_level, "medium")
+
+    def test_a_task_can_have_multiple_spec_rows(self):
+        """D9: SME multi-category task sheet — a single task can carry more
+        than one category/difficulty/type row (task.specs is now a
+        ForeignKey-backed collection, not a OneToOne)."""
+        task = Task.objects.create(
+            title="T",
+            description="",
+            assigned_by=self.admin,
+            assigned_to=self.sme,
+            assignee_role="sme",
+        )
+        TaskSpec.objects.create(task=task, qb_category="Quant", num_questions=5)
+        TaskSpec.objects.create(task=task, qb_category="Verbal", num_questions=3)
+        self.assertEqual(task.specs.count(), 2)
+        categories = set(task.specs.values_list("qb_category", flat=True))
+        self.assertEqual(categories, {"Quant", "Verbal"})
+
+
+class ConcernTests(TaskBaseTestCase):
+    """D9: any user can raise a concern, routed to cj_admin + helpdesk."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.helpdesk_role, _ = Role.objects.get_or_create(
+            name="helpdesk", defaults={"is_system": True, "is_frozen": True}
+        )
+        cls.helpdesk = User.objects.create_user(
+            email="helpdesk@test.com", password="pw12345", is_active=True, role=cls.helpdesk_role
+        )
+
+    def test_user_can_raise_a_concern(self):
+        self.client.force_authenticate(self.sme)
+        resp = self.client.post(
+            "/api/tasks/concerns/",
+            {"subject": "Can't access my task", "message": "The task link 404s."},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        data = resp.json()["data"]
+        self.assertEqual(data["subject"], "Can't access my task")
+        self.assertEqual(data["status"], "open")
+        concern = Concern.objects.get(id=data["id"])
+        self.assertEqual(concern.raised_by, self.sme)
+
+    def test_raising_a_concern_notifies_admin_and_helpdesk(self):
+        self.client.force_authenticate(self.sme)
+        resp = self.client.post(
+            "/api/tasks/concerns/",
+            {"subject": "Question", "message": "Need help."},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=self.admin, title__icontains="Concern raised"
+            ).exists()
+        )
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=self.helpdesk, title__icontains="Concern raised"
+            ).exists()
+        )
+
+    def test_concern_can_reference_a_task(self):
+        task = Task.objects.create(
+            title="Test",
+            description="",
+            assigned_by=self.admin,
+            assigned_to=self.sme,
+            assignee_role="sme",
+        )
+        self.client.force_authenticate(self.sme)
+        resp = self.client.post(
+            "/api/tasks/concerns/",
+            {"subject": "Issue with task", "message": "Unclear spec.", "related_task": task.id},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(resp.json()["data"]["related_task"], task.id)
+
+    def test_user_sees_only_own_concerns(self):
+        Concern.objects.create(raised_by=self.sme, subject="Mine", message="x")
+        Concern.objects.create(raised_by=self.reviewer, subject="Not mine", message="y")
+        self.client.force_authenticate(self.sme)
+        resp = self.client.get("/api/tasks/concerns/")
+        results = self._extract_results(resp.json())
+        subjects = {c["subject"] for c in results}
+        self.assertEqual(subjects, {"Mine"})
+
+    def test_admin_sees_all_concerns(self):
+        Concern.objects.create(raised_by=self.sme, subject="Mine", message="x")
+        Concern.objects.create(raised_by=self.reviewer, subject="Also mine", message="y")
+        self.client.force_authenticate(self.admin)
+        resp = self.client.get("/api/tasks/concerns/")
+        results = self._extract_results(resp.json())
+        self.assertEqual(len(results), 2)
+
+    def test_helpdesk_sees_all_concerns(self):
+        Concern.objects.create(raised_by=self.sme, subject="Mine", message="x")
+        self.client.force_authenticate(self.helpdesk)
+        resp = self.client.get("/api/tasks/concerns/")
+        results = self._extract_results(resp.json())
+        self.assertEqual(len(results), 1)
+
+    def test_admin_can_resolve_a_concern(self):
+        concern = Concern.objects.create(raised_by=self.sme, subject="Mine", message="x")
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(
+            f"/api/tasks/concerns/{concern.id}/resolve/",
+            {"comment": "Fixed it."},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        concern.refresh_from_db()
+        self.assertEqual(concern.status, "resolved")
+        self.assertEqual(concern.resolved_by, self.admin)
+        self.assertEqual(concern.resolution_comment, "Fixed it.")
+        self.assertIsNotNone(concern.resolved_at)
+        # The concern's author is notified of the resolution.
+        self.assertTrue(
+            Notification.objects.filter(recipient=self.sme, title__icontains="resolved").exists()
+        )
+
+    def test_non_admin_cannot_resolve_a_concern(self):
+        """A non-admin who isn't the raiser can't even see the concern to
+        resolve it (get_queryset scopes it out — 404, not a 403 leak)."""
+        concern = Concern.objects.create(raised_by=self.sme, subject="Mine", message="x")
+        self.client.force_authenticate(self.reviewer)
+        resp = self.client.post(f"/api/tasks/concerns/{concern.id}/resolve/", {}, format="json")
+        self.assertEqual(resp.status_code, 404, resp.content)
+
+    def test_raiser_cannot_resolve_own_concern(self):
+        """Only cj_admin/helpdesk can resolve — even the concern's own
+        raiser (who CAN see it) is forbidden from resolving it themselves."""
+        concern = Concern.objects.create(raised_by=self.sme, subject="Mine", message="x")
+        self.client.force_authenticate(self.sme)
+        resp = self.client.post(f"/api/tasks/concerns/{concern.id}/resolve/", {}, format="json")
+        self.assertEqual(resp.status_code, 403, resp.content)
+
+    def test_cannot_resolve_already_resolved_concern(self):
+        concern = Concern.objects.create(
+            raised_by=self.sme, subject="Mine", message="x", status="resolved"
+        )
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(f"/api/tasks/concerns/{concern.id}/resolve/", {}, format="json")
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+    def test_user_cannot_see_others_concern_detail(self):
+        concern = Concern.objects.create(raised_by=self.reviewer, subject="Private", message="x")
+        self.client.force_authenticate(self.sme)
+        resp = self.client.get(f"/api/tasks/concerns/{concern.id}/")
+        self.assertEqual(resp.status_code, 404)

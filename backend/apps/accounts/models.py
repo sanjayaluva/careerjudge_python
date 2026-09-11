@@ -426,6 +426,18 @@ class UserProfile(models.Model):
         _("channel partner agreement ID"), max_length=50, blank=True
     )
     contract_period = models.CharField(_("contract period"), max_length=2, blank=True)
+    # Dossier gap (medium, accounts §User Details): Channel Partner-specific
+    # fields, mirroring the counsellor field group added in migration 0007.
+    agency_name = models.CharField(_("agency name"), max_length=100, blank=True, default="")
+    allocated_region = models.CharField(
+        _("allocated region"), max_length=100, blank=True, default=""
+    )
+
+    # --- Corporate fields (corp_admin / corp_exclusive) ---
+    # Dossier gap (medium, accounts §User Details): Corporate-specific fields.
+    # pan_number above is already generic/shared; tan_number is Corporate-only.
+    manager_name = models.CharField(_("manager name"), max_length=100, blank=True, default="")
+    tan_number = models.CharField(_("TAN number"), max_length=15, blank=True, default="")
 
     # --- Counsellor-specific fields (shown only when role='counsellor') ---
     hourly_rate = models.DecimalField(

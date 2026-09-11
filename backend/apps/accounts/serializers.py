@@ -20,10 +20,17 @@ from .services import create_email_verification_token, send_verification_email
 
 
 class SignupSerializer(serializers.Serializer):
-    """POST /api/auth/signup — UC001."""
+    """POST /api/auth/signup — UC001.
+
+    Accounts audit gap (medium): self-signup used to capture the password
+    up front, before the email address was proven to belong to the
+    signer-upper. It no longer does — the account is created with an
+    *unusable* password, and the candidate sets a real one when they follow
+    the emailed verification link (see EmailVerificationSerializer /
+    VerifyEmailView.post), i.e. only after email ownership is verified.
+    """
 
     email = serializers.EmailField(max_length=255)
-    password = serializers.CharField(write_only=True, validators=[validate_password])
     full_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
 
     def validate_email(self, value: str) -> str:
@@ -37,7 +44,7 @@ class SignupSerializer(serializers.Serializer):
     def create(self, validated_data: dict) -> User:
         user = User.objects.create_user(
             email=validated_data["email"],
-            password=validated_data["password"],
+            password=None,  # unusable until set during email verification
             full_name=validated_data.get("full_name", ""),
             is_active=False,  # requires email verification per UC001
             is_email_verified=False,
@@ -76,9 +83,19 @@ class LoginSerializer(serializers.Serializer):
 
 
 class EmailVerificationSerializer(serializers.Serializer):
-    """POST /api/auth/verify-email."""
+    """POST /api/auth/verify-email.
+
+    `password` is optional and is how a self-registered account (which no
+    longer captures a password at signup — see SignupSerializer) sets its
+    password: it's provided here, alongside the token, once the candidate
+    has followed the emailed link and thereby proven they own the email.
+    Admin-invited accounts (which already have a password) can omit it.
+    """
 
     token = serializers.UUIDField()
+    password = serializers.CharField(
+        write_only=True, required=False, validators=[validate_password]
+    )
 
     def validate(self, attrs: dict) -> dict:
         try:
@@ -195,8 +212,29 @@ class UserProfileSerializer(serializers.ModelSerializer):
             # Channel Partner fields
             "channel_partner_agreement_id",
             "contract_period",
+            "agency_name",
+            "allocated_region",
+            # Corporate fields
+            "manager_name",
+            "tan_number",
         ]
         read_only_fields = ["avatar"]  # avatar handled via separate upload endpoint
+
+
+def _apply_profile_fields(profile: UserProfile, profile_data: dict) -> None:
+    """Set only valid UserProfile fields from a dict onto `profile`.
+
+    Shared by UpdateProfileSerializer (self-service /me/) and
+    UserWriteSerializer (admin create/edit — D9 role-specific Add-User
+    fields) so both accept the same loosely-typed profile dict shape.
+    Empty strings are converted to None for nullable fields.
+    """
+    valid_fields = {f.name for f in UserProfile._meta.get_fields()}
+    for attr, value in profile_data.items():
+        if attr in valid_fields and attr not in ("id", "user"):
+            if value == "" and UserProfile._meta.get_field(attr).null:
+                value = None
+            setattr(profile, attr, value)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -273,6 +311,10 @@ class UserWriteSerializer(serializers.ModelSerializer):
             # Report 3 §1.17: counselling categories to tag the counsellor with
             # at creation time. Only meaningful when role='counsellor'.
             "counsellor_categories",
+            # D9: role-specific profile fields (org name, PAN/TAN, agency,
+            # allocated region, employee id, etc.) captured on the admin
+            # Add/Edit User form for the role being created/edited.
+            "profile",
         ]
         extra_kwargs = {
             "password": {"write_only": True, "required": False, "allow_blank": True},
@@ -287,6 +329,16 @@ class UserWriteSerializer(serializers.ModelSerializer):
         help_text=(
             "Counselling category IDs to tag the counsellor with at creation "
             "(Report 3 §1.17). Only meaningful when role='counsellor'."
+        ),
+    )
+    profile = serializers.DictField(
+        required=False,
+        write_only=True,
+        child=serializers.CharField(allow_blank=True, allow_null=True),
+        help_text=(
+            "Role-specific profile fields to set at creation/update time "
+            "(e.g. pan_number, tan_number, manager_name, agency_name, "
+            "allocated_region — D9 Add-User role-specific fields)."
         ),
     )
 
@@ -305,6 +357,7 @@ class UserWriteSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data: dict) -> User:
         categories = validated_data.pop("counsellor_categories", None)
+        profile_data = validated_data.pop("profile", None)
         password = validated_data.pop("password", None)
         # Use create_user to properly hash the password and normalize email
         user = User.objects.create_user(**validated_data)
@@ -328,7 +381,10 @@ class UserWriteSerializer(serializers.ModelSerializer):
                 except Exception:
                     # Email send failure should not block admin user creation
                     pass
-        UserProfile.objects.get_or_create(user=user)
+        profile, _profile_created = UserProfile.objects.get_or_create(user=user)
+        if profile_data:
+            _apply_profile_fields(profile, profile_data)
+            profile.save()
         # Report 3 §1.17: when creating a counsellor, auto-create their
         # CounsellorProfile + tag it with the admin-selected categories.
         if user.role and user.role.name == "counsellor":
@@ -347,11 +403,17 @@ class UserWriteSerializer(serializers.ModelSerializer):
     def update(self, instance: User, validated_data: dict) -> User:
         """Update user. Hash password if provided; ignore blank password."""
         password = validated_data.pop("password", None)
+        profile_data = validated_data.pop("profile", None)
+        validated_data.pop("counsellor_categories", None)
         if password:  # only update if a non-empty password was sent
             instance.set_password(password)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+        if profile_data:
+            profile, _ = UserProfile.objects.get_or_create(user=instance)
+            _apply_profile_fields(profile, profile_data)
+            profile.save()
         return instance
 
 
@@ -377,14 +439,7 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
         instance.save()
         if profile_data:
             profile, _ = UserProfile.objects.get_or_create(user=instance)
-            # Only set fields that exist on the UserProfile model
-            valid_fields = {f.name for f in UserProfile._meta.get_fields()}
-            for attr, value in profile_data.items():
-                if attr in valid_fields and attr != "id" and attr != "user":
-                    # Convert empty strings to None for nullable fields
-                    if value == "" and UserProfile._meta.get_field(attr).null:
-                        value = None
-                    setattr(profile, attr, value)
+            _apply_profile_fields(profile, profile_data)
             profile.save()
         return instance
 

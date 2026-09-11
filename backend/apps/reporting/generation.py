@@ -87,18 +87,40 @@ def generate_report_data(report, session: AssessmentSession) -> dict[str, Any]:
     if report.polar_variables.exists():
         data["polar"] = _build_polar(report, session)
 
-    # --- Report sections (narratives, charts, etc.) ---
+    # --- Report sections (narratives, charts, description/image, table/graph
+    #     layout — SRS §2.1.2, §3.1.2/§3.2.2/§3.3.2, §3_layout) ---
+    section_breakdown_for_layout = data.get("section_breakdown")
+    if section_breakdown_for_layout is None:
+        section_breakdown_for_layout = _build_section_breakdown(report, session, norm)
+    section_bands_by_id = _section_bands_by_id(report)
+
     sections = []
     for rs in report.sections.filter(is_visible=True).order_by("order"):
-        sections.append(
-            {
-                "type": rs.section_type,
-                "title": rs.title,
-                "content": rs.content,
-                "table_graph_config": rs.table_graph_config,
-                "order": rs.order,
-            }
-        )
+        entry: dict[str, Any] = {
+            "type": rs.section_type,
+            "title": rs.title,
+            "content": rs.content,
+            "description": rs.description,
+            "image_url": rs.image.url if rs.image else None,
+            "image_data_uri": _image_data_uri(rs.image),
+            "table_graph_config": rs.table_graph_config,
+            "order": rs.order,
+        }
+        layout = (rs.table_graph_config or {}).get("layout") if rs.table_graph_config else None
+        if layout == "table":
+            # SRS §3.1.2/§3.2.2/§3.3.2 Table/Graph layout — Table implemented
+            # end-to-end: section scores -> table rows (banded where the
+            # report defines section-target bands) -> PDF table.
+            entry["table"] = _build_layout_table(
+                section_breakdown_for_layout, section_bands_by_id, rs.table_graph_config
+            )
+        elif layout == "graph":
+            # Graph rendering is scoped out — recorded but not drawn.
+            entry["graph_note"] = (
+                "Graph layout is configured but not yet rendered — scoped out; use "
+                "layout='table' for an end-to-end rendered layout."
+            )
+        sections.append(entry)
     data["sections"] = sections
 
     # --- Profiling report data (FMI, PMI, VMI) ---
@@ -301,6 +323,14 @@ def _build_typological(
     codes concatenated to form the type profile. Ordering uses the report's
     selected statistical conversion (H4) so the "top" variables are ranked on
     the same scale the user chose.
+
+    Per SRS §3.2.1 'System shows entry fields where user can define bands and
+    their description for each specified variable' / 'applies band details':
+    each top-scoring variable's (converted) score is matched against the
+    report's target_type='section' ``ReportBand`` rows for that variable, so
+    the type profile carries a band label/description alongside its code —
+    reusing the same ReportBand + target_type machinery as the interpretative
+    and profiling builders (H6).
     """
     if norm is None:
         norm = _build_norm_context(report, session)
@@ -309,13 +339,17 @@ def _build_typological(
         return {"type_profile": "", "top_variables": []}
 
     top_n = codes[0].top_n if codes else 3
+    section_bands = _section_bands_by_id(report)
 
     # Get candidate's scores for the coded variables (converted to the scale)
     scored = []
     for tc in codes:
         ss = session.section_scores.filter(section=tc.section).first()
         score = norm.convert(ss.percentage if ss else 0, report.stat_conversion)
-        scored.append({"variable": tc.section.title, "code": tc.code, "score": score})
+        band = _match_band(section_bands.get(tc.section_id, []), score)
+        scored.append(
+            {"variable": tc.section.title, "code": tc.code, "score": score, "band": band}
+        )
 
     # Sort by (converted) score descending, take top N
     scored.sort(key=lambda x: x["score"], reverse=True)
@@ -617,6 +651,85 @@ def _match_band(bands: list, value: float | None, assessment_label: str | None =
                 "colour_code": band.colour_code,
             }
     return None
+
+
+def _section_bands_by_id(report) -> dict[int, list]:
+    """Group a report's target_type='section' bands by ``section_id`` (H6).
+
+    Shared by the typological builder (top-N variable banding, SRS §3.2.1)
+    and the Table layout builder (SRS §3.1.2/§3.2.2/§3.3.2) so both reuse the
+    same ReportBand rows a psychometrician already defines for interpretative
+    reports.
+    """
+    grouped: dict[int, list] = {}
+    for band in report.bands.filter(target_type="section").select_related("section"):
+        if band.section_id is not None:
+            grouped.setdefault(band.section_id, []).append(band)
+    return grouped
+
+
+def _image_data_uri(image_field) -> str | None:
+    """Encode an uploaded ImageField as a base64 data URI for PDF embedding.
+
+    ``rendered_data`` is a JSON snapshot computed once at generation time and
+    later rendered to PDF without a live request/filesystem context, so the
+    image bytes are baked in here rather than referencing a path that may not
+    resolve at render time. Returns None when there's no image, or when the
+    file can't be read (e.g. missing from storage) — callers treat that as
+    "no image" rather than failing report generation.
+    """
+    if not image_field:
+        return None
+    try:
+        import base64
+        import mimetypes
+
+        content_type = mimetypes.guess_type(image_field.name)[0] or "image/png"
+        with image_field.open("rb") as fh:
+            encoded = base64.b64encode(fh.read()).decode("ascii")
+        return f"data:{content_type};base64,{encoded}"
+    except Exception:
+        return None
+
+
+def _build_layout_table(
+    section_breakdown: list[dict], section_bands_by_id: dict[int, list], config: dict | None
+) -> dict:
+    """Build the Table layout (SRS §3.1.2/§3.2.2/§3.3.2) for section scores.
+
+    Per the SRS sample table/graph head definition (Table_Graph_Title,
+    Variable_Name, Data_Input_Name, Label, Colour_Code, Description): a
+    layout section's ``table_graph_config`` supplies the column headers, and
+    each row is one section score from the report's data-input-level
+    breakdown, banded (when the report defines a target_type='section' band
+    for that variable) for its Label/Colour/Description columns.
+
+    This is the "Table" half of the layout stub — Graph rendering is scoped
+    out (see the 'graph' branch in generate_report_data).
+    """
+    config = config or {}
+    headers = {
+        "table_title": config.get("table_title", ""),
+        "variable_label": config.get("variable_label", "Variable"),
+        "score_label": config.get("score_label", "Score"),
+        "label_label": config.get("label_label", "Label"),
+        "colour_label": config.get("colour_label", "Colour"),
+        "description_label": config.get("description_label", "Description"),
+    }
+    rows = []
+    for row in section_breakdown:
+        bands = section_bands_by_id.get(row.get("section_id"), [])
+        band = _match_band(bands, row.get("converted_score"))
+        rows.append(
+            {
+                "variable": row.get("section_title"),
+                "score": row.get("converted_score"),
+                "label": band["band_label"] if band else "",
+                "colour_code": band["colour_code"] if band else "",
+                "description": band["description"] if band else "",
+            }
+        )
+    return {"headers": headers, "rows": rows}
 
 
 def _pmi_by_assessment(mi) -> dict[str, float]:

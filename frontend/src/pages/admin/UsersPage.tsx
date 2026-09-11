@@ -34,6 +34,7 @@ import {
 import { listRoles } from "@/api/roles";
 import { extractApiError, apiClient } from "@/api/client";
 import { ROLE_LABELS, ROLE_NAME_CHOICES, type RoleName } from "@/lib/constants";
+import { getRoleSpecificFields } from "@/lib/profileFields";
 import type { AdminCreateUserPayload, AdminUpdateUserPayload, Role, User } from "@/api/types";
 import { formatDate } from "@/lib/utils";
 
@@ -318,6 +319,12 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
   const [isTrial, setIsTrial] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // Role-specific profile fields (D9): which fields show depends on the
+  // selected role — see @/lib/profileFields (shared with ProfilePage.tsx).
+  const [profileValues, setProfileValues] = useState<Record<string, string>>({});
+
+  const selectedRoleName = roles.find((r) => r.id === roleId)?.name ?? null;
+  const roleFields = getRoleSpecificFields((selectedRoleName as RoleName | null) ?? null);
 
   // Load user data when editing
   useEffect(() => {
@@ -331,6 +338,13 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
       setIsVerified(user.is_email_verified);
       setIsTrial(user.is_trial_user);
       setPassword("");
+      const fields = getRoleSpecificFields(user.role);
+      const defaults: Record<string, string> = {};
+      for (const f of fields) {
+        const val = user.profile?.[f.name];
+        defaults[f.name] = val === null || val === undefined ? "" : String(val);
+      }
+      setProfileValues(defaults);
       setError(null);
       setSuccess(null);
     } else if (!isEdit) {
@@ -343,10 +357,27 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
       setIsActive(true);
       setIsVerified(false);
       setIsTrial(false);
+      setProfileValues({});
       setError(null);
       setSuccess(null);
     }
   }, [isEdit, user, roles, open]);
+
+  // When the selected role changes in create mode, drop profile values that
+  // don't belong to the newly-selected role's field set (keeps stale data
+  // from a previously-selected role out of the payload).
+  useEffect(() => {
+    if (isEdit) return;
+    setProfileValues((prev) => {
+      const allowed = new Set(roleFields.map((f) => f.name));
+      const next: Record<string, string> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        if (allowed.has(k as (typeof roleFields)[number]["name"])) next[k] = v;
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRoleName, isEdit]);
 
   const createMutation = useMutation({
     mutationFn: (payload: AdminCreateUserPayload) => apiCreateUser(payload),
@@ -394,6 +425,8 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
       is_email_verified: isVerified,
       is_trial_user: isTrial,
       role: roleId as number,
+      // D9: role-specific fields for the role being created/edited.
+      ...(roleFields.length > 0 ? { profile: profileValues } : {}),
     };
 
     if (isEdit) {
@@ -531,6 +564,64 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
             Trial account
           </label>
         </div>
+
+        {/* D9: role-specific fields for the selected role (org/PAN-TAN/
+            agency/allocated region/etc — same field set as the self-service
+            Profile page, see @/lib/profileFields). */}
+        {roleFields.length > 0 && (
+          <div className="rounded-md border border-slate-200 p-3">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {ROLE_LABELS[selectedRoleName as RoleName] ?? selectedRoleName} details
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {roleFields.map((field) => (
+                <div
+                  key={field.name}
+                  className={field.type === "textarea" ? "sm:col-span-2" : ""}
+                >
+                  <Label htmlFor={`uf-profile-${field.name}`} required={field.required}>
+                    {field.label}
+                  </Label>
+                  {field.type === "select" ? (
+                    <select
+                      id={`uf-profile-${field.name}`}
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                      value={profileValues[field.name] ?? ""}
+                      onChange={(e) =>
+                        setProfileValues((prev) => ({ ...prev, [field.name]: e.target.value }))
+                      }
+                    >
+                      {field.options?.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : field.type === "textarea" ? (
+                    <textarea
+                      id={`uf-profile-${field.name}`}
+                      rows={3}
+                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                      value={profileValues[field.name] ?? ""}
+                      onChange={(e) =>
+                        setProfileValues((prev) => ({ ...prev, [field.name]: e.target.value }))
+                      }
+                    />
+                  ) : (
+                    <Input
+                      id={`uf-profile-${field.name}`}
+                      type={field.type === "date" ? "date" : "text"}
+                      value={profileValues[field.name] ?? ""}
+                      onChange={(e) =>
+                        setProfileValues((prev) => ({ ...prev, [field.name]: e.target.value }))
+                      }
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" onClick={onClose}>

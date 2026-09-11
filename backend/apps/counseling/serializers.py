@@ -153,6 +153,8 @@ class CounselingSessionSerializer(serializers.ModelSerializer):
             "booked_at",
             "confirmed_at",
             "completed_at",
+            "actual_start_at",
+            "actual_end_at",
         ]
         read_only_fields = [
             "id",
@@ -171,6 +173,9 @@ class CounselingSessionSerializer(serializers.ModelSerializer):
             "booked_at",
             "confirmed_at",
             "completed_at",
+            # D8: only settable via the `join`/`complete` actions.
+            "actual_start_at",
+            "actual_end_at",
         ]
 
 
@@ -184,9 +189,16 @@ class SessionCancellationSerializer(serializers.ModelSerializer):
             "reason",
             "refund_tier",
             "refund_amount",
+            "refund_executed",
             "cancelled_at",
         ]
-        read_only_fields = ["id", "refund_tier", "refund_amount", "cancelled_at"]
+        read_only_fields = [
+            "id",
+            "refund_tier",
+            "refund_amount",
+            "refund_executed",
+            "cancelled_at",
+        ]
 
 
 class SessionSummarySerializer(serializers.ModelSerializer):

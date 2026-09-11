@@ -859,6 +859,56 @@ class CourseRegistrationViewSet(ModelViewSet):
             # is what 'course completion' actually means per SRS §2.6.
             completion_pct = mandatory_completion_pct
 
+        # Dossier gap D7: roll assessment + report scores into the progress
+        # summary (SRS §6: "Course Completion Status, Time Tracker, Score
+        # report, Option to resume from where last left").
+        #
+        #   - assessment_scores: the student's latest completed
+        #     AssessmentSession percentage for each CourseAssessment attached
+        #     to this course.
+        #   - assignment_report_scores: the trainer's score/rating (out of 10)
+        #     on each of the student's reviewed AssignmentReport submissions
+        #     — the "Score report" half of SRS §6.
+        from apps.assessment.models import AssessmentSession
+
+        assessment_scores = []
+        percentages = []
+        for ca in reg.course.assessments.select_related("assessment").all():
+            latest = (
+                AssessmentSession.objects.filter(
+                    assessment_id=ca.assessment_id, candidate=reg.student, status="completed"
+                )
+                .order_by("-completed_at")
+                .first()
+            )
+            assessment_scores.append(
+                {
+                    "course_assessment_id": ca.id,
+                    "title": ca.title,
+                    "level": ca.level,
+                    "assessment_id": ca.assessment_id,
+                    "session_id": latest.id if latest else None,
+                    "percentage": latest.percentage if latest else None,
+                    "total_score": latest.total_score if latest else None,
+                    "max_score": latest.max_score if latest else None,
+                    "status": "completed" if latest else "not_attempted",
+                }
+            )
+            if latest and latest.percentage is not None:
+                percentages.append(latest.percentage)
+
+        assignment_report_scores = [
+            {
+                "assignment_id": ar.assignment_id,
+                "assignment_title": ar.assignment.title,
+                "status": ar.status,
+                "trainer_score": ar.trainer_score,
+            }
+            for ar in AssignmentReport.objects.filter(
+                assignment__session__topic__lesson__course=reg.course, student=reg.student
+            ).select_related("assignment")
+        ]
+
         return Response(
             {
                 "message": "OK",
@@ -877,6 +927,11 @@ class CourseRegistrationViewSet(ModelViewSet):
                     "last_content": last_content,
                     "completion_status": reg.completion_status,
                     "started_at": reg.started_at.isoformat() if reg.started_at else None,
+                    "assessment_scores": assessment_scores,
+                    "average_assessment_percentage": (
+                        round(sum(percentages) / len(percentages), 1) if percentages else None
+                    ),
+                    "assignment_report_scores": assignment_report_scores,
                 },
             },
             status=status.HTTP_200_OK,

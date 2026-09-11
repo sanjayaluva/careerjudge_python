@@ -1,7 +1,7 @@
 /**
  * Career Profiling API client.
  */
-import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { apiClient, apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
 import { listAssessments } from "./assessment";
 
 const BASE = "/career-profiling";
@@ -356,6 +356,39 @@ export function createMappingRule(
   },
 ): Promise<MappingRule> {
   return apiPost<MappingRule>(`${BASE}/solutions/${solutionId}/mapping_rules/`, payload);
+}
+
+// ---------------------------------------------------------------------------
+// Criterion Template Upload (SRS §4.1.4)
+// ---------------------------------------------------------------------------
+
+/** Downloads the CSV criteria template (one Band Code / Rank Order column
+ * pair per variable currently banded in this solution). */
+export async function downloadCriteriaTemplate(solutionId: number): Promise<Blob> {
+  const res = await apiClient.get(`${BASE}/solutions/${solutionId}/criteria-upload/`, {
+    responseType: "blob",
+  });
+  return res.data as Blob;
+}
+
+export interface CriteriaUploadResult {
+  created_count: number;
+  updated_count: number;
+  error_count: number;
+  errors: { row: number; career_title: string; variable: string; error: string }[];
+  unmatched_variables: string[];
+}
+
+/** Uploads a filled-in criteria CSV — creates/updates MappingCriterion rows. */
+export function uploadCriteriaCsv(
+  solutionId: number,
+  file: File,
+): Promise<CriteriaUploadResult> {
+  const form = new FormData();
+  form.append("file", file);
+  return apiPost(`${BASE}/solutions/${solutionId}/criteria-upload/`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
 }
 
 // ---------------------------------------------------------------------------

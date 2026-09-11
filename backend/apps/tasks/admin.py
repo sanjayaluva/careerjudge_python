@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from .models import Task, TaskExtensionRequest, TaskProgressUpdate, TaskSpec
+from .models import Concern, Task, TaskExtensionRequest, TaskProgressUpdate, TaskSpec
 
 
 @admin.register(Task)
@@ -56,3 +56,11 @@ class TaskExtensionRequestAdmin(admin.ModelAdmin):
     )
     list_filter = ("status",)
     search_fields = ("task__task_id", "reason")
+
+
+@admin.register(Concern)
+class ConcernAdmin(admin.ModelAdmin):
+    list_display = ("id", "raised_by", "subject", "status", "related_task", "created_at")
+    list_filter = ("status",)
+    search_fields = ("subject", "message", "raised_by__email")
+    readonly_fields = ("created_at", "updated_at", "resolved_at")

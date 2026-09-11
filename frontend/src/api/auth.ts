@@ -24,7 +24,6 @@ const http = axios.create({
 
 export interface SignupArgs {
   email: string;
-  password: string;
   full_name?: string;
 }
 
@@ -63,8 +62,8 @@ export async function refreshToken(refresh: string): Promise<TokenRefreshRespons
   return res.data.data;
 }
 
-export async function verifyEmail(token: string): Promise<void> {
-  await http.post("/auth/verify-email", { token });
+export async function verifyEmail(token: string, password?: string): Promise<void> {
+  await http.post("/auth/verify-email", password ? { token, password } : { token });
 }
 
 export async function resendVerification(email: string): Promise<void> {

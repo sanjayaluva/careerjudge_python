@@ -23,6 +23,7 @@ actual outputs — see the inline verification in the test.)
 
 import pytest
 
+from apps.accounts.tests.factories import UserFactory
 from apps.assessment.models import (
     Assessment,
     AssessmentSection,
@@ -30,15 +31,14 @@ from apps.assessment.models import (
     SectionScore,
 )
 from apps.assessment.tests.factories import get_or_create_role
-from apps.accounts.tests.factories import UserFactory
 from apps.career_profiling.models import MatchIndex, ProfilingSolution
 from apps.reporting.generation import (
-    _NormContext,
     _build_descriptive,
     _build_interpretative,
     _build_profiling,
     _compute_norm,
     _convert_score,
+    _NormContext,
     _percentile_rank,
 )
 from apps.reporting.models import Report, ReportBand, ReportCutoff

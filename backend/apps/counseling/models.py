@@ -225,6 +225,15 @@ class CounselingSession(models.Model):
     confirmed_at = models.DateTimeField(_("confirmed at"), null=True, blank=True)
     completed_at = models.DateTimeField(_("completed at"), null=True, blank=True)
 
+    # Dossier gap D8: split the session into actual start/end timestamps —
+    # distinct from the *scheduled* timeslot.start_time/end_time. Recorded
+    # server-side by the `join` action (first join sets actual_start_at,
+    # within the join window) and by `complete` (sets actual_end_at), so the
+    # live-delivery timeline can be audited even if the counsellor forgets to
+    # click "End Session" exactly on time.
+    actual_start_at = models.DateTimeField(_("actual start time"), null=True, blank=True)
+    actual_end_at = models.DateTimeField(_("actual end time"), null=True, blank=True)
+
     class Meta:
         ordering = ["-booked_at"]
         verbose_name = _("counseling session")
@@ -267,6 +276,10 @@ class SessionCancellation(models.Model):
     refund_amount = models.DecimalField(
         _("refund amount"), max_digits=10, decimal_places=2, default=0
     )
+    # Dossier gap D8: whether the refund was actually executed against the
+    # payments module (Payment record flipped to 'refunded', and a gateway
+    # refund attempted when configured) — not just recorded here.
+    refund_executed = models.BooleanField(_("refund executed"), default=False)
     cancelled_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -190,7 +190,8 @@ class VerifyEmailView(APIView):
         serializer = EmailVerificationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         token = serializer.validated_data["token"]
-        user = svc_verify_email(token)
+        password = serializer.validated_data.get("password")
+        user = svc_verify_email(token, password)
         return Response(
             {
                 "message": "Email verified successfully. Registration complete.",

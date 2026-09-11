@@ -218,6 +218,17 @@ class SessionContent(models.Model):
     document = models.FileField(
         _("document"), upload_to="session_documents/", null=True, blank=True
     )
+    # Dossier gap D7: a real file-upload path for content media (video/audio/
+    # image), alongside the existing URL/base64 `content_url` field. When
+    # set, players prefer this uploaded file over `content_url`. Also used
+    # to embed media inline with text-format content (see `text_content`).
+    media_file = models.FileField(
+        _("media file upload"),
+        upload_to="session_media/",
+        null=True,
+        blank=True,
+        help_text=_("Uploaded media file (video/audio/image) for this content."),
+    )
     duration_seconds = models.PositiveIntegerField(_("duration (seconds)"), null=True, blank=True)
     order = models.PositiveIntegerField(_("order"), default=0)
     # Per SRS §2.4.1.1 (Interlinking contents and assessments): contents

@@ -14,12 +14,16 @@ from apps.accounts.models import (
 
 @pytest.mark.django_db
 class TestSignup:
+    """Accounts audit gap: self-signup no longer collects a password up
+    front — the account is created with an unusable password, and the
+    candidate sets a real one when verifying their email (see
+    TestVerifyEmail.test_sets_password_when_provided below)."""
+
     def test_happy_path(self, client):
         resp = client.post(
             "/api/auth/signup",
             {
                 "email": "newuser@example.com",
-                "password": "StrongP@ss1",
                 "full_name": "New User",
             },
             format="json",
@@ -27,10 +31,11 @@ class TestSignup:
         assert resp.status_code == 201
         data = resp.json()
         assert data["data"]["email"] == "newuser@example.com"
-        # user should exist, inactive, unverified
+        # user should exist, inactive, unverified, with no usable password yet
         user = User.objects.get(email="newuser@example.com")
         assert user.is_active is False
         assert user.is_email_verified is False
+        assert user.has_usable_password() is False
         # default 'individual' role assigned if it exists
         if hasattr(user, "role") and user.role:
             assert user.role.name == "individual"
@@ -40,44 +45,20 @@ class TestSignup:
     def test_duplicate_email(self, client, individual_user):
         resp = client.post(
             "/api/auth/signup",
-            {
-                "email": individual_user.email,
-                "password": "StrongP@ss1",
-            },
+            {"email": individual_user.email},
             format="json",
         )
         assert resp.status_code == 400
         assert "already exists" in str(resp.json()["error"]["details"]["email"])
 
-    def test_weak_password(self, client):
-        resp = client.post(
-            "/api/auth/signup",
-            {
-                "email": "x@y.com",
-                "password": "weak",
-            },
-            format="json",
-        )
-        assert resp.status_code == 400
-        assert "password" in resp.json()["error"]["details"]
-
     def test_missing_email(self, client):
-        resp = client.post(
-            "/api/auth/signup",
-            {
-                "password": "StrongP@ss1",
-            },
-            format="json",
-        )
+        resp = client.post("/api/auth/signup", {}, format="json")
         assert resp.status_code == 400
 
     def test_email_case_insensitive(self, client, individual_user):
         resp = client.post(
             "/api/auth/signup",
-            {
-                "email": individual_user.email.upper(),
-                "password": "StrongP@ss1",
-            },
+            {"email": individual_user.email.upper()},
             format="json",
         )
         assert resp.status_code == 400
@@ -187,6 +168,71 @@ class TestVerifyEmail:
         token.save()
         resp = client.post("/api/auth/verify-email", {"token": str(token.token)}, format="json")
         assert resp.status_code == 400
+
+    def test_sets_password_when_provided(self, client, db, individual_role):
+        """Self-signup flow: password is set at verify-email time, once the
+        candidate has proven ownership of the email via the token."""
+        user = User.objects.create_user(
+            email="selfsignup@example.com",
+            password=None,
+            role=individual_role,
+            is_active=False,
+            is_email_verified=False,
+        )
+        assert user.has_usable_password() is False
+        token = EmailVerificationToken.objects.create(user=user)
+        resp = client.post(
+            "/api/auth/verify-email",
+            {"token": str(token.token), "password": "BrandNewP@ss1"},
+            format="json",
+        )
+        assert resp.status_code == 200, resp.content
+        user.refresh_from_db()
+        assert user.is_active is True
+        assert user.is_email_verified is True
+        assert user.has_usable_password() is True
+        assert user.check_password("BrandNewP@ss1")
+        # The freshly-set password logs the candidate in.
+        login_resp = client.post(
+            "/api/auth/login",
+            {"email": user.email, "password": "BrandNewP@ss1"},
+            format="json",
+        )
+        assert login_resp.status_code == 200
+
+    def test_weak_password_rejected(self, client, db, individual_role):
+        user = User.objects.create_user(
+            email="weakpw@example.com",
+            password=None,
+            role=individual_role,
+            is_active=False,
+            is_email_verified=False,
+        )
+        token = EmailVerificationToken.objects.create(user=user)
+        resp = client.post(
+            "/api/auth/verify-email",
+            {"token": str(token.token), "password": "weak"},
+            format="json",
+        )
+        assert resp.status_code == 400
+        assert "password" in resp.json()["error"]["details"]
+        # Verification must not partially apply when the password is invalid.
+        user.refresh_from_db()
+        assert user.is_active is False
+        assert user.has_usable_password() is False
+
+    def test_password_omitted_still_verifies(self, client, db, individual_role):
+        """Verifying without a password (e.g. admin-invited accounts, which
+        already have one) still activates the account — password can be set
+        later via the forgot-password flow."""
+        from .factories import UserFactory
+
+        user = UserFactory(role=individual_role, is_active=False, is_email_verified=False)
+        token = EmailVerificationToken.objects.create(user=user)
+        resp = client.post("/api/auth/verify-email", {"token": str(token.token)}, format="json")
+        assert resp.status_code == 200
+        user.refresh_from_db()
+        assert user.is_active is True
 
 
 @pytest.mark.django_db

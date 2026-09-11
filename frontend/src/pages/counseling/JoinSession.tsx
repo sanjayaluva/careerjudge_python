@@ -8,14 +8,33 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Badge, Button, Input, useToast } from "@/components/ui";
-import { setSessionMeetingLink, type CounselingSession } from "@/api/counseling";
+import { joinSession, setSessionMeetingLink, type CounselingSession } from "@/api/counseling";
 import { extractApiError } from "@/api/client";
 import { useJoinWindow } from "./joinWindow";
+
+/**
+ * D8: shared "join" mutation — hits the backend's join-window-gated
+ * redirect endpoint (the authoritative check; the countdown above it is a
+ * UX affordance only) and opens the returned meeting_link in a new tab.
+ */
+function useJoinMutation(session: CounselingSession) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => joinSession(session.id),
+    onSuccess: (data) => {
+      window.open(data.meeting_link, "_blank", "noopener,noreferrer");
+      void queryClient.invalidateQueries({ queryKey: ["counseling", "sessions"] });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+}
 
 /** Counselee-facing: countdown + Join button, linking to the counsellor's link. */
 export function JoinSessionButton({ session }: { session: CounselingSession }) {
   const slot = session.timeslot_detail;
   const { canJoin, label } = useJoinWindow(slot?.start_time, slot?.end_time);
+  const joinMutation = useJoinMutation(session);
 
   if (session.mode !== "online" || !slot) return null;
 
@@ -24,8 +43,9 @@ export function JoinSessionButton({ session }: { session: CounselingSession }) {
       <Badge variant={canJoin ? "success" : "outline"}>{label}</Badge>
       <Button
         size="sm"
-        disabled={!canJoin || !session.meeting_link}
-        onClick={() => window.open(session.meeting_link, "_blank", "noopener,noreferrer")}
+        disabled={!canJoin || !session.meeting_link || joinMutation.isPending}
+        loading={joinMutation.isPending}
+        onClick={() => joinMutation.mutate()}
         title={!session.meeting_link ? "Counsellor hasn't shared a meeting link yet" : undefined}
       >
         Join Session
@@ -40,6 +60,7 @@ export function MeetingLinkControl({ session }: { session: CounselingSession }) 
   const queryClient = useQueryClient();
   const slot = session.timeslot_detail;
   const { canJoin, label } = useJoinWindow(slot?.start_time, slot?.end_time);
+  const joinMutation = useJoinMutation(session);
   const [editing, setEditing] = useState(false);
   const [link, setLink] = useState(session.meeting_link);
 
@@ -80,8 +101,9 @@ export function MeetingLinkControl({ session }: { session: CounselingSession }) 
         <Badge variant={canJoin ? "success" : "outline"}>{label}</Badge>
         <Button
           size="sm"
-          disabled={!canJoin || !session.meeting_link}
-          onClick={() => window.open(session.meeting_link, "_blank", "noopener,noreferrer")}
+          disabled={!canJoin || !session.meeting_link || joinMutation.isPending}
+          loading={joinMutation.isPending}
+          onClick={() => joinMutation.mutate()}
         >
           Join Session
         </Button>

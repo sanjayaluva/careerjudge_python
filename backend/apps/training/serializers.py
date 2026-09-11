@@ -63,6 +63,7 @@ class SessionContentSerializer(serializers.ModelSerializer):
             "content_format",
             "content_url",
             "document",
+            "media_file",
             "text_content",
             "duration_seconds",
             "order",

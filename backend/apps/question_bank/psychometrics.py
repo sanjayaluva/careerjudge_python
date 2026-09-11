@@ -36,8 +36,10 @@ import math
 import statistics
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
+from dateutil.relativedelta import relativedelta
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.assessment.models import AssessmentQuestion, AssessmentSession, QuestionAttempt
@@ -93,6 +95,9 @@ def run_psychometric_analysis(
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     assessment_id: int | None = None,
+    region: str | None = None,
+    age_min: int | None = None,
+    age_max: int | None = None,
 ) -> PsychometricResult:
     """Run psychometric analysis on a single question.
 
@@ -102,6 +107,14 @@ def run_psychometric_analysis(
         date_to: Optional upper bound on session.completed_at.
         assessment_id: Optional filter — only sessions of this assessment
             are considered.
+        region: Optional case-insensitive substring match against the
+            candidate's UserProfile country_of_origin / state_province /
+            geographical_location / city (D2 filter: "Region"). Candidates
+            with no profile are excluded when this filter is set.
+        age_min: Optional lower bound (inclusive) on candidate age in years,
+            computed from UserProfile.date_of_birth (D2 filter: "User Age
+            range"). Candidates with no date_of_birth are excluded when set.
+        age_max: Optional upper bound (inclusive) on candidate age in years.
 
     Returns:
         PsychometricResult with computed indices. The result is also
@@ -114,7 +127,9 @@ def run_psychometric_analysis(
       - Non-MCQ: use §3 + §5 formulas (mean-based difficulty + total
         correlation index)
     """
-    attempts = _fetch_target_attempts(question, date_from, date_to, assessment_id)
+    attempts = _fetch_target_attempts(
+        question, date_from, date_to, assessment_id, region, age_min, age_max
+    )
     summaries = _build_summaries(attempts)
     if len(summaries) < 2:
         result = PsychometricResult(
@@ -147,6 +162,9 @@ def run_batch_psychometric_analysis(
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     assessment_id: int | None = None,
+    region: str | None = None,
+    age_min: int | None = None,
+    age_max: int | None = None,
 ) -> list[PsychometricResult]:
     """Run psychometric analysis on a batch of questions.
 
@@ -155,7 +173,48 @@ def run_batch_psychometric_analysis(
     independently per SRS 02 ("Target question is the question whose
     analysis is performed. All questions undergo analysis separately.").
     """
-    return [run_psychometric_analysis(q, date_from, date_to, assessment_id) for q in questions]
+    return [
+        run_psychometric_analysis(q, date_from, date_to, assessment_id, region, age_min, age_max)
+        for q in questions
+    ]
+
+
+def extract_response_rows(
+    question: Question,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    assessment_id: int | None = None,
+    region: str | None = None,
+    age_min: int | None = None,
+    age_max: int | None = None,
+) -> list[dict]:
+    """Extract the raw per-candidate response data for a question (D1 §4.1
+    "Manual Analysis" path — "System displays option to download questions
+    with user data").
+
+    Returns one row per candidate who attempted the question (subject to the
+    same filter criteria used by automatic analysis), with the fields a
+    psychometrician needs to compute indices manually offline: the target
+    question's score/max-score, the session's total score, and the "rest"
+    score (total minus target) used by the SRS §4/§5 formulas.
+    """
+    attempts = _fetch_target_attempts(
+        question, date_from, date_to, assessment_id, region, age_min, age_max
+    )
+    summaries = _build_summaries(attempts)
+    return [
+        {
+            "question_id": question.id,
+            "candidate_id": s.candidate_id,
+            "session_id": s.session_id,
+            "target_score": s.target_score,
+            "target_max_score": s.target_max_score,
+            "total_score": s.total_score,
+            "rest_score": s.rest_score,
+            "is_correct": s.is_correct,
+        }
+        for s in summaries
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -168,8 +227,16 @@ def _fetch_target_attempts(
     date_from: datetime | None,
     date_to: datetime | None,
     assessment_id: int | None,
+    region: str | None = None,
+    age_min: int | None = None,
+    age_max: int | None = None,
 ) -> list[QuestionAttempt]:
-    """Fetch all completed-session attempts for the target question."""
+    """Fetch all completed-session attempts for the target question.
+
+    region/age_min/age_max apply the D2 "Region" / "User Age range" filter
+    criteria against the candidate's UserProfile (see module docstring on
+    run_psychometric_analysis for details).
+    """
     qs = QuestionAttempt.objects.filter(
         question=question,
         status="attempted",
@@ -181,7 +248,36 @@ def _fetch_target_attempts(
         qs = qs.filter(session__completed_at__lte=date_to)
     if assessment_id is not None:
         qs = qs.filter(session__assessment_id=assessment_id)
-    return list(qs.select_related("session"))
+    if region:
+        qs = qs.filter(
+            Q(session__candidate__profile__country_of_origin__icontains=region)
+            | Q(session__candidate__profile__state_province__icontains=region)
+            | Q(session__candidate__profile__geographical_location__icontains=region)
+            | Q(session__candidate__profile__city__icontains=region)
+        )
+    attempts = list(qs.select_related("session", "session__candidate__profile"))
+    if age_min is not None or age_max is not None:
+        attempts = [a for a in attempts if _candidate_age_in_range(a, age_min, age_max)]
+    return attempts
+
+
+def _candidate_age_in_range(
+    attempt: QuestionAttempt, age_min: int | None, age_max: int | None
+) -> bool:
+    """Whether the attempt's candidate age (from UserProfile.date_of_birth)
+    falls within [age_min, age_max] (either bound optional). Candidates with
+    no profile / no date_of_birth are excluded whenever an age filter is set.
+    """
+    profile = getattr(attempt.session.candidate, "profile", None)
+    dob = getattr(profile, "date_of_birth", None) if profile else None
+    if dob is None:
+        return False
+    age = relativedelta(date.today(), dob).years
+    if age_min is not None and age < age_min:
+        return False
+    if age_max is not None and age > age_max:
+        return False
+    return True
 
 
 def _build_summaries(attempts: list[QuestionAttempt]) -> list[CandidateAttemptSummary]:

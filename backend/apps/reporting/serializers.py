@@ -22,11 +22,18 @@ class ReportSectionSerializer(serializers.ModelSerializer):
             "section_type",
             "title",
             "content",
+            "description",
+            "image",
             "table_graph_config",
             "order",
             "is_visible",
         ]
-        read_only_fields = ["id"]
+        # `report` is set by the view (POST /reports/<id>/sections/ passes
+        # `report=report` to serializer.save()), not by the client — making
+        # it read-only here matches how the `sections` create endpoint (and
+        # the frontend's createSection(), which never sends `report`) is
+        # actually used.
+        read_only_fields = ["id", "report"]
 
 
 class ReportCutoffSerializer(serializers.ModelSerializer):

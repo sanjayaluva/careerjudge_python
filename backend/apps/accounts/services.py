@@ -50,12 +50,21 @@ def send_verification_email(user: User, token: EmailVerificationToken) -> None:
 
 
 @transaction.atomic
-def verify_email(token: EmailVerificationToken) -> User:
-    """Mark the user's email as verified and activate the account."""
+def verify_email(token: EmailVerificationToken, password: str | None = None) -> User:
+    """Mark the user's email as verified and activate the account.
+
+    If `password` is given — the self-signup flow, where the password is
+    now set at verification time instead of at signup (accounts audit gap)
+    — set it on the user too, in the same transaction as activation.
+    """
     user = token.user
     user.is_email_verified = True
     user.is_active = True
-    user.save(update_fields=["is_email_verified", "is_active", "updated_at"])
+    update_fields = ["is_email_verified", "is_active", "updated_at"]
+    if password:
+        user.set_password(password)
+        update_fields.append("password")
+    user.save(update_fields=update_fields)
     token.used_at = timezone.now()
     token.save(update_fields=["used_at"])
     return user

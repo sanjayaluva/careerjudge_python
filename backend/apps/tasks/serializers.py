@@ -5,7 +5,7 @@ from rest_framework import serializers
 from apps.notifications.models import notify_user
 from apps.notifications.signals import _notify_admin_and_helpdesk
 
-from .models import Task, TaskExtensionRequest, TaskProgressUpdate, TaskSpec
+from .models import Concern, Task, TaskExtensionRequest, TaskProgressUpdate, TaskSpec
 
 
 class TaskSpecSerializer(serializers.ModelSerializer):
@@ -117,7 +117,15 @@ class TaskListSerializer(serializers.ModelSerializer):
 
 
 class TaskDetailSerializer(TaskListSerializer):
-    spec = TaskSpecSerializer(required=False)
+    # `spec` is a write-only, single-row convenience — most SME tasks only
+    # ever need one category/difficulty/type combination. `specs` is the
+    # full multi-row list (D9 gap: multi-category SME task sheet) and is
+    # what create()/update() actually persist against; `spec` is normalized
+    # into a one-item `specs` list when given. Reads expose BOTH: `specs`
+    # (the full list) and `spec` (the first row, for single-row callers —
+    # see to_representation below).
+    spec = TaskSpecSerializer(required=False, write_only=True)
+    specs = TaskSpecSerializer(many=True, required=False)
     progress_updates = TaskProgressUpdateSerializer(many=True, read_only=True)
     extension_requests = TaskExtensionRequestSerializer(many=True, read_only=True)
     parent_task_id = serializers.CharField(source="parent_task.task_id", read_only=True)
@@ -126,6 +134,7 @@ class TaskDetailSerializer(TaskListSerializer):
         fields = [
             *TaskListSerializer.Meta.fields,
             "spec",
+            "specs",
             "progress_updates",
             "extension_requests",
             "parent_task",
@@ -145,11 +154,30 @@ class TaskDetailSerializer(TaskListSerializer):
             "status",  # status is managed via lifecycle actions (start/submit/approve/cancel)
         ]
 
-    def create(self, validated_data):
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        rows = data.get("specs") or []
+        data["spec"] = rows[0] if rows else None
+        return data
+
+    @staticmethod
+    def _spec_rows(validated_data: dict) -> list[dict] | None:
+        """Merge the `specs` (multi-row) and `spec` (single-row, legacy)
+        inputs into one list of spec-row dicts. Returns None when neither
+        was provided (i.e. "don't touch the spec rows")."""
+        specs_data = validated_data.pop("specs", None)
         spec_data = validated_data.pop("spec", None)
-        task = Task.objects.create(**validated_data)
+        if specs_data is not None:
+            return specs_data
         if spec_data:
-            TaskSpec.objects.create(task=task, **spec_data)
+            return [spec_data]
+        return None
+
+    def create(self, validated_data):
+        spec_rows = self._spec_rows(validated_data)
+        task = Task.objects.create(**validated_data)
+        for row in spec_rows or []:
+            TaskSpec.objects.create(task=task, **row)
         # Notify the assignee
         notify_user(
             task.assigned_to,
@@ -168,13 +196,70 @@ class TaskDetailSerializer(TaskListSerializer):
         return task
 
     def update(self, instance, validated_data):
-        spec_data = validated_data.pop("spec", None)
+        spec_rows = self._spec_rows(validated_data)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-        if spec_data:
-            spec, _ = TaskSpec.objects.get_or_create(task=instance)
-            for attr, value in spec_data.items():
-                setattr(spec, attr, value)
-            spec.save()
+        if spec_rows is not None:
+            # Replace-all semantics: simplest predictable behavior for an
+            # edit that supplies spec rows (matches how the rest of the
+            # write API treats nested collections here — no partial merge).
+            instance.specs.all().delete()
+            for row in spec_rows:
+                TaskSpec.objects.create(task=instance, **row)
         return instance
+
+
+class ConcernSerializer(serializers.ModelSerializer):
+    """A user-raised concern — routed to cj_admin + helpdesk (D9)."""
+
+    raised_by_name = serializers.SerializerMethodField()
+    resolved_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Concern
+        fields = [
+            "id",
+            "raised_by",
+            "raised_by_name",
+            "subject",
+            "message",
+            "related_task",
+            "status",
+            "resolved_by",
+            "resolved_by_name",
+            "resolution_comment",
+            "resolved_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "raised_by",
+            "status",
+            "resolved_by",
+            "resolution_comment",
+            "resolved_at",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_raised_by_name(self, obj):
+        return obj.raised_by.full_name or obj.raised_by.email
+
+    def get_resolved_by_name(self, obj):
+        if obj.resolved_by:
+            return obj.resolved_by.full_name or obj.resolved_by.email
+        return None
+
+    def create(self, validated_data):
+        concern = Concern.objects.create(raised_by=self.context["request"].user, **validated_data)
+        task_ref = f" (re: task {concern.related_task.task_id})" if concern.related_task_id else ""
+        _notify_admin_and_helpdesk(
+            f"Concern raised: {concern.subject}",
+            f"{concern.raised_by.full_name or concern.raised_by.email} raised a concern{task_ref}: "
+            f"{concern.message}",
+            "warning",
+            f"/tasks/concerns/{concern.id}",
+        )
+        return concern

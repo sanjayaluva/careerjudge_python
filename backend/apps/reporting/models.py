@@ -200,12 +200,33 @@ class ReportSection(models.Model):
         default="",
         help_text=_("For narrative sections: the text content. For charts: JSON config."),
     )
+    # SRS §2.1.2 'Add Description': free text + image upload attached to a
+    # section (report-layout level description, distinct from `content`).
+    description = models.TextField(
+        _("description"),
+        blank=True,
+        default="",
+        help_text=_("Free-text description shown alongside this section (SRS §2.1.2)."),
+    )
+    image = models.ImageField(
+        _("image"),
+        upload_to="report_sections/",
+        null=True,
+        blank=True,
+        help_text=_("Uploaded image shown alongside this section (SRS §2.1.2)."),
+    )
     # Table head / graph legend definitions (SRS §3.1.2, §3.2.2, §3.3.2)
     table_graph_config = models.JSONField(
         _("table/graph configuration"),
         null=True,
         blank=True,
-        help_text=_("JSON with table_heads or graph_legends configuration."),
+        help_text=_(
+            "JSON layout config: {'layout': 'table'|'graph', 'table_title': ..., "
+            "'variable_label': ..., 'score_label': ..., 'label_label': ..., "
+            "'colour_label': ..., 'description_label': ...}. 'table' is rendered "
+            "end-to-end (section scores -> PDF table); 'graph' is recorded but not "
+            "yet rendered (scoped out)."
+        ),
     )
     order = models.PositiveIntegerField(_("order"), default=0)
     is_visible = models.BooleanField(_("visible"), default=True)

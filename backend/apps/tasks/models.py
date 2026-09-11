@@ -163,6 +163,14 @@ class TaskSpec(models.Model):
     - Reviewer/Psychometrician tasks: link to source SME/Reviewer task (already
       captured via Task.parent_task); this model just records metadata.
     - Trainer/Counsellor tasks: no extra spec needed (description suffices).
+
+    D9 gap (medium): an SME task can span more than one category/difficulty/
+    type combination (e.g. "5 Easy Quant MCQs" + "3 Hard Verbal FITB" in the
+    same task), so a task may have MULTIPLE spec rows — hence a plain
+    ForeignKey (one task -> many specs) rather than the original
+    one-spec-per-task design. Single-row callers are unaffected: the API
+    still accepts/returns a single `spec` object as a convenience alongside
+    the full `specs` list (see TaskDetailSerializer).
     """
 
     DIFFICULTY_CHOICES = [
@@ -181,7 +189,7 @@ class TaskSpec(models.Model):
         ("create", "Create"),
     ]
 
-    task = models.OneToOneField(Task, on_delete=models.CASCADE, related_name="spec")
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="specs")
 
     # SME-specific (SRS §3.1.1)
     qb_category = models.CharField(_("QB category"), max_length=255, blank=True, default="")
@@ -305,3 +313,56 @@ class TaskExtensionRequest(models.Model):
 
     def __str__(self) -> str:
         return f"{self.task.task_id} — {self.status} — {self.requested_due_date}"
+
+
+class Concern(models.Model):
+    """A concern/issue raised by any user, routed to cj_admin + helpdesk.
+
+    Per SRS 09_admin_system_administration.json (D9): a user who runs into a
+    problem — with a task, or anything else in the system — should be able
+    to flag it so admin + helpdesk are notified and can follow up, without
+    needing an existing task to hang the message off of.
+    """
+
+    STATUS_CHOICES = [
+        ("open", "Open"),
+        ("resolved", "Resolved"),
+    ]
+
+    raised_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="concerns_raised",
+    )
+    subject = models.CharField(_("subject"), max_length=255)
+    message = models.TextField(_("message"))
+    related_task = models.ForeignKey(
+        Task,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="concerns",
+        help_text=_("Optional: the task this concern is about, if any."),
+    )
+
+    status = models.CharField(_("status"), max_length=20, choices=STATUS_CHOICES, default="open")
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="concerns_resolved",
+    )
+    resolution_comment = models.TextField(_("resolution comment"), blank=True, default="")
+    resolved_at = models.DateTimeField(_("resolved at"), null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("concern")
+        verbose_name_plural = _("concerns")
+
+    def __str__(self) -> str:
+        return f"Concern #{self.pk} by {self.raised_by.email}: {self.subject[:50]}"

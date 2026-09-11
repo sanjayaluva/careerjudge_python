@@ -123,6 +123,11 @@ export interface UserProfile {
   // Channel Partner fields
   channel_partner_agreement_id: string;
   contract_period: string;
+  agency_name: string;
+  allocated_region: string;
+  // Corporate fields
+  manager_name: string;
+  tan_number: string;
 }
 
 export interface User {
@@ -172,6 +177,9 @@ export interface AdminCreateUserPayload {
   is_trial_user: boolean;
   role: number; // role id
   password?: string;
+  /** Role-specific profile fields (D9 Add-User role-specific fields), e.g.
+   * pan_number, tan_number, manager_name, agency_name, allocated_region. */
+  profile?: Record<string, string>;
 }
 
 export interface AdminUpdateUserPayload {
@@ -183,6 +191,7 @@ export interface AdminUpdateUserPayload {
   is_trial_user?: boolean;
   role?: number;
   password?: string;
+  profile?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------

@@ -52,6 +52,12 @@ from .serializers import (
     TimeSlotSerializer,
 )
 
+# D8 §2.3: join-window bounds around the timeslot's scheduled start/end —
+# mirrors frontend/src/pages/counseling/joinWindow.ts JOIN_WINDOW_BEFORE_MIN /
+# JOIN_WINDOW_AFTER_END_MIN. Keep both in sync.
+JOIN_WINDOW_BEFORE_MIN = 10
+JOIN_WINDOW_AFTER_END_MIN = 15
+
 
 class HasCounselingPermission(HasModulePermission):
     module = "counseling"
@@ -73,6 +79,9 @@ class HasCounselingPermission(HasModulePermission):
         "my_sessions": "view",
         # H16/D8 §2.3: counsellor sets the per-session meeting link.
         "meeting_link": "change",
+        # D8: any participant (counselee/counsellor) may join within the
+        # window — gated at 'view' so it doesn't require write access.
+        "join": "view",
     }
 
 
@@ -160,17 +169,55 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
     @action(detail=True, methods=["get"])
     def timeslots(self, request, pk=None):
         """List a counsellor's available timeslots (SRS §2.1: 'System shows
-        available timeslots of the counsellor for a week')."""
+        available timeslots of the counsellor for a week').
+
+        Query params:
+          weeks=N        — cumulative window: now .. now + N weeks (default
+                            behaviour, kept for backward compatibility).
+          week_offset=N   — dossier gap D8 "browse future weeks": a single
+                            calendar week window, N weeks from now (0 = this
+                            week, 1 = next week, etc). When given, overrides
+                            `weeks` and returns just that one week's slots so
+                            the UI can page forward/backward through future
+                            weeks instead of always getting the cumulative
+                            list. Capped at CounselingSettings.max_weeks_ahead
+                            (the same limit timeslot creation enforces).
+        """
         counsellor = self.get_object()
-        # Default: show slots from now to 3 weeks ahead (SRS §3.1 max)
-        weeks = int(request.query_params.get("weeks", 3))
-        from_date = timezone.now()
-        to_date = from_date + timedelta(weeks=weeks)
+        now = timezone.now()
+        week_offset = request.query_params.get("week_offset")
+        if week_offset is not None:
+            try:
+                offset = max(0, int(week_offset))
+            except ValueError:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "week_offset must be an integer.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            max_weeks = CounselingSettings.get().max_weeks_ahead
+            offset = min(offset, max_weeks)
+            from_date = now + timedelta(weeks=offset)
+            to_date = from_date + timedelta(weeks=1)
+        else:
+            # Default: show slots from now to N weeks ahead (SRS §3.1 max 3)
+            weeks = int(request.query_params.get("weeks", 3))
+            from_date = now
+            to_date = from_date + timedelta(weeks=weeks)
         slots = counsellor.timeslots.filter(
             start_time__gte=from_date, start_time__lte=to_date
         ).order_by("start_time")
         return Response(
-            {"message": "OK", "data": TimeSlotSerializer(slots, many=True).data},
+            {
+                "message": "OK",
+                "data": TimeSlotSerializer(slots, many=True).data,
+                "week_start": from_date.isoformat(),
+                "week_end": to_date.isoformat(),
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -578,6 +625,19 @@ class CounselingSessionViewSet(ModelViewSet):
             refund_tier = "none"
             refund_amount = 0
 
+        # Dossier gap D8: execute the refund through the payments module
+        # rather than only recording it here. A full Stripe gateway refund
+        # is attempted when configured; either way, the Payment record is
+        # flipped to 'refunded' so it's reflected in the system of record.
+        refund_executed = False
+        if refund_amount and float(refund_amount) > 0:
+            from apps.payments.models import Payment
+            from apps.payments.services import refund_payment
+
+            payment = Payment.objects.filter(module="counseling", item_id=session.id).first()
+            if payment:
+                refund_executed = refund_payment(payment, amount=refund_amount)
+
         # Create cancellation record
         cancellation = SessionCancellation.objects.create(
             session=session,
@@ -585,6 +645,7 @@ class CounselingSessionViewSet(ModelViewSet):
             reason=reason,
             refund_tier=refund_tier,
             refund_amount=refund_amount,
+            refund_executed=refund_executed,
         )
 
         # Update session status
@@ -630,8 +691,16 @@ class CounselingSessionViewSet(ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
         session.status = "completed"
-        session.completed_at = timezone.now()
-        session.save(update_fields=["status", "completed_at"])
+        now = timezone.now()
+        session.completed_at = now
+        update_fields = ["status", "completed_at"]
+        # D8: record the actual end of the live delivery, distinct from the
+        # scheduled timeslot end. Only set if not already recorded (e.g. via
+        # a future explicit "leave" action) so completion never overwrites it.
+        if not session.actual_end_at:
+            session.actual_end_at = now
+            update_fields.append("actual_end_at")
+        session.save(update_fields=update_fields)
         return Response(
             {"message": "Session completed.", "data": CounselingSessionSerializer(session).data},
             status=status.HTTP_200_OK,
@@ -820,6 +889,100 @@ class CounselingSessionViewSet(ModelViewSet):
         session.save(update_fields=["meeting_link"])
         return Response(
             {"message": "Meeting link updated.", "data": CounselingSessionSerializer(session).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"])
+    def join(self, request, pk=None):
+        """Redirect to the per-session meeting link within the join window
+        (dossier gap D8: 'provide the redirect to the (per-session) meeting
+        link within the join window').
+
+        Only the session's counselee, its counsellor, or an admin may join.
+        Enforces the join window server-side (the frontend's countdown is a
+        UX affordance, not the source of truth) and records
+        `actual_start_at` the first time either party joins — this is the
+        "split the session into start/end timestamps" half of D8; `complete`
+        records the matching `actual_end_at`.
+
+        Returns the meeting_link for the frontend to redirect/open, plus the
+        countdown state so a caller doesn't need to duplicate the math.
+        """
+        session = self.get_object()
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_admin = user_role_name == "cj_admin" or request.user.is_superuser
+        is_counselee = session.counselee_id == request.user.id
+        is_counsellor = session.counsellor.user_id == request.user.id
+        if not (is_admin or is_counselee or is_counsellor):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the counselee, the counsellor, or an admin can join.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if session.status not in ("confirmed", "completed"):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": f"Cannot join a session with status '{session.status}'.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if session.mode != "online":
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "Only online sessions have a meeting link to join.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        timeslot = session.timeslot
+        now = timezone.now()
+        opens_at = timeslot.start_time - timedelta(minutes=JOIN_WINDOW_BEFORE_MIN)
+        closes_at = timeslot.end_time + timedelta(minutes=JOIN_WINDOW_AFTER_END_MIN)
+        can_join = opens_at <= now <= closes_at
+        if not can_join:
+            return Response(
+                {
+                    "error": {
+                        "code": "join_window_closed",
+                        "message": "The join window for this session is not currently open.",
+                    },
+                    "data": {"opens_at": opens_at.isoformat(), "closes_at": closes_at.isoformat()},
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not session.meeting_link:
+            return Response(
+                {
+                    "error": {
+                        "code": "not_ready",
+                        "message": "The counsellor hasn't set a meeting link for this session yet.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not session.actual_start_at:
+            session.actual_start_at = now
+            session.save(update_fields=["actual_start_at"])
+
+        return Response(
+            {
+                "message": "Join window is open.",
+                "data": {
+                    "meeting_link": session.meeting_link,
+                    "actual_start_at": session.actual_start_at.isoformat(),
+                },
+            },
             status=status.HTTP_200_OK,
         )
 

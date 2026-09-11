@@ -246,6 +246,33 @@ function TasksTable({
 // Assign Task Modal
 // ---------------------------------------------------------------------------
 
+// One row of an SME task's spec — D9: multi-category task sheet. A task
+// can carry more than one of these (e.g. "5 Easy Quant MCQs" + "3 Hard
+// Verbal FITB" in the same task).
+interface SpecRow {
+  qb_category: string;
+  qb_subcategory: string;
+  question_type: string;
+  num_questions: number | "";
+  num_options: number | "";
+  num_correct: number | "";
+  difficulty: "" | "easy" | "medium" | "hard" | "expert";
+  cognitive: "" | "remember" | "understand" | "apply" | "analyze" | "evaluate" | "create";
+}
+
+function emptySpecRow(): SpecRow {
+  return {
+    qb_category: "",
+    qb_subcategory: "",
+    question_type: "",
+    num_questions: "",
+    num_options: "",
+    num_correct: "",
+    difficulty: "",
+    cognitive: "",
+  };
+}
+
 function AssignTaskModal({
   open,
   onClose,
@@ -264,17 +291,17 @@ function AssignTaskModal({
   const [dueDate, setDueDate] = useState("");
   const [parentTaskId, setParentTaskId] = useState("");
 
-  // SME-specific spec fields
-  const [qbCategory, setQbCategory] = useState("");
-  const [qbSubcategory, setQbSubcategory] = useState("");
-  const [questionType, setQuestionType] = useState("");
-  const [numQuestions, setNumQuestions] = useState<number | "">("");
-  const [numOptions, setNumOptions] = useState<number | "">("");
-  const [numCorrect, setNumCorrect] = useState<number | "">("");
-  const [difficulty, setDifficulty] = useState<"" | "easy" | "medium" | "hard" | "expert">("");
-  const [cognitive, setCognitive] = useState<
-    "" | "remember" | "understand" | "apply" | "analyze" | "evaluate" | "create"
-  >("");
+  // SME-specific spec fields — a task can carry multiple category/
+  // difficulty/type rows (D9: SME multi-category task sheet), so this is a
+  // list of rows rather than a single set of fields.
+  const [specRows, setSpecRows] = useState<SpecRow[]>([emptySpecRow()]);
+
+  const updateSpecRow = (index: number, patch: Partial<SpecRow>) => {
+    setSpecRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+  const addSpecRow = () => setSpecRows((rows) => [...rows, emptySpecRow()]);
+  const removeSpecRow = (index: number) =>
+    setSpecRows((rows) => (rows.length > 1 ? rows.filter((_, i) => i !== index) : rows));
 
   // Load users list filtered by role
   const usersQuery = useQuery({
@@ -293,14 +320,7 @@ function AssignTaskModal({
       setPriority("medium");
       setDueDate("");
       setParentTaskId("");
-      setQbCategory("");
-      setQbSubcategory("");
-      setQuestionType("");
-      setNumQuestions("");
-      setNumOptions("");
-      setNumCorrect("");
-      setDifficulty("");
-      setCognitive("");
+      setSpecRows([emptySpecRow()]);
     },
     onError: (err) => {
       toast.error(`Failed to assign task: ${extractApiError(err)}`);
@@ -323,16 +343,16 @@ function AssignTaskModal({
       ...(parentTaskId ? { parent_task_id: parentTaskId } : {}),
       ...(assigneeRole === "sme"
         ? {
-            spec: {
-              qb_category: qbCategory,
-              qb_subcategory: qbSubcategory,
-              question_type: questionType,
-              num_questions: numQuestions === "" ? null : Number(numQuestions),
-              num_options: numOptions === "" ? null : Number(numOptions),
-              num_correct_options: numCorrect === "" ? null : Number(numCorrect),
-              difficulty_level: difficulty,
-              cognitive_level: cognitive,
-            },
+            specs: specRows.map((row) => ({
+              qb_category: row.qb_category,
+              qb_subcategory: row.qb_subcategory,
+              question_type: row.question_type,
+              num_questions: row.num_questions === "" ? null : Number(row.num_questions),
+              num_options: row.num_options === "" ? null : Number(row.num_options),
+              num_correct_options: row.num_correct === "" ? null : Number(row.num_correct),
+              difficulty_level: row.difficulty,
+              cognitive_level: row.cognitive,
+            })),
           }
         : {}),
     };
@@ -448,100 +468,142 @@ function AssignTaskModal({
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">SME Task Specification</CardTitle>
+              <p className="text-xs text-slate-500">
+                Add a row per category/difficulty/type combination this task covers.
+              </p>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="qb_category">QB Category</Label>
-                  <Input
-                    id="qb_category"
-                    value={qbCategory}
-                    onChange={(e) => setQbCategory(e.target.value)}
-                    placeholder="e.g. Quantitative"
-                  />
+            <CardContent className="space-y-4">
+              {specRows.map((row, i) => (
+                <div key={i} className="space-y-3 rounded-md border border-slate-200 p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Row {i + 1}
+                    </p>
+                    {specRows.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-danger hover:bg-danger-50"
+                        onClick={() => removeSpecRow(i)}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor={`qb_category-${i}`}>QB Category</Label>
+                      <Input
+                        id={`qb_category-${i}`}
+                        value={row.qb_category}
+                        onChange={(e) => updateSpecRow(i, { qb_category: e.target.value })}
+                        placeholder="e.g. Quantitative"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`qb_subcategory-${i}`}>QB Subcategory</Label>
+                      <Input
+                        id={`qb_subcategory-${i}`}
+                        value={row.qb_subcategory}
+                        onChange={(e) => updateSpecRow(i, { qb_subcategory: e.target.value })}
+                        placeholder="e.g. Algebra"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor={`question_type-${i}`}>Question Type</Label>
+                    <Input
+                      id={`question_type-${i}`}
+                      value={row.question_type}
+                      onChange={(e) => updateSpecRow(i, { question_type: e.target.value })}
+                      placeholder="e.g. mcq_text"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <Label htmlFor={`num_questions-${i}`}># Questions</Label>
+                      <Input
+                        id={`num_questions-${i}`}
+                        type="number"
+                        value={row.num_questions}
+                        onChange={(e) =>
+                          updateSpecRow(i, {
+                            num_questions: e.target.value ? Number(e.target.value) : "",
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`num_options-${i}`}># Options</Label>
+                      <Input
+                        id={`num_options-${i}`}
+                        type="number"
+                        value={row.num_options}
+                        onChange={(e) =>
+                          updateSpecRow(i, {
+                            num_options: e.target.value ? Number(e.target.value) : "",
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`num_correct-${i}`}># Correct</Label>
+                      <Input
+                        id={`num_correct-${i}`}
+                        type="number"
+                        value={row.num_correct}
+                        onChange={(e) =>
+                          updateSpecRow(i, {
+                            num_correct: e.target.value ? Number(e.target.value) : "",
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor={`difficulty-${i}`}>Difficulty (optional)</Label>
+                      <select
+                        id={`difficulty-${i}`}
+                        value={row.difficulty}
+                        onChange={(e) =>
+                          updateSpecRow(i, { difficulty: e.target.value as SpecRow["difficulty"] })
+                        }
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      >
+                        <option value="">—</option>
+                        <option value="easy">Easy</option>
+                        <option value="medium">Medium</option>
+                        <option value="hard">Hard</option>
+                        <option value="expert">Expert</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label htmlFor={`cognitive-${i}`}>Cognitive Level (optional)</Label>
+                      <select
+                        id={`cognitive-${i}`}
+                        value={row.cognitive}
+                        onChange={(e) =>
+                          updateSpecRow(i, { cognitive: e.target.value as SpecRow["cognitive"] })
+                        }
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      >
+                        <option value="">—</option>
+                        <option value="remember">Remember</option>
+                        <option value="understand">Understand</option>
+                        <option value="apply">Apply</option>
+                        <option value="analyze">Analyze</option>
+                        <option value="evaluate">Evaluate</option>
+                        <option value="create">Create</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="qb_subcategory">QB Subcategory</Label>
-                  <Input
-                    id="qb_subcategory"
-                    value={qbSubcategory}
-                    onChange={(e) => setQbSubcategory(e.target.value)}
-                    placeholder="e.g. Algebra"
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="question_type">Question Type</Label>
-                <Input
-                  id="question_type"
-                  value={questionType}
-                  onChange={(e) => setQuestionType(e.target.value)}
-                  placeholder="e.g. mcq_text"
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <Label htmlFor="num_questions"># Questions</Label>
-                  <Input
-                    id="num_questions"
-                    type="number"
-                    value={numQuestions}
-                    onChange={(e) => setNumQuestions(e.target.value ? Number(e.target.value) : "")}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="num_options"># Options</Label>
-                  <Input
-                    id="num_options"
-                    type="number"
-                    value={numOptions}
-                    onChange={(e) => setNumOptions(e.target.value ? Number(e.target.value) : "")}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="num_correct"># Correct</Label>
-                  <Input
-                    id="num_correct"
-                    type="number"
-                    value={numCorrect}
-                    onChange={(e) => setNumCorrect(e.target.value ? Number(e.target.value) : "")}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="difficulty">Difficulty (optional)</Label>
-                  <select
-                    id="difficulty"
-                    value={difficulty}
-                    onChange={(e) => setDifficulty(e.target.value as typeof difficulty)}
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  >
-                    <option value="">—</option>
-                    <option value="easy">Easy</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
-                    <option value="expert">Expert</option>
-                  </select>
-                </div>
-                <div>
-                  <Label htmlFor="cognitive">Cognitive Level (optional)</Label>
-                  <select
-                    id="cognitive"
-                    value={cognitive}
-                    onChange={(e) => setCognitive(e.target.value as typeof cognitive)}
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  >
-                    <option value="">—</option>
-                    <option value="remember">Remember</option>
-                    <option value="understand">Understand</option>
-                    <option value="apply">Apply</option>
-                    <option value="analyze">Analyze</option>
-                    <option value="evaluate">Evaluate</option>
-                    <option value="create">Create</option>
-                  </select>
-                </div>
-              </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addSpecRow}>
+                + Add another category
+              </Button>
             </CardContent>
           </Card>
         )}
