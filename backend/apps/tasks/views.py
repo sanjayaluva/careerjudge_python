@@ -26,8 +26,9 @@ from rest_framework.viewsets import ModelViewSet
 
 from apps.notifications.models import notify_user
 
-from .models import Task, TaskExtensionRequest, TaskProgressUpdate
+from .models import Concern, Task, TaskExtensionRequest, TaskProgressUpdate
 from .serializers import (
+    ConcernSerializer,
     TaskDetailSerializer,
     TaskExtensionRequestSerializer,
     TaskListSerializer,
@@ -39,6 +40,12 @@ def _is_admin(user) -> bool:
     if user.is_superuser:
         return True
     return user.role_id is not None and user.role.name == "cj_admin"
+
+
+def _is_admin_or_helpdesk(user) -> bool:
+    if _is_admin(user):
+        return True
+    return user.role_id is not None and user.role.name == "helpdesk"
 
 
 class TaskViewSet(ModelViewSet):
@@ -241,6 +248,11 @@ class TaskViewSet(ModelViewSet):
                 {"detail": "Only admin can request progress updates."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if task.status == "cancelled":
+            return Response(
+                {"detail": "Cannot request a progress update on a cancelled task."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         message = request.data.get("message", "Please provide a progress update.")
         update = TaskProgressUpdate.objects.create(
             task=task,
@@ -281,6 +293,11 @@ class TaskViewSet(ModelViewSet):
                 }
             )
         # POST
+        if task.status == "cancelled":
+            return Response(
+                {"detail": "Cannot post progress updates on a cancelled task."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         message = request.data.get("message", "")
         if not message:
             return Response(
@@ -328,6 +345,11 @@ class TaskViewSet(ModelViewSet):
             return Response(
                 {"detail": "Only the assignee can request an extension."},
                 status=status.HTTP_403_FORBIDDEN,
+            )
+        if not task.can_be_cancelled:  # i.e. task.status in ("completed", "cancelled")
+            return Response(
+                {"detail": f"Cannot request an extension on a {task.status} task."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         requested_due_date = request.data.get("requested_due_date")
         reason = request.data.get("reason", "")
@@ -537,4 +559,69 @@ class TaskExtensionViewSet(ModelViewSet):
                 "message": "Extension declined.",
                 "data": TaskExtensionRequestSerializer(ext).data,
             }
+        )
+
+
+class ConcernViewSet(ModelViewSet):
+    """User-raised concerns, routed to cj_admin + helpdesk (D9).
+
+    Any authenticated user can raise a concern (optionally tied to a task).
+    Regular users see only their own concerns; cj_admin/helpdesk see all and
+    can resolve them.
+    """
+
+    queryset = Concern.objects.select_related("raised_by", "resolved_by", "related_task")
+    serializer_class = ConcernSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if _is_admin_or_helpdesk(self.request.user):
+            return qs
+        return qs.filter(raised_by=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        concern = serializer.save()
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            {
+                "message": "Concern submitted. Admin and helpdesk have been notified.",
+                "data": ConcernSerializer(concern).data,
+            },
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
+
+    @action(detail=True, methods=["post"])
+    def resolve(self, request, pk=None):
+        """cj_admin/helpdesk marks a concern resolved."""
+        concern = self.get_object()
+        if not _is_admin_or_helpdesk(request.user):
+            return Response(
+                {"detail": "Only admin or helpdesk can resolve concerns."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if concern.status == "resolved":
+            return Response(
+                {"detail": "Concern is already resolved."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        concern.status = "resolved"
+        concern.resolved_by = request.user
+        concern.resolution_comment = request.data.get("comment", "")
+        concern.resolved_at = timezone.now()
+        concern.save()
+        notify_user(
+            concern.raised_by,
+            f"Concern resolved: {concern.subject}",
+            f"Your concern has been resolved by {request.user.full_name or request.user.email}.",
+            "success",
+            link=f"/tasks/concerns/{concern.id}",
+        )
+        return Response(
+            {"message": "Concern resolved.", "data": ConcernSerializer(concern).data},
+            status=status.HTTP_200_OK,
         )

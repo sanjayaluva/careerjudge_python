@@ -1,7 +1,7 @@
 /**
  * Question Bank API functions.
  */
-import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { apiClient, apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
 
 const BASE = "/question-bank";
 
@@ -44,6 +44,8 @@ export interface QuestionListItem {
   is_psychometric: boolean;
   question_category: "normal" | "psychometric";
   sub_question_count: number;
+  /** Optional validity expiry for periodic Question Bank review (D1 §4.3). */
+  expires_at: string | null;
 }
 
 export interface ResponseOption {
@@ -68,6 +70,8 @@ export interface ResponseOption {
 
 export interface QuestionDetail extends QuestionListItem {
   question_text_2: string;
+  /** Model answer / worked-out solution shown to reviewers (D1). */
+  worked_solution: string;
   image: string | null;
   image_width: number | null;
   image_height: number | null;
@@ -196,6 +200,8 @@ export interface QuestionListParams {
   status?: string;
   difficulty?: string;
   mine?: boolean;
+  /** Periodic QB updation (D1 §4.3): "true" = expired only, "false" = valid/unset only. */
+  expired?: boolean;
 }
 
 export function listQuestions(params: QuestionListParams = {}): Promise<{
@@ -213,6 +219,7 @@ export function listQuestions(params: QuestionListParams = {}): Promise<{
       ...(params.status ? { status: params.status } : {}),
       ...(params.difficulty ? { difficulty: params.difficulty } : {}),
       ...(params.mine ? { mine: "true" } : {}),
+      ...(params.expired !== undefined ? { expired: params.expired ? "true" : "false" } : {}),
     },
   });
 }
@@ -238,6 +245,97 @@ export function deleteQuestion(id: number): Promise<void> {
 
 export function submitForReview(id: number): Promise<{ id: number; status: string }> {
   return apiPost(`${BASE}/questions/${id}/submit_for_review/`);
+}
+
+// ---------------------------------------------------------------------------
+// Periodic QB updation: batch activate/inactivate + exposure-limit
+// management (D1 §4.2/§4.3)
+// ---------------------------------------------------------------------------
+
+export interface BatchActionResult {
+  updated_count: number;
+  updated_ids: number[];
+  missing_ids: number[];
+}
+
+export function batchSetQuestionStatus(payload: {
+  question_ids: number[];
+  is_active: boolean;
+}): Promise<BatchActionResult & { is_active: boolean }> {
+  return apiPost(`${BASE}/questions/batch-status/`, payload);
+}
+
+export function batchSetExposureLimit(payload: {
+  question_ids: number[];
+  exposure_limit: number | null;
+}): Promise<BatchActionResult & { exposure_limit: number | null }> {
+  return apiPost(`${BASE}/questions/batch-exposure-limit/`, payload);
+}
+
+// ---------------------------------------------------------------------------
+// Psychometric analysis — automatic + manual paths (D2)
+// ---------------------------------------------------------------------------
+
+export interface PsychometricAnalysisFilters {
+  /** Required unless category_id is given. */
+  question_ids?: number[];
+  /** Auto-extracts all questions in the category when question_ids is omitted. */
+  category_id?: number;
+  date_from?: string;
+  date_to?: string;
+  assessment_id?: number;
+  region?: string;
+  age_min?: number;
+  age_max?: number;
+}
+
+export interface PsychometricAnalysisResult {
+  question_id: number;
+  n_candidates: number;
+  item_difficulty_index: number | null;
+  top_group_difficulty_index: number | null;
+  bottom_group_difficulty_index: number | null;
+  difference_difficulty_index: number | null;
+  discrimination_index: number | null;
+  item_total_correlation: number | null;
+  error: string | null;
+}
+
+/** Automatic psychometric analysis (SRS 02). */
+export function runPsychometricAnalysis(
+  filters: PsychometricAnalysisFilters,
+): Promise<PsychometricAnalysisResult[]> {
+  return apiPost(`${BASE}/questions/psychometric_analysis/`, filters);
+}
+
+/**
+ * Manual analysis path, step 1: download the raw per-candidate response
+ * data as a CSV Blob for offline computation.
+ */
+export async function downloadPsychometricData(
+  filters: PsychometricAnalysisFilters,
+): Promise<Blob> {
+  const res = await apiClient.post(`${BASE}/questions/psychometric-data-download/`, filters, {
+    responseType: "blob",
+  });
+  return res.data as Blob;
+}
+
+export interface PsychometricUploadRow {
+  question_id: number;
+  item_difficulty_index?: number | null;
+  top_group_difficulty_index?: number | null;
+  bottom_group_difficulty_index?: number | null;
+  difference_difficulty_index?: number | null;
+  discrimination_index?: number | null;
+  item_total_correlation?: number | null;
+}
+
+/** Manual analysis path, step 2: upload manually-computed index values. */
+export function uploadPsychometricResults(
+  results: PsychometricUploadRow[],
+): Promise<{ updated_ids: number[]; errors: { index: number; error: string }[] }> {
+  return apiPost(`${BASE}/questions/psychometric-upload/`, { results });
 }
 
 // ---------------------------------------------------------------------------

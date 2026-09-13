@@ -25,7 +25,7 @@ export function AdminRoute({ module = "users", children }: AdminRouteProps) {
     return <Navigate to="/dashboard" replace state={{ reason: "no_role" }} />;
   }
 
-  if (!canAccessModule(role, module)) {
+  if (!canAccessModule(role, module, user?.module_rights)) {
     const from = encodeURIComponent(location.pathname);
     return <Navigate to={`/dashboard?denied=${from}`} replace />;
   }

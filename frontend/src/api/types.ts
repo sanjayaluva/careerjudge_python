@@ -39,6 +39,15 @@ export interface ApiErrorEnvelope {
 // Auth
 // ---------------------------------------------------------------------------
 
+/** A single effective module right — {module, action} pair, as granted via
+ *  the user's role (including anything inherited from a base_role). This is
+ *  the RBAC single source of truth: the frontend derives nav + action
+ *  gating from this list instead of a static per-role-name map. */
+export interface ModuleRightGrant {
+  module: string; // accounts, organizations, question_bank, assessment, etc.
+  action: ModuleAction;
+}
+
 export interface AuthUser {
   id: number;
   email: string;
@@ -47,6 +56,9 @@ export interface AuthUser {
   is_email_verified: boolean;
   is_superuser: boolean;
   is_staff: boolean;
+  /** Effective ModuleRights for the user's role. Absent on the slim login
+   *  response — populated once /api/me/ resolves (see useAuth.ts). */
+  module_rights?: ModuleRightGrant[];
 }
 
 export interface LoginResponse {
@@ -111,6 +123,11 @@ export interface UserProfile {
   // Channel Partner fields
   channel_partner_agreement_id: string;
   contract_period: string;
+  agency_name: string;
+  allocated_region: string;
+  // Corporate fields
+  manager_name: string;
+  tan_number: string;
 }
 
 export interface User {
@@ -124,6 +141,7 @@ export interface User {
   is_superuser: boolean;
   is_staff: boolean;
   role: RoleName | null;
+  module_rights: ModuleRightGrant[];
   profile: UserProfile | null;
   created_at: string;
   updated_at: string;
@@ -159,6 +177,9 @@ export interface AdminCreateUserPayload {
   is_trial_user: boolean;
   role: number; // role id
   password?: string;
+  /** Role-specific profile fields (D9 Add-User role-specific fields), e.g.
+   * pan_number, tan_number, manager_name, agency_name, allocated_region. */
+  profile?: Record<string, string>;
 }
 
 export interface AdminUpdateUserPayload {
@@ -170,6 +191,7 @@ export interface AdminUpdateUserPayload {
   is_trial_user?: boolean;
   role?: number;
   password?: string;
+  profile?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------

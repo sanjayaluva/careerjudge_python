@@ -17,6 +17,8 @@ import pytest
 from apps.accounts.tests.factories import UserFactory
 from apps.assessment.models import (
     Assessment,
+    AssessmentQuestion,
+    AssessmentSection,
     AssessmentSession,
     QuestionAttempt,
 )
@@ -227,10 +229,16 @@ def test_mcq_discrimination_index_positive_when_top_performers_correct():
 
 
 def test_mcq_discrimination_index_zero_when_no_variance():
-    """If all candidates have the same total score, SD=0 -> discrimination None."""
+    """If all candidates have the same rest score, SD=0 -> discrimination None.
+
+    Rest score = total - target. To make every rest score identical while still
+    having both a correct and an incorrect candidate, correct candidates
+    (target=1) get total=6 and incorrect candidates (target=0) get total=5, so
+    every rest score is 5 and SD-rest = 0.
+    """
     q = _make_question()
     assessment = Assessment.objects.create(title="A", status="published")
-    pairs = [(1, 5), (0, 5), (1, 5), (0, 5)]  # all total_score = 5
+    pairs = [(1, 6), (0, 5), (1, 6), (0, 5)]  # all rest_score = 5
     for i, (s, ts) in enumerate(pairs):
         c = _make_candidate(f"c{i}@test.com")
         session = _make_completed_session(assessment, c, total_score=ts)
@@ -254,6 +262,36 @@ def test_mcq_discrimination_index_none_when_all_correct():
     assert result.discrimination_index is None
 
 
+def test_mcq_discrimination_index_uses_rest_scores():
+    """Discrimination (SRS §4) is computed over rest scores (total EXCLUDING
+    the target question's own score), not the target-inclusive total.
+
+    Four candidates, (target_score, total_score):
+        (1, 6), (1, 5), (0, 3), (0, 1)
+    Rest score = total - target -> [5, 4, 3, 1].
+      N = 4, N1 (correct) = 2, N2 (incorrect) = 2.
+      Mean-Correct   (rest of correct: 5, 4) = 4.5
+      Mean-Incorrect (rest of incorrect: 3, 1) = 2.0
+      SD-rest        = pstdev([5,4,3,1]) = sqrt(2.1875) = 1.4790199458
+      N-Coefficient  = sqrt((2/4)(2/4)) = 0.5
+      Mean-Coefficient = (4.5 - 2.0) x 0.5 = 1.25
+      Discrimination = 1.25 / 1.4790199458 = 0.8452 (4 dp)
+
+    Had the target been included in the total ([6,5,3,1]) the answer would be a
+    different 0.9113, so this asserts the rest-score (excluded-target) value.
+    """
+    q = _make_question()
+    assessment = Assessment.objects.create(title="A", status="published")
+    pairs = [(1, 6), (1, 5), (0, 3), (0, 1)]
+    for i, (s, ts) in enumerate(pairs):
+        c = _make_candidate(f"c{i}@test.com")
+        session = _make_completed_session(assessment, c, total_score=ts)
+        _make_attempt(session, q, score=s)
+
+    result = run_psychometric_analysis(q)
+    assert result.discrimination_index == pytest.approx(0.8452, abs=1e-4)
+
+
 # ---------------------------------------------------------------------------
 # Non-MCQ Item Difficulty Index (SRS §3)
 # ---------------------------------------------------------------------------
@@ -264,10 +302,13 @@ def test_non_mcq_idi_uses_mean_score_divided_by_max():
 
     Setup: 4 candidates, max_score=10:
       scores = [10, 8, 6, 4] -> mean = 7 -> IDI = 7/10 = 0.7
+
+    Totals differ from targets so the rest score (total - target) varies and
+    the item-total correlation is computable (not None).
     """
     q = _make_question(qtype="FITB_TEXT", scoring_type="PARTIAL")
     assessment = Assessment.objects.create(title="A", status="published")
-    pairs = [(10, 10), (8, 8), (6, 6), (4, 4)]
+    pairs = [(10, 20), (8, 16), (6, 12), (4, 8)]
     for i, (s, ts) in enumerate(pairs):
         c = _make_candidate(f"c{i}@test.com")
         session = _make_completed_session(assessment, c, total_score=ts)
@@ -315,16 +356,18 @@ def test_non_mcq_tdi_bdi_use_top_bottom_27_percent():
 # ---------------------------------------------------------------------------
 
 
-def test_non_mcq_item_total_correlation_positive_when_correlated():
-    """When target scores and total scores are positively correlated,
-    the Item-Total Correlation should be positive (close to 1 for
-    perfect correlation).
+def test_non_mcq_item_total_correlation_none_when_total_equals_target():
+    """SRS §5 excludes the target question from the "Total Score" (rest score).
 
-    Setup: target_score = total_score / 10 * 10 (perfect correlation)
+    When total_score == target_score for every candidate, the rest score
+    (total - target) is 0 for everyone -> SD-Total = 0 -> the item-total
+    correlation is degenerate and must be None. (Before the rest-score fix,
+    this data produced a perfect +1 correlation because the target was
+    counted inside the total.)
     """
     q = _make_question(qtype="FITB_TEXT", scoring_type="PARTIAL")
     assessment = Assessment.objects.create(title="A", status="published")
-    # Perfectly correlated: target = total (both 1-10)
+    # total == target for every candidate -> rest score is all-zero.
     pairs = [(i, i) for i in range(1, 11)]
     for i, (s, ts) in enumerate(pairs):
         c = _make_candidate(f"c{i}@test.com")
@@ -332,9 +375,38 @@ def test_non_mcq_item_total_correlation_positive_when_correlated():
         _make_attempt(session, q, score=s, max_score=10.0)
 
     result = run_psychometric_analysis(q)
-    assert result.item_total_correlation is not None
-    # Perfect correlation should give a value close to 1
-    assert result.item_total_correlation > 0.9
+    assert result.item_total_correlation is None  # SD-Total (rest) = 0
+
+
+def test_non_mcq_item_total_correlation_exact_value_over_rest_scores():
+    """Hand-computed item-total correlation using rest scores (SRS §5).
+
+    Four candidates, (target_score, total_score):
+        (1, 2), (2, 5), (3, 5), (4, 10)
+    Rest score = total - target -> [1, 3, 2, 6]; target -> [1, 2, 3, 4].
+
+    Mean-rest = 3, Mean-target = 2.5.
+      Difference-Total  (rest - 3)   = [-2,  0, -1,  3]
+      Difference-Target (target-2.5) = [-1.5, -0.5, 0.5, 1.5]
+      Sum(Diff-Total x Diff-Target)  = 3 + 0 - 0.5 + 4.5 = 7
+      SD-Total(rest)   = sqrt(14/4) = 1.8708286934
+      SD-Target        = sqrt(5/4)  = 1.1180339887
+      SD-N-product     = 1.8708286934 x 1.1180339887 x 4 = 8.3666002741
+      ITC = 7 / 8.3666002741 = 0.8367 (4 dp)
+
+    (Had the target been counted inside the total, rest would be [2,5,5,10]
+    and the answer would be a different 0.9342 — this asserts the rest value.)
+    """
+    q = _make_question(qtype="FITB_TEXT", scoring_type="PARTIAL")
+    assessment = Assessment.objects.create(title="A", status="published")
+    pairs = [(1, 2), (2, 5), (3, 5), (4, 10)]
+    for i, (s, ts) in enumerate(pairs):
+        c = _make_candidate(f"c{i}@test.com")
+        session = _make_completed_session(assessment, c, total_score=ts)
+        _make_attempt(session, q, score=s, max_score=10.0)
+
+    result = run_psychometric_analysis(q)
+    assert result.item_total_correlation == pytest.approx(0.8367, abs=1e-4)
 
 
 def test_non_mcq_item_total_correlation_none_when_no_variance():
@@ -350,6 +422,44 @@ def test_non_mcq_item_total_correlation_none_when_no_variance():
 
     result = run_psychometric_analysis(q)
     assert result.item_total_correlation is None  # SD-Target = 0
+
+
+def test_non_mcq_correlation_excludes_incomplete_respondents():
+    """SRS §5 note: the correlation is computed only over users who attempted
+    ALL questions in the assessment; incomplete respondents are dropped.
+
+    The assessment links two questions (the target + one other). Three
+    candidates attempt BOTH and form a perfectly correlated rest/target set
+    (rest [2,4,6], target [1,2,3] -> ITC = 1.0). A fourth candidate attempts
+    ONLY the target with an outlier (target=10, total=0) that would destroy the
+    correlation if counted. Because that candidate did not attempt every
+    question, they are excluded and the correlation stays 1.0. The full sample
+    (n_candidates = 4) is still used for the difficulty indices.
+    """
+    q = _make_question(qtype="FITB_TEXT", scoring_type="PARTIAL")
+    other = _make_question(qtype="FITB_TEXT", scoring_type="PARTIAL")
+    assessment = Assessment.objects.create(title="A", status="published")
+    section = AssessmentSection.objects.create(assessment=assessment, title="S", level=1)
+    AssessmentQuestion.objects.create(section=section, question=q, order=0)
+    AssessmentQuestion.objects.create(section=section, question=other, order=1)
+
+    # Three complete respondents: attempt BOTH q and other.
+    complete = [(1, 3), (2, 6), (3, 9)]  # (target_score, total_score) -> rest [2,4,6]
+    for i, (s, ts) in enumerate(complete):
+        c = _make_candidate(f"c{i}@test.com")
+        session = _make_completed_session(assessment, c, total_score=ts)
+        _make_attempt(session, q, score=s, max_score=10.0)
+        _make_attempt(session, other, score=1.0, max_score=10.0)
+
+    # One incomplete respondent: attempts ONLY the target, with an outlier.
+    c_incomplete = _make_candidate("incomplete@test.com")
+    s_incomplete = _make_completed_session(assessment, c_incomplete, total_score=0)
+    _make_attempt(s_incomplete, q, score=10.0, max_score=10.0)
+
+    result = run_psychometric_analysis(q)
+    assert result.n_candidates == 4  # difficulty indices use the full sample
+    # Correlation drops the incomplete respondent -> perfect 1.0 over the 3.
+    assert result.item_total_correlation == pytest.approx(1.0, abs=1e-4)
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             "description",
             "created_at",
             "paid_at",
+            "refunded_at",
         ]
         read_only_fields = [
             "id",
@@ -32,6 +33,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             "provider_session_id",
             "created_at",
             "paid_at",
+            "refunded_at",
         ]
 
 

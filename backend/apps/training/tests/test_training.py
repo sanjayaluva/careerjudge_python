@@ -1111,3 +1111,147 @@ def test_non_trainer_cannot_reschedule(student_client, trainer_user):
         format="json",
     )
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Trainer edit gating (Doc 7 §5) — reuses CourseModificationRequest
+# ---------------------------------------------------------------------------
+
+
+def _approve_update_request(admin_client, course, trainer_client, reason="Fix content"):
+    """Helper: trainer requests an update, admin approves it. Returns the
+    approved CourseModificationRequest."""
+    from apps.training.models import CourseModificationRequest
+
+    trainer_client.post(
+        f"/api/training/courses/{course.id}/request-update/",
+        {"request_type": "update", "reason": reason},
+        format="json",
+    )
+    cur = CourseModificationRequest.objects.get(course=course, status="pending")
+    resp = admin_client.post(
+        f"/api/training/course-update-requests/{cur.id}/approve/", format="json"
+    )
+    assert resp.status_code == 200, resp.data
+    cur.refresh_from_db()
+    return cur
+
+
+def test_trainer_cannot_edit_published_course_directly(trainer_client, trainer_user):
+    """Doc 7 §5: a trainer must go through request_update to edit a
+    published course — direct PATCH is blocked."""
+    course = TrainingCourse.objects.create(
+        title="Original", created_by=trainer_user, status="published"
+    )
+    resp = trainer_client.patch(
+        f"/api/training/courses/{course.id}/", {"title": "Hacked"}, format="json"
+    )
+    assert resp.status_code == 403
+    course.refresh_from_db()
+    assert course.title == "Original"
+
+
+def test_trainer_can_edit_after_admin_approval_then_approval_is_consumed(
+    admin_client, trainer_client, trainer_user
+):
+    """Once approved, the trainer's next edit succeeds; a further edit
+    without a fresh approval is blocked again."""
+    course = TrainingCourse.objects.create(
+        title="Original", created_by=trainer_user, status="published"
+    )
+    _approve_update_request(admin_client, course, trainer_client)
+
+    resp = trainer_client.patch(
+        f"/api/training/courses/{course.id}/", {"title": "Updated"}, format="json"
+    )
+    assert resp.status_code == 200, resp.data
+    course.refresh_from_db()
+    assert course.title == "Updated"
+
+    # The approval is consumed — a second edit needs a new request.
+    resp2 = trainer_client.patch(
+        f"/api/training/courses/{course.id}/", {"title": "Updated Again"}, format="json"
+    )
+    assert resp2.status_code == 403
+    course.refresh_from_db()
+    assert course.title == "Updated"
+
+
+def test_cj_admin_edits_published_course_directly(admin_client, trainer_user):
+    """cj_admin bypasses the request/approve flow entirely."""
+    course = TrainingCourse.objects.create(
+        title="Original", created_by=trainer_user, status="published"
+    )
+    resp = admin_client.patch(
+        f"/api/training/courses/{course.id}/", {"title": "Admin Edit"}, format="json"
+    )
+    assert resp.status_code == 200
+    course.refresh_from_db()
+    assert course.title == "Admin Edit"
+
+
+def test_trainer_can_build_structure_while_draft(trainer_client, trainer_user):
+    """First-time structure creation on a draft course is never gated."""
+    from apps.training.models import CourseLesson
+
+    course = TrainingCourse.objects.create(
+        title="Draft Course", created_by=trainer_user, status="draft"
+    )
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = trainer_client.post(
+        f"/api/training/lessons/{lesson.id}/topics/",
+        {"title": "Intro", "description": ""},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+
+
+def test_trainer_cannot_add_topic_to_published_course_directly(trainer_client, trainer_user):
+    """Doc 7 §5: adding structure to an already-published course is gated
+    the same way as editing it."""
+    from apps.training.models import CourseLesson, LessonTopic
+
+    course = TrainingCourse.objects.create(
+        title="Published Course", created_by=trainer_user, status="published"
+    )
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = trainer_client.post(
+        f"/api/training/lessons/{lesson.id}/topics/",
+        {"title": "New Topic", "description": ""},
+        format="json",
+    )
+    assert resp.status_code == 403
+    assert not LessonTopic.objects.filter(lesson=lesson).exists()
+
+
+def test_trainer_can_add_topic_after_admin_approval(admin_client, trainer_client, trainer_user):
+    from apps.training.models import CourseLesson, LessonTopic
+
+    course = TrainingCourse.objects.create(
+        title="Published Course", created_by=trainer_user, status="published"
+    )
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    _approve_update_request(admin_client, course, trainer_client)
+
+    resp = trainer_client.post(
+        f"/api/training/lessons/{lesson.id}/topics/",
+        {"title": "New Topic", "description": ""},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    assert LessonTopic.objects.filter(lesson=lesson, title="New Topic").exists()
+
+
+def test_cj_admin_can_add_topic_to_published_course_directly(admin_client, trainer_user):
+    from apps.training.models import CourseLesson
+
+    course = TrainingCourse.objects.create(
+        title="Published Course", created_by=trainer_user, status="published"
+    )
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = admin_client.post(
+        f"/api/training/lessons/{lesson.id}/topics/",
+        {"title": "Admin Topic", "description": ""},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data

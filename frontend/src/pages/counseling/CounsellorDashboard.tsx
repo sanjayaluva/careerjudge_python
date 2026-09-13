@@ -50,6 +50,7 @@ import {
   type SessionSummary,
 } from "@/api/counseling";
 import { extractApiError } from "@/api/client";
+import { MeetingLinkControl } from "./JoinSession";
 
 export function CounsellorDashboard({ counsellorId }: { counsellorId: number }) {
   return (
@@ -134,6 +135,8 @@ function SessionsTab({ counsellorId: _cid }: { counsellorId: number }) {
                   <TableHead>Topic</TableHead>
                   <TableHead>Scheduled</TableHead>
                   <TableHead>Mode</TableHead>
+                  {/* H16/D8 §2.3: live-delivery — countdown + Join + meeting link */}
+                  <TableHead>Meeting</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -237,12 +240,14 @@ function SessionRow({
       </TableCell>
       {showConfirm && <TableCell className="text-slate-500">${session.fee}</TableCell>}
       {showComplete && (
-        <TableCell>
-          <Badge variant="outline">{session.mode}</Badge>
-          {session.mode === "online" && session.timeslot_detail && (
-            <span className="ml-1 text-xs text-primary-600">Online</span>
-          )}
-        </TableCell>
+        <>
+          <TableCell>
+            <Badge variant="outline">{session.mode}</Badge>
+          </TableCell>
+          <TableCell>
+            <MeetingLinkControl session={session} />
+          </TableCell>
+        </>
       )}
       {showSummary && (
         <TableCell className="text-slate-500">

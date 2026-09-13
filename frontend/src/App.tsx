@@ -25,6 +25,7 @@ import CMSPage from "@/pages/cms/CMSPage";
 import CMSPageViewer from "@/pages/cms/CMSPageViewer";
 import TasksPage from "@/pages/tasks/TasksPage";
 import TaskDetailPage from "@/pages/tasks/TaskDetailPage";
+import InvoicingPage from "@/pages/invoicing/InvoicingPage";
 import { PaymentSuccessPage, PaymentCancelPage } from "@/pages/payments/PaymentResultPages";
 import { PublicHomepage } from "@/pages/PublicHomepage";
 import ProfilePage from "@/pages/account/ProfilePage";
@@ -168,6 +169,7 @@ export default function App() {
                 <Route path="page/:slug" element={<CMSPageViewer />} />
                 <Route path="tasks" element={<TasksPage />} />
                 <Route path="tasks/:id" element={<TaskDetailPage />} />
+                <Route path="invoicing" element={<InvoicingPage />} />
               </Route>
 
               {/* Fullscreen session player — outside DashboardShell so the

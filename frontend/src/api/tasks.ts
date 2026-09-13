@@ -74,7 +74,11 @@ export interface Task {
   started_at: string | null;
   approval_comment: string;
   cancellation_reason: string;
-  spec?: TaskSpec;
+  // `spec` is a read-only convenience: the first row of `specs` (most SME
+  // tasks only have one). `specs` is the full multi-row list — D9: SME
+  // multi-category task sheet (multiple category/difficulty/type rows).
+  spec?: TaskSpec | null;
+  specs?: TaskSpec[];
   progress_updates?: TaskProgressUpdate[];
   extension_requests?: TaskExtensionRequest[];
   parent_task?: number | null;
@@ -89,7 +93,32 @@ export interface TaskCreateInput {
   priority?: TaskPriority;
   due_date?: string | null;
   parent_task_id?: string;
-  spec?: TaskSpec;
+  /** Multi-row SME task spec — one entry per category/difficulty/type
+   * combination. A single entry is equivalent to the legacy `spec` shape. */
+  specs?: TaskSpec[];
+}
+
+// D9: user -> cj_admin + helpdesk concern routing.
+export interface Concern {
+  id: number;
+  raised_by: number;
+  raised_by_name: string;
+  subject: string;
+  message: string;
+  related_task: number | null;
+  status: "open" | "resolved";
+  resolved_by: number | null;
+  resolved_by_name: string | null;
+  resolution_comment: string;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConcernCreateInput {
+  subject: string;
+  message: string;
+  related_task?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,4 +160,12 @@ export const tasksApi = {
   // Filters
   myTasks: () => apiGetPaged<Task>(`${BASE}/my_tasks/`),
   assigned: () => apiGetPaged<Task>(`${BASE}/assigned/`),
+};
+
+// D9: raise a concern (routed to cj_admin + helpdesk).
+export const concernsApi = {
+  list: () => apiGetPaged<Concern>(`${BASE}/concerns/`),
+  create: (input: ConcernCreateInput) => apiPost<Concern>(`${BASE}/concerns/`, input),
+  resolve: (id: number, comment: string) =>
+    apiPost<Concern>(`${BASE}/concerns/${id}/resolve/`, { comment }),
 };

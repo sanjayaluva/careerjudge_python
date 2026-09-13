@@ -67,6 +67,9 @@ class Payment(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(_("paid at"), null=True, blank=True)
+    # Dossier gap D8: when a module (e.g. counseling cancellation) executes a
+    # refund against this payment record via refund_payment().
+    refunded_at = models.DateTimeField(_("refunded at"), null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

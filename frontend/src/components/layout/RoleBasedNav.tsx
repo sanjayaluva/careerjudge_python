@@ -15,6 +15,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   MessageSquare,
+  Receipt,
   ShieldCheck,
   UserCircle,
   Users,
@@ -39,6 +40,7 @@ const ICONS: Record<string, LucideIcon> = {
   GraduationCap,
   MessageSquare,
   FileText,
+  Receipt,
 };
 
 export interface RoleBasedNavProps {

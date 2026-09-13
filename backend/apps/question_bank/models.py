@@ -196,6 +196,32 @@ class Question(models.Model):
     order = models.PositiveIntegerField(_("order"), default=0)
     is_active = models.BooleanField(_("active"), default=True)
 
+    # --- Worked-out solution (D1 §3.1.1 input field: "worked-out solutions") ---
+    worked_solution = models.TextField(
+        _("worked-out solution"),
+        blank=True,
+        default="",
+        help_text=_(
+            "Model answer / worked-out solution shown to reviewers (and optionally "
+            "to the candidate in feedback). Plain or lightly-formatted text."
+        ),
+    )
+
+    # --- Periodic QB updation (D1 §4.3) — optional validity expiry. Past this
+    # date the question is surfaced by the 'expired' filter for periodic
+    # review (activate/inactivate) by the Psychometrician.
+    expires_at = models.DateTimeField(
+        _("expires at"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Optional validity expiry for periodic Question Bank review (D1 §4.3). "
+            "Once past this date, the question is eligible for the periodic "
+            "review filter (Question Expiry) and can be re-activated or "
+            "inactivated in bulk."
+        ),
+    )
+
     # --- Scoring configuration ---
     scoring_type = models.CharField(
         _("scoring type"), max_length=30, choices=SCORING_TYPE_CHOICES, default="BINARY"
@@ -840,3 +866,68 @@ class QuestionReview(models.Model):
 
     def __str__(self) -> str:
         return f"{self.review_type} {self.action} on Q#{self.question_id} by {self.reviewer}"
+
+
+# ---------------------------------------------------------------------------
+# QuestionBankDeletionRequest — non-admin requests admin approval to delete
+# a category or question. Per D1 §2.2, §4.3.
+# ---------------------------------------------------------------------------
+
+
+class QuestionBankDeletionRequest(models.Model):
+    """Non-admin's request to delete a question-bank category or question.
+
+    Per D1 §2.2/§4.3:
+    - A non-admin user's delete action on a Category or Question is NOT
+      applied immediately — a pending deletion request is created instead
+      and CJ Admin + Helpdesk are notified.
+    - CJ Admin approves (performs the real delete) or declines the request.
+
+    The target is referenced by (target_type, target_id) rather than a
+    foreign key, since it can point at either a Category or a Question.
+    """
+
+    TARGET_TYPE_CHOICES = [
+        ("category", "Category"),
+        ("question", "Question"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending Admin Review"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    target_type = models.CharField(_("target type"), max_length=10, choices=TARGET_TYPE_CHOICES)
+    target_id = models.PositiveIntegerField(_("target ID"))
+    target_label = models.CharField(
+        _("target label"),
+        max_length=255,
+        blank=True,
+        default="",
+        help_text=_("Snapshot of the target's name/title, kept for the audit trail."),
+    )
+    requester = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="question_bank_deletion_requests",
+    )
+    reason = models.TextField(_("reason"), help_text=_("Reason for the deletion request"))
+    status = models.CharField(_("status"), max_length=10, choices=STATUS_CHOICES, default="pending")
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="question_bank_deletion_reviews",
+    )
+    review_comment = models.TextField(_("review comment"), blank=True, default="")
+    reviewed_at = models.DateTimeField(_("reviewed at"), null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("question bank deletion request")
+        verbose_name_plural = _("question bank deletion requests")
+
+    def __str__(self) -> str:
+        return f"Delete {self.target_type}#{self.target_id} ({self.status})"

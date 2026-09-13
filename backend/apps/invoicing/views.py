@@ -32,6 +32,26 @@ def _is_admin(user) -> bool:
     return user.role_id is not None and user.role.name == "cj_admin"
 
 
+# H14: only the empanelled roles that actually bill CJ Admin for their work
+# (Doc 4) — plus cj_admin itself (e.g. raising an invoice on someone's
+# behalf) — may create invoices. Everyone else (individual, corp_admin,
+# helpdesk, ...) has no reason to invoice CareerJudge.
+EMPANELLED_ROLES = {
+    "sme",
+    "reviewer",
+    "trainer",
+    "counsellor",
+    "channel_partner",
+    "psychometrician",
+}
+
+
+def _can_create_invoice(user) -> bool:
+    if _is_admin(user):
+        return True
+    return user.role_id is not None and user.role.name in EMPANELLED_ROLES
+
+
 def _generate_invoice_number() -> str:
     """Generate a unique invoice number: INV-YYYY-NNNN."""
     year = datetime.now().year
@@ -55,6 +75,19 @@ class InvoiceViewSet(ModelViewSet):
         return super().get_queryset().filter(creator=user)
 
     def create(self, request, *args, **kwargs):
+        if not _can_create_invoice(request.user):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": (
+                            "Only empanelled roles (SME, Reviewer, Trainer, Counsellor, "
+                            "Channel Partner, Psychometrician) or CJ Admin can create invoices."
+                        ),
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         data = request.data.copy()
         data["creator"] = request.user.id
         data["invoice_number"] = _generate_invoice_number()

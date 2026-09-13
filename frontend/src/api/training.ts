@@ -26,6 +26,9 @@ export interface SessionContent {
   content_url: string;
   /** Report 3 §OS.1: uploaded document (PDF/Word/PPT) URL. */
   document: string | null;
+  /** D7: uploaded media file (video/audio/image) URL — preferred over
+   * `content_url` when set, and used to embed media alongside text content. */
+  media_file: string | null;
   text_content: string;
   duration_seconds: number | null;
   order: number;
@@ -185,6 +188,25 @@ export interface CourseProgress {
   last_accessed_at: string | null;
 }
 
+export interface AssessmentScoreSummary {
+  course_assessment_id: number;
+  title: string;
+  level: string;
+  assessment_id: number;
+  session_id: number | null;
+  percentage: number | null;
+  total_score: number | null;
+  max_score: number | null;
+  status: "completed" | "not_attempted";
+}
+
+export interface AssignmentReportScoreSummary {
+  assignment_id: number;
+  assignment_title: string;
+  status: string;
+  trainer_score: number | null;
+}
+
 export interface ProgressSummary {
   completion_percentage: number;
   completed_count: number;
@@ -201,6 +223,11 @@ export interface ProgressSummary {
   mandatory_completion_percentage: number | null;
   mandatory_completed_count: number | null;
   mandatory_total_count: number | null;
+  /** D7: score report — assessment + assignment-report scores rolled into
+   * the progress summary (SRS §6 "Score report"). */
+  assessment_scores: AssessmentScoreSummary[];
+  average_assessment_percentage: number | null;
+  assignment_report_scores: AssignmentReportScoreSummary[];
 }
 
 export interface CourseMessage {
@@ -502,6 +529,34 @@ export function addContent(
   },
 ): Promise<SessionContent> {
   return apiPost<SessionContent>(`${BASE}/sessions/${sessionId}/contents/`, payload);
+}
+
+/**
+ * D7: add session content with an uploaded media file (video/audio/image)
+ * instead of a URL/base64 string. Uses multipart/form-data so the file
+ * reaches the backend's `media_file` upload field.
+ */
+export function addContentWithFile(
+  sessionId: number,
+  payload: {
+    title: string;
+    content_format: "video" | "audio" | "text";
+    media_file: File;
+    text_content?: string;
+    duration_seconds?: number;
+    order?: number;
+  },
+): Promise<SessionContent> {
+  const form = new FormData();
+  form.append("title", payload.title);
+  form.append("content_format", payload.content_format);
+  form.append("media_file", payload.media_file);
+  if (payload.text_content) form.append("text_content", payload.text_content);
+  if (payload.duration_seconds != null) {
+    form.append("duration_seconds", String(payload.duration_seconds));
+  }
+  if (payload.order != null) form.append("order", String(payload.order));
+  return apiPost<SessionContent>(`${BASE}/sessions/${sessionId}/contents/`, form);
 }
 
 export function addAssignment(

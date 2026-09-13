@@ -119,6 +119,49 @@ class TestBulkUserUpload:
         )
         assert resp.status_code == 403
 
+    def test_bulk_created_user_gets_verification_token_and_can_activate(
+        self, authed_client, mailoutbox
+    ):
+        """D9 §2.2-2.3: bulk-invited users must be able to activate + log in."""
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import EmailVerificationToken
+
+        csv_content = "full_name,email\nBulk Invitee,bulkinvite@bulk.com\n"
+        file = SimpleUploadedFile("users.csv", csv_content.encode("utf-8"), content_type="text/csv")
+
+        resp = authed_client.post(
+            "/api/accounts/users/bulk-upload/",
+            {"file": file},
+            format="multipart",
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"]["created_count"] == 1
+
+        user = User.objects.get(email="bulkinvite@bulk.com")
+        assert user.is_active is False
+
+        token = EmailVerificationToken.objects.filter(user=user, used_at__isnull=True).first()
+        assert token is not None
+        assert len(mailoutbox) == 1
+
+        anon = APIClient()
+        verify_resp = anon.post(
+            "/api/auth/verify-email", {"token": str(token.token)}, format="json"
+        )
+        assert verify_resp.status_code == 200
+        user.refresh_from_db()
+        assert user.is_active is True
+
+        user.set_password("KnownPass123!")
+        user.save(update_fields=["password"])
+        login_resp = anon.post(
+            "/api/auth/login",
+            {"email": user.email, "password": "KnownPass123!"},
+            format="json",
+        )
+        assert login_resp.status_code == 200
+
 
 @pytest.mark.django_db
 class TestBulkUserTemplate:

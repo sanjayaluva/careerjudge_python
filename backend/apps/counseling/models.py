@@ -208,12 +208,31 @@ class CounselingSession(models.Model):
     )
     mode = models.CharField(_("mode"), max_length=10, choices=MODE_CHOICES, default="online")
 
+    # Per-session meeting link (D8 §2.3: live-delivery layer). Set by the
+    # counsellor (via the `meeting-link` action) — distinct from the static
+    # UserProfile.meeting_url, which is only a default/fallback.
+    meeting_link = models.URLField(
+        _("meeting link"),
+        blank=True,
+        default="",
+        help_text=_("Per-session Zoom/Meet link set by the counsellor for this booking."),
+    )
+
     # Session fee (captured at booking time — counsellor's hourly_rate)
     fee = models.DecimalField(_("fee"), max_digits=10, decimal_places=2, default=0)
 
     booked_at = models.DateTimeField(auto_now_add=True)
     confirmed_at = models.DateTimeField(_("confirmed at"), null=True, blank=True)
     completed_at = models.DateTimeField(_("completed at"), null=True, blank=True)
+
+    # Dossier gap D8: split the session into actual start/end timestamps —
+    # distinct from the *scheduled* timeslot.start_time/end_time. Recorded
+    # server-side by the `join` action (first join sets actual_start_at,
+    # within the join window) and by `complete` (sets actual_end_at), so the
+    # live-delivery timeline can be audited even if the counsellor forgets to
+    # click "End Session" exactly on time.
+    actual_start_at = models.DateTimeField(_("actual start time"), null=True, blank=True)
+    actual_end_at = models.DateTimeField(_("actual end time"), null=True, blank=True)
 
     class Meta:
         ordering = ["-booked_at"]
@@ -257,6 +276,10 @@ class SessionCancellation(models.Model):
     refund_amount = models.DecimalField(
         _("refund amount"), max_digits=10, decimal_places=2, default=0
     )
+    # Dossier gap D8: whether the refund was actually executed against the
+    # payments module (Payment record flipped to 'refunded', and a gateway
+    # refund attempted when configured) — not just recorded here.
+    refund_executed = models.BooleanField(_("refund executed"), default=False)
     cancelled_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

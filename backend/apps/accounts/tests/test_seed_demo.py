@@ -34,6 +34,17 @@ class TestSeedDemoCommand:
         cj_admin_role = Role.objects.get(name="cj_admin")
         assert ModuleRight.objects.filter(role=cj_admin_role).count() >= 10
 
+    def test_psychometrician_has_reporting_generate_report(self):
+        """Psychometricians must be able to generate reports, not just view
+        them — see 0010_psychometrician_reporting_perms migration."""
+        out = StringIO()
+        call_command("seed_demo", stdout=out)
+        role = Role.objects.get(name="psychometrician")
+        assert ModuleRight.objects.filter(
+            role=role, module="reporting", action="generate_report"
+        ).exists()
+        assert ModuleRight.objects.filter(role=role, module="reporting", action="view").exists()
+
     def test_idempotent(self):
         out = StringIO()
         call_command("seed_demo", stdout=out)

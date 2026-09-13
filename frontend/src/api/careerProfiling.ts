@@ -1,7 +1,7 @@
 /**
  * Career Profiling API client.
  */
-import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { apiClient, apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
 import { listAssessments } from "./assessment";
 
 const BASE = "/career-profiling";
@@ -107,6 +107,14 @@ export interface PolarMatchRule {
   user_band_code: string;
   match_code: "HM" | "MM" | "LM";
   match_value: number;
+}
+
+export interface MappingRule {
+  id: number;
+  band_definition: number;
+  criterion_band_code: string;
+  user_band_code: string;
+  value: number;
 }
 
 export interface MatchIndex {
@@ -217,6 +225,24 @@ export function createBandDefinition(
   return apiPost<BandDefinition>(`${BASE}/solutions/${solutionId}/bands/`, payload);
 }
 
+export function listBandRows(solutionId: number): Promise<Band[]> {
+  return apiGet<Band[]>(`${BASE}/solutions/${solutionId}/band_rows/`);
+}
+
+export function createBand(
+  solutionId: number,
+  payload: {
+    band_definition: number;
+    band_number: number;
+    range_min: number;
+    range_max: number;
+    band_code: string;
+    sub_variable_name?: string;
+  },
+): Promise<Band> {
+  return apiPost<Band>(`${BASE}/solutions/${solutionId}/band_rows/`, payload);
+}
+
 // ---------------------------------------------------------------------------
 // Mapping Criteria
 // ---------------------------------------------------------------------------
@@ -310,6 +336,56 @@ export function createPolarMatchRule(
   },
 ): Promise<PolarMatchRule> {
   return apiPost<PolarMatchRule>(`${BASE}/solutions/${solutionId}/polar_match_rules/`, payload);
+}
+
+// ---------------------------------------------------------------------------
+// Mapping Rules (SRS §4.1.2 — standard n x n mapping-rule table)
+// ---------------------------------------------------------------------------
+
+export function listMappingRules(solutionId: number): Promise<MappingRule[]> {
+  return apiGet<MappingRule[]>(`${BASE}/solutions/${solutionId}/mapping_rules/`);
+}
+
+export function createMappingRule(
+  solutionId: number,
+  payload: {
+    band_definition: number;
+    criterion_band_code: string;
+    user_band_code: string;
+    value: number;
+  },
+): Promise<MappingRule> {
+  return apiPost<MappingRule>(`${BASE}/solutions/${solutionId}/mapping_rules/`, payload);
+}
+
+// ---------------------------------------------------------------------------
+// Criterion Template Upload (SRS §4.1.4)
+// ---------------------------------------------------------------------------
+
+/** Downloads the CSV criteria template (one Band Code / Rank Order column
+ * pair per variable currently banded in this solution). */
+export async function downloadCriteriaTemplate(solutionId: number): Promise<Blob> {
+  const res = await apiClient.get(`${BASE}/solutions/${solutionId}/criteria-upload/`, {
+    responseType: "blob",
+  });
+  return res.data as Blob;
+}
+
+export interface CriteriaUploadResult {
+  created_count: number;
+  updated_count: number;
+  error_count: number;
+  errors: { row: number; career_title: string; variable: string; error: string }[];
+  unmatched_variables: string[];
+}
+
+/** Uploads a filled-in criteria CSV — creates/updates MappingCriterion rows. */
+export function uploadCriteriaCsv(solutionId: number, file: File): Promise<CriteriaUploadResult> {
+  const form = new FormData();
+  form.append("file", file);
+  return apiPost(`${BASE}/solutions/${solutionId}/criteria-upload/`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
 }
 
 // ---------------------------------------------------------------------------

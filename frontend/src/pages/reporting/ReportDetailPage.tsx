@@ -40,6 +40,7 @@ import {
   createCutoff,
   createPolarVariable,
   createSection,
+  createSectionWithImage,
   DATA_INPUT_LEVELS,
   generateGroupReport,
   generateReport,
@@ -1532,19 +1533,33 @@ function LayoutTab({ reportId }: { reportId: number }) {
   const [sectionType, setSectionType] = useState("narrative");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [description, setDescription] = useState("");
+  const [image, setImage] = useState<File | null>(null);
   const [order, setOrder] = useState("0");
   const [isVisible, setIsVisible] = useState(true);
+  // SRS §3.1.2/§3.2.2/§3.3.2: Table/Graph layout. "table" renders an
+  // end-to-end table of section scores; "graph" is recorded but scoped out.
+  const [layout, setLayout] = useState<"" | "table" | "graph">("");
+  const [tableTitle, setTableTitle] = useState("");
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      createSection(reportId, {
+    mutationFn: () => {
+      const table_graph_config = layout
+        ? { layout, ...(layout === "table" && tableTitle ? { table_title: tableTitle } : {}) }
+        : null;
+      const payload = {
         section_type: sectionType,
         title,
         content,
-        table_graph_config: null,
+        description,
+        table_graph_config,
         order: Number(order),
         is_visible: isVisible,
-      }),
+      };
+      return image
+        ? createSectionWithImage(reportId, { ...payload, image })
+        : createSection(reportId, payload);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["reporting", "reports", reportId, "sections"],
@@ -1552,6 +1567,10 @@ function LayoutTab({ reportId }: { reportId: number }) {
       toast.success("Section added.");
       setTitle("");
       setContent("");
+      setDescription("");
+      setImage(null);
+      setLayout("");
+      setTableTitle("");
       setOrder(String(Number(order) + 1));
     },
     onError: (err) => toast.error(extractApiError(err)),
@@ -1611,7 +1630,19 @@ function LayoutTab({ reportId }: { reportId: number }) {
                   <TableCell>
                     <Badge variant="outline">{s.section_type}</Badge>
                   </TableCell>
-                  <TableCell className="text-slate-900">{s.title || "—"}</TableCell>
+                  <TableCell className="text-slate-900">
+                    {s.title || "—"}
+                    {s.image && (
+                      <Badge variant="outline" className="ml-1">
+                        image
+                      </Badge>
+                    )}
+                    {(s.table_graph_config as { layout?: string } | null)?.layout && (
+                      <Badge variant="outline" className="ml-1">
+                        {(s.table_graph_config as { layout?: string }).layout}
+                      </Badge>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={s.is_visible ? "success" : "default"}>
                       {s.is_visible ? "yes" : "no"}
@@ -1696,6 +1727,57 @@ function LayoutTab({ reportId }: { reportId: number }) {
               placeholder="Free text for narrative sections, or JSON config for charts"
             />
           </div>
+          <div className="sm:col-span-2">
+            <Label htmlFor="ls-desc">Description (SRS §2.1.2)</Label>
+            <textarea
+              id="ls-desc"
+              rows={2}
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Short description shown alongside this section"
+            />
+          </div>
+          <div>
+            <Label htmlFor="ls-image">Image upload (SRS §2.1.2)</Label>
+            <input
+              id="ls-image"
+              type="file"
+              accept="image/*"
+              onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+              className="block w-full text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-700 hover:file:bg-primary-100"
+            />
+          </div>
+          <div>
+            <Label htmlFor="ls-layout">Table/Graph layout</Label>
+            <select
+              id="ls-layout"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={layout}
+              onChange={(e) => setLayout(e.target.value as "" | "table" | "graph")}
+            >
+              <option value="">None</option>
+              <option value="table">Table (section scores)</option>
+              <option value="graph">Graph (not yet rendered)</option>
+            </select>
+          </div>
+          {layout === "table" && (
+            <div className="sm:col-span-2">
+              <Label htmlFor="ls-table-title">Table title</Label>
+              <Input
+                id="ls-table-title"
+                value={tableTitle}
+                onChange={(e) => setTableTitle(e.target.value)}
+                placeholder="e.g., Your Intellectual Profile"
+              />
+            </div>
+          )}
+          {layout === "graph" && (
+            <p className="text-xs text-amber-600 sm:col-span-2">
+              Graph rendering isn&apos;t implemented yet — the layout choice is saved, but the PDF
+              will show a note instead of a chart. Use &quot;Table&quot; for a rendered layout.
+            </p>
+          )}
           <div className="flex items-center gap-2 sm:col-span-2">
             <input
               id="ls-v"

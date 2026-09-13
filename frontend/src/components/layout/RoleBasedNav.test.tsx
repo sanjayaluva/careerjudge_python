@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { RoleBasedNav } from "./RoleBasedNav";
 import { useAuthStore } from "@/stores/auth";
-import type { AuthUser } from "@/api/types";
+import type { AuthUser, ModuleRightGrant } from "@/api/types";
 
 function renderNav() {
   return render(
@@ -14,7 +14,7 @@ function renderNav() {
   );
 }
 
-function setUser(role: AuthUser["role"]): void {
+function setUser(role: AuthUser["role"], moduleRights?: ModuleRightGrant[]): void {
   const user: AuthUser = {
     id: 1,
     email: "u@example.com",
@@ -23,6 +23,7 @@ function setUser(role: AuthUser["role"]): void {
     is_email_verified: true,
     is_superuser: false,
     is_staff: false,
+    module_rights: moduleRights,
   };
   useAuthStore.getState().login({
     access: "a",
@@ -47,14 +48,15 @@ describe("<RoleBasedNav />", () => {
     setUser("cj_admin");
     renderNav();
 
-    // cj_admin sees every nav item (13 total: dashboard, profile, users,
+    // cj_admin sees every nav item (14 total: dashboard, profile, users,
     // roles, organizations, question_bank, assessments, career_profiling,
-    // reports, training, counseling, cms, tasks).
+    // reports, training, counseling, cms, tasks, invoicing).
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(13);
+    expect(links).toHaveLength(14);
     expect(screen.getByText("CMS")).toBeInTheDocument();
     expect(screen.getByText("Roles & Permissions")).toBeInTheDocument();
     expect(screen.getByText("Users")).toBeInTheDocument();
+    expect(screen.getByText("Invoicing")).toBeInTheDocument();
   });
 
   it("shows only the allowed subset for individual", () => {
@@ -104,7 +106,7 @@ describe("<RoleBasedNav />", () => {
     expect(labels).not.toContain("Question Bank");
   });
 
-  it("shows the sme subset (Dashboard, Profile, Question Bank, Assessments, Tasks)", () => {
+  it("shows the sme subset (Dashboard, Profile, Question Bank, Assessments, Tasks, Invoicing)", () => {
     setUser("sme");
     renderNav();
 
@@ -114,12 +116,19 @@ describe("<RoleBasedNav />", () => {
       .map((a) => a.textContent?.trim() ?? "");
 
     expect(labels).toEqual(
-      expect.arrayContaining(["Dashboard", "Profile", "Question Bank", "Assessments", "Tasks"]),
+      expect.arrayContaining([
+        "Dashboard",
+        "Profile",
+        "Question Bank",
+        "Assessments",
+        "Tasks",
+        "Invoicing",
+      ]),
     );
-    expect(within(list).getAllByRole("link")).toHaveLength(5);
+    expect(within(list).getAllByRole("link")).toHaveLength(6);
   });
 
-  it("shows the reviewer subset (Dashboard, Profile, Question Bank, Assessments, Tasks)", () => {
+  it("shows the reviewer subset (Dashboard, Profile, Question Bank, Assessments, Tasks, Invoicing)", () => {
     setUser("reviewer");
     renderNav();
 
@@ -129,8 +138,90 @@ describe("<RoleBasedNav />", () => {
       .map((a) => a.textContent?.trim() ?? "");
 
     expect(labels).toEqual(
-      expect.arrayContaining(["Dashboard", "Profile", "Question Bank", "Assessments", "Tasks"]),
+      expect.arrayContaining([
+        "Dashboard",
+        "Profile",
+        "Question Bank",
+        "Assessments",
+        "Tasks",
+        "Invoicing",
+      ]),
     );
-    expect(within(list).getAllByRole("link")).toHaveLength(5);
+    expect(within(list).getAllByRole("link")).toHaveLength(6);
+  });
+
+  describe("module_rights-driven rendering (RBAC single source of truth)", () => {
+    it("renders nav items for a custom role purely from module_rights", () => {
+      // A custom role name (not one of the 12 seeded roles) is invisible to
+      // the static MODULE_VISIBILITY map — the nav must fall back entirely
+      // to the effective module_rights /api/me returns.
+      setUser("senior_reviewer" as AuthUser["role"], [
+        { module: "question_bank", action: "view" },
+        { module: "question_bank", action: "review" },
+        { module: "assessment", action: "view" },
+      ]);
+      renderNav();
+
+      const list = screen.getByRole("navigation");
+      const labels = within(list)
+        .getAllByRole("link")
+        .map((a) => a.textContent?.trim() ?? "");
+
+      // Dashboard + Profile are always visible; Question Bank + Assessments
+      // come from the granted modules; nothing else.
+      expect(labels).toEqual(
+        expect.arrayContaining(["Dashboard", "Profile", "Question Bank", "Assessments"]),
+      );
+      expect(labels).not.toContain("Users");
+      expect(labels).not.toContain("Roles & Permissions");
+      expect(within(list).getAllByRole("link")).toHaveLength(4);
+    });
+
+    it("surfaces a ModuleRight grant not present in the static map for a seeded role", () => {
+      // seed_demo grants corp_admin `counseling.view`, but the static
+      // MODULE_VISIBILITY map (pre-H13) never included "Counseling" for
+      // corp_admin — a real backend grant that never reached the UI. The
+      // nav must now show it once it's present in module_rights.
+      setUser("corp_admin", [{ module: "counseling", action: "view" }]);
+      renderNav();
+
+      const list = screen.getByRole("navigation");
+      const labels = within(list)
+        .getAllByRole("link")
+        .map((a) => a.textContent?.trim() ?? "");
+
+      expect(labels).toContain("Counseling");
+      // The rest of corp_admin's usual static set is still present (union,
+      // not replacement).
+      expect(labels).toContain("Users");
+      expect(labels).toContain("Organizations");
+    });
+
+    it("still shows nothing extra for individual when module_rights matches the static set", () => {
+      setUser("individual", [
+        { module: "assessment", action: "view" },
+        { module: "reporting", action: "view" },
+        { module: "training", action: "view" },
+        { module: "training", action: "add" },
+        { module: "training", action: "change" },
+        { module: "counseling", action: "view" },
+        { module: "counseling", action: "add" },
+        { module: "counseling", action: "change" },
+      ]);
+      renderNav();
+
+      const list = screen.getByRole("navigation");
+      const labels = within(list)
+        .getAllByRole("link")
+        .map((a) => a.textContent?.trim() ?? "");
+
+      expect(labels).not.toContain("Users");
+      expect(labels).not.toContain("Roles & Permissions");
+      expect(labels).not.toContain("CMS");
+      // career_profiling isn't in individual's seed_demo grants but stays
+      // visible via the static fallback (union, not replacement).
+      expect(labels).toContain("Career Profiling");
+      expect(within(list).getAllByRole("link")).toHaveLength(7);
+    });
   });
 });

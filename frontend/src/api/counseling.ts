@@ -1,7 +1,7 @@
 /**
  * Counseling API client.
  */
-import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { apiClient, apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
 
 const BASE = "/counseling";
 
@@ -66,10 +66,15 @@ export interface CounselingSession {
   status: "pending" | "confirmed" | "completed" | "cancelled";
   payment_status: string;
   mode: "online" | "offline";
+  /** H16/D8 §2.3: per-session meeting link, set by the counsellor. */
+  meeting_link: string;
   fee: string;
   booked_at: string;
   confirmed_at: string | null;
   completed_at: string | null;
+  /** D8: actual live-delivery start/end, distinct from the scheduled timeslot. */
+  actual_start_at: string | null;
+  actual_end_at: string | null;
 }
 
 export interface SessionCancellation {
@@ -79,6 +84,8 @@ export interface SessionCancellation {
   reason: string;
   refund_tier: "full" | "half" | "none";
   refund_amount: string;
+  /** D8: whether the refund was executed against the payments module. */
+  refund_executed: boolean;
   cancelled_at: string;
 }
 
@@ -199,6 +206,25 @@ export function listCounsellorTimeslots(counsellorId: number, weeks?: number): P
   );
 }
 
+/**
+ * D8 "browse future weeks": a single calendar week of a counsellor's
+ * timeslots, N weeks from now (0 = this week, 1 = next week, ...) — for
+ * paging forward/backward through future weeks instead of only ever seeing
+ * the cumulative "next N weeks" list.
+ */
+export async function listCounsellorTimeslotsForWeek(
+  counsellorId: number,
+  weekOffset: number,
+): Promise<{ slots: TimeSlot[]; weekStart: string; weekEnd: string }> {
+  const res = await apiClient.get<{
+    message: string;
+    data: TimeSlot[];
+    week_start: string;
+    week_end: string;
+  }>(`${BASE}/counsellors/${counsellorId}/timeslots/?week_offset=${weekOffset}`);
+  return { slots: res.data.data, weekStart: res.data.week_start, weekEnd: res.data.week_end };
+}
+
 // ---------------------------------------------------------------------------
 // TimeSlot API
 // ---------------------------------------------------------------------------
@@ -249,8 +275,30 @@ export function bookSession(payload: {
   category?: number;
   /** Report 3 §1.8: the user must explicitly accept the terms. */
   terms_accepted?: boolean;
-}): Promise<CounselingSession> {
-  return apiPost<CounselingSession>(`${BASE}/sessions/`, payload);
+}): Promise<CounselingSession & { checkout_url: string | null }> {
+  return apiPost<CounselingSession & { checkout_url: string | null }>(`${BASE}/sessions/`, payload);
+}
+
+/** H16/D8 §2.3: counsellor sets/updates the per-session meeting link. */
+export function setSessionMeetingLink(
+  sessionId: number,
+  meetingLink: string,
+): Promise<CounselingSession> {
+  return apiPost<CounselingSession>(`${BASE}/sessions/${sessionId}/meeting-link/`, {
+    meeting_link: meetingLink,
+  });
+}
+
+/**
+ * D8: join a session within its join window. The backend enforces the
+ * window server-side (not just the frontend countdown), records
+ * `actual_start_at` on first join, and returns the meeting_link to redirect
+ * to — this is the authoritative source for the third-party redirect.
+ */
+export function joinSession(
+  sessionId: number,
+): Promise<{ meeting_link: string; actual_start_at: string }> {
+  return apiPost(`${BASE}/sessions/${sessionId}/join/`);
 }
 
 export function confirmSession(sessionId: number): Promise<CounselingSession> {
@@ -327,6 +375,7 @@ export function proposeFollowup(sessionId: number, proposedTime: string): Promis
 export function confirmFollowup(followupId: number): Promise<{
   followup: FollowupSession;
   session: CounselingSession;
+  checkout_url: string | null;
 }> {
   return apiPost(`${BASE}/followups/${followupId}/confirm/`);
 }

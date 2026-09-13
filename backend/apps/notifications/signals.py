@@ -187,3 +187,61 @@ def notify_on_session_reschedule(sender, instance, created, **kwargs):
             "warning",
             f"/training/{course.id}",
         )
+
+
+# ---------------------------------------------------------------------------
+# D1 §2.2/§4.3 — Question Bank deletion-request workflow
+# ---------------------------------------------------------------------------
+
+
+@receiver(post_save, sender="question_bank.QuestionBankDeletionRequest")
+def notify_on_qb_deletion_request(sender, instance, created, **kwargs):
+    """Per D1 §2.2/§4.3: notify admin on new request, notify requester on decision."""
+    from .models import notify_user
+
+    if created:
+        _notify_admin_and_helpdesk(
+            f"{instance.target_type.capitalize()} deletion request",
+            f"{instance.requester.email} requests to delete {instance.target_type} "
+            f"'{instance.target_label}'. Reason: {instance.reason}",
+            "warning",
+            "/question-bank",
+        )
+    elif instance.status in ("approved", "rejected"):
+        notify_user(
+            instance.requester,
+            f"Deletion request {instance.status}: {instance.target_label}",
+            f"Your request to delete {instance.target_type} '{instance.target_label}' "
+            f"was {instance.status}.",
+            "success" if instance.status == "approved" else "warning",
+            "/question-bank",
+        )
+
+
+# ---------------------------------------------------------------------------
+# SRS 03_assessment_configuration.json §2.2/§2.3 — Assessment modification
+# request workflow (title edit / delete on a published assessment)
+# ---------------------------------------------------------------------------
+
+
+@receiver(post_save, sender="assessment.AssessmentModificationRequest")
+def notify_on_assessment_modification_request(sender, instance, created, **kwargs):
+    """Notify admin on new request, notify requester on decision."""
+    from .models import notify_user
+
+    if created:
+        _notify_admin_and_helpdesk(
+            f"Assessment {instance.action} request",
+            f"{instance.requester.email} requests to {instance.action} published assessment "
+            f"'{instance.assessment.title}'. Reason: {instance.reason}",
+            "warning",
+            f"/assessments/{instance.assessment_id}",
+        )
+    elif instance.status in ("approved", "rejected"):
+        notify_user(
+            instance.requester,
+            f"Assessment {instance.action} {instance.status}",
+            f"Your request to {instance.action} '{instance.assessment.title}' was {instance.status}.",
+            "success" if instance.status == "approved" else "warning",
+            f"/assessments/{instance.assessment_id}",
+        )

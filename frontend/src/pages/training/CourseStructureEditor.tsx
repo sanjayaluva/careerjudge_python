@@ -11,6 +11,7 @@ import { Badge, Button, Input, Label, useToast } from "@/components/ui";
 import {
   addAssignment,
   addContent,
+  addContentWithFile,
   addLesson,
   addSession,
   addTopic,
@@ -637,23 +638,34 @@ function AddContentForm({ sessionId, onDone }: { sessionId: number; onDone: () =
   const [title, setTitle] = useState("");
   const [format, setFormat] = useState<"video" | "audio" | "text">("video");
   const [url, setUrl] = useState("");
+  // D7: media can be a URL/base64 string OR a real uploaded file.
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [textContent, setTextContent] = useState("");
   const [duration, setDuration] = useState("");
 
   const mutation = useMutation({
     mutationFn: () =>
-      addContent(sessionId, {
-        title,
-        content_format: format,
-        content_url: url,
-        text_content: textContent,
-        duration_seconds: duration ? Number(duration) : undefined,
-      }),
+      mediaFile
+        ? addContentWithFile(sessionId, {
+            title,
+            content_format: format,
+            media_file: mediaFile,
+            text_content: textContent,
+            duration_seconds: duration ? Number(duration) : undefined,
+          })
+        : addContent(sessionId, {
+            title,
+            content_format: format,
+            content_url: url,
+            text_content: textContent,
+            duration_seconds: duration ? Number(duration) : undefined,
+          }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["training", "courses"] });
       toast.success("Content added.");
       setTitle("");
       setUrl("");
+      setMediaFile(null);
       setTextContent("");
       setDuration("");
       onDone();
@@ -688,20 +700,52 @@ function AddContentForm({ sessionId, onDone }: { sessionId: number; onDone: () =
         </select>
       </div>
       {(format === "video" || format === "audio") && (
-        <Input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="Media URL (or base64 data URL)"
-        />
+        <>
+          <Input
+            value={url}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              if (e.target.value) setMediaFile(null);
+            }}
+            placeholder="Media URL (or base64 data URL)"
+            disabled={!!mediaFile}
+          />
+          <div>
+            <Label htmlFor="content-media-file">Or upload a media file (D7)</Label>
+            <input
+              id="content-media-file"
+              type="file"
+              accept="video/*,audio/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                setMediaFile(file);
+                if (file) setUrl("");
+              }}
+              className="block w-full text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-700 hover:file:bg-primary-100"
+            />
+          </div>
+        </>
       )}
       {format === "text" && (
-        <textarea
-          value={textContent}
-          onChange={(e) => setTextContent(e.target.value)}
-          placeholder="Text content"
-          rows={3}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-        />
+        <>
+          <textarea
+            value={textContent}
+            onChange={(e) => setTextContent(e.target.value)}
+            placeholder="Text content"
+            rows={3}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+          />
+          <div>
+            <Label htmlFor="content-embed-media">Embed an image/media file in this text (D7)</Label>
+            <input
+              id="content-embed-media"
+              type="file"
+              accept="image/*,video/*,audio/*"
+              onChange={(e) => setMediaFile(e.target.files?.[0] ?? null)}
+              className="block w-full text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-700 hover:file:bg-primary-100"
+            />
+          </div>
+        </>
       )}
       {(format === "video" || format === "audio") && (
         <Input

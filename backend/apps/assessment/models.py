@@ -147,6 +147,40 @@ class Assessment(models.Model):
     def __str__(self) -> str:
         return self.title
 
+    def aggregate_duration_seconds(self):
+        """Effective total time budget for the assessment (SRS §5.2).
+
+        A timer is set at only ONE level. Level 0 (assessment) uses
+        ``total_duration_seconds`` directly. For a lower level, the aggregate
+        is the SUM of the timers set at that level across the assigned
+        variables/questions — never double-counting a parent and its
+        children, because only the configured ``timer_level`` contributes.
+
+        Returns ``None`` when no timer is set (backward-compatible: behaves
+        as an untimed assessment).
+        """
+        if self.timer_level in ("level1", "level2", "level3", "level4"):
+            level_num = int(self.timer_level[-1])
+            values = [
+                d
+                for d in self.sections.filter(level=level_num).values_list(
+                    "duration_seconds", flat=True
+                )
+                if d
+            ]
+            return sum(values) if values else None
+        if self.timer_level == "question":
+            values = [
+                d
+                for d in AssessmentQuestion.objects.filter(
+                    section__assessment=self, duration_seconds__isnull=False
+                ).values_list("duration_seconds", flat=True)
+                if d
+            ]
+            return sum(values) if values else None
+        # Assessment level (Level 0) or any unhandled value.
+        return self.total_duration_seconds
+
 
 class AssessmentSection(models.Model):
     """Hierarchical variable structure within an assessment (SRS Section 3).
@@ -178,6 +212,17 @@ class AssessmentSection(models.Model):
         null=True,
         blank=True,
         help_text=_("Time for this section. Only used if timer_level matches this level."),
+    )
+    delivery_count = models.PositiveIntegerField(
+        _("delivery count"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "SRS §4.1.1 — number of assigned questions to actually present during "
+            "delivery. Set on the last-level (leaf) variable that holds questions. "
+            "If set and less than the assigned count, that many questions are "
+            "selected at random per session. NULL (or >= assigned count) delivers all."
+        ),
     )
 
     class Meta:
@@ -371,3 +416,67 @@ class SectionScore(models.Model):
         else:
             self.percentage = 0
         super().save(*args, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# AssessmentModificationRequest — non-admin requests admin approval to edit
+# the title of, or delete, a PUBLISHED assessment. Per SRS
+# 03_assessment_configuration.json §2.2/§2.3.
+# ---------------------------------------------------------------------------
+
+
+class AssessmentModificationRequest(models.Model):
+    """Non-admin's request to edit the title of, or delete, a published assessment.
+
+    Per SRS §2.2/§2.3: 'After going live, user cannot directly edit
+    Assessment Title. An edit request is sent to Admin for approval.'
+    Deletion of a published assessment follows the same request→approve
+    pattern.
+    """
+
+    ACTION_CHOICES = [
+        ("edit", "Edit Title"),
+        ("delete", "Delete Assessment"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending Admin Review"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    assessment = models.ForeignKey(
+        Assessment, on_delete=models.CASCADE, related_name="modification_requests"
+    )
+    requester = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="assessment_modification_requests",
+    )
+    action = models.CharField(_("action"), max_length=10, choices=ACTION_CHOICES)
+    proposed_title = models.CharField(
+        _("proposed title"),
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text=_("New title requested (only for action='edit')."),
+    )
+    reason = models.TextField(_("reason"), help_text=_("Reason for the edit/delete request"))
+    status = models.CharField(_("status"), max_length=10, choices=STATUS_CHOICES, default="pending")
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assessment_modification_reviews",
+    )
+    review_comment = models.TextField(_("review comment"), blank=True, default="")
+    reviewed_at = models.DateTimeField(_("reviewed at"), null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("assessment modification request")
+        verbose_name_plural = _("assessment modification requests")
+
+    def __str__(self) -> str:
+        return f"{self.action} request for '{self.assessment.title}' ({self.status})"

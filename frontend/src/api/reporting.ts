@@ -164,6 +164,15 @@ export interface ReportSection {
   section_type: string;
   title: string;
   content: string;
+  /** SRS §2.1.2 'Add Description': free text shown alongside the section. */
+  description: string;
+  /** SRS §2.1.2 'Image Upload': uploaded image URL (null if none set). */
+  image: string | null;
+  /**
+   * SRS §3.1.2/§3.2.2/§3.3.2 Table/Graph layout. `layout: "table"` renders
+   * an end-to-end table of section scores; `layout: "graph"` is recorded
+   * but not yet rendered (scoped out).
+   */
   table_graph_config: Record<string, unknown> | null;
   order: number;
   is_visible: boolean;
@@ -214,9 +223,31 @@ export function listSections(reportId: number): Promise<ReportSection[]> {
 }
 export function createSection(
   reportId: number,
-  payload: Omit<ReportSection, "id" | "report">,
+  payload: Omit<ReportSection, "id" | "report" | "image">,
 ): Promise<ReportSection> {
   return apiPost<ReportSection>(`${BASE}/reports/${reportId}/sections/`, payload);
+}
+
+/**
+ * SRS §2.1.2 'Image Upload': create a report layout section with an
+ * uploaded image, via multipart/form-data.
+ */
+export function createSectionWithImage(
+  reportId: number,
+  payload: Omit<ReportSection, "id" | "report" | "image"> & { image: File },
+): Promise<ReportSection> {
+  const form = new FormData();
+  form.append("section_type", payload.section_type);
+  form.append("title", payload.title);
+  form.append("content", payload.content);
+  form.append("description", payload.description);
+  form.append("order", String(payload.order));
+  form.append("is_visible", String(payload.is_visible));
+  if (payload.table_graph_config) {
+    form.append("table_graph_config", JSON.stringify(payload.table_graph_config));
+  }
+  form.append("image", payload.image);
+  return apiPost<ReportSection>(`${BASE}/reports/${reportId}/sections/`, form);
 }
 export function reorderSections(reportId: number, orderedIds: number[]): Promise<ReportSection[]> {
   return apiPatch<ReportSection[]>(`${BASE}/reports/${reportId}/sections_reorder/`, {

@@ -24,7 +24,11 @@ from .serializers import (
     UserSerializer,
     UserWriteSerializer,
 )
-from .services import assign_permission_to_role
+from .services import (
+    assign_permission_to_role,
+    create_email_verification_token,
+    send_verification_email,
+)
 
 
 class HasAccountsPermission(HasModulePermission):
@@ -609,6 +613,15 @@ class BulkUserUploadView(APIView):
                 from apps.accounts.models import UserProfile
 
                 UserProfile.objects.get_or_create(user=user)
+                # Invited user: mint an activation token and send the same
+                # verification email self-registration uses, so they can
+                # actually activate their account (D9 §2.2-2.3).
+                token = create_email_verification_token(user)
+                try:
+                    send_verification_email(user, token)
+                except Exception:
+                    # Email send failure should not block bulk user creation
+                    pass
                 created.append({"row": row_num, "email": email, "full_name": full_name})
             except Exception as exc:
                 errors.append({"row": row_num, "email": email, "error": str(exc)})

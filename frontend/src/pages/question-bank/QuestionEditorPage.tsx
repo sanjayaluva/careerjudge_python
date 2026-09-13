@@ -90,6 +90,7 @@ export default function QuestionEditorPage() {
   const [questionTitle, setQuestionTitle] = useState("");
   const [difficulty, setDifficulty] = useState("");
   const [cognitiveLevel, setCognitiveLevel] = useState("");
+  const [workedSolution, setWorkedSolution] = useState("");
   const [categoryId, setCategoryId] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
 
@@ -166,6 +167,7 @@ export default function QuestionEditorPage() {
     setQuestionTitle(q.question_title ?? "");
     setDifficulty(q.difficulty_level ?? "");
     setCognitiveLevel(q.cognitive_level ?? "");
+    setWorkedSolution(q.worked_solution ?? "");
     setCategoryId(q.category ?? "");
     setQuestionText1(q.question_text_1 ?? "");
     setQuestionText2(q.question_text_2 ?? "");
@@ -648,6 +650,7 @@ export default function QuestionEditorPage() {
       scoring_type: scoringType,
       difficulty_level: difficulty,
       cognitive_level: cognitiveLevel,
+      worked_solution: workedSolution,
     };
 
     if (categoryId) payload.category = categoryId;
@@ -967,6 +970,21 @@ export default function QuestionEditorPage() {
               <p className="mt-1 text-xs text-slate-500">
                 This title identifies the question in lists and previews. It is not shown to
                 candidates.
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Worked-Out Solution
+              </label>
+              <textarea
+                className="min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                value={workedSolution}
+                onChange={(e) => setWorkedSolution(e.target.value)}
+                placeholder="Model answer / step-by-step solution for reviewers (optional)"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Shown to Reviewers/Psychometricians during review. Not shown to candidates.
               </p>
             </div>
 

@@ -443,6 +443,38 @@ def test_counsellor_saves_summary(counsellor_client, counselee_user, counsellor_
     assert resp.data["data"]["followup_recommended"] is True
 
 
+def test_counselee_cannot_view_summary(
+    counselee_client, counsellor_client, admin_client, counselee_user, counsellor_user
+):
+    """D8 §3.3: the counsellor's private summary must not leak to the counselee."""
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="Test",
+        fee=counsellor.hourly_rate,
+        status="completed",
+    )
+    counsellor_client.post(
+        f"/api/counseling/sessions/{session.id}/summary/",
+        {"summary": "Private counsellor notes"},
+        format="json",
+    )
+
+    resp = counselee_client.get(f"/api/counseling/sessions/{session.id}/summary/")
+    assert resp.status_code == 403
+
+    resp = counsellor_client.get(f"/api/counseling/sessions/{session.id}/summary/")
+    assert resp.status_code == 200
+    assert resp.data["data"]["summary"] == "Private counsellor notes"
+
+    resp = admin_client.get(f"/api/counseling/sessions/{session.id}/summary/")
+    assert resp.status_code == 200
+    assert resp.data["data"]["summary"] == "Private counsellor notes"
+
+
 # ---------------------------------------------------------------------------
 # Feedback tests (SRS §2.3)
 # ---------------------------------------------------------------------------
@@ -1008,3 +1040,176 @@ def test_maintenance_notifies_slot_shortage(counsellor_user):
     assert Notification.objects.filter(
         recipient=counsellor_user, title__contains="Timeslot update"
     ).exists()
+
+
+# ---------------------------------------------------------------------------
+# H15 — payment gateway wiring (D8 §2.1/§3.3): booking + follow-up must NOT
+# assume payment is done; only the gateway/webhook can mark a session paid.
+# ---------------------------------------------------------------------------
+
+
+def test_booking_does_not_auto_pay_without_gateway(
+    counselee_client, counselee_user, counsellor_user
+):
+    """A paid session stays payment_status='pending' after booking — it only
+    becomes 'paid' via the payments webhook (Stripe not configured in tests,
+    so create_stripe_checkout_session returns None and checkout_url is null,
+    matching the 'manual processing' branch used by training)."""
+    from apps.payments.models import Payment
+
+    counsellor = _make_counsellor(counsellor_user, hourly_rate="100.00")
+    timeslot = _make_timeslot(counsellor)
+    resp = counselee_client.post(
+        "/api/counseling/sessions/",
+        {
+            "counsellor": counsellor.id,
+            "timeslot": timeslot.id,
+            "topic": "Career advice",
+            "terms_accepted": True,
+            "mode": "online",
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, f"Got {resp.status_code}: {resp.data}"
+    assert resp.data["data"]["payment_status"] == "pending"
+    assert "checkout_url" in resp.data["data"]
+
+    session = CounselingSession.objects.get(id=resp.data["data"]["id"])
+    assert session.payment_status == "pending"
+
+    # A Payment record was created for this booking, also pending.
+    payment = Payment.objects.get(module="counseling", item_id=session.id, user=counselee_user)
+    assert payment.status == "pending"
+    assert float(payment.amount) == 100.0
+
+
+def test_free_session_booking_is_auto_paid(counselee_client, counselee_user, counsellor_user):
+    """A zero-fee session (counsellor hourly_rate=0) needs no gateway — it's
+    auto-paid immediately, same as a free training course."""
+    counsellor = _make_counsellor(counsellor_user, hourly_rate="0.00")
+    timeslot = _make_timeslot(counsellor)
+    resp = counselee_client.post(
+        "/api/counseling/sessions/",
+        {
+            "counsellor": counsellor.id,
+            "timeslot": timeslot.id,
+            "topic": "Free session",
+            "terms_accepted": True,
+            "mode": "online",
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, f"Got {resp.status_code}: {resp.data}"
+    assert resp.data["data"]["payment_status"] == "paid"
+    assert resp.data["data"]["checkout_url"] is None
+
+
+def test_followup_confirm_does_not_auto_pay(counselee_client, counselee_user, counsellor_user):
+    """H15: confirming a follow-up must no longer hardcode payment_status='paid'
+    ('Assume payment done') — it goes through the same gateway wiring as booking."""
+    from apps.counseling.models import FollowupSession
+    from apps.payments.models import Payment
+
+    counsellor = _make_counsellor(counsellor_user, hourly_rate="100.00")
+    timeslot = _make_timeslot(counsellor)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="Test",
+        fee=counsellor.hourly_rate,
+        status="completed",
+    )
+    followup = FollowupSession.objects.create(
+        original_session=session,
+        counsellor=counsellor,
+        proposed_time="2026-08-15T10:00:00Z",
+        status="proposed",
+    )
+    resp = counselee_client.post(f"/api/counseling/followups/{followup.id}/confirm/")
+    assert resp.status_code == 200, f"Got {resp.status_code}: {resp.data}"
+    assert resp.data["data"]["session"]["payment_status"] == "pending"
+    assert "checkout_url" in resp.data["data"]
+
+    new_session = CounselingSession.objects.get(id=resp.data["data"]["session"]["id"])
+    assert new_session.payment_status == "pending"
+    assert Payment.objects.filter(
+        module="counseling", item_id=new_session.id, user=counselee_user, status="pending"
+    ).exists()
+
+
+def test_webhook_marks_counseling_session_paid(counselee_client, counselee_user, counsellor_user):
+    """The payments webhook (apps/payments/services._update_module_payment_status)
+    is what actually flips a counselling session to 'paid' — never the view."""
+    from apps.payments.models import Payment
+    from apps.payments.services import _update_module_payment_status
+
+    counsellor = _make_counsellor(counsellor_user, hourly_rate="100.00")
+    timeslot = _make_timeslot(counsellor)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="Test",
+        fee="100.00",
+        status="pending",
+        payment_status="pending",
+    )
+    payment = Payment.objects.create(
+        user=counselee_user,
+        module="counseling",
+        item_id=session.id,
+        amount="100.00",
+        status="paid",
+    )
+    _update_module_payment_status(payment)
+    session.refresh_from_db()
+    assert session.payment_status == "paid"
+
+
+# ---------------------------------------------------------------------------
+# H16 — per-session meeting link (D8 §2.3 live-delivery layer)
+# ---------------------------------------------------------------------------
+
+
+def test_counsellor_sets_meeting_link(counsellor_client, counselee_user, counsellor_user):
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="Test",
+        fee=counsellor.hourly_rate,
+        status="confirmed",
+    )
+    resp = counsellor_client.post(
+        f"/api/counseling/sessions/{session.id}/meeting-link/",
+        {"meeting_link": "https://zoom.us/j/123456789"},
+        format="json",
+    )
+    assert resp.status_code == 200, f"Got {resp.status_code}: {resp.data}"
+    assert resp.data["data"]["meeting_link"] == "https://zoom.us/j/123456789"
+    session.refresh_from_db()
+    assert session.meeting_link == "https://zoom.us/j/123456789"
+
+
+def test_counselee_cannot_set_meeting_link(counselee_client, counselee_user, counsellor_user):
+    counsellor = _make_counsellor(counsellor_user)
+    timeslot = _make_timeslot(counsellor)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=timeslot,
+        topic="Test",
+        fee=counsellor.hourly_rate,
+        status="confirmed",
+    )
+    resp = counselee_client.post(
+        f"/api/counseling/sessions/{session.id}/meeting-link/",
+        {"meeting_link": "https://zoom.us/j/hijacked"},
+        format="json",
+    )
+    assert resp.status_code == 403, f"Got {resp.status_code}: {resp.data}"
+    session.refresh_from_db()
+    assert session.meeting_link == ""

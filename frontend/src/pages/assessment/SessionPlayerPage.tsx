@@ -21,6 +21,7 @@ import {
   suspendSession,
 } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
+import { canNavigateBackToSection, sectionDeliveryOrder } from "./navigationRules";
 
 export default function SessionPlayerPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -31,8 +32,14 @@ export default function SessionPlayerPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, Record<string, unknown>>>({});
   const [bookmarked, setBookmarked] = useState<Set<string>>(new Set());
+  // Tracks "<question>_<subQuestionIndex>" keys the candidate has explicitly
+  // skipped (via the Skip button) — mirrors `bookmarked`. Skipping saves the
+  // question as status='skipped' server-side (assessment answer endpoint —
+  // see D3/audit gap: Skip + skipped list) and moves on without an answer.
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [questionTimeLeft, setQuestionTimeLeft] = useState<number | null>(null);
+  const [sectionTimeLeft, setSectionTimeLeft] = useState<number | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Tracks question IDs the candidate has already viewed (visited + navigated
@@ -146,7 +153,8 @@ export default function SessionPlayerPage() {
   });
 
   // Question-level timer: when timer_level='question', each question can
-  // have its own duration_seconds. Reset the per-question timer when the
+  // have its own duration_seconds (carried in the payload as
+  // question_duration_seconds). Reset the per-question timer when the
   // current question changes. Must be before early returns (hooks rule).
   const timerLevel = session?.timer_level ?? "assessment";
   useEffect(() => {
@@ -154,8 +162,28 @@ export default function SessionPlayerPage() {
       setQuestionTimeLeft(null);
       return;
     }
-    setQuestionTimeLeft(null);
+    const dur = questions[currentIndex].question_duration_seconds;
+    setQuestionTimeLeft(dur && dur > 0 ? dur : null);
   }, [currentIndex, timerLevel, questions]);
+
+  // Section-level timer: when timer_level is a variable level (level1..4),
+  // the section that governs the current question (timer_section_id) has a
+  // duration_seconds budget. The countdown resets when the governing section
+  // changes and, on expiry, locks that section by auto-advancing to the first
+  // question of the next section (mirroring the overall-timer expiry, which
+  // auto-submits). Must be before early returns (hooks rule).
+  const sectionTimerActive = ["level1", "level2", "level3", "level4"].includes(timerLevel);
+  const currentTimerSectionId =
+    questions && questions[currentIndex] ? questions[currentIndex].timer_section_id : null;
+  useEffect(() => {
+    if (!sectionTimerActive || !questions || !questions[currentIndex]) {
+      setSectionTimeLeft(null);
+      return;
+    }
+    const dur = questions[currentIndex].section_duration_seconds;
+    setSectionTimeLeft(dur && dur > 0 ? dur : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTimerSectionId, sectionTimerActive]);
 
   // Reset in-question sub-question index when the main question changes.
   useEffect(() => {
@@ -182,6 +210,39 @@ export default function SessionPlayerPage() {
     return () => clearInterval(qTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionTimeLeft]);
+
+  // Section-level timer countdown. On expiry, advance past the expiring
+  // section (locking it) or submit if it was the last section.
+  useEffect(() => {
+    if (sectionTimeLeft === null || sectionTimeLeft <= 0) return;
+    const expiringSectionId = currentTimerSectionId;
+    const sTimer = setInterval(() => {
+      setSectionTimeLeft((t) => {
+        if (t === null || t <= 1) {
+          clearInterval(sTimer);
+          // Find the last delivered question in the expiring section and jump
+          // to the one after it (the next section). Order-independent of the
+          // candidate's current position within the section.
+          if (questions) {
+            let lastIdx = -1;
+            questions.forEach((qq, i) => {
+              if (qq.timer_section_id === expiringSectionId) lastIdx = i;
+            });
+            const nextIdx = lastIdx + 1;
+            if (nextIdx > 0 && nextIdx < questions.length) {
+              setCurrentIndex(nextIdx);
+            } else {
+              submitMutation.mutate();
+            }
+          }
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(sTimer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionTimeLeft]);
 
   if (sessionLoading || questionsLoading) {
     return (
@@ -220,6 +281,7 @@ export default function SessionPlayerPage() {
   const isLast = currentIndex === questions.length - 1;
   const answeredCount = Object.keys(answers).length;
   const bookmarkedCount = bookmarked.size;
+  const skippedCount = skipped.size;
   // Total question count: for multi-sub-question questions, each sub-question
   // counts as one. So a question with sub_question_count=3 counts as 3.
   const totalQuestions = questions.reduce(
@@ -292,16 +354,25 @@ export default function SessionPlayerPage() {
   // NO_BACKWARD_SECTION: cannot go back to previous section
   // NO_BACKWARD_QUESTION: cannot go back to previous question
   const navRule = session.navigation_rule ?? "FREE";
+  // Section delivery order — needed by PREV_SECTION to tell "the section
+  // immediately before this one" apart from any section further back.
+  const questionSectionOrder = sectionDeliveryOrder(questions.map((sq) => sq.section));
   const canGoBack = () => {
-    if (navRule === "NO_BACKWARD_QUESTION") return false;
-    // For section-level rules, check if the previous question is in a
-    // different section
-    if (navRule === "NO_BACKWARD_SECTION" && currentIndex > 0) {
-      const prevSection = questions[currentIndex - 1].section;
-      const currentSection = q.section;
-      if (prevSection !== currentSection) return false;
-    }
-    return true;
+    if (currentIndex === 0) return true;
+    const targetSection = questions[currentIndex - 1].section;
+    return canNavigateBackToSection(navRule, questionSectionOrder, q.section, targetSection);
+  };
+  // Same rule, used by the sidebar's jump-to-question tree (which can move
+  // backward by more than one question/section in a single click, unlike
+  // the Previous button above).
+  const canJumpTo = (targetIndex: number) => {
+    if (targetIndex >= currentIndex) return true; // forward jumps are unrestricted
+    return canNavigateBackToSection(
+      navRule,
+      questionSectionOrder,
+      q.section,
+      questions[targetIndex].section,
+    );
   };
 
   const handleNext = () => {
@@ -369,6 +440,34 @@ export default function SessionPlayerPage() {
     });
   };
 
+  const handleSkip = () => {
+    // Skipping discards any unsaved draft for this (sub-)question and
+    // records it as status='skipped' server-side (the answer endpoint marks
+    // an attempt 'skipped' when called with neither raw_answer nor bookmark
+    // — see backend apps/assessment/views.py SessionViewSet.answer).
+    setAnswers((prev) => {
+      if (!(answerKey in prev)) return prev;
+      const next = { ...prev };
+      delete next[answerKey];
+      return next;
+    });
+    setSkipped((prev) => new Set(prev).add(answerKey));
+    answerMutation.mutate({
+      question_id: q.question,
+      sub_question_index: activeSubQ,
+    });
+    // Mark current question as viewed (locks replay on revisit), same as Next/Prev.
+    if (q?.question) {
+      setViewedQuestions((prev) => new Set(prev).add(q.question));
+    }
+    // Advance the same way Next does: next sub-question, then next question.
+    if (subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) {
+      setActiveSubQ((s) => s + 1);
+      return;
+    }
+    if (!isLast) setCurrentIndex((i) => i + 1);
+  };
+
   const handleSubmit = () => {
     setShowSubmitConfirm(true);
   };
@@ -417,7 +516,7 @@ export default function SessionPlayerPage() {
           <h1 className="text-sm font-bold text-slate-900">{session.assessment_title}</h1>
           <p className="text-xs text-slate-500">
             Question {currentIndex + 1} of {questions.length} · Answered: {answeredCount} /{" "}
-            {totalQuestions} · Bookmarked: {bookmarkedCount}
+            {totalQuestions} · Bookmarked: {bookmarkedCount} · Skipped: {skippedCount}
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -435,6 +534,20 @@ export default function SessionPlayerPage() {
             >
               <span className="text-xs">⏱</span>
               {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
+            </div>
+          )}
+          {/* Section-level timer (when timer_level='level1'..'level4') */}
+          {sectionTimeLeft !== null && sectionTimeLeft > 0 && (
+            <div
+              className={`flex items-center gap-1 rounded-lg px-3 py-1.5 font-mono text-base font-bold ${
+                sectionTimeLeft < 30
+                  ? "bg-danger-100 text-danger-700"
+                  : "bg-amber-100 text-amber-700"
+              }`}
+              title="Section time remaining"
+            >
+              Sec: {Math.floor(sectionTimeLeft / 60)}:
+              {String(sectionTimeLeft % 60).padStart(2, "0")}
             </div>
           )}
           {/* Question-level timer (when timer_level='question') */}
@@ -488,6 +601,10 @@ export default function SessionPlayerPage() {
                 <span className="text-amber-600">Bookmarked</span>
                 <p className="text-lg font-bold text-amber-700">{bookmarkedCount}</p>
               </div>
+              <div className="rounded-md bg-orange-50 p-2">
+                <span className="text-orange-600">Skipped</span>
+                <p className="text-lg font-bold text-orange-700">{skippedCount}</p>
+              </div>
               <div className="rounded-md bg-slate-50 p-2">
                 <span className="text-slate-500">Remaining</span>
                 <p className="text-lg font-bold text-slate-700">{remainingCount}</p>
@@ -510,12 +627,15 @@ export default function SessionPlayerPage() {
                     const aKey = `${questions[i].question}_${questions[i].sub_question_index}`;
                     const isAnswered = Boolean(answers[aKey]);
                     const isBookmarked = bookmarked.has(aKey);
+                    const isSkipped = skipped.has(aKey);
                     const isCurrent = i === currentIndex;
+                    const jumpAllowed = canJumpTo(i);
+                    const isDisabled = presentationActive || !jumpAllowed;
                     return (
                       <button
                         key={i}
                         onClick={() => {
-                          if (presentationActive) return;
+                          if (isDisabled) return;
                           // Save current answer before jumping to a different question
                           const currentAnswer = answers[answerKey];
                           if (currentAnswer && i !== currentIndex) {
@@ -529,7 +649,9 @@ export default function SessionPlayerPage() {
                         title={
                           presentationActive
                             ? "Wait for the presentation to finish before navigating"
-                            : `Question ${i + 1}`
+                            : !jumpAllowed
+                              ? "Backward navigation is not allowed this far back for this assessment"
+                              : `Question ${i + 1}`
                         }
                         className={`h-7 w-7 rounded-md text-xs font-medium transition-colors ${
                           isCurrent
@@ -538,8 +660,10 @@ export default function SessionPlayerPage() {
                               ? "bg-green-100 text-green-700 hover:bg-green-200"
                               : isBookmarked
                                 ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                        } ${presentationActive ? "cursor-not-allowed opacity-50" : ""}`}
+                                : isSkipped
+                                  ? "bg-orange-100 text-orange-700 hover:bg-orange-200"
+                                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                        } ${isDisabled ? "cursor-not-allowed opacity-50" : ""}`}
                       >
                         {i + 1}
                       </button>
@@ -728,10 +852,11 @@ export default function SessionPlayerPage() {
               )}
 
               {/* Answer input area — by question type.
-                  GATED: hidden until the timed presentation is over.
-                  No skip button — the candidate must play the content
-                  via the 'Show Content' button and wait for it to end.
-                  Only then do the sub-questions appear. */}
+                  GATED: hidden until the timed presentation is over. There is
+                  no way to skip PAST the presentation itself — the candidate
+                  must play the content via the 'Show Content' button and
+                  wait for it to end before options (or the footer's Skip
+                  question button) become available. */}
               {presentationActive ? (
                 <div className="rounded-md border border-slate-200 bg-slate-50 p-6 text-center">
                   <p className="text-sm text-slate-500">
@@ -742,7 +867,17 @@ export default function SessionPlayerPage() {
                 <AnswerInput
                   question={q}
                   currentAnswer={answers[answerKey]}
-                  onChange={(ans) => setAnswers({ ...answers, [answerKey]: ans })}
+                  onChange={(ans) => {
+                    setAnswers({ ...answers, [answerKey]: ans });
+                    // Answering a previously-skipped question un-skips it.
+                    if (skipped.has(answerKey)) {
+                      setSkipped((prev) => {
+                        const next = new Set(prev);
+                        next.delete(answerKey);
+                        return next;
+                      });
+                    }
+                  }}
                   activeSubQ={activeSubQ}
                 />
               )}
@@ -776,32 +911,50 @@ export default function SessionPlayerPage() {
             </span>
           )}
         </p>
-        {isLast && !(subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) ? (
+        <div className="flex items-center gap-2">
+          {/* Skip: mark this (sub-)question as skipped (no answer recorded)
+              and move on. Disabled during a timed presentation — same gate
+              as Next/Submit — so it can't be used to bypass anti-cheat
+              content gating. */}
           <Button
-            onClick={handleSubmit}
-            loading={submitMutation.isPending}
+            variant="ghost"
+            onClick={handleSkip}
             disabled={presentationActive}
             title={
               presentationActive
                 ? "Answer options will appear after the presentation ends"
-                : undefined
+                : "Skip this question without answering it"
             }
           >
-            Submit Assessment
+            Skip
           </Button>
-        ) : (
-          <Button
-            onClick={handleNext}
-            disabled={presentationActive}
-            title={
-              presentationActive
-                ? "Answer options will appear after the presentation ends"
-                : undefined
-            }
-          >
-            Next →
-          </Button>
-        )}
+          {isLast && !(subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) ? (
+            <Button
+              onClick={handleSubmit}
+              loading={submitMutation.isPending}
+              disabled={presentationActive}
+              title={
+                presentationActive
+                  ? "Answer options will appear after the presentation ends"
+                  : undefined
+              }
+            >
+              Submit Assessment
+            </Button>
+          ) : (
+            <Button
+              onClick={handleNext}
+              disabled={presentationActive}
+              title={
+                presentationActive
+                  ? "Answer options will appear after the presentation ends"
+                  : undefined
+              }
+            >
+              Next →
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Submit confirmation modal — replaces the blocking confirm() dialog */}

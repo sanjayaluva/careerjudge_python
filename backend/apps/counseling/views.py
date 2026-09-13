@@ -52,6 +52,12 @@ from .serializers import (
     TimeSlotSerializer,
 )
 
+# D8 §2.3: join-window bounds around the timeslot's scheduled start/end —
+# mirrors frontend/src/pages/counseling/joinWindow.ts JOIN_WINDOW_BEFORE_MIN /
+# JOIN_WINDOW_AFTER_END_MIN. Keep both in sync.
+JOIN_WINDOW_BEFORE_MIN = 10
+JOIN_WINDOW_AFTER_END_MIN = 15
+
 
 class HasCounselingPermission(HasModulePermission):
     module = "counseling"
@@ -71,6 +77,11 @@ class HasCounselingPermission(HasModulePermission):
         "followups": "change",
         "confirm_followup": "add",
         "my_sessions": "view",
+        # H16/D8 §2.3: counsellor sets the per-session meeting link.
+        "meeting_link": "change",
+        # D8: any participant (counselee/counsellor) may join within the
+        # window — gated at 'view' so it doesn't require write access.
+        "join": "view",
     }
 
 
@@ -158,17 +169,55 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
     @action(detail=True, methods=["get"])
     def timeslots(self, request, pk=None):
         """List a counsellor's available timeslots (SRS §2.1: 'System shows
-        available timeslots of the counsellor for a week')."""
+        available timeslots of the counsellor for a week').
+
+        Query params:
+          weeks=N        — cumulative window: now .. now + N weeks (default
+                            behaviour, kept for backward compatibility).
+          week_offset=N   — dossier gap D8 "browse future weeks": a single
+                            calendar week window, N weeks from now (0 = this
+                            week, 1 = next week, etc). When given, overrides
+                            `weeks` and returns just that one week's slots so
+                            the UI can page forward/backward through future
+                            weeks instead of always getting the cumulative
+                            list. Capped at CounselingSettings.max_weeks_ahead
+                            (the same limit timeslot creation enforces).
+        """
         counsellor = self.get_object()
-        # Default: show slots from now to 3 weeks ahead (SRS §3.1 max)
-        weeks = int(request.query_params.get("weeks", 3))
-        from_date = timezone.now()
-        to_date = from_date + timedelta(weeks=weeks)
+        now = timezone.now()
+        week_offset = request.query_params.get("week_offset")
+        if week_offset is not None:
+            try:
+                offset = max(0, int(week_offset))
+            except ValueError:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "week_offset must be an integer.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            max_weeks = CounselingSettings.get().max_weeks_ahead
+            offset = min(offset, max_weeks)
+            from_date = now + timedelta(weeks=offset)
+            to_date = from_date + timedelta(weeks=1)
+        else:
+            # Default: show slots from now to N weeks ahead (SRS §3.1 max 3)
+            weeks = int(request.query_params.get("weeks", 3))
+            from_date = now
+            to_date = from_date + timedelta(weeks=weeks)
         slots = counsellor.timeslots.filter(
             start_time__gte=from_date, start_time__lte=to_date
         ).order_by("start_time")
         return Response(
-            {"message": "OK", "data": TimeSlotSerializer(slots, many=True).data},
+            {
+                "message": "OK",
+                "data": TimeSlotSerializer(slots, many=True).data,
+                "week_start": from_date.isoformat(),
+                "week_end": to_date.isoformat(),
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -411,11 +460,16 @@ class CounselingSessionViewSet(ModelViewSet):
 
         counsellor = serializer.validated_data["counsellor"]
         # Capture the fee at booking time
+        fee = counsellor.hourly_rate
+        # H15/D8 §2.1: a session is only 'paid' once the gateway/webhook says
+        # so — free sessions (fee=0) are the one exception, auto-marked paid
+        # exactly like free training courses (apps/training/views.py register()).
+        is_free = float(fee) == 0
         session = serializer.save(
             counselee=request.user,
-            fee=counsellor.hourly_rate,
+            fee=fee,
             status="pending",
-            payment_status="pending",
+            payment_status="paid" if is_free else "pending",
             terms_accepted=True,
         )
         # Mark the timeslot as booked
@@ -442,10 +496,36 @@ class CounselingSessionViewSet(ModelViewSet):
             "session",
         )
 
+        # H15/D8 §2.1/§3.3: route payment through the gateway — same pattern
+        # as apps/training/views.py CourseViewSet.register(). The webhook
+        # (apps/payments/services.py _update_module_payment_status) flips
+        # session.payment_status to 'paid'; nothing here assumes payment done.
+        from apps.payments.services import create_stripe_checkout_session, get_or_create_payment
+
+        payment = get_or_create_payment(
+            request.user,
+            module="counseling",
+            item_id=session.id,
+            amount=fee,
+            description=f"Counselling session with {counsellor.full_name}",
+        )
+        checkout_url = None
+        if not is_free:
+            success_url = request.build_absolute_uri("/counseling?payment=success")
+            cancel_url = request.build_absolute_uri("/counseling?payment=cancelled")
+            checkout_url = create_stripe_checkout_session(payment, success_url, cancel_url)
+
+        if is_free:
+            message = "Session booked. Awaiting counsellor confirmation."
+        elif checkout_url is None:
+            message = "Session booked. Complete payment to confirm your session."
+        else:
+            message = "Session booked. Redirecting to payment…"
+
         return Response(
             {
-                "message": "Session booked. Awaiting counsellor confirmation.",
-                "data": serializer.data,
+                "message": message,
+                "data": {**serializer.data, "checkout_url": checkout_url},
             },
             status=status.HTTP_201_CREATED,
         )
@@ -545,6 +625,19 @@ class CounselingSessionViewSet(ModelViewSet):
             refund_tier = "none"
             refund_amount = 0
 
+        # Dossier gap D8: execute the refund through the payments module
+        # rather than only recording it here. A full Stripe gateway refund
+        # is attempted when configured; either way, the Payment record is
+        # flipped to 'refunded' so it's reflected in the system of record.
+        refund_executed = False
+        if refund_amount and float(refund_amount) > 0:
+            from apps.payments.models import Payment
+            from apps.payments.services import refund_payment
+
+            payment = Payment.objects.filter(module="counseling", item_id=session.id).first()
+            if payment:
+                refund_executed = refund_payment(payment, amount=refund_amount)
+
         # Create cancellation record
         cancellation = SessionCancellation.objects.create(
             session=session,
@@ -552,6 +645,7 @@ class CounselingSessionViewSet(ModelViewSet):
             reason=reason,
             refund_tier=refund_tier,
             refund_amount=refund_amount,
+            refund_executed=refund_executed,
         )
 
         # Update session status
@@ -597,8 +691,16 @@ class CounselingSessionViewSet(ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
         session.status = "completed"
-        session.completed_at = timezone.now()
-        session.save(update_fields=["status", "completed_at"])
+        now = timezone.now()
+        session.completed_at = now
+        update_fields = ["status", "completed_at"]
+        # D8: record the actual end of the live delivery, distinct from the
+        # scheduled timeslot end. Only set if not already recorded (e.g. via
+        # a future explicit "leave" action) so completion never overwrites it.
+        if not session.actual_end_at:
+            session.actual_end_at = now
+            update_fields.append("actual_end_at")
+        session.save(update_fields=update_fields)
         return Response(
             {"message": "Session completed.", "data": CounselingSessionSerializer(session).data},
             status=status.HTTP_200_OK,
@@ -613,6 +715,21 @@ class CounselingSessionViewSet(ModelViewSet):
         """
         session = self.get_object()
         if request.method == "GET":
+            # Only the counsellor (owner) or admin can view the summary; a
+            # counselee must never see counsellor-private notes (D8 §3.3).
+            user_role_name = request.user.role.name if request.user.role_id else None
+            if user_role_name != "cj_admin" and (
+                not session.counsellor_id or session.counsellor.user_id != request.user.id
+            ):
+                return Response(
+                    {
+                        "error": {
+                            "code": "forbidden",
+                            "message": "Summary is counsellor/admin-only.",
+                        }
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             if not hasattr(session, "summary"):
                 return Response(
                     {"message": "OK", "data": None},
@@ -750,6 +867,129 @@ class CounselingSessionViewSet(ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=True, methods=["post"], url_path="meeting-link")
+    def meeting_link(self, request, pk=None):
+        """Counsellor sets/updates the per-session meeting link (H16/D8 §2.3).
+
+        Body: {"meeting_link": "https://zoom.us/j/..."}
+        Only the session's own counsellor (or an admin) may set it — this is
+        what the live-delivery Join-Session button on both dashboards links
+        to, gated by a countdown to the timeslot's start time.
+        """
+        session = self.get_object()
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_admin = user_role_name == "cj_admin" or request.user.is_superuser
+        if not is_admin and session.counsellor.user_id != request.user.id:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the assigned counsellor can set the meeting link.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        session.meeting_link = (request.data.get("meeting_link") or "").strip()
+        session.save(update_fields=["meeting_link"])
+        return Response(
+            {"message": "Meeting link updated.", "data": CounselingSessionSerializer(session).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"])
+    def join(self, request, pk=None):
+        """Redirect to the per-session meeting link within the join window
+        (dossier gap D8: 'provide the redirect to the (per-session) meeting
+        link within the join window').
+
+        Only the session's counselee, its counsellor, or an admin may join.
+        Enforces the join window server-side (the frontend's countdown is a
+        UX affordance, not the source of truth) and records
+        `actual_start_at` the first time either party joins — this is the
+        "split the session into start/end timestamps" half of D8; `complete`
+        records the matching `actual_end_at`.
+
+        Returns the meeting_link for the frontend to redirect/open, plus the
+        countdown state so a caller doesn't need to duplicate the math.
+        """
+        session = self.get_object()
+        user_role_name = request.user.role.name if request.user.role_id else None
+        is_admin = user_role_name == "cj_admin" or request.user.is_superuser
+        is_counselee = session.counselee_id == request.user.id
+        is_counsellor = session.counsellor.user_id == request.user.id
+        if not (is_admin or is_counselee or is_counsellor):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the counselee, the counsellor, or an admin can join.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if session.status not in ("confirmed", "completed"):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": f"Cannot join a session with status '{session.status}'.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if session.mode != "online":
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "Only online sessions have a meeting link to join.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        timeslot = session.timeslot
+        now = timezone.now()
+        opens_at = timeslot.start_time - timedelta(minutes=JOIN_WINDOW_BEFORE_MIN)
+        closes_at = timeslot.end_time + timedelta(minutes=JOIN_WINDOW_AFTER_END_MIN)
+        can_join = opens_at <= now <= closes_at
+        if not can_join:
+            return Response(
+                {
+                    "error": {
+                        "code": "join_window_closed",
+                        "message": "The join window for this session is not currently open.",
+                    },
+                    "data": {"opens_at": opens_at.isoformat(), "closes_at": closes_at.isoformat()},
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not session.meeting_link:
+            return Response(
+                {
+                    "error": {
+                        "code": "not_ready",
+                        "message": "The counsellor hasn't set a meeting link for this session yet.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not session.actual_start_at:
+            session.actual_start_at = now
+            session.save(update_fields=["actual_start_at"])
+
+        return Response(
+            {
+                "message": "Join window is open.",
+                "data": {
+                    "meeting_link": session.meeting_link,
+                    "actual_start_at": session.actual_start_at.isoformat(),
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 # ---------------------------------------------------------------------------
 # FollowupSession ViewSet (confirm follow-up — SRS §3.3)
@@ -789,8 +1029,12 @@ class FollowupSessionViewSet(ModelViewSet):
             end_time=followup.proposed_time + timedelta(hours=1),
             status="booked",
         )
-        # Create the new session
+        # Create the new session. H15/D8 §2.1/§3.3: payment_status must be
+        # set by the gateway/webhook, not assumed — mirrors the booking flow
+        # in CounselingSessionViewSet.create() above.
         original = followup.original_session
+        fee = followup.counsellor.hourly_rate
+        is_free = float(fee) == 0
         new_session = CounselingSession.objects.create(
             counselee=request.user,
             counsellor=followup.counsellor,
@@ -800,20 +1044,44 @@ class FollowupSessionViewSet(ModelViewSet):
             description="Follow-up session",
             terms_accepted=True,
             status="confirmed",
-            payment_status="paid",  # Assume payment done
+            payment_status="paid" if is_free else "pending",
             mode=original.mode,
-            fee=followup.counsellor.hourly_rate,
+            fee=fee,
             confirmed_at=timezone.now(),
         )
         followup.confirmed_session = new_session
         followup.status = "confirmed"
         followup.save(update_fields=["confirmed_session", "status"])
+
+        from apps.payments.services import create_stripe_checkout_session, get_or_create_payment
+
+        payment = get_or_create_payment(
+            request.user,
+            module="counseling",
+            item_id=new_session.id,
+            amount=fee,
+            description=f"Follow-up session with {followup.counsellor.full_name}",
+        )
+        checkout_url = None
+        if not is_free:
+            success_url = request.build_absolute_uri("/counseling?payment=success")
+            cancel_url = request.build_absolute_uri("/counseling?payment=cancelled")
+            checkout_url = create_stripe_checkout_session(payment, success_url, cancel_url)
+
+        if is_free:
+            message = "Follow-up confirmed."
+        elif checkout_url is None:
+            message = "Follow-up confirmed. Complete payment to finalize."
+        else:
+            message = "Follow-up confirmed. Redirecting to payment…"
+
         return Response(
             {
-                "message": "Follow-up confirmed.",
+                "message": message,
                 "data": {
                     "followup": FollowupSessionSerializer(followup).data,
                     "session": CounselingSessionSerializer(new_session).data,
+                    "checkout_url": checkout_url,
                 },
             },
             status=status.HTTP_200_OK,

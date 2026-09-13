@@ -39,7 +39,7 @@ import {
   listCounsellors,
   listMySessions,
   bookSession,
-  listCounsellorTimeslots,
+  listCounsellorTimeslotsForWeek,
   confirmFollowup,
   declineFollowup,
   listFollowups,
@@ -52,6 +52,7 @@ import {
 import { extractApiError, apiPatch } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { CounsellorDashboard } from "./CounsellorDashboard";
+import { JoinSessionButton } from "./JoinSession";
 
 export default function CounselingPage() {
   const { user } = useAuth();
@@ -197,6 +198,8 @@ export default function CounselingPage() {
                     <TableHead>Scheduled</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Fee</TableHead>
+                    {/* H16/D8 §2.3: live-delivery — countdown + Join Session */}
+                    <TableHead>Meeting</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -228,6 +231,9 @@ export default function CounselingPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-500">${s.fee}</TableCell>
+                      <TableCell>
+                        {s.status === "confirmed" ? <JoinSessionButton session={s} /> : "—"}
+                      </TableCell>
                       <TableCell>
                         <SessionActionsForCounselee session={s} />
                       </TableCell>
@@ -262,6 +268,8 @@ function BookingModal({
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   // Report 3 §1.8: explicit terms acceptance (backend rejects without it).
   const [termsAccepted, setTermsAccepted] = useState(false);
+  // D8 "browse future weeks": 0 = this week, 1 = next week, ...
+  const [weekOffset, setWeekOffset] = useState(0);
 
   // Report 3 §1.9/§1.11: show the admin-managed terms + refund policy.
   const { data: settings } = useQuery({
@@ -269,10 +277,12 @@ function BookingModal({
     queryFn: getCounselingSettings,
   });
 
-  const { data: timeslots, isLoading } = useQuery({
-    queryKey: ["counseling", "counsellors", counsellor.id, "timeslots"],
-    queryFn: () => listCounsellorTimeslots(counsellor.id),
+  const { data: week, isLoading } = useQuery({
+    queryKey: ["counseling", "counsellors", counsellor.id, "timeslots", "week", weekOffset],
+    queryFn: () => listCounsellorTimeslotsForWeek(counsellor.id, weekOffset),
   });
+  const timeslots = week?.slots;
+  const maxWeeksAhead = settings?.max_weeks_ahead ?? 3;
 
   const bookMutation = useMutation({
     mutationFn: () => {
@@ -286,11 +296,21 @@ function BookingModal({
         terms_accepted: termsAccepted,
       });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["counseling", "my-sessions"] });
       void queryClient.invalidateQueries({
         queryKey: ["counseling", "counsellors", counsellor.id, "timeslots"],
+        // matches both the plain and the ["...", "week", N] browsing keys
+        exact: false,
       });
+      // H15/D8 §2.1: paid sessions get a Stripe checkout URL — route through
+      // the gateway like training's registerForCourse(), instead of assuming
+      // payment is done.
+      if (data.checkout_url) {
+        toast.success("Redirecting to payment…");
+        window.location.href = data.checkout_url;
+        return;
+      }
       toast.success("Session booked! Awaiting counsellor confirmation.");
       onClose();
     },
@@ -368,11 +388,39 @@ function BookingModal({
         </div>
 
         <div>
-          <Label required>Available time slots</Label>
+          <div className="flex items-center justify-between">
+            <Label required>Available time slots</Label>
+            {/* D8 "browse future weeks" */}
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setWeekOffset((w) => Math.max(0, w - 1))}
+                disabled={weekOffset === 0}
+              >
+                ← Prev week
+              </Button>
+              <span className="px-1 text-xs text-slate-500">
+                {weekOffset === 0 ? "This week" : `Week +${weekOffset}`}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setWeekOffset((w) => Math.min(maxWeeksAhead, w + 1))}
+                disabled={weekOffset >= maxWeeksAhead}
+              >
+                Next week →
+              </Button>
+            </div>
+          </div>
           {isLoading ? (
             <Spinner />
           ) : availableSlots.length === 0 ? (
-            <p className="text-sm text-slate-500">No available slots. Check back later.</p>
+            <p className="text-sm text-slate-500">
+              No available slots this week. Try browsing another week.
+            </p>
           ) : (
             <div className="max-h-48 space-y-1 overflow-y-auto">
               {availableSlots.map((slot) => (
@@ -643,8 +691,15 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
 
   const confirmFuMut = useMutation({
     mutationFn: (fuId: number) => confirmFollowup(fuId),
-    onSuccess: () => {
+    onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["counseling"] });
+      // H15/D8 §2.1/§3.3: route the follow-up payment through the gateway
+      // too — no longer assumed paid.
+      if (data.checkout_url) {
+        toast.success("Redirecting to payment…");
+        window.location.href = data.checkout_url;
+        return;
+      }
       toast.success("Follow-up confirmed! A new session has been created.");
     },
     onError: (err) => toast.error(extractApiError(err)),

@@ -270,6 +270,51 @@ class MappingCriterion(models.Model):
         return f"{self.career_title} > {self.section.title} = {self.criterion_band_code}"
 
 
+class MappingRule(models.Model):
+    """User-defined mapping-rule table for standard assessments (SRS §4.1.2).
+
+    Per SRS §4.1.2: for each variable the psychometrician defines an (n x n)
+    grid of mapping combinations, keyed by
+    (criterion_band_code, user_band_code) -> value, where n = number of bands.
+
+    The value is NOT a pure band-distance function. The SRS §4.1.2 sample
+    (Analytical Reasoning) shows, e.g., criterion 'ANL1' with ANY higher user
+    code mapping to 5, so the table must be stored explicitly rather than
+    derived. See engine._compute_standard_variable for the lookup + fallback.
+
+    This table is defined per BandDefinition (i.e., per variable within a
+    standard selected_assessment).
+    """
+
+    band_definition = models.ForeignKey(
+        BandDefinition,
+        on_delete=models.CASCADE,
+        related_name="mapping_rules",
+        help_text=_("The standard variable's band definition this rule applies to."),
+    )
+    criterion_band_code = models.CharField(
+        _("criterion band code"), max_length=20, help_text=_("e.g., 'ANH2'")
+    )
+    user_band_code = models.CharField(
+        _("user band code"), max_length=20, help_text=_("e.g., 'ANH1'")
+    )
+    value = models.PositiveIntegerField(
+        _("mapping value"),
+        help_text=_("Mapping score for this (criterion, user) band combination."),
+    )
+
+    class Meta:
+        ordering = ["criterion_band_code", "user_band_code"]
+        verbose_name = _("mapping rule")
+        verbose_name_plural = _("mapping rules")
+        unique_together = [
+            ("band_definition", "criterion_band_code", "user_band_code"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.criterion_band_code} vs {self.user_band_code} -> {self.value}"
+
+
 class RankDefinition(models.Model):
     """Rank Order Chart for a selected assessment (SRS §4.1.3 — OPTIONAL).
 

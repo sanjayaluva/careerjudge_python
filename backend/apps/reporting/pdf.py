@@ -362,25 +362,33 @@ def _build_descriptive(descriptive: Any) -> str:
 
 
 def _build_typological(typological: Any) -> str:
-    """Build the typological report — type profile + top variables."""
+    """Build the typological report — type profile + top variables.
+
+    Per SRS §3.2.1 the top-N variables also carry band details (label +
+    description), so each row shows the band alongside its code/score when
+    the report defines a matching target_type='section' band.
+    """
     if not typological:
         return ""
     type_profile = typological.get("type_profile", "")
     top_vars = typological.get("top_variables") or []
     rows = ""
     for v in top_vars:
+        band = v.get("band") or {}
         rows += (
             f"<tr>"
             f"<td>{_esc(v.get('variable'))}</td>"
             f"<td><strong>{_esc(v.get('code'))}</strong></td>"
             f"<td>{_fmt(v.get('score'), '%')}</td>"
+            f"<td>{_esc(band.get('band_label'))}</td>"
+            f"<td>{_esc(band.get('description'))}</td>"
             f"</tr>"
         )
     return f"""
       <h2>Personality / Intellectual Type</h2>
       <p><strong>Type Profile:</strong> <span style="font-size:14pt;font-weight:bold;color:#1e40af;">{_esc(type_profile)}</span></p>
       <table>
-        <thead><tr><th>Top Variable</th><th>Code</th><th>Score</th></tr></thead>
+        <thead><tr><th>Top Variable</th><th>Code</th><th>Score</th><th>Band</th><th>Description</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>
     """
@@ -538,6 +546,8 @@ def _build_profiling(profiling: Any) -> str:
                 f"<table><thead><tr><th>Career</th><th>FMI</th><th>VMI</th></tr></thead>"
                 f"<tbody>{rows}</tbody></table>"
             )
+    if "pmi" in profiling:
+        parts.append(_build_pmi_section(profiling["pmi"]))
     if "vmi" in profiling:
         vmi_list = profiling["vmi"] or []
         if vmi_list:
@@ -567,8 +577,108 @@ def _build_profiling(profiling: Any) -> str:
     return "<h2>Profiling Results</h2>" + "".join(parts)
 
 
+def _build_pmi_section(pmi: Any) -> str:
+    """Build the PMI report (per-assessment) + PMI-D gap index (SRS 06 §3.3)."""
+    if not pmi or not isinstance(pmi, dict):
+        return ""
+    parts = ["<h3>Profile Match Index (PMI)</h3>"]
+    by_assessment = pmi.get("by_assessment") or {}
+    for label in pmi.get("assessments") or list(by_assessment.keys()):
+        careers = by_assessment.get(label) or []
+        if not careers:
+            continue
+        rows = ""
+        for c in careers:
+            band = c.get("band") or {}
+            rows += (
+                f"<tr>"
+                f"<td>{_esc(c.get('career_stream'))}</td>"
+                f"<td>{_esc(c.get('career_title'))}</td>"
+                f"<td>{_fmt(c.get('pmi'))}</td>"
+                f"<td>{_esc(band.get('band_label'))}</td>"
+                f"</tr>"
+            )
+        parts.append(
+            f"<p><strong>{_esc(label)}-PMI</strong></p>"
+            f"<table><thead><tr><th>Career Stream</th><th>Career</th>"
+            f"<th>PMI</th><th>Label</th></tr></thead><tbody>{rows}</tbody></table>"
+        )
+
+    gap = pmi.get("gap_index")
+    if gap and gap.get("careers"):
+        rows = ""
+        for c in gap["careers"]:
+            band = c.get("band") or {}
+            pmi_d = c.get("pmi_d")
+            badge_class = "badge-danger" if pmi_d is not None and pmi_d < 0 else "badge-success"
+            rows += (
+                f"<tr>"
+                f"<td>{_esc(c.get('career_stream'))}</td>"
+                f"<td>{_esc(c.get('career_title'))}</td>"
+                f"<td>{_fmt(c.get('a1_pmi'))}</td>"
+                f"<td>{_fmt(c.get('a2_pmi'))}</td>"
+                f"<td><span class='badge {badge_class}'>{_fmt(pmi_d)}</span></td>"
+                f"<td>{_esc(band.get('band_label'))}</td>"
+                f"</tr>"
+            )
+        parts.append(
+            f"<h3>PMI Gap Index (PMI-D)</h3>"
+            f"<p style='font-size:9pt;color:#64748b;'>{_esc(gap.get('formula'))}</p>"
+            f"<table><thead><tr><th>Career Stream</th><th>Career</th>"
+            f"<th>{_esc(gap.get('first_assessment'))}-PMI</th>"
+            f"<th>{_esc(gap.get('second_assessment'))}-PMI</th>"
+            f"<th>PMI-D</th><th>Label</th></tr></thead><tbody>{rows}</tbody></table>"
+        )
+    return "".join(parts)
+
+
+def _build_layout_table_html(table: Any) -> str:
+    """Render a Table-layout section (SRS §3.1.2/§3.2.2/§3.3.2) — section
+    scores banded into Variable/Score/Label/Colour/Description columns."""
+    if not table or not isinstance(table, dict):
+        return ""
+    rows = table.get("rows") or []
+    if not rows:
+        return ""
+    headers = table.get("headers") or {}
+    row_html = ""
+    for r in rows:
+        colour = r.get("colour_code") or ""
+        swatch = (
+            f"<span style='display:inline-block;width:8pt;height:8pt;border-radius:2pt;"
+            f"background:{_esc(colour)};margin-right:4pt;vertical-align:middle;'></span>"
+            if colour
+            else ""
+        )
+        row_html += (
+            f"<tr>"
+            f"<td>{_esc(r.get('variable'))}</td>"
+            f"<td>{_fmt(r.get('score'))}</td>"
+            f"<td>{_esc(r.get('label'))}</td>"
+            f"<td>{swatch}{_esc(colour)}</td>"
+            f"<td>{_esc(r.get('description'))}</td>"
+            f"</tr>"
+        )
+    title = _esc(headers.get("table_title") or "")
+    return f"""
+      {f"<h3>{title}</h3>" if title else ""}
+      <table>
+        <thead><tr>
+          <th>{_esc(headers.get('variable_label', 'Variable'))}</th>
+          <th>{_esc(headers.get('score_label', 'Score'))}</th>
+          <th>{_esc(headers.get('label_label', 'Label'))}</th>
+          <th>{_esc(headers.get('colour_label', 'Colour'))}</th>
+          <th>{_esc(headers.get('description_label', 'Description'))}</th>
+        </tr></thead>
+        <tbody>{row_html}</tbody>
+      </table>
+    """
+
+
 def _build_custom_sections(sections: Any) -> str:
-    """Build custom narrative sections from ReportSection rows."""
+    """Build custom layout sections from ReportSection rows: title/content,
+    an optional description + uploaded image (SRS §2.1.2), and an optional
+    Table-layout rendering of section scores (SRS §3.1.2/§3.2.2/§3.3.2)."""
     if not sections or not isinstance(sections, list):
         return ""
     parts = []
@@ -577,16 +687,36 @@ def _build_custom_sections(sections: Any) -> str:
             continue
         title = _esc(s.get("title"))
         content = _esc(s.get("content"))
+        description = _esc(s.get("description"))
         stype = _esc(s.get("section_type"))
-        if not content and not title:
+        image_data_uri = s.get("image_data_uri")
+        table_html = _build_layout_table_html(s.get("table"))
+        graph_note = s.get("graph_note")
+
+        if not any((content, title, description, image_data_uri, table_html, graph_note)):
             continue
-        parts.append(
+
+        block = (
             f"<div class='narrative'>"
             f"<div style='font-size:8pt;color:#64748b;text-transform:uppercase;'>{stype}</div>"
-            f"<strong>{title}</strong>"
-            f"<p style='margin:4pt 0 0 0;'>{content}</p>"
-            f"</div>"
         )
+        if title:
+            block += f"<strong>{title}</strong>"
+        if description:
+            block += f"<p style='margin:4pt 0 0 0;'>{description}</p>"
+        if content:
+            block += f"<p style='margin:4pt 0 0 0;'>{content}</p>"
+        if image_data_uri:
+            block += (
+                f"<img src='{image_data_uri}' style='max-width:100%;margin-top:6pt;"
+                f"border-radius:3pt;' />"
+            )
+        block += "</div>"
+        if table_html:
+            block += table_html
+        if graph_note:
+            block += f"<p style='font-size:8pt;color:#b45309;'>{_esc(graph_note)}</p>"
+        parts.append(block)
     if not parts:
         return ""
     return "<h2>Additional Sections</h2>" + "".join(parts)

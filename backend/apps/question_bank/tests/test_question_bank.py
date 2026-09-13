@@ -37,6 +37,11 @@ def individual_role(roles):
 
 
 @pytest.fixture
+def cj_admin_role(roles):
+    return roles["cj_admin"]
+
+
+@pytest.fixture
 def psychometrician_user(db, psychometrician_role):
     for action in ("view", "add", "change", "delete", "review"):
         ModuleRight.objects.get_or_create(
@@ -65,6 +70,13 @@ def individual_user(db, individual_role):
 
 
 @pytest.fixture
+def cj_admin_user(db, cj_admin_role):
+    for action in ("view", "add", "change", "delete"):
+        ModuleRight.objects.get_or_create(role=cj_admin_role, module="question_bank", action=action)
+    return UserFactory(role=cj_admin_role, email="qb-admin@test.com")
+
+
+@pytest.fixture
 def client():
     return APIClient()
 
@@ -75,6 +87,16 @@ def psy_client(db, psychometrician_user):
 
     c = APIClient()
     refresh = RefreshToken.for_user(psychometrician_user)
+    c.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+    return c
+
+
+@pytest.fixture
+def admin_client(db, cj_admin_user):
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    c = APIClient()
+    refresh = RefreshToken.for_user(cj_admin_user)
     c.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
     return c
 
@@ -95,6 +117,23 @@ def reviewer_client(db, reviewer_user):
 
     c = APIClient()
     refresh = RefreshToken.for_user(reviewer_user)
+    c.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+    return c
+
+
+@pytest.fixture
+def other_sme_user(db, sme_role):
+    for action in ("view", "add", "change", "delete"):
+        ModuleRight.objects.get_or_create(role=sme_role, module="question_bank", action=action)
+    return UserFactory(role=sme_role, email="other-sme@test.com")
+
+
+@pytest.fixture
+def other_sme_client(db, other_sme_user):
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    c = APIClient()
+    refresh = RefreshToken.for_user(other_sme_user)
     c.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
     return c
 
@@ -179,13 +218,101 @@ class TestCategoryCRUD:
         )
         assert resp.status_code == 403
 
-    def test_psy_can_delete_category(self, psy_client):
+    def test_psy_delete_category_creates_pending_request(self, psy_client):
+        """D1 §2.2: a non-admin's delete creates a pending deletion request
+        instead of deleting immediately."""
+        from apps.question_bank.models import Category, QuestionBankDeletionRequest
+
         create_resp = psy_client.post(
             "/api/question-bank/categories/", {"name": "ToDelete"}, format="json"
         )
         cat_id = create_resp.json()["data"]["id"]
+        resp = psy_client.delete(
+            f"/api/question-bank/categories/{cat_id}/",
+            {"reason": "Duplicate category"},
+            format="json",
+        )
+        assert resp.status_code == 201, resp.data
+        assert Category.objects.filter(id=cat_id).exists()
+        dr = QuestionBankDeletionRequest.objects.get(target_type="category", target_id=cat_id)
+        assert dr.status == "pending"
+
+    def test_delete_category_without_reason_is_rejected(self, psy_client):
+        create_resp = psy_client.post(
+            "/api/question-bank/categories/", {"name": "NeedsReason"}, format="json"
+        )
+        cat_id = create_resp.json()["data"]["id"]
         resp = psy_client.delete(f"/api/question-bank/categories/{cat_id}/")
+        assert resp.status_code == 400
+
+    def test_admin_can_delete_category_directly(self, admin_client):
+        from apps.question_bank.models import Category
+
+        create_resp = admin_client.post(
+            "/api/question-bank/categories/", {"name": "AdminDelete"}, format="json"
+        )
+        cat_id = create_resp.json()["data"]["id"]
+        resp = admin_client.delete(f"/api/question-bank/categories/{cat_id}/")
         assert resp.status_code == 200
+        assert not Category.objects.filter(id=cat_id).exists()
+
+    def test_admin_approve_deletes_category(self, admin_client, psy_client):
+        from apps.question_bank.models import Category, QuestionBankDeletionRequest
+
+        create_resp = psy_client.post(
+            "/api/question-bank/categories/", {"name": "ApproveDelete"}, format="json"
+        )
+        cat_id = create_resp.json()["data"]["id"]
+        psy_client.delete(
+            f"/api/question-bank/categories/{cat_id}/",
+            {"reason": "Not needed"},
+            format="json",
+        )
+        dr = QuestionBankDeletionRequest.objects.get(target_type="category", target_id=cat_id)
+        resp = admin_client.post(
+            f"/api/question-bank/deletion-requests/{dr.id}/approve/", format="json"
+        )
+        assert resp.status_code == 200, resp.data
+        assert not Category.objects.filter(id=cat_id).exists()
+
+    def test_admin_decline_keeps_category(self, admin_client, psy_client):
+        from apps.question_bank.models import Category, QuestionBankDeletionRequest
+
+        create_resp = psy_client.post(
+            "/api/question-bank/categories/", {"name": "DeclineDelete"}, format="json"
+        )
+        cat_id = create_resp.json()["data"]["id"]
+        psy_client.delete(
+            f"/api/question-bank/categories/{cat_id}/",
+            {"reason": "Not needed"},
+            format="json",
+        )
+        dr = QuestionBankDeletionRequest.objects.get(target_type="category", target_id=cat_id)
+        resp = admin_client.post(
+            f"/api/question-bank/deletion-requests/{dr.id}/decline/", format="json"
+        )
+        assert resp.status_code == 200, resp.data
+        assert Category.objects.filter(id=cat_id).exists()
+        dr.refresh_from_db()
+        assert dr.status == "rejected"
+
+    def test_non_admin_cannot_approve_deletion_request(self, psy_client):
+        from apps.question_bank.models import QuestionBankDeletionRequest
+
+        create_resp = psy_client.post(
+            "/api/question-bank/categories/", {"name": "NoApprove"}, format="json"
+        )
+        cat_id = create_resp.json()["data"]["id"]
+        psy_client.delete(
+            f"/api/question-bank/categories/{cat_id}/",
+            {"reason": "x"},
+            format="json",
+        )
+        dr = QuestionBankDeletionRequest.objects.get(target_type="category", target_id=cat_id)
+        resp = psy_client.post(
+            f"/api/question-bank/deletion-requests/{dr.id}/approve/", format="json"
+        )
+        assert resp.status_code == 403
 
 
 # ---------------------------------------------------------------------------
@@ -317,7 +444,11 @@ class TestQuestionCRUD:
         )
         assert resp.status_code == 403
 
-    def test_sme_can_delete_draft_question(self, sme_client):
+    def test_sme_delete_draft_question_creates_pending_request(self, sme_client):
+        """D1 §2.2: a non-admin's delete on an editable (draft) question
+        creates a pending deletion request instead of deleting immediately."""
+        from apps.question_bank.models import Question, QuestionBankDeletionRequest
+
         create_resp = sme_client.post(
             "/api/question-bank/questions/",
             {
@@ -329,8 +460,55 @@ class TestQuestionCRUD:
             format="json",
         )
         qid = create_resp.json()["data"]["id"]
-        resp = sme_client.delete(f"/api/question-bank/questions/{qid}/")
+        resp = sme_client.delete(
+            f"/api/question-bank/questions/{qid}/",
+            {"reason": "Created by mistake"},
+            format="json",
+        )
+        assert resp.status_code == 201, resp.data
+        assert Question.objects.filter(id=qid).exists()
+        dr = QuestionBankDeletionRequest.objects.get(target_type="question", target_id=qid)
+        assert dr.status == "pending"
+
+    def test_admin_can_delete_question_directly(self, admin_client):
+        from apps.question_bank.models import Question
+
+        create_resp = admin_client.post(
+            "/api/question-bank/questions/",
+            {
+                "question_type": "MCQ_TEXT_IMAGE",
+                "question_title": "Admin Delete Me",
+                "question_text_1": "Delete me",
+                "scoring_type": "BINARY",
+            },
+            format="json",
+        )
+        qid = create_resp.json()["data"]["id"]
+        resp = admin_client.delete(f"/api/question-bank/questions/{qid}/")
         assert resp.status_code == 200
+        assert not Question.objects.filter(id=qid).exists()
+
+    def test_admin_approve_deletes_question(self, admin_client, sme_client):
+        from apps.question_bank.models import Question, QuestionBankDeletionRequest
+
+        create_resp = sme_client.post(
+            "/api/question-bank/questions/",
+            {
+                "question_type": "MCQ_TEXT_IMAGE",
+                "question_title": "Approve Delete Me",
+                "question_text_1": "Delete me",
+                "scoring_type": "BINARY",
+            },
+            format="json",
+        )
+        qid = create_resp.json()["data"]["id"]
+        sme_client.delete(f"/api/question-bank/questions/{qid}/", {"reason": "x"}, format="json")
+        dr = QuestionBankDeletionRequest.objects.get(target_type="question", target_id=qid)
+        resp = admin_client.post(
+            f"/api/question-bank/deletion-requests/{dr.id}/approve/", format="json"
+        )
+        assert resp.status_code == 200, resp.data
+        assert not Question.objects.filter(id=qid).exists()
 
     def test_individual_cannot_create_question(self, individual_client):
         resp = individual_client.post(
@@ -381,6 +559,34 @@ class TestQuestionCRUD:
             format="json",
         )
         resp = sme_client.get("/api/question-bank/questions/?mine=true")
+        assert resp.status_code == 200
+
+    def test_sme_cannot_retrieve_another_sme_question(self, sme_client, other_sme_client):
+        """D1 §3.1: SMEs must only see their own questions, without needing ?mine=true."""
+        create_resp = other_sme_client.post(
+            "/api/question-bank/questions/",
+            {
+                "question_type": "MCQ_TEXT_IMAGE",
+                "question_title": "Other SME's Q Title",
+                "question_text_1": "Other SME's Q",
+                "scoring_type": "BINARY",
+            },
+            format="json",
+        )
+        qid = create_resp.json()["data"]["id"]
+
+        # Direct retrieve of another SME's question is blocked
+        resp = sme_client.get(f"/api/question-bank/questions/{qid}/")
+        assert resp.status_code == 404
+
+        # It also never shows up in the (unfiltered) list
+        resp = sme_client.get("/api/question-bank/questions/")
+        assert resp.status_code == 200
+        ids = [q["id"] for q in resp.json()["data"]["results"]]
+        assert qid not in ids
+
+        # But the owning SME can still see it
+        resp = other_sme_client.get(f"/api/question-bank/questions/{qid}/")
         assert resp.status_code == 200
 
 

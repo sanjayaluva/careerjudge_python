@@ -69,6 +69,140 @@ class TestUserCreate:
         )
         assert resp.status_code == 403
 
+    def test_invited_user_gets_verification_token_and_can_activate(
+        self, authed_client, individual_role, mailoutbox
+    ):
+        """D9 §2.2-2.3: an admin-created (invited) user must be able to activate."""
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import EmailVerificationToken
+
+        resp = authed_client.post(
+            "/api/accounts/users/",
+            {
+                "email": "invited@test.com",
+                "full_name": "Invited User",
+                "is_active": False,
+                "is_email_verified": False,
+                "role": individual_role.id,
+            },
+            format="json",
+        )
+        assert resp.status_code == 201
+        user = User.objects.get(email="invited@test.com")
+        assert user.is_active is False
+
+        token = EmailVerificationToken.objects.filter(user=user, used_at__isnull=True).first()
+        assert token is not None
+        assert len(mailoutbox) == 1
+
+        anon = APIClient()
+        verify_resp = anon.post(
+            "/api/auth/verify-email", {"token": str(token.token)}, format="json"
+        )
+        assert verify_resp.status_code == 200
+        user.refresh_from_db()
+        assert user.is_active is True
+        assert user.is_email_verified is True
+
+        # The admin generated a random password the invitee never saw; once
+        # they know a password (e.g. via reset), login must work now that
+        # the account is active.
+        user.set_password("KnownPass123!")
+        user.save(update_fields=["password"])
+        login_resp = anon.post(
+            "/api/auth/login",
+            {"email": user.email, "password": "KnownPass123!"},
+            format="json",
+        )
+        assert login_resp.status_code == 200
+
+
+@pytest.mark.django_db
+class TestUserCreateRoleSpecificProfileFields:
+    """D9: the admin Add-User form captures role-specific fields (org name,
+    PAN/TAN, agency, allocated region, ...) for the role being created."""
+
+    def test_create_channel_partner_with_agency_fields(self, authed_client, db):
+        role, _ = Role.objects.get_or_create(
+            name="channel_partner", defaults={"is_system": True, "is_frozen": True}
+        )
+        resp = authed_client.post(
+            "/api/accounts/users/",
+            {
+                "email": "partner@test.com",
+                "full_name": "Partner Person",
+                "is_active": True,
+                "is_email_verified": True,
+                "role": role.id,
+                "profile": {
+                    "agency_name": "Acme Partners",
+                    "allocated_region": "APAC",
+                },
+            },
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        user = User.objects.get(email="partner@test.com")
+        assert user.profile.agency_name == "Acme Partners"
+        assert user.profile.allocated_region == "APAC"
+
+    def test_create_corp_admin_with_manager_and_tan(self, authed_client, db):
+        role, _ = Role.objects.get_or_create(
+            name="corp_admin", defaults={"is_system": True, "is_frozen": True}
+        )
+        resp = authed_client.post(
+            "/api/accounts/users/",
+            {
+                "email": "corp@test.com",
+                "full_name": "Corp Person",
+                "is_active": True,
+                "is_email_verified": True,
+                "role": role.id,
+                "profile": {
+                    "manager_name": "Jane Manager",
+                    "tan_number": "TAN12345",
+                    "pan_number": "PAN67890",
+                },
+            },
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        user = User.objects.get(email="corp@test.com")
+        assert user.profile.manager_name == "Jane Manager"
+        assert user.profile.tan_number == "TAN12345"
+        assert user.profile.pan_number == "PAN67890"
+
+    def test_update_user_profile_fields(self, authed_client, individual_user):
+        resp = authed_client.patch(
+            f"/api/accounts/users/{individual_user.id}/",
+            {"profile": {"occupation": "employed", "current_position": "Engineer"}},
+            format="json",
+        )
+        assert resp.status_code == 200, resp.content
+        individual_user.refresh_from_db()
+        assert individual_user.profile.occupation == "employed"
+        assert individual_user.profile.current_position == "Engineer"
+
+    def test_unknown_profile_keys_are_ignored(self, authed_client, individual_role):
+        """Unrecognized keys in `profile` must not raise — same tolerant
+        behavior as the self-service /api/me/ profile update."""
+        resp = authed_client.post(
+            "/api/accounts/users/",
+            {
+                "email": "tolerant@test.com",
+                "full_name": "Tolerant",
+                "is_active": True,
+                "is_email_verified": True,
+                "role": individual_role.id,
+                "profile": {"not_a_real_field": "whatever", "occupation": "employed"},
+            },
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        user = User.objects.get(email="tolerant@test.com")
+        assert user.profile.occupation == "employed"
+
 
 @pytest.mark.django_db
 class TestUserRetrieve:

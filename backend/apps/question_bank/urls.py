@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     CategoryViewSet,
+    QuestionBankDeletionRequestViewSet,
     QuestionReviewListView,
     QuestionReviewView,
     QuestionViewSet,
@@ -22,6 +23,10 @@ app_name = "question_bank"
 router = DefaultRouter()
 router.register("categories", CategoryViewSet, basename="category")
 router.register("questions", QuestionViewSet, basename="question")
+# D1 §2.2/§4.3
+router.register(
+    "deletion-requests", QuestionBankDeletionRequestViewSet, basename="deletion-request"
+)
 
 # Nested routers for child resources under questions
 question_router = DefaultRouter()
