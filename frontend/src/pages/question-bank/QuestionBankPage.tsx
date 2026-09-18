@@ -23,8 +23,11 @@ import {
   TableRow,
   PageCard,
   stripHtml,
+  useToast,
 } from "@/components/ui";
 import {
+  batchSetExposureLimit,
+  batchSetQuestionStatus,
   deleteQuestion,
   listQuestions,
   QUESTION_STATUSES,
@@ -52,6 +55,7 @@ export default function QuestionBankPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -119,6 +123,39 @@ export default function QuestionBankPage() {
   // the "Pending My Review" quick filter.
   const canReviewContent = ["reviewer", "cj_admin"].includes(user?.role ?? "");
   const canReviewPsychometric = ["psychometrician", "cj_admin"].includes(user?.role ?? "");
+
+  // QB-2 (D1 §4.2/§4.3): periodic QB updation — batch activate/inactivate and
+  // exposure-limit management (psychometrician / admin).
+  const canManageQB = ["psychometrician", "cj_admin"].includes(user?.role ?? "");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const clearSelection = () => setSelected(new Set());
+  const toggleSelect = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const batchStatusMutation = useMutation({
+    mutationFn: (isActive: boolean) =>
+      batchSetQuestionStatus({ question_ids: [...selected], is_active: isActive }),
+    onSuccess: (res) => {
+      toast.success(`${res.updated_count} question(s) updated.`);
+      clearSelection();
+      void queryClient.invalidateQueries({ queryKey: QB_KEY });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+  const batchExposureMutation = useMutation({
+    mutationFn: (limit: number | null) =>
+      batchSetExposureLimit({ question_ids: [...selected], exposure_limit: limit }),
+    onSuccess: (res) => {
+      toast.success(`Exposure limit set on ${res.updated_count} question(s).`);
+      clearSelection();
+      void queryClient.invalidateQueries({ queryKey: QB_KEY });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
   const canReviewAny = canReviewContent || canReviewPsychometric;
 
   // The statuses the current user can review — used by the "Pending My Review" shortcut.
@@ -282,6 +319,54 @@ export default function QuestionBankPage() {
             )}
           </div>
 
+          {/* QB-2: batch action bar (D1 §4.2/§4.3) */}
+          {canManageQB && selected.size > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-primary-200 bg-primary-50 px-3 py-2 text-sm">
+              <span className="font-medium text-primary-800">{selected.size} selected</span>
+              <Button
+                size="sm"
+                variant="outline"
+                loading={batchStatusMutation.isPending}
+                onClick={() => batchStatusMutation.mutate(true)}
+              >
+                Activate
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                loading={batchStatusMutation.isPending}
+                onClick={() => batchStatusMutation.mutate(false)}
+              >
+                Inactivate
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                loading={batchExposureMutation.isPending}
+                onClick={() => {
+                  const raw = window.prompt(
+                    "Exposure limit for the selected questions (blank = no limit):",
+                  );
+                  if (raw === null) return;
+                  const val = raw.trim() === "" ? null : Number(raw);
+                  if (val !== null && (Number.isNaN(val) || val < 0)) {
+                    toast.error("Enter a non-negative number, or leave blank for no limit.");
+                    return;
+                  }
+                  batchExposureMutation.mutate(val);
+                }}
+              >
+                Set exposure limit
+              </Button>
+              <button
+                className="ml-auto text-xs text-slate-500 hover:underline"
+                onClick={clearSelection}
+              >
+                Clear
+              </button>
+            </div>
+          )}
+
           {isLoading ? (
             <div className="flex justify-center py-12">
               <Spinner size="lg" />
@@ -294,6 +379,7 @@ export default function QuestionBankPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {canManageQB && <TableHead className="w-10" />}
                   <TableHead>Question</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
@@ -305,7 +391,7 @@ export default function QuestionBankPage() {
               </TableHeader>
               <TableBody>
                 {questions.length === 0 ? (
-                  <TableEmpty colSpan={7}>
+                  <TableEmpty colSpan={canManageQB ? 8 : 7}>
                     {debouncedSearch || typeFilter || statusFilter
                       ? "No questions match your filters."
                       : "No questions yet. Create one to get started."}
@@ -313,6 +399,16 @@ export default function QuestionBankPage() {
                 ) : (
                   questions.map((q) => (
                     <TableRow key={q.id}>
+                      {canManageQB && (
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            aria-label="Select question"
+                            checked={selected.has(q.id)}
+                            onChange={() => toggleSelect(q.id)}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell className="max-w-xs truncate font-medium text-slate-900">
                         <Link
                           to={`/question-bank/${q.id}`}
