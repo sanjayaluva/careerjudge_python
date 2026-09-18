@@ -375,6 +375,33 @@ export default function SessionPlayerPage() {
     );
   };
 
+  // QT-3: rating items (STANDARD_RATING_SCALE / FORCED_CHOICE_*) in the same
+  // section render as one continuous-scroll screen. The first item renders in
+  // the normal question area; the rest of its same-section rating run renders
+  // below it, and Next advances past the whole group.
+  const CONTINUOUS_RATING_TYPES = new Set([
+    "STANDARD_RATING_SCALE",
+    "FORCED_CHOICE_SINGLE_LEVEL",
+    "FORCED_CHOICE_TWO_LEVEL",
+  ]);
+  const continuousTail: number[] = [];
+  if (CONTINUOUS_RATING_TYPES.has(qd.question_type) && activeSubQ === 0) {
+    for (let i = currentIndex + 1; i < questions.length; i++) {
+      const nq = questions[i];
+      if (
+        nq.section === q.section &&
+        CONTINUOUS_RATING_TYPES.has(nq.question_detail.question_type)
+      ) {
+        continuousTail.push(i);
+      } else {
+        break;
+      }
+    }
+  }
+  const groupIsLast =
+    (continuousTail[continuousTail.length - 1] ?? currentIndex) === questions.length - 1;
+  const effectiveIsLast = continuousTail.length ? groupIsLast : isLast;
+
   const handleNext = () => {
     // Save current answer before navigating
     const currentAnswer = answers[answerKey];
@@ -394,6 +421,20 @@ export default function SessionPlayerPage() {
     // Requirement 3: sub-questions must be delivered in order 1,2,3.
     if (subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) {
       setActiveSubQ((s) => s + 1);
+      return;
+    }
+    // QT-3: a continuous-rating group shows every member on one screen — save
+    // each member's answer and advance past the whole group.
+    if (continuousTail.length) {
+      for (const gi of continuousTail) {
+        const gq = questions[gi];
+        const ga = answers[`${gq.question}_0`];
+        if (ga) {
+          answerMutation.mutate({ question_id: gq.question, raw_answer: ga, sub_question_index: 0 });
+        }
+        setViewedQuestions((prev) => new Set(prev).add(gq.question));
+      }
+      if (!groupIsLast) setCurrentIndex(continuousTail[continuousTail.length - 1] + 1);
       return;
     }
     // Otherwise, move to the next question in the assessment.
@@ -881,6 +922,39 @@ export default function SessionPlayerPage() {
                   activeSubQ={activeSubQ}
                 />
               )}
+              {continuousTail.length > 0 && !presentationActive && (
+                <div className="mt-6 space-y-6 border-t border-slate-200 pt-6">
+                  {continuousTail.map((gi) => {
+                    const gq = questions[gi];
+                    const gKey = `${gq.question}_0`;
+                    return (
+                      <div key={gq.id}>
+                        <div
+                          className="prose prose-sm mb-3 max-w-none text-base font-medium text-slate-900 [&_p]:my-1"
+                          dangerouslySetInnerHTML={{
+                            __html: gq.question_detail.question_text_1 || "",
+                          }}
+                        />
+                        <AnswerInput
+                          question={gq}
+                          currentAnswer={answers[gKey]}
+                          onChange={(ans) => {
+                            setAnswers({ ...answers, [gKey]: ans });
+                            if (skipped.has(gKey)) {
+                              setSkipped((prev) => {
+                                const next = new Set(prev);
+                                next.delete(gKey);
+                                return next;
+                              });
+                            }
+                          }}
+                          activeSubQ={0}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -916,19 +990,21 @@ export default function SessionPlayerPage() {
               and move on. Disabled during a timed presentation — same gate
               as Next/Submit — so it can't be used to bypass anti-cheat
               content gating. */}
-          <Button
-            variant="ghost"
-            onClick={handleSkip}
-            disabled={presentationActive}
-            title={
-              presentationActive
-                ? "Answer options will appear after the presentation ends"
-                : "Skip this question without answering it"
-            }
-          >
-            Skip
-          </Button>
-          {isLast && !(subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) ? (
+          {continuousTail.length === 0 && (
+            <Button
+              variant="ghost"
+              onClick={handleSkip}
+              disabled={presentationActive}
+              title={
+                presentationActive
+                  ? "Answer options will appear after the presentation ends"
+                  : "Skip this question without answering it"
+              }
+            >
+              Skip
+            </Button>
+          )}
+          {effectiveIsLast && !(subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) ? (
             <Button
               onClick={handleSubmit}
               loading={submitMutation.isPending}
