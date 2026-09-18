@@ -184,7 +184,7 @@ export default function CounselingPage() {
                       <TableCell className="text-slate-500">
                         {c.category_names.join(", ") || "—"}
                       </TableCell>
-                      <TableCell className="text-slate-500">${c.hourly_rate}/hr</TableCell>
+                      <TableCell className="text-slate-500">₹{c.hourly_rate}/Session</TableCell>
                       <TableCell>
                         <Badge variant={c.upcoming_slot_count > 0 ? "success" : "default"}>
                           {c.upcoming_slot_count} slot{c.upcoming_slot_count !== 1 ? "s" : ""}
@@ -256,7 +256,7 @@ export default function CounselingPage() {
                           {s.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-slate-500">${s.fee}</TableCell>
+                      <TableCell className="text-slate-500">₹{s.fee}</TableCell>
                       <TableCell>
                         {s.status === "confirmed" ? <JoinSessionButton session={s} /> : "—"}
                       </TableCell>
@@ -352,7 +352,7 @@ function BookingModal({
       open
       onClose={onClose}
       title={`Book with ${counsellor.full_name}`}
-      description={`$${counsellor.hourly_rate}/hr`}
+      description={`₹${counsellor.hourly_rate}/Session`}
       size="md"
     >
       <div className="space-y-4">
@@ -530,7 +530,7 @@ function BookingModal({
             loading={bookMutation.isPending}
             disabled={!topic || !selectedSlot || !termsAccepted}
           >
-            Book session (${counsellor.hourly_rate})
+            Book session (₹{counsellor.hourly_rate})
           </Button>
         </div>
           </>
@@ -633,7 +633,7 @@ function CounsellorDashboardWrapper() {
             </div>
             <div>
               <Label htmlFor="cp-rate" required>
-                Hourly rate (USD)
+                Rate per session (INR)
               </Label>
               <Input
                 id="cp-rate"

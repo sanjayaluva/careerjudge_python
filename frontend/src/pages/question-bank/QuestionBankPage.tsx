@@ -223,7 +223,9 @@ export default function QuestionBankPage() {
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle>Question Bank</CardTitle>
+              <CardTitle>
+                {user?.role === "reviewer" ? "My Review Questions" : "Question Bank"}
+              </CardTitle>
               <CardDescription>
                 {count > 0
                   ? `${count} question${count === 1 ? "" : "s"}`

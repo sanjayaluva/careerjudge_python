@@ -27,6 +27,7 @@ import { NavLink } from "react-router-dom";
 
 import { NAV_ITEMS, type ModuleKey } from "@/lib/constants";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuthStore } from "@/stores/auth";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -55,7 +56,14 @@ export interface RoleBasedNavProps {
 
 export function RoleBasedNav({ onNavigate, className }: RoleBasedNavProps) {
   const { can } = usePermissions();
+  const user = useAuthStore((s) => s.user);
   const visibleItems = NAV_ITEMS.filter((item) => can(item.key));
+
+  // Report 4 Reviewer-2: a reviewer's Question Bank is their review queue.
+  const labelFor = (item: (typeof NAV_ITEMS)[number]) =>
+    item.key === "question_bank" && user?.role === "reviewer"
+      ? "My Review Questions"
+      : item.label;
 
   return (
     <nav aria-label="Primary" className={cn("flex flex-col gap-0.5", className)}>
@@ -78,7 +86,7 @@ export function RoleBasedNav({ onNavigate, className }: RoleBasedNavProps) {
             aria-current="page"
           >
             <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="truncate">{item.label}</span>
+            <span className="truncate">{labelFor(item)}</span>
           </NavLink>
         );
       })}

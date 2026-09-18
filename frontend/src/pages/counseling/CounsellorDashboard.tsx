@@ -238,7 +238,7 @@ function SessionRow({
           ? new Date(session.timeslot_detail.start_time).toLocaleString()
           : "—"}
       </TableCell>
-      {showConfirm && <TableCell className="text-slate-500">${session.fee}</TableCell>}
+      {showConfirm && <TableCell className="text-slate-500">₹{session.fee}</TableCell>}
       {showComplete && (
         <>
           <TableCell>

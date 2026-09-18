@@ -441,6 +441,10 @@ class QuestionReviewCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"comment": "A reason is required to send a question back."}
             )
+        # Report 4 Reviewer-7: a rating applies ONLY on approval. Never store a
+        # rating for a send-back or reject, even if one was submitted.
+        if action != "approve":
+            attrs["rating"] = None
         return attrs
 
     def create(self, validated_data):

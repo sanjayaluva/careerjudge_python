@@ -766,6 +766,26 @@ class TestReviewWorkflow:
         assert resp.status_code == 200
         assert resp.json()["data"]["question_status"] == "sent_back"
 
+    def test_send_back_does_not_store_rating(self, sme_client, reviewer_client):
+        """Report 4 Reviewer-7: a rating submitted with a send-back is ignored."""
+        from apps.question_bank.models import QuestionReview
+
+        qid = self._create_and_submit(sme_client)
+        resp = reviewer_client.post(
+            f"/api/question-bank/questions/{qid}/review/",
+            {
+                "review_type": "content",
+                "action": "send_back",
+                "comment": "Fix the grammar",
+                "rating": 2,  # should be ignored on send-back
+            },
+            format="json",
+        )
+        assert resp.status_code == 200, resp.content
+        review = QuestionReview.objects.filter(question_id=qid, action="send_back").first()
+        assert review is not None
+        assert review.rating is None
+
     def test_reviewer_can_reject(self, sme_client, reviewer_client):
         qid = self._create_and_submit(sme_client)
         resp = reviewer_client.post(

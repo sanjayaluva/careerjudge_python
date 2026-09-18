@@ -1174,7 +1174,9 @@ function ReviewModal({
         review_type: reviewType,
         action,
         comment,
-        rating: Number(rating),
+        // Report 4 Reviewer-7: a rating applies only when APPROVING a question,
+        // never when sending it back.
+        ...(action === "approve" ? { rating: Number(rating) } : {}),
         ...(canSetExposure && exposureLimit ? { exposure_limit: Number(exposureLimit) } : {}),
       }),
     onSuccess: () => {
@@ -1257,21 +1259,24 @@ function ReviewModal({
             }
           />
         </div>
-        <div>
-          <Label htmlFor="rating">Content quality rating (1-5)</Label>
-          <select
-            id="rating"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={rating}
-            onChange={(e) => setRating(Number(e.target.value))}
-          >
-            {[1, 2, 3, 4, 5].map((r) => (
-              <option key={r} value={r}>
-                {r} - {["Poor", "Fair", "Good", "Very Good", "Excellent"][r - 1]}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Report 4 Reviewer-7: rating is only for approval, not send-back. */}
+        {action === "approve" && (
+          <div>
+            <Label htmlFor="rating">Content quality rating (1-5)</Label>
+            <select
+              id="rating"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              value={rating}
+              onChange={(e) => setRating(Number(e.target.value))}
+            >
+              {[1, 2, 3, 4, 5].map((r) => (
+                <option key={r} value={r}>
+                  {r} - {["Poor", "Fair", "Good", "Very Good", "Excellent"][r - 1]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {canSetExposure && (
           <div>
             <Label htmlFor="exposure">Exposure limit (optional)</Label>

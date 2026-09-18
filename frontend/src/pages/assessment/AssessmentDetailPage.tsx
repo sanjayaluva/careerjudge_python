@@ -754,18 +754,22 @@ function QuestionAssignmentTab({
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  // Flatten sections for the dropdown (show level + title)
+  // Report 5 §3.2/§3.3: questions attach only at the LAST (leaf) section, and
+  // the picker shows the full path chain — e.g. "Analytical ›› Assignment ›› L1".
+  // Sections that have sub-sections are intermediate variables and are omitted.
   const flatSections: { id: number; label: string }[] = [];
-  const flatten = (secs: AssessmentSection[], depth: number) => {
+  const flatten = (secs: AssessmentSection[], path: string[]) => {
     for (const s of secs) {
-      flatSections.push({
-        id: s.id,
-        label: `${"  ".repeat(depth)}L${s.level}: ${s.title}`,
-      });
-      if (s.subsections) flatten(s.subsections, depth + 1);
+      const chain = [...path, s.title];
+      const hasChildren = Boolean(s.subsections && s.subsections.length > 0);
+      if (hasChildren) {
+        flatten(s.subsections!, chain);
+      } else {
+        flatSections.push({ id: s.id, label: chain.join(" ›› ") });
+      }
     }
   };
-  flatten(sections, 0);
+  flatten(sections, []);
 
   // Load assigned questions for the selected section
   const { data: assignedQuestions, isLoading: assignedLoading } = useQuery({

@@ -36,7 +36,7 @@ authored in the QnBank first, grouped at config time). Scoped separately in
 
 ---
 
-## B. Report 5 — Assessment Parameter Setting (10 items: 6 ✅ · 1 🟡 · 3 🔴)
+## B. Report 5 — Assessment Parameter Setting (10 items: 8 ✅ · 1 🟡 · 1 🔴)
 
 | Item | Status | Evidence / note |
 |---|---|---|
@@ -45,8 +45,8 @@ authored in the QnBank first, grouped at config time). Scoped separately in
 | Order §1 — display order per level (randomise within a level) | ✅ | `AssessmentSection.order_mode` STATIC/RANDOM + per-section shuffle in player |
 | Order §2 — "static as configured" sequential editable view | ✅ | STATIC choice + editable section order |
 | Assign §1 — questions attach only at the leaf section | ✅ | `not_leaf_section` guard (psychometric exempt). Test-backed |
-| Assign §2 — section list shows full path chains | 🔴 | Picker labels are `L{level}: {title}`, not `A ›› B ›› C` chains |
-| Assign §3 — parent not listed when a child exists | 🔴 | Picker lists every section incl. non-leaf parents |
+| Assign §2 — section list shows full path chains | ✅ | **Fixed** — picker now shows `A ›› B ›› Leaf` chains |
+| Assign §3 — parent not listed when a child exists | ✅ | **Fixed** — picker lists leaf sections only |
 | Assign §4 — one question assigned **only once** per assessment | ✅ | `question_already_assigned` guard (just added). Test-backed |
 | Assign §5 — psychometric author flow (Approach 1) | 🔴 | See **A2** |
 | Delivery — random N from the assigned pool, leaf only | ✅ | `delivery_count` + `random.sample` per session; note: over-count is soft-clamped, no hard validation error |
@@ -60,7 +60,7 @@ authored in the QnBank first, grouped at config time). Scoped separately in
 |---|---|---|
 | 1 sees only own questions | ✅ | `get_queryset` forces `created_by=self` for sme |
 | 2 no create-categories | ✅ | category UI gated to psychometrician/cj_admin |
-| 3 no view/take assessments | 🔴 | Assessments nav still granted to sme |
+| 3 no view/take assessments | ✅ | **Fixed** — Assessments removed from SME nav + grant |
 | 4 pick specific Reviewer **and Psychometrician** (domain) | 🟡 | Auto-routes to a **domain reviewer**; no *manual* choice and **no psychometrician routing** (`assigned_psychometrician` doesn't exist) |
 | 5 create question from task (auto-fill hyperlink) | ✅ | Task → "Create question from spec" prefills type/category |
 | 6 live-chat · 7 invoice | ✅ | present |
@@ -69,12 +69,12 @@ authored in the QnBank first, grouped at config time). Scoped separately in
 | # | Status | Note |
 |---|---|---|
 | 1 sees only assigned questions | 🟡 | Sees own + all non-draft pipeline; assigned-only is opt-in (`?assigned=me`) |
-| 2 rename tab → "My Review Questions" | 🔴 | Still labelled "Question Bank" |
+| 2 rename tab → "My Review Questions" | ✅ | **Fixed** — nav + page heading renamed for reviewers |
 | 3 no create-categories | ✅ | gated |
-| 4 no view/take assessments | 🔴 | Assessments nav still granted to reviewer |
+| 4 no view/take assessments | ✅ | **Fixed** — Assessments removed from Reviewer nav + grant |
 | 5 receive only own-domain questions | ✅ | domain routing via `domain_root` + `assigned_reviewer` |
 | 6 sent-back returns to same SME | ✅ | `created_by` never reassigned |
-| 7 **no rating when sending back** | 🔴 | Reviewer UI always sends a rating; not forbidden on send-back |
+| 7 **no rating when sending back** | ✅ | **Fixed** — rating hidden + ignored on send-back/reject. Test-backed |
 | 8 second-round rating replaces old (history kept) | ✅ | each review is a new row; latest effective, all retained |
 | 9 live-chat · 10 invoice | ✅ | present |
 
@@ -98,7 +98,7 @@ authored in the QnBank first, grouped at config time). Scoped separately in
 | 18 booking notifies counsellor (was a bug) | ✅ | **Fixed** — `notify_user(counsellor…)` on booking |
 | 19 "Counsellor" link → error page (was a bug) | ✅ | **Fixed** — `counseling/:id` route added |
 | 20 rename module tabs (My Assessments, …) | 🔴 | Not renamed |
-| 21 "/hr"→"/Session", **dollars → rupees** | 🔴 | Still `$…/hr`, "Hourly rate (USD)" |
+| 21 "/hr"→"/Session", **dollars → rupees** | ✅ | **Fixed** — counselling shows ₹…/Session (INR) |
 
 ### Role 8 — Trainer (7 ✅ · 3 🟡 · 3 🔴)
 | # | Status | Note |
@@ -118,7 +118,7 @@ authored in the QnBank first, grouped at config time). Scoped separately in
 ### Role 9 — Counsellor (5 ✅ · 4 🟡 · 5 🔴 · 2 ❔)
 | # | Status | Note |
 |---|---|---|
-| 1 no assessment tab · 2 no profiling tab | 🔴 | Both still visible to counsellor (MODULE_VISIBILITY) |
+| 1 no assessment tab · 2 no profiling tab | ✅ | **Fixed** — both removed from Counsellor nav + grant |
 | 3 reports limited to his clients · 4 no create-report · 5 only booked-client reports | 🔴/❔ | No counsellor/client scoping on reports; create not blocked |
 | 6 no browse/book | 🟡 | Browse tab still shown; book/My-Sessions hidden |
 | 7 tagged to a counselling category | ✅ | `CounsellorProfile.categories` M2M |
@@ -165,21 +165,24 @@ corporate change-order.
 
 ---
 
-## E. Suggested "quick wins" before the testing month (small, non-corporate)
+## E. Quick wins — status
 
-These are genuinely in-scope, low-effort, and would clear several red rows:
-1. Reviewer must **not rate on send-back** (6.7) + rename tab "My Review Questions" (6.2).
-2. Hide **Assessments** from SME/Reviewer nav (5.3/6.4) and **Assessments/Profiling** from Counsellor nav (9.1/9.2).
-3. Counsellor timeslot **minimum 1-week** enforcement (9.8).
-4. Currency **$ → ₹** and "/hr" → "/Session" (7.21).
-5. Section picker: **leaf-only + full path chains** (Report 5 Assign §2/§3).
-6. Individual: **Not-Attempted / Suspended / Completed** tabs for assessments & training (7.4/7.14) — a bit larger.
+**Done this pass** (committed, tests green where applicable):
+1. ✅ Reviewer no longer rates on send-back (6.7) + tab renamed "My Review Questions" (6.2).
+2. ✅ Assessments removed from SME/Reviewer nav+grant (5.3/6.4); Assessments & Profiling removed from Counsellor (9.1/9.2).
+3. ✅ Currency $ → ₹ and "/hr" → "/Session" across counselling (7.21).
+4. ✅ Section picker: leaf-only + full path chains (Report 5 §3.2/§3.3).
 
-Bigger, discrete items: the **psychometric Approach-1 flow** (scoped separately),
-**trainer-authored assessments** (8.8), **explicit domain tagging + DomainCategory
-CRUD** (11.5/6/7), and the whole **corporate change-order**.
+**Deferred — larger than a quick win** (flagged, not done):
+- 🔴 Counsellor "minimum 1 week of slots" (9.8) — this is a reminder/notification
+  to the counsellor + helpdesk when availability runs short (Report 3 Counselling
+  §3), not a per-slot check; belongs with the notifications work.
+- 🔴 Individual **status tabs** (Not-Attempted / Suspended / Completed) for
+  assessments, profiling and training (7.4/7.9/7.14) — a UI restructure per module.
 
----
+**Bigger, discrete items** (separate builds): the **psychometric Approach-1 flow**
+(scoped separately), **trainer-authored assessments** (8.8), **explicit domain
+tagging + DomainCategory CRUD** (11.5/6/7), and the whole **corporate change-order**.
 
 ## F. Suggested agenda for the meeting
 1. Agree the **scope split in writing**: (a) SRS + Reports 1–3, (b) Report 4

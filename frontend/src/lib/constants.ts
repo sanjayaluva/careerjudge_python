@@ -120,15 +120,17 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "tasks",
     "invoicing",
   ],
-  sme: ["dashboard", "profile", "question_bank", "assessments", "tasks", "invoicing"],
-  reviewer: ["dashboard", "profile", "question_bank", "assessments", "tasks", "invoicing"],
+  // Report 4 SME-3 / Reviewer-4: SME & Reviewer have no right to view/take
+  // assessments — the Assessments tab is removed from their nav.
+  sme: ["dashboard", "profile", "question_bank", "tasks", "invoicing"],
+  reviewer: ["dashboard", "profile", "question_bank", "tasks", "invoicing"],
   trainer: ["dashboard", "profile", "assessments", "training", "tasks", "invoicing"],
   group_admin: ["dashboard", "profile", "organizations", "assessments"],
+  // Report 4 Counsellor-1/2: no assessment or profiling access — those tabs are
+  // removed; the counsellor keeps Reports (limited to their own clients).
   counsellor: [
     "dashboard",
     "profile",
-    "assessments",
-    "career_profiling",
     "reports",
     "counseling",
     "tasks",

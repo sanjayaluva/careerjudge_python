@@ -113,7 +113,7 @@ describe("<RoleBasedNav />", () => {
     expect(labels).not.toContain("Question Bank");
   });
 
-  it("shows the sme subset (Dashboard, Profile, Question Bank, Assessments, Tasks, Invoicing)", () => {
+  it("shows the sme subset (no Assessments — Report 4 SME-3)", () => {
     setUser("sme");
     renderNav();
 
@@ -127,15 +127,16 @@ describe("<RoleBasedNav />", () => {
         "Dashboard",
         "Profile",
         "Question Bank",
-        "Assessments",
         "Tasks",
         "Invoicing",
       ]),
     );
-    expect(within(list).getAllByRole("link")).toHaveLength(8);
+    expect(labels).not.toContain("Assessments");
+    // 5 role modules + Contact Admin + Messages = 7.
+    expect(within(list).getAllByRole("link")).toHaveLength(7);
   });
 
-  it("shows the reviewer subset (Dashboard, Profile, Question Bank, Assessments, Tasks, Invoicing)", () => {
+  it("shows the reviewer subset (tab reads 'My Review Questions', no Assessments)", () => {
     setUser("reviewer");
     renderNav();
 
@@ -148,13 +149,14 @@ describe("<RoleBasedNav />", () => {
       expect.arrayContaining([
         "Dashboard",
         "Profile",
-        "Question Bank",
-        "Assessments",
+        "My Review Questions",
         "Tasks",
         "Invoicing",
       ]),
     );
-    expect(within(list).getAllByRole("link")).toHaveLength(8);
+    expect(labels).not.toContain("Assessments");
+    expect(labels).not.toContain("Question Bank");
+    expect(within(list).getAllByRole("link")).toHaveLength(7);
   });
 
   describe("module_rights-driven rendering (RBAC single source of truth)", () => {
