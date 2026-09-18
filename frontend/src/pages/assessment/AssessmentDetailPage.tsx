@@ -93,7 +93,10 @@ export default function AssessmentDetailPage() {
   const [sectionToDelete, setSectionToDelete] = useState<AssessmentSection | null>(null);
 
   const toast = useToast();
-  const canManage = ["cj_admin", "corp_admin", "psychometrician"].includes(user?.role ?? "");
+  // Signed (Doc 7 §2.4.1): trainers author + configure their own assessments.
+  const canManage = ["cj_admin", "corp_admin", "psychometrician", "trainer"].includes(
+    user?.role ?? "",
+  );
 
   const { data: assessment, isLoading } = useQuery({
     queryKey: ["assessments", aid],

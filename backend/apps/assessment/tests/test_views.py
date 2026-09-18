@@ -153,6 +153,28 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert amr.proposed_title == "Updated"
         assert amr.requester == corp_admin
 
+    def test_trainer_creates_and_sees_only_own_assessment(self):
+        """Doc 7 §2.4/§2.4.1 (signed): a trainer authors their own assessment
+        and sees only their own + published (never the whole CJ pool)."""
+        trainer = UserFactory.create(role=get_or_create_role("trainer", is_system=True))
+        grant_assessment_perms(trainer)
+        # Someone else's unpublished assessment must NOT be visible to the trainer.
+        Assessment.objects.create(title="Other draft", status="draft", created_by=self.user)
+
+        self.client.force_authenticate(user=trainer)
+        resp = self.client.post(
+            "/api/assessments/",
+            {"title": "Trainer Quiz", "assessment_type": "normal"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        assert resp.json()["data"]["created_by"] == trainer.id
+
+        lst = self.client.get("/api/assessments/")
+        titles = [a["title"] for a in lst.json()["data"]["results"]]
+        assert "Trainer Quiz" in titles
+        assert "Other draft" not in titles  # not the whole pool
+
     def test_update_published_assessment_without_reason_rejected(self):
         corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
         grant_assessment_perms(corp_admin)

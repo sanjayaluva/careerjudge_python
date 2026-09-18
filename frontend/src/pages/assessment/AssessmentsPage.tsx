@@ -57,7 +57,13 @@ export default function AssessmentsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
 
-  const canManage = ["cj_admin", "corp_admin", "psychometrician"].includes(user?.role ?? "");
+  // Report 3 §4.1 / Doc 7 §2.4.1 (signed): trainers author their own assessments
+  // using the CJ Question Bank. The backend scopes a trainer to their OWN
+  // assessments; the list only shows their drafts + published, so Publish/Delete
+  // here act on their own drafts.
+  const canManage = ["cj_admin", "corp_admin", "psychometrician", "trainer"].includes(
+    user?.role ?? "",
+  );
 
   const { data, isLoading } = useQuery({
     queryKey: [...ASSESS_KEY, debouncedSearch, statusFilter],
