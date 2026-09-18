@@ -39,6 +39,7 @@ export type ModuleKey =
   | "cms"
   | "tasks"
   | "concerns"
+  | "messaging"
   | "invoicing";
 
 export const ROLE_LABELS: Record<RoleName, string> = {
@@ -251,6 +252,14 @@ export const NAV_ITEMS: NavItem[] = [
     roles: roleListFor("profile"),
   },
   {
+    // PLT-1 — "Send Message" role-scoped messaging (User Details.pdf p.1).
+    key: "messaging",
+    label: "Messages",
+    to: "/messages",
+    icon: "Mail",
+    roles: roleListFor("profile"),
+  },
+  {
     key: "invoicing",
     label: "Invoicing",
     to: "/invoicing",
@@ -316,6 +325,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   cms: "CMS",
   tasks: "Task Management",
   concerns: "Contact Admin",
+  messaging: "Messages",
   invoicing: "Invoicing",
 };
 
@@ -335,5 +345,6 @@ export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
   cms: "Manage static content and pages.",
   tasks: "Admin assigns + monitors tasks for SME / Reviewer / Trainer / Counsellor.",
   concerns: "Raise an issue or feedback, routed to the admin and helpdesk.",
+  messaging: "Send messages to the admin, helpdesk, and other roles you work with.",
   invoicing: "Raise and track invoices for empanelled work; CJ Admin reviews and pays them.",
 };

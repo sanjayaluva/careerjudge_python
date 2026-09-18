@@ -37,6 +37,7 @@ import UserViewPage from "@/pages/admin/UserViewPage";
 import OrganizationsPage from "@/pages/organizations/OrganizationsPage";
 import OrganizationDetailPage from "@/pages/organizations/OrganizationDetailPage";
 import ConcernsPage from "@/pages/ConcernsPage";
+import MessagesPage from "@/pages/MessagesPage";
 import PsychometricAnalysisPage from "@/pages/question-bank/PsychometricAnalysisPage";
 import QuestionBankPage from "@/pages/question-bank/QuestionBankPage";
 import QuestionDetailPage from "@/pages/question-bank/QuestionDetailPage";
@@ -177,6 +178,7 @@ export default function App() {
                 <Route path="page/:slug" element={<CMSPageViewer />} />
                 <Route path="tasks" element={<TasksPage />} />
                 <Route path="concerns" element={<ConcernsPage />} />
+                <Route path="messages" element={<MessagesPage />} />
                 <Route path="tasks/:id" element={<TaskDetailPage />} />
                 <Route path="invoicing" element={<InvoicingPage />} />
               </Route>

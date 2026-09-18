@@ -100,10 +100,49 @@ class ConversationTests(MessagingBaseTestCase):
             {"recipient": self.admin.id, "body": "Thread msg"},
             format="json",
         )
-        # Get conversations
+        # Get conversations (wrapped envelope: {message, data: {count, results}})
         resp = self.client.get("/api/messaging/conversations/")
-        results = resp.json().get("results", resp.json().get("data", []))
+        body = resp.json()
+        page = body.get("data", body)
+        results = page.get("results", []) if isinstance(page, dict) else page
         if results:
             conv_id = results[0]["id"]
             resp = self.client.get(f"/api/messaging/conversations/{conv_id}/thread/")
             self.assertEqual(resp.status_code, 200, resp.content)
+
+
+class IndividualMessagingTests(MessagingBaseTestCase):
+    """PLT-1: the standard Individual User can Send Message to CJ Admin /
+    Helpdesk (signed capability, User Details.pdf p.1)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.individual_role, _ = Role.objects.get_or_create(
+            name="individual", defaults={"is_system": True, "is_frozen": True}
+        )
+        cls.individual = User.objects.create_user(
+            email="user@msg-test.com", password="pw12345", is_active=True,
+            role=cls.individual_role,
+        )
+
+    def test_individual_sees_admin_in_contacts(self):
+        self.client.force_authenticate(self.individual)
+        resp = self.client.get("/api/messaging/conversations/contacts/")
+        self.assertEqual(resp.status_code, 200)
+        contacts = resp.json()["data"]
+        self.assertTrue(any(c["role__name"] == "cj_admin" for c in contacts))
+
+    def test_individual_can_message_admin(self):
+        self.client.force_authenticate(self.individual)
+        resp = self.client.post(
+            "/api/messaging/messages/",
+            {"recipient": self.admin.id, "subject": "Help", "body": "I need help"},
+        )
+        self.assertEqual(resp.status_code, 201)
+
+    def test_admin_sees_individual_in_contacts(self):
+        self.client.force_authenticate(self.admin)
+        resp = self.client.get("/api/messaging/conversations/contacts/")
+        contacts = resp.json()["data"]
+        self.assertTrue(any(c["role__name"] == "individual" for c in contacts))
