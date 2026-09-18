@@ -17,6 +17,7 @@ import {
   getSessionQuestions,
   retrieveSession,
   submitAnswer,
+  submitGroupAnswer,
   submitSessionResult,
   suspendSession,
 } from "@/api/assessment";
@@ -152,13 +153,29 @@ export default function SessionPlayerPage() {
     return result;
   })();
 
+  // PSY-A1: a psychometric group is delivered with a negative synthetic
+  // question id (``-group_id``). Route its answer to the group endpoint; every
+  // real (positive-id) question keeps the normal answer endpoint, so all the
+  // existing call sites (Next/Prev/Skip/Bookmark/Submit) work unchanged.
+  const persistAnswer = (payload: {
+    question_id: number;
+    raw_answer?: Record<string, unknown>;
+    bookmark?: boolean;
+    sub_question_index?: number;
+  }): Promise<unknown> => {
+    if (payload.question_id < 0) {
+      // Bookmark is a client-only convenience for a group (no server state);
+      // don't let a bookmark click mark the group skipped.
+      if (payload.bookmark && payload.raw_answer == null) {
+        return Promise.resolve({ group_id: -payload.question_id, status: "not_attempted", raw_answer: null });
+      }
+      return submitGroupAnswer(sid, -payload.question_id, payload.raw_answer);
+    }
+    return submitAnswer(sid, payload);
+  };
+
   const answerMutation = useMutation({
-    mutationFn: (payload: {
-      question_id: number;
-      raw_answer?: Record<string, unknown>;
-      bookmark?: boolean;
-      sub_question_index?: number;
-    }) => submitAnswer(sid, payload),
+    mutationFn: persistAnswer,
     onError: (err) => toast.error(extractApiError(err)),
   });
 
@@ -415,7 +432,11 @@ export default function SessionPlayerPage() {
   // Only single-sub-question items can share a continuous screen — a
   // multi-sub-question type (e.g. FORCED_CHOICE_TWO_LEVEL) must keep its
   // one-at-a-time sub-question flow, or later sub-questions would be dropped.
+  // PSY-A1: a psychometric group already renders every statement on one screen
+  // and saves via the group endpoint, so it must NOT be folded into the
+  // continuous-rating scroll grouping (which saves per question id).
   const isGroupable = (sq: (typeof questions)[number]) =>
+    sq.group_id == null &&
     CONTINUOUS_RATING_TYPES.has(sq.question_detail.question_type) &&
     (sq.question_detail.sub_question_count ?? 1) <= 1;
   const continuousTail: number[] = [];
@@ -574,7 +595,7 @@ export default function SessionPlayerPage() {
     for (const [key, ans] of Object.entries(answers)) {
       const [qId, subIdx] = key.split("_");
       savePromises.push(
-        submitAnswer(sid, {
+        persistAnswer({
           question_id: Number(qId),
           sub_question_index: Number(subIdx),
           raw_answer: ans,

@@ -92,6 +92,120 @@ def _seed_session_attempts(session) -> None:
                 defaults={"section": section, "status": "not_attempted"},
             )
 
+    # PSY-A1: seed a response row per psychometric group so groups are both
+    # delivered and (unattempted → 0) scored, mirroring QuestionAttempt seeding.
+    from .models import PsychometricGroupResponse
+
+    for group in session.assessment.psychometric_groups.all():
+        PsychometricGroupResponse.objects.get_or_create(
+            session=session, group=group, defaults={"status": "not_attempted"}
+        )
+
+
+_GROUP_TYPE_TO_QTYPE = {
+    "rank_simple": ("RANK_SIMPLE", "RANK"),
+    "rank_then_rate": ("RANK_THEN_RATE", "RANK"),
+    "forced_choice_single": ("FORCED_CHOICE_SINGLE_LEVEL", "FORCED_CHOICE"),
+    "forced_choice_two_level": ("FORCED_CHOICE_TWO_LEVEL", "FORCED_CHOICE"),
+}
+
+
+def _serialize_group_for_player(group, response) -> dict:
+    """Shape a psychometric group as a synthetic session-question for the player.
+
+    The group is rendered with the EXISTING psychometric renderers (rank /
+    forced-choice), so it is delivered as a synthetic ``SessionQuestion`` whose
+    ``question_detail`` carries the matching question_type + one synthetic
+    option per group item (``option.id`` = ``PsychometricGroupItem.id``).
+
+    A negative synthetic ``question`` id (``-group.id``) is a collision-free
+    sentinel — real question ids are positive — so the player can route this
+    unit's answer to the group endpoint while every id-keyed code path (answer
+    key, viewed set, radio-group name) keeps working unchanged.
+    """
+    qtype, opt_type = _GROUP_TYPE_TO_QTYPE.get(group.group_type, ("RANK_SIMPLE", "RANK"))
+    items = list(group.items.select_related("statement").all().order_by("order"))
+    options = [
+        {
+            "id": it.id,
+            "option_type": opt_type,
+            "label": "",
+            "text_value": (it.statement.question_text_1 if it.statement_id else ""),
+            "image_file": None,
+            "is_correct": False,
+            "match_pair_id": None,
+            "predefined_score": 0,
+            "section_tag": "",
+            "selection_score": 0,
+            "non_selection_score": 0,
+            "order": it.order,
+            "sub_question_index": 0,
+        }
+        for it in items
+    ]
+    label_map = {
+        "rank_simple": "Simple Ranking",
+        "rank_then_rate": "Rank then Rate",
+        "forced_choice_single": "Forced Choice (Single Level)",
+        "forced_choice_two_level": "Forced Choice (Two Level)",
+    }
+    title = f"{label_map.get(group.group_type, 'Psychometric Group')} #{group.group_number}"
+    return {
+        "id": -group.id,
+        "session": response.session_id if response else None,
+        "question": -group.id,
+        "group_id": group.id,
+        "section": None,
+        "sub_question_index": 0,
+        "status": (response.status if response else "not_attempted"),
+        "raw_answer": (response.raw_answer if response else None),
+        "score": None,
+        "max_score": None,
+        "answered_at": (response.answered_at.isoformat() if response and response.answered_at else None),
+        "time_spent_seconds": None,
+        "section_duration_seconds": None,
+        "timer_section_id": None,
+        "question_duration_seconds": None,
+        "section_order_mode": "STATIC",
+        "question_detail": {
+            "id": -group.id,
+            "question_title": title,
+            "question_type": qtype,
+            "question_type_label": title,
+            "question_text_1": title,
+            "question_text_2": "",
+            "image": None,
+            "scoring_type": "",
+            "scoring_type_label": "",
+            "difficulty_level": "",
+            "cognitive_level": "",
+            "status": "active",
+            "options": options,
+            "flash_items": [],
+            "hotspot_areas": [],
+            "media_files": [],
+            "flash_interval_ms": None,
+            "flash_display_count": None,
+            "flash_order": "",
+            "passage_title": "",
+            "passage_body": "",
+            "display_duration_seconds": None,
+            "display_mode": "unlimited",
+            "replay_mode": "permitted",
+            "option_layout": "1",
+            "hotspot_visibility": "visible",
+            "sub_question_count": 1,
+            "sub_question_texts": [],
+            "sub_question_text_2_list": [],
+            "grid_rows": None,
+            "grid_cols": None,
+            "rating_scale_points": group.rating_scale_points,
+            "rating_direction": None,
+            "image_width": None,
+            "image_height": None,
+        },
+    }
+
 
 def _ensure_section_tags_have_sections(assessment, parent_section, question) -> None:
     """Ensure every distinct ``section_tag`` on a psychometric question's
@@ -1088,7 +1202,32 @@ class SessionViewSet(ModelViewSet):
             many=True,
             context={"section_timer_map": section_timer_map, "aq_durations": aq_durations},
         )
-        return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+        data = list(serializer.data)
+
+        # PSY-A1: append psychometric groups as synthetic session-questions so
+        # the player delivers them via the existing rank / forced-choice
+        # renderers. Seeded above; self-heal here for older sessions.
+        from .models import PsychometricGroupResponse
+
+        groups = list(
+            assessment.psychometric_groups.prefetch_related("items__statement").order_by(
+                "order", "group_number"
+            )
+        )
+        if groups:
+            responses = {
+                r.group_id: r
+                for r in PsychometricGroupResponse.objects.filter(session=session)
+            }
+            for group in groups:
+                resp = responses.get(group.id)
+                if resp is None:
+                    resp, _ = PsychometricGroupResponse.objects.get_or_create(
+                        session=session, group=group, defaults={"status": "not_attempted"}
+                    )
+                data.append(_serialize_group_for_player(group, resp))
+
+        return Response({"message": "OK", "data": data}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
     def answer(self, request, pk=None):
@@ -1182,6 +1321,74 @@ class SessionViewSet(ModelViewSet):
             {
                 "message": "Answer saved.",
                 "data": QuestionAttemptSerializer(attempt).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="answer-group")
+    def answer_group(self, request, pk=None):
+        """Save a candidate's answer to one psychometric group (PSY-A1).
+
+        Payload:
+          - group_id: int (required) — a PsychometricGroup in this assessment
+          - raw_answer: dict (optional — omit to mark the group as skipped)
+
+        The group's answer lives on a ``PsychometricGroupResponse`` (a group is
+        not a Question, so it has no QuestionAttempt). Scoring routes each item's
+        contribution to that item's assigned section on submit.
+        """
+        session = self.get_object()
+        if session.status != "active":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": f"Session is {session.status}. Only active sessions can accept answers.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        group_id = request.data.get("group_id")
+        raw_answer = request.data.get("raw_answer")
+
+        from .models import PsychometricGroup, PsychometricGroupResponse
+
+        group = PsychometricGroup.objects.filter(
+            id=group_id, assessment=session.assessment
+        ).first()
+        if group is None:
+            return Response(
+                {
+                    "error": {
+                        "code": "not_found",
+                        "message": "Psychometric group not found for this assessment.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        response, _created = PsychometricGroupResponse.objects.get_or_create(
+            session=session, group=group, defaults={"status": "not_attempted"}
+        )
+        if raw_answer is not None:
+            response.raw_answer = raw_answer
+            response.status = "attempted"
+            response.answered_at = timezone.now()
+        else:
+            response.status = "skipped"
+        response.save()
+
+        return Response(
+            {
+                "message": "Answer saved.",
+                "data": {
+                    "group_id": group.id,
+                    "status": response.status,
+                    "raw_answer": response.raw_answer,
+                },
             },
             status=status.HTTP_200_OK,
         )

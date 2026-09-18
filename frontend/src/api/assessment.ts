@@ -350,6 +350,14 @@ export interface SessionQuestion {
   question: number;
   section: number | null;
   sub_question_index: number;
+  /**
+   * PSY-A1: when set, this delivery unit is a psychometric GROUP (Rank Group /
+   * Forced-Choice Pair), not a real question. It is rendered via the existing
+   * rank / forced-choice renderers and its answer is saved to the group
+   * endpoint (``submitGroupAnswer``). The synthetic ``question`` id is
+   * ``-group_id`` so id-keyed player state stays collision-free.
+   */
+  group_id?: number;
   status: string;
   raw_answer: Record<string, unknown> | null;
   score: number | null;
@@ -457,6 +465,21 @@ export function submitAnswer(
   },
 ): Promise<SessionQuestion> {
   return apiPost<SessionQuestion>(`${BASE}/sessions/${sessionId}/answer/`, payload);
+}
+
+/**
+ * PSY-A1: save a candidate's answer to one psychometric group. Omit
+ * ``raw_answer`` to mark the group skipped.
+ */
+export function submitGroupAnswer(
+  sessionId: number,
+  groupId: number,
+  raw_answer?: Record<string, unknown>,
+): Promise<{ group_id: number; status: string; raw_answer: Record<string, unknown> | null }> {
+  return apiPost(`${BASE}/sessions/${sessionId}/answer-group/`, {
+    group_id: groupId,
+    raw_answer,
+  });
 }
 
 export function submitSessionResult(sessionId: number): Promise<{

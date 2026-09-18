@@ -574,3 +574,48 @@ class PsychometricGroupItem(models.Model):
 
     def __str__(self) -> str:
         return f"{self.group} :: {self.statement_id} -> section {self.section_id}"
+
+
+class PsychometricGroupResponse(models.Model):
+    """A candidate's answer to one psychometric group within a session (PSY-A1).
+
+    A psychometric group (Rank Group / Forced-Choice Pair) is delivered as one
+    unit — the candidate ranks/rates/selects among the group's statements. The
+    group is NOT a Question, so its answer cannot live on a QuestionAttempt;
+    this model is the group's equivalent attempt store. ``raw_answer`` uses the
+    same shapes the player already produces for the matching question type:
+
+      - rank_simple:      {"ranking": [item_id, ...]}
+      - rank_then_rate:   {"ranking": [...], "ratings": {"<item_id>": r}}
+      - forced_choice_*:  {"selected_option_id": item_id, "rating": r?}
+
+    where each ``item_id`` is a ``PsychometricGroupItem`` id. Scoring routes each
+    item's contribution to that item's explicitly-assigned section
+    (``PsychometricGroupItem.section``) — see ``scoring.score_psychometric_group``.
+    """
+
+    STATUS_CHOICES = [
+        ("not_attempted", "Not Attempted"),
+        ("attempted", "Attempted"),
+        ("skipped", "Skipped"),
+    ]
+
+    session = models.ForeignKey(
+        AssessmentSession, on_delete=models.CASCADE, related_name="group_responses"
+    )
+    group = models.ForeignKey(
+        PsychometricGroup, on_delete=models.CASCADE, related_name="responses"
+    )
+    status = models.CharField(
+        _("status"), max_length=20, choices=STATUS_CHOICES, default="not_attempted"
+    )
+    raw_answer = models.JSONField(_("raw answer"), null=True, blank=True)
+    answered_at = models.DateTimeField(_("answered at"), null=True, blank=True)
+
+    class Meta:
+        unique_together = [("session", "group")]
+        verbose_name = _("psychometric group response")
+        verbose_name_plural = _("psychometric group responses")
+
+    def __str__(self) -> str:
+        return f"Session #{self.session_id} - Group #{self.group_id} ({self.status})"

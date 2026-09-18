@@ -156,6 +156,91 @@ def score_question_by_section(
     return {t: (v[0], v[1]) for t, v in result.items()}
 
 
+def score_psychometric_group(group, raw_answer: dict[str, Any] | None) -> dict[int, tuple[float, float]]:
+    """Score one psychometric group response (PSY-A1, signed Approach 1).
+
+    Returns ``{section_id: (raw_score, max_score)}`` — each group ITEM's
+    contribution routed to that item's explicitly-assigned section
+    (``PsychometricGroupItem.section``), so scoring never depends on the
+    error-prone free-text option ``section_tag`` (the Approach-2 flow the
+    client flagged). The math mirrors ``score_question_by_section`` exactly, so
+    a group and an equivalent tagged psychometric question score identically:
+
+      - rank_simple:     option ranked at position ``p`` (0=first) scores
+                         ``N - p``; each item's max = ``N``.
+      - rank_then_rate:  score = ``(N - p) * rating``; each item's max =
+                         ``N * max_rating``.
+      - forced_choice_single:   selected item's section += 1, the other += 0;
+                         each item's max = 1.
+      - forced_choice_two_level: selected item's section += rating, the other
+                         += 0; each item's max = ``max_rating``.
+
+    Statements carry no per-option scores, so forced choice uses the natural
+    selection/non-selection convention (1 / 0, scaled by the rating for the
+    two-level variant) — one point of preference per pair, accumulated per
+    section across the assessment.
+
+    ``raw_answer`` shapes match what the session player already produces
+    (see ``PsychometricGroupResponse``). ``item_id`` values are
+    ``PsychometricGroupItem`` ids.
+    """
+    items = list(group.items.all().order_by("order"))
+    n = len(items)
+    result: dict[int, list[float]] = {}
+
+    def _add(section_id: int, raw: float, mx: float) -> None:
+        cur = result.setdefault(section_id, [0.0, 0.0])
+        cur[0] += raw
+        cur[1] += mx
+
+    if n == 0:
+        return {}
+
+    gt = group.group_type
+    ans = raw_answer or {}
+
+    if gt == "rank_simple":
+        for it in items:
+            _add(it.section_id, 0.0, float(n))
+        ranking = ans.get("ranking", [])
+        if ranking and len(ranking) == n:
+            for pos, item_id in enumerate(ranking):
+                it = next((x for x in items if x.id == item_id), None)
+                if it is not None:
+                    result[it.section_id][0] += float(n - pos)
+
+    elif gt == "rank_then_rate":
+        max_rating = group.rating_scale_points or 5
+        for it in items:
+            _add(it.section_id, 0.0, float(n * max_rating))
+        ranking = ans.get("ranking", [])
+        ratings = ans.get("ratings", {})
+        if ranking and len(ranking) == n:
+            for pos, item_id in enumerate(ranking):
+                it = next((x for x in items if x.id == item_id), None)
+                if it is None:
+                    continue
+                rating = ratings.get(str(item_id), ratings.get(item_id, 0))
+                result[it.section_id][0] += float(n - pos) * float(rating)
+
+    else:  # forced_choice_single / forced_choice_two_level
+        two_level = gt == "forced_choice_two_level"
+        max_rating = group.rating_scale_points or 5
+        selected_id = ans.get("selected_option_id")
+        rating = ans.get("rating", 0)
+        for it in items:
+            is_selected = it.id == selected_id
+            if two_level:
+                mx = float(max_rating)
+                raw = float(rating) if (is_selected and rating) else 0.0
+            else:
+                mx = 1.0
+                raw = 1.0 if is_selected else 0.0
+            _add(it.section_id, raw, mx)
+
+    return {sid: (v[0], v[1]) for sid, v in result.items()}
+
+
 def _get_max_score(question: Question, sub_question_index: int = 0) -> float:
     """Get the maximum possible score for a question.
 
@@ -918,6 +1003,31 @@ def calculate_session_scores(session):
                     leaf_scores[sid] = {"raw": 0.0, "max": 0.0}
                 leaf_scores[sid]["raw"] += attempt.score or 0.0
                 leaf_scores[sid]["max"] += attempt.max_score or 0.0
+
+    # ── Step 1b: Score psychometric groups (PSY-A1, signed Approach 1) ──
+    # A psychometric group (Rank Group / Forced-Choice Pair) is delivered as
+    # one unit and answered on a PsychometricGroupResponse (not a
+    # QuestionAttempt). Each group item's score routes to that item's
+    # explicitly-assigned section — no free-text tag matching.
+    from .models import PsychometricGroupResponse
+
+    for gr in (
+        PsychometricGroupResponse.objects.filter(session=session)
+        .select_related("group")
+        .prefetch_related("group__items")
+    ):
+        by_section = score_psychometric_group(
+            gr.group, gr.raw_answer if gr.status == "attempted" else None
+        )
+        for sid, (raw, mx) in by_section.items():
+            if sid is None:
+                continue
+            if sid not in leaf_scores:
+                leaf_scores[sid] = {"raw": 0.0, "max": 0.0}
+            leaf_scores[sid]["raw"] += raw
+            leaf_scores[sid]["max"] += mx
+            total_raw += raw
+            total_max += mx
 
     # ── Step 2: Build the section hierarchy for the assessment ──
     # Load all sections (ordered deepest-first for the roll-up pass below)
