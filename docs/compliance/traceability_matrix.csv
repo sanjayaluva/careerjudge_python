@@ -40,7 +40,7 @@ ASM-9,Full question-review (open Select/Cancel),Doc 3 §4.1,SIGNED-PENDING,pendi
 QB-1,Deletion approve/decline queue (remove reason-gate),Doc 1 §4.3 / CJ_UC016-17,SIGNED-DONE,done,M2,questionBank.ts delete+deletion-request client; QuestionBankPage + CategoryManager reason modals + admin queue,tsc; vitest,M2: reason-on-delete + admin approve/decline queue (questions & categories); backend reason-gate PRESERVED (signed)
 QB-2,Batch activate/inactivate + exposure UI,Doc 1 §4.2/§4.3,SIGNED-DONE,done,M2,QuestionBankPage.tsx selection + batch bar (batchSetQuestionStatus/ExposureLimit),tsc; vitest,M2: batch activate/inactivate + exposure UI for psychometrician/admin
 QB-3,Question expiry editable (enables expired filter),Doc 1 §4.3,SIGNED-DONE,done,M2,QuestionEditorPage expires_at date field,tsc; vitest,M2: expiry editable
-QB-5,Server hard-require rating on approve / reason on send-back,Doc 1 §3.2/§3.3,SIGNED-PENDING,pending,M2,question_bank/serializers.py:420-427,,
+QB-5,Server hard-require rating on approve / reason on send-back,Doc 1 §3.2/§3.3,SIGNED-DONE,done,M2,question_bank/serializers.py QuestionReviewCreateSerializer.validate,question_bank 143 pass (+2),M2: server-enforce rating/reason
 QT-1,Type 2a (FITB single) default scoring = list-match not 0,00_scoring_rules.json,SIGNED-DONE,done,M1,assessment/scoring.py score_question FITB_SINGLE route,assessment/tests/test_scoring.py::TestFITBSingleScoring,Routes 2a to fuzzy scorer; 3 new tests
 QT-3,Continuous multi-question rating template,00_question_types_spec.json,SIGNED-PENDING,pending,M2,types 7/8a/8b,,
 QT-4,Hotspot 5b per-click confirm/cancel popup,00_question_types_spec.json,SIGNED-PENDING,pending,M2,SessionPlayerPage.tsx:1395-1617,,Load-bearing for correct 5b scoring
