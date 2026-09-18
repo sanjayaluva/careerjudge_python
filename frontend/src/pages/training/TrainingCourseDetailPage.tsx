@@ -55,6 +55,7 @@ import {
   listLiveSessionConsents,
   listAssignmentReports,
   reviewAssignmentReport,
+  setDeadlineOverride,
   listMessages,
   sendMessage,
   type AssignmentReport,
@@ -624,6 +625,16 @@ function ReportsReviewModal({
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
+  // E-X7: trainer grants a per-student deadline override on an assignment.
+  const overrideMut = useMutation({
+    mutationFn: (v: { assignmentId: number; newDeadline: string }) =>
+      setDeadlineOverride(registrationId, {
+        assignment_id: v.assignmentId,
+        new_deadline: new Date(v.newDeadline).toISOString(),
+      }),
+    onSuccess: () => toast.success("Deadline override set for this student."),
+    onError: (err) => toast.error(extractApiError(err)),
+  });
   const list = reports ?? [];
   return (
     <Modal open onClose={onClose} title="Assignment reports" size="lg">
@@ -641,6 +652,10 @@ function ReportsReviewModal({
               report={rep}
               loading={reviewMut.isPending}
               onReview={(score, feedback) => reviewMut.mutate({ reportId: rep.id, score, feedback })}
+              onSetDeadline={(assignmentId, newDeadline) =>
+                overrideMut.mutate({ assignmentId, newDeadline })
+              }
+              overrideLoading={overrideMut.isPending}
             />
           ))}
         </div>
@@ -653,13 +668,18 @@ function ReportReviewRow({
   report,
   loading,
   onReview,
+  onSetDeadline,
+  overrideLoading,
 }: {
   report: AssignmentReport;
   loading: boolean;
   onReview: (score: number, feedback: string) => void;
+  onSetDeadline: (assignmentId: number, newDeadline: string) => void;
+  overrideLoading: boolean;
 }) {
   const [score, setScore] = useState(report.trainer_score != null ? String(report.trainer_score) : "");
   const [feedback, setFeedback] = useState(report.trainer_feedback ?? "");
+  const [override, setOverride] = useState("");
   return (
     <div className="rounded-md border border-slate-200 p-3 text-sm">
       <div className="flex items-center justify-between">
@@ -678,6 +698,43 @@ function ReportReviewRow({
           View submitted report ↗
         </a>
       )}
+      {/* E-X7: multiple attached files */}
+      {(report.files ?? []).length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-2">
+          {(report.files ?? []).map((f) => (
+            <a
+              key={f.id}
+              href={f.file}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded bg-slate-100 px-2 py-0.5 text-xs text-primary-600 hover:underline"
+            >
+              {f.file_type || "file"} ↗
+            </a>
+          ))}
+        </div>
+      )}
+      {/* E-X7: per-student deadline override */}
+      <div className="mt-2 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-2">
+        <div>
+          <label className="block text-xs text-slate-500">Deadline override</label>
+          <input
+            type="datetime-local"
+            value={override}
+            onChange={(e) => setOverride(e.target.value)}
+            className="rounded border border-slate-200 px-2 py-1 text-sm"
+          />
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          loading={overrideLoading}
+          disabled={!override}
+          onClick={() => onSetDeadline(report.assignment, override)}
+        >
+          Set override
+        </Button>
+      </div>
       <div className="mt-2 flex flex-wrap items-end gap-2">
         <div>
           <label className="block text-xs text-slate-500">Score (0–10)</label>

@@ -253,6 +253,8 @@ export interface AssignmentReport {
   report_file_url: string;
   /** Report 3 §3.6: uploaded report file (PDF/PPT/Word). */
   report_file: string | null;
+  /** E-X7: additional attached files (multi-format). */
+  files?: { id: number; file: string; file_type: string; uploaded_at: string }[];
   /** Report 3 §3.3: trainer granted late-submission permission. */
   late_submission_approved: boolean;
   status: string;
@@ -770,15 +772,28 @@ export function submitAssignmentReport(
  */
 export function submitAssignmentReportFile(
   registrationId: number,
-  payload: { assignment: number; report_text?: string; file: File },
+  payload: { assignment: number; report_text?: string; file?: File; files?: File[] },
 ): Promise<AssignmentReport> {
   const form = new FormData();
   form.append("assignment", String(payload.assignment));
   if (payload.report_text) form.append("report_text", payload.report_text);
-  form.append("report_file", payload.file);
+  if (payload.file) form.append("report_file", payload.file);
+  // E-X7: attach multiple files of mixed formats.
+  (payload.files ?? []).forEach((f) => form.append("report_files", f));
   return apiPost<AssignmentReport>(
     `${BASE}/registrations/${registrationId}/assignment_reports/`,
     form,
+  );
+}
+
+/** E-X7: trainer sets a per-student deadline override for one assignment. */
+export function setDeadlineOverride(
+  registrationId: number,
+  payload: { assignment_id: number; new_deadline: string; reason?: string },
+): Promise<{ id: number; student: number; new_deadline: string }> {
+  return apiPost(
+    `${BASE}/registrations/${registrationId}/set-deadline-override/`,
+    payload,
   );
 }
 

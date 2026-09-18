@@ -27,7 +27,9 @@ from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
 
 from .models import (
+    AssignmentDeadlineOverride,
     AssignmentReport,
+    AssignmentReportFile,
     CourseAssessment,
     CourseLesson,
     CourseMessage,
@@ -88,6 +90,7 @@ class HasTrainingPermission(HasModulePermission):
         "assignment_reports": "add",
         "review_report": "change",
         "approve_late_submission": "change",
+        "set_deadline_override": "change",
         "request_update": "change",
         "consent": "add",
         "consents": "view",
@@ -1057,10 +1060,13 @@ class CourseRegistrationViewSet(ModelViewSet):
         existing = AssignmentReport.objects.filter(
             assignment=assignment, student=request.user
         ).first()
-        deadline_passed = (
-            assignment.submission_deadline is not None
-            and assignment.submission_deadline < timezone.now()
-        )
+        # E-X7: a per-student deadline override (trainer-granted) takes
+        # precedence over the assignment's global deadline.
+        override = AssignmentDeadlineOverride.objects.filter(
+            assignment=assignment, student=request.user
+        ).first()
+        effective_deadline = override.new_deadline if override else assignment.submission_deadline
+        deadline_passed = effective_deadline is not None and effective_deadline < timezone.now()
         late_ok = bool(existing and existing.late_submission_approved)
         if deadline_passed and not late_ok:
             return Response(
@@ -1093,9 +1099,75 @@ class CourseRegistrationViewSet(ModelViewSet):
             },
         )
 
+        # E-X7: accept multiple attached files of mixed formats.
+        extra_files = request.FILES.getlist("report_files")
+        for f in extra_files:
+            ext = f.name.rsplit(".", 1)[-1].lower() if "." in f.name else ""
+            AssignmentReportFile.objects.create(report=report, file=f, file_type=ext)
+
         return Response(
             {"message": "Report submitted.", "data": AssignmentReportSerializer(report).data},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="set-deadline-override")
+    def set_deadline_override(self, request, pk=None):
+        """Trainer sets a deadline override for this registration's student on
+        one assignment (E-X7).
+
+        Body: {assignment_id, new_deadline (ISO), reason?}
+        """
+        from .models import Assignment
+
+        registration = self.get_object()
+        course = registration.course
+        user_role_name = request.user.role.name if request.user.role_id else None
+        if course.created_by_id != request.user.id and user_role_name != "cj_admin":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the course trainer or admin can set a deadline override.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        assignment = Assignment.objects.filter(
+            id=request.data.get("assignment_id"), session__topic__lesson__course=course
+        ).first()
+        new_deadline = request.data.get("new_deadline")
+        if not assignment:
+            return Response(
+                {"error": {"code": "not_found", "message": "Assignment not found for this course."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not new_deadline:
+            return Response(
+                {"error": {"code": "validation_error", "message": "new_deadline is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        override, _created = AssignmentDeadlineOverride.objects.update_or_create(
+            assignment=assignment,
+            student=registration.student,
+            defaults={
+                "new_deadline": new_deadline,
+                "reason": request.data.get("reason", ""),
+                "created_by": request.user,
+            },
+        )
+        # Re-read so new_deadline is a parsed datetime (update_or_create leaves
+        # the raw input on the in-memory instance).
+        override.refresh_from_db()
+        return Response(
+            {
+                "message": "Deadline override set.",
+                "data": {
+                    "id": override.id,
+                    "student": override.student_id,
+                    "new_deadline": override.new_deadline.isoformat(),
+                },
+            },
+            status=status.HTTP_200_OK,
         )
 
     @action(detail=True, methods=["post"], url_path="review-report")

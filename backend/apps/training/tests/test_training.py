@@ -1320,3 +1320,96 @@ def test_cj_admin_can_add_topic_to_published_course_directly(admin_client, train
         format="json",
     )
     assert resp.status_code == 201, resp.data
+
+
+def _course_with_assignment(trainer_user, deadline=None):
+    from apps.training.models import Assignment, CourseLesson, LessonTopic, TopicSession
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="T1", order=1)
+    session = TopicSession.objects.create(topic=topic, title="S1", order=1)
+    assignment = Assignment.objects.create(
+        session=session, title="A1", report_submission_enabled=True,
+        submission_deadline=deadline,
+    )
+    return course, assignment
+
+
+def test_past_deadline_blocks_submission(student_client, individual_user, trainer_user):
+    """E-X7 baseline: a past global deadline blocks submission."""
+    from django.utils import timezone
+    from datetime import timedelta
+
+    course, assignment = _course_with_assignment(
+        trainer_user, deadline=timezone.now() - timedelta(days=1)
+    )
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    resp = student_client.post(
+        f"/api/training/registrations/{reg.id}/assignment_reports/",
+        {"assignment": assignment.id, "report_text": "late"},
+        format="json",
+    )
+    assert resp.status_code == 403
+    assert resp.data["error"]["code"] == "deadline_passed"
+
+
+def test_deadline_override_allows_late_submission(
+    student_client, individual_user, trainer_user
+):
+    """E-X7: a per-student override deadline in the future re-opens submission."""
+    from django.utils import timezone
+    from datetime import timedelta
+    from apps.training.models import AssignmentDeadlineOverride
+
+    course, assignment = _course_with_assignment(
+        trainer_user, deadline=timezone.now() - timedelta(days=1)
+    )
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    AssignmentDeadlineOverride.objects.create(
+        assignment=assignment, student=individual_user,
+        new_deadline=timezone.now() + timedelta(days=3),
+    )
+    resp = student_client.post(
+        f"/api/training/registrations/{reg.id}/assignment_reports/",
+        {"assignment": assignment.id, "report_text": "on time now"},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+
+
+def test_trainer_sets_deadline_override(trainer_client, individual_user, trainer_user):
+    """E-X7: trainer sets an override via the endpoint."""
+    from django.utils import timezone
+    from datetime import timedelta
+    from apps.training.models import AssignmentDeadlineOverride
+
+    course, assignment = _course_with_assignment(trainer_user)
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    new_deadline = (timezone.now() + timedelta(days=5)).isoformat()
+    resp = trainer_client.post(
+        f"/api/training/registrations/{reg.id}/set-deadline-override/",
+        {"assignment_id": assignment.id, "new_deadline": new_deadline, "reason": "extra time"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    assert AssignmentDeadlineOverride.objects.filter(
+        assignment=assignment, student=individual_user
+    ).exists()
+
+
+def test_multiple_report_files_attached(student_client, individual_user, trainer_user):
+    """E-X7: multiple files attach to a report submission."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    course, assignment = _course_with_assignment(trainer_user)
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    f1 = SimpleUploadedFile("a.pdf", b"pdf-bytes", content_type="application/pdf")
+    f2 = SimpleUploadedFile("b.docx", b"doc-bytes")
+    resp = student_client.post(
+        f"/api/training/registrations/{reg.id}/assignment_reports/",
+        {"assignment": assignment.id, "report_text": "multi", "report_files": [f1, f2]},
+        format="multipart",
+    )
+    assert resp.status_code == 201, resp.data
+    assert len(resp.data["data"]["files"]) == 2

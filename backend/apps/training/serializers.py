@@ -298,6 +298,15 @@ class TrainingCourseSerializer(serializers.ModelSerializer):
         ]
 
 
+class AssignmentReportFileSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import AssignmentReportFile
+
+        model = AssignmentReportFile
+        fields = ["id", "file", "file_type", "uploaded_at"]
+        read_only_fields = ["id", "uploaded_at"]
+
+
 class AssignmentReportSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source="student.full_name", read_only=True, default=None)
     student_email = serializers.CharField(source="student.email", read_only=True)
@@ -305,6 +314,7 @@ class AssignmentReportSerializer(serializers.ModelSerializer):
     reviewed_by_name = serializers.CharField(
         source="reviewed_by.full_name", read_only=True, default=None
     )
+    files = AssignmentReportFileSerializer(many=True, read_only=True)
 
     class Meta:
         model = AssignmentReport
@@ -318,6 +328,7 @@ class AssignmentReportSerializer(serializers.ModelSerializer):
             "report_text",
             "report_file_url",
             "report_file",
+            "files",
             "late_submission_approved",
             "status",
             "trainer_score",
