@@ -60,6 +60,7 @@ import {
   listMessages,
   sendMessage,
   type AssignmentReport,
+  type CourseLesson,
   publishCourse,
   registerForCourse,
   requestCourseUpdate,
@@ -450,6 +451,9 @@ export default function TrainingCourseDetailPage() {
                         <TableCell className="font-medium text-slate-900">{a.title}</TableCell>
                         <TableCell>
                           <Badge variant="outline">{a.level.replace(/_/g, " ")}</Badge>
+                          {a.session_title && (
+                            <div className="mt-0.5 text-xs text-slate-500">{a.session_title}</div>
+                          )}
                         </TableCell>
                         <TableCell className="text-slate-500">
                           {a.assessment_detail?.title ?? `#${a.assessment}`}
@@ -469,7 +473,7 @@ export default function TrainingCourseDetailPage() {
                   </TableBody>
                 </Table>
               )}
-              {canManage && <AddAssessmentForm courseId={cid} />}
+              {canManage && <AddAssessmentForm courseId={cid} lessons={course.lessons} />}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1029,14 +1033,25 @@ function AddLiveSessionForm({ courseId }: { courseId: number }) {
 // Add Assessment Form (SRS §2.4)
 // ---------------------------------------------------------------------------
 
-function AddAssessmentForm({ courseId }: { courseId: number }) {
+function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: CourseLesson[] }) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [show, setShow] = useState(false);
   const [title, setTitle] = useState("");
   const [assessmentId, setAssessmentId] = useState("");
   const [level, setLevel] = useState("end_of_session");
+  const [sessionId, setSessionId] = useState("");
   const [isScored, setIsScored] = useState(true);
+
+  // Report 3 §4 Issue 3: a level-specific assessment must attach to a chosen
+  // session — flatten the course's sessions with a Lesson › Topic › Session
+  // path so the trainer picks the exact one. "End of Course" needs no session.
+  const sessionOptions = lessons.flatMap((l) =>
+    l.topics.flatMap((t) =>
+      t.sessions.map((s) => ({ id: s.id, label: `${l.title} › ${t.title} › ${s.title}` })),
+    ),
+  );
+  const needsSession = level !== "end_of_course";
 
   // Load available assessments from the assessment module
   const { data: assessmentsData } = useQuery({
@@ -1051,12 +1066,14 @@ function AddAssessmentForm({ courseId }: { courseId: number }) {
         level,
         title,
         is_scored: isScored,
+        ...(needsSession && sessionId ? { session: Number(sessionId) } : {}),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["training", "courses", courseId] });
       toast.success("Assessment linked to course.");
       setTitle("");
       setAssessmentId("");
+      setSessionId("");
       setShow(false);
     },
     onError: (err) => toast.error(extractApiError(err)),
@@ -1135,6 +1152,37 @@ function AddAssessmentForm({ courseId }: { courseId: number }) {
           </select>
         </div>
       </div>
+      {needsSession && (
+        <div>
+          <Label htmlFor="as-session" required>
+            {level === "during_session" || level === "end_of_session"
+              ? "Session"
+              : level === "end_of_topic"
+                ? "Topic (pick a session within it)"
+                : "Lesson (pick a session within it)"}
+          </Label>
+          <select
+            id="as-session"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            value={sessionId}
+            onChange={(e) => setSessionId(e.target.value)}
+            required
+          >
+            <option value="">Select the session…</option>
+            {sessionOptions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          {sessionOptions.length === 0 && (
+            <p className="mt-1 text-xs text-amber-600">
+              Add lessons, topics and sessions to the course structure first, then link the
+              assessment to a specific session.
+            </p>
+          )}
+        </div>
+      )}
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
@@ -1149,7 +1197,7 @@ function AddAssessmentForm({ courseId }: { courseId: number }) {
           type="submit"
           size="sm"
           loading={mutation.isPending}
-          disabled={!title || !assessmentId}
+          disabled={!title || !assessmentId || (needsSession && !sessionId)}
         >
           Link assessment
         </Button>

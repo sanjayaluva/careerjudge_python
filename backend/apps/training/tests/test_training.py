@@ -1449,3 +1449,31 @@ def test_trainer_can_link_assessment_to_draft_course(trainer_client, trainer_use
     )
     assert resp.status_code == 201, resp.data
     assert CourseAssessment.objects.filter(course=course).exists()
+
+
+def test_assessment_links_to_specific_session(trainer_client, trainer_user):
+    """Report 3 §4.3 / Report 4 Trainer Issue 9: an assessment links to a
+    SPECIFIC session, not just a level label."""
+    from apps.assessment.models import Assessment
+    from apps.training.models import CourseAssessment, CourseLesson, LessonTopic, TopicSession
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="T1", order=1)
+    session = TopicSession.objects.create(topic=topic, title="Session 2", order=2)
+    assessment = Assessment.objects.create(title="Quiz", status="published")
+
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/assessments/",
+        {
+            "assessment": assessment.id,
+            "title": "End of Session 2 Quiz",
+            "level": "end_of_session",
+            "session": session.id,
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    ca = CourseAssessment.objects.get(course=course)
+    assert ca.session_id == session.id
+    assert resp.data["data"]["session_title"] == "Session 2"

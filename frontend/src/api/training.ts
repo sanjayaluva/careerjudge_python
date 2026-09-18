@@ -91,6 +91,7 @@ export interface CourseAssessment {
   };
   level: string;
   session: number | null;
+  session_title?: string | null;
   title: string;
   is_scored: boolean;
   order: number;

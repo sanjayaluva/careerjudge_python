@@ -121,6 +121,7 @@ class CourseLessonSerializer(serializers.ModelSerializer):
 
 class CourseAssessmentSerializer(serializers.ModelSerializer):
     assessment_detail = AssessmentListSerializer(source="assessment", read_only=True)
+    session_title = serializers.CharField(source="session.title", read_only=True, default=None)
 
     class Meta:
         model = CourseAssessment
@@ -131,11 +132,12 @@ class CourseAssessmentSerializer(serializers.ModelSerializer):
             "assessment_detail",
             "level",
             "session",
+            "session_title",
             "title",
             "is_scored",
             "order",
         ]
-        read_only_fields = ["id", "assessment_detail", "course"]
+        read_only_fields = ["id", "assessment_detail", "course", "session_title"]
 
 
 class LiveSessionSerializer(serializers.ModelSerializer):
