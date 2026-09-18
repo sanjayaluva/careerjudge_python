@@ -22,8 +22,8 @@ D3,Per-section/per-question timers (backend),Doc 3 §5.2,SIGNED-DONE,done,,asses
 PSY-1,Psychometrician filter/run UI,Doc 2 / CJ_UC025,SIGNED-PENDING,pending,M2,question_bank/views.py:665;questionBank.ts:305-339,,Drop download/upload sub-claim (no basis)
 PSY-2,Question detail surfaces all 6 stored indices,Doc 2,SIGNED-PENDING,pending,M2,QuestionDetailPage.tsx:102,,Deviation - low
 CP-1,Standard n x n mapping-rule UI,Doc 5 §4.1.2,SIGNED-PENDING,pending,M2,ProfilingSolutionDetailPage.tsx;careerProfiling.ts:345-359,,
-CP-2,Band-row creation UI (bands currently read-only),Doc 5 §4.1.1/§4.2.1,SIGNED-PENDING,pending,M2,ProfilingSolutionDetailPage.tsx:436-513,,
-CP-3,Define-Band variable picker (not raw section ID),Doc 5 §4.1.1,SIGNED-PENDING,pending,M2,ProfilingSolutionDetailPage.tsx:550-596,,
+CP-2,Band-row creation UI (bands currently read-only),Doc 5 §4.1.1/§4.2.1,SIGNED-DONE,done,M2,ProfilingSolutionDetailPage BandsTab + CreateBandRowModal (createBand),tsc; vitest,M2: band-row creation per definition
+CP-3,Define-Band variable picker (not raw section ID),Doc 5 §4.1.1,SIGNED-DONE,done,M2,ProfilingSolutionDetailPage CreateBandDefinitionModal section picker (listSections),tsc; vitest,M2: variable picker replaces raw Section ID
 REP-1,Report graph/chart layout rendering,Doc 4 §2.2/§3.1.2;Doc 6 §3.1.2,SIGNED-PENDING,pending,M4,generation.py:117-122;ReportDetailPage.tsx:1775,,Not analytics dashboards; sample report 10 is chart-built
 REP-2,Report templates/drag-drop/live preview,Doc 4 §3;Doc 6 §4,SIGNED-PENDING,pending,M4,ReportDetailPage.tsx:1730-1750,,Drop WYSIWYG-everywhere (elective M6B item 4)
 REP-3,Front-end FMI/PMI/VMI/raw/PMI-D band creation,Doc 6 §3,SIGNED-PENDING,pending,M3,reporting.ts:131-142,,
