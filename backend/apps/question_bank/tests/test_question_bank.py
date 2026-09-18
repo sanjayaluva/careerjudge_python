@@ -337,6 +337,65 @@ class TestQuestionCRUD:
         assert resp.json()["data"]["status"] == "draft"
         assert resp.json()["data"]["created_by"] is not None
 
+    def test_bulk_import_creates_multiple_questions(self, sme_client):
+        """E-QB-4: bulk-import a template of full questions."""
+        resp = sme_client.post(
+            "/api/question-bank/questions/bulk-import/",
+            {
+                "questions": [
+                    {
+                        "question_type": "MCQ_TEXT_IMAGE",
+                        "question_title": "Q1",
+                        "question_text_1": "First?",
+                        "scoring_type": "BINARY",
+                    },
+                    {
+                        "question_type": "FITB_SINGLE",
+                        "question_title": "Q2",
+                        "question_text_1": "Second?",
+                        "scoring_type": "BINARY",
+                    },
+                ]
+            },
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        data = resp.json()["data"]
+        assert data["created_count"] == 2
+        assert data["error_count"] == 0
+        assert len(data["created_ids"]) == 2
+
+    def test_bulk_import_reports_row_errors(self, sme_client):
+        """A bad row is reported; valid rows still import (partial success)."""
+        resp = sme_client.post(
+            "/api/question-bank/questions/bulk-import/",
+            {
+                "questions": [
+                    {
+                        "question_type": "MCQ_TEXT_IMAGE",
+                        "question_title": "Good",
+                        "question_text_1": "OK?",
+                        "scoring_type": "BINARY",
+                    },
+                    {"question_title": "Missing type"},
+                ]
+            },
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        data = resp.json()["data"]
+        assert data["created_count"] == 1
+        assert data["error_count"] == 1
+        assert data["errors"][0]["index"] == 1
+
+    def test_bulk_import_rejects_empty(self, sme_client):
+        resp = sme_client.post(
+            "/api/question-bank/questions/bulk-import/",
+            {"questions": []},
+            format="json",
+        )
+        assert resp.status_code == 400
+
     def test_sme_can_create_all_question_types(self, sme_client):
         """Test creating questions of different types."""
         types = [

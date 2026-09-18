@@ -29,6 +29,7 @@ import {
   approveDeletionRequest,
   batchSetExposureLimit,
   batchSetQuestionStatus,
+  bulkImportQuestions,
   declineDeletionRequest,
   deleteQuestion,
   listDeletionRequests,
@@ -36,6 +37,7 @@ import {
   QUESTION_STATUSES,
   QUESTION_TYPES,
   submitForReview,
+  type BulkImportResult,
 } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -67,6 +69,7 @@ export default function QuestionBankPage() {
   const [mineOnly, setMineOnly] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [deleteQ, setDeleteQ] = useState<{ id: number; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -236,6 +239,11 @@ export default function QuestionBankPage() {
               <Button variant="outline" onClick={() => setCategoriesOpen(true)}>
                 Categories
               </Button>
+              {canCreate && (
+                <Button variant="outline" onClick={() => setBulkImportOpen(true)}>
+                  Bulk import
+                </Button>
+              )}
               {canCreate && <Button onClick={openCreateEditor}>Create question</Button>}
             </div>
           </div>
@@ -609,7 +617,118 @@ export default function QuestionBankPage() {
         onClose={() => setDeleteQ(null)}
         onConfirm={(reason) => deleteQ && deleteMutation.mutate({ id: deleteQ.id, reason })}
       />
+      {bulkImportOpen && (
+        <BulkImportModal
+          onClose={() => setBulkImportOpen(false)}
+          onImported={() => void queryClient.invalidateQueries({ queryKey: QB_KEY })}
+        />
+      )}
     </div>
+  );
+}
+
+function BulkImportModal({
+  onClose,
+  onImported,
+}: {
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const toast = useToast();
+  const [text, setText] = useState("");
+  const [result, setResult] = useState<BulkImportResult | null>(null);
+
+  const importMutation = useMutation({
+    mutationFn: (questions: Record<string, unknown>[]) => bulkImportQuestions(questions),
+    onSuccess: (res) => {
+      setResult(res);
+      if (res.created_count > 0) {
+        toast.success(`Imported ${res.created_count} question(s).`);
+        onImported();
+      }
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const handleFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => setText(String(reader.result ?? ""));
+    reader.readAsText(file);
+  };
+
+  const submit = () => {
+    setResult(null);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      toast.error("Invalid JSON. Paste an array of questions or { \"questions\": [...] }.");
+      return;
+    }
+    const questions = Array.isArray(parsed)
+      ? parsed
+      : (parsed as { questions?: unknown }).questions;
+    if (!Array.isArray(questions) || questions.length === 0) {
+      toast.error("Provide a non-empty array of question objects.");
+      return;
+    }
+    importMutation.mutate(questions as Record<string, unknown>[]);
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Bulk import questions" size="lg">
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600">
+          Paste a JSON array of full questions (or a{" "}
+          <code className="rounded bg-slate-100 px-1">{`{ "questions": [...] }`}</code> object), or
+          upload a <code className="rounded bg-slate-100 px-1">.json</code> file. Each item uses the
+          same fields as a single question (e.g. <code>question_type</code>,{" "}
+          <code>question_title</code>, <code>question_text_1</code>, <code>scoring_type</code>).
+        </p>
+        <div>
+          <input
+            type="file"
+            accept="application/json,.json"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+            }}
+            className="block w-full text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-700 hover:file:bg-primary-100"
+          />
+        </div>
+        <textarea
+          rows={10}
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder='[{"question_type": "MCQ_TEXT_IMAGE", "question_title": "Q1", "question_text_1": "First?", "scoring_type": "BINARY"}]'
+        />
+        {result && (
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+            <p className="font-medium text-slate-900">
+              Imported {result.created_count}; {result.error_count} error(s).
+            </p>
+            {result.errors.length > 0 && (
+              <ul className="mt-2 max-h-32 space-y-1 overflow-auto text-xs text-danger-600">
+                {result.errors.map((e) => (
+                  <li key={e.index}>
+                    Row {e.index + 1}: {JSON.stringify(e.errors)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+          <Button loading={importMutation.isPending} disabled={!text.trim()} onClick={submit}>
+            Import
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

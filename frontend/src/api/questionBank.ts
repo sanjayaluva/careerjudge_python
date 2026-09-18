@@ -239,6 +239,20 @@ export function createQuestion(payload: Record<string, unknown>): Promise<Questi
   return apiPost<QuestionDetail>(`${BASE}/questions/`, payload);
 }
 
+export interface BulkImportResult {
+  created_count: number;
+  created_ids: number[];
+  error_count: number;
+  errors: { index: number; errors: Record<string, unknown> }[];
+}
+
+/** E-QB-4: bulk-import full questions from a template array. */
+export function bulkImportQuestions(
+  questions: Record<string, unknown>[],
+): Promise<BulkImportResult> {
+  return apiPost<BulkImportResult>(`${BASE}/questions/bulk-import/`, { questions });
+}
+
 export function updateQuestion(
   id: number,
   payload: Record<string, unknown>,

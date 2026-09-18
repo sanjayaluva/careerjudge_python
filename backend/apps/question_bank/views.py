@@ -39,6 +39,7 @@ class HasQuestionBankPermission(HasModulePermission):
         "partial_update": "change",
         "destroy": "delete",
         "tree": "view",
+        "bulk_import": "add",  # E-QB-4: bulk full-question template import
         "submit_for_review": "change",
         "validate_config": "view",
         "psychometric_analysis": "change",  # psychometrician-only: computes indices
@@ -276,6 +277,52 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
                 "data": QuestionDetailSerializer(serializer.instance).data,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], url_path="bulk-import")
+    def bulk_import(self, request):
+        """Bulk-import full questions from a template (E-QB-4).
+
+        Extends the single-question create (CJ_UC013) to a batch: the client
+        posts {"questions": [<full question payload>, ...]} and each item is
+        validated + created with the same serializer as a normal create. The
+        response reports how many were created and per-row errors, so a partial
+        template still imports its valid rows.
+
+        Body: {"questions": [ {question_type, question_title, ...}, ... ]}
+        """
+        items = request.data.get("questions")
+        if not isinstance(items, list) or not items:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "Provide a non-empty 'questions' list.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        created, errors = [], []
+        for idx, payload in enumerate(items):
+            serializer = QuestionCreateSerializer(data=payload, context={"request": request})
+            if serializer.is_valid():
+                serializer.save(created_by=request.user)
+                created.append(serializer.instance.id)
+            else:
+                errors.append({"index": idx, "errors": serializer.errors})
+
+        return Response(
+            {
+                "message": f"Imported {len(created)} of {len(items)} question(s).",
+                "data": {
+                    "created_count": len(created),
+                    "created_ids": created,
+                    "error_count": len(errors),
+                    "errors": errors,
+                },
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_400_BAD_REQUEST,
         )
 
     def update(self, request, *args, **kwargs):
