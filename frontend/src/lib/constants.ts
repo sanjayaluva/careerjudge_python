@@ -38,6 +38,7 @@ export type ModuleKey =
   | "counseling"
   | "cms"
   | "tasks"
+  | "concerns"
   | "invoicing";
 
 export const ROLE_LABELS: Record<RoleName, string> = {
@@ -242,6 +243,14 @@ export const NAV_ITEMS: NavItem[] = [
     roles: roleListFor("tasks"),
   },
   {
+    // ADM-2 / D9 §4 — raise a concern (all roles) + admin inbox.
+    key: "concerns",
+    label: "Contact Admin",
+    to: "/concerns",
+    icon: "MessageSquare",
+    roles: roleListFor("profile"),
+  },
+  {
     key: "invoicing",
     label: "Invoicing",
     to: "/invoicing",
@@ -306,6 +315,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   counseling: "Counseling",
   cms: "CMS",
   tasks: "Task Management",
+  concerns: "Contact Admin",
   invoicing: "Invoicing",
 };
 
@@ -324,5 +334,6 @@ export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
   counseling: "Schedule and track counseling sessions.",
   cms: "Manage static content and pages.",
   tasks: "Admin assigns + monitors tasks for SME / Reviewer / Trainer / Counsellor.",
+  concerns: "Raise an issue or feedback, routed to the admin and helpdesk.",
   invoicing: "Raise and track invoices for empanelled work; CJ Admin reviews and pays them.",
 };
