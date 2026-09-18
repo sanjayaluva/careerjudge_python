@@ -31,6 +31,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { tasksApi, type Task, type TaskCreateInput, type AssigneeRole } from "@/api/tasks";
+import { listCategories, QUESTION_TYPES } from "@/api/questionBank";
 import { listUsers } from "@/api/users";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -295,6 +296,39 @@ function AssignTaskModal({
   // difficulty/type rows (D9: SME multi-category task sheet), so this is a
   // list of rows rather than a single set of fields.
   const [specRows, setSpecRows] = useState<SpecRow[]>([emptySpecRow()]);
+  // ADM-4 (§3.1.1): QB categories/subcategories drive the spec dropdowns
+  // instead of free text.
+  const { data: qbCategories } = useQuery({
+    queryKey: ["question-bank", "categories", "all"],
+    queryFn: () => listCategories(),
+  });
+  const topCategories = (qbCategories ?? []).filter((c) => c.parent === null);
+  const subsForCategory = (catName: string) => {
+    const cat = topCategories.find((c) => c.name === catName);
+    return cat ? (qbCategories ?? []).filter((c) => c.parent === cat.id) : [];
+  };
+
+  // ADM-3 (§3.1.2/3): a Reviewer/Psychometrician task picks its parent from the
+  // upstream tasks not yet assigned to that role, instead of a free-text ID.
+  const needsParentPicklist = assigneeRole === "reviewer" || assigneeRole === "psychometrician";
+  const { data: allTasksPage } = useQuery({
+    queryKey: ["tasks", "all-for-parent"],
+    queryFn: () => tasksApi.list(),
+    enabled: needsParentPicklist,
+  });
+  const allTasks = allTasksPage?.results ?? [];
+  const hasChildOfRole = (taskId: number, role: AssigneeRole) =>
+    allTasks.some((t) => t.parent_task === taskId && t.assignee_role === role);
+  const parentTaskOptions =
+    assigneeRole === "reviewer"
+      ? allTasks.filter((t) => t.assignee_role === "sme" && !hasChildOfRole(t.id, "reviewer"))
+      : assigneeRole === "psychometrician"
+        ? allTasks.filter(
+            (t) =>
+              (t.assignee_role === "sme" || t.assignee_role === "reviewer") &&
+              !hasChildOfRole(t.id, "psychometrician"),
+          )
+        : [];
 
   const updateSpecRow = (index: number, patch: Partial<SpecRow>) => {
     setSpecRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -455,13 +489,35 @@ function AssignTaskModal({
         </div>
 
         <div>
-          <Label htmlFor="parent_task_id">Parent Task ID (optional)</Label>
-          <Input
-            id="parent_task_id"
-            value={parentTaskId}
-            onChange={(e) => setParentTaskId(e.target.value)}
-            placeholder="e.g. TSK-2026-AB12CD — links this task to a parent (e.g. SME task for a Reviewer task)"
-          />
+          <Label htmlFor="parent_task_id">
+            {needsParentPicklist ? "Parent task" : "Parent Task ID (optional)"}
+          </Label>
+          {needsParentPicklist ? (
+            <select
+              id="parent_task_id"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={parentTaskId}
+              onChange={(e) => setParentTaskId(e.target.value)}
+            >
+              <option value="">
+                {parentTaskOptions.length
+                  ? "Select an unassigned upstream task…"
+                  : "No unassigned upstream tasks available"}
+              </option>
+              {parentTaskOptions.map((t) => (
+                <option key={t.id} value={t.task_id ?? ""}>
+                  {t.task_id} — {t.title} ({ROLE_LABEL[t.assignee_role]})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Input
+              id="parent_task_id"
+              value={parentTaskId}
+              onChange={(e) => setParentTaskId(e.target.value)}
+              placeholder="e.g. TSK-2026-AB12CD — links this task to a parent"
+            />
+          )}
         </div>
 
         {assigneeRole === "sme" && (
@@ -494,31 +550,57 @@ function AssignTaskModal({
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label htmlFor={`qb_category-${i}`}>QB Category</Label>
-                      <Input
+                      <select
                         id={`qb_category-${i}`}
+                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
                         value={row.qb_category}
-                        onChange={(e) => updateSpecRow(i, { qb_category: e.target.value })}
-                        placeholder="e.g. Quantitative"
-                      />
+                        onChange={(e) =>
+                          updateSpecRow(i, { qb_category: e.target.value, qb_subcategory: "" })
+                        }
+                      >
+                        <option value="">Select category...</option>
+                        {topCategories.map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <Label htmlFor={`qb_subcategory-${i}`}>QB Subcategory</Label>
-                      <Input
+                      <select
                         id={`qb_subcategory-${i}`}
+                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm disabled:opacity-50"
                         value={row.qb_subcategory}
+                        disabled={!row.qb_category}
                         onChange={(e) => updateSpecRow(i, { qb_subcategory: e.target.value })}
-                        placeholder="e.g. Algebra"
-                      />
+                      >
+                        <option value="">
+                          {row.qb_category ? "Select subcategory..." : "Choose a category first"}
+                        </option>
+                        {subsForCategory(row.qb_category).map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                   <div>
                     <Label htmlFor={`question_type-${i}`}>Question Type</Label>
-                    <Input
+                    <select
                       id={`question_type-${i}`}
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
                       value={row.question_type}
                       onChange={(e) => updateSpecRow(i, { question_type: e.target.value })}
-                      placeholder="e.g. mcq_text"
-                    />
+                    >
+                      <option value="">Select type...</option>
+                      {QUESTION_TYPES.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
