@@ -54,6 +54,7 @@ class HasReportingPermission(HasModulePermission):
         "partial_update": "change",
         "destroy": "delete",
         "publish": "change",
+        "duplicate": "add",
         "generate": "view",
         "generate_group": "view",
         "select_data": "view",
@@ -138,6 +139,51 @@ class ReportViewSet(ActionSerializerMixin, ModelViewSet):
         return Response(
             {"message": "Report published.", "data": {"id": report.id, "status": report.status}},
             status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"])
+    def duplicate(self, request, pk=None):
+        """Clone this report's full configuration into a new draft report.
+
+        This is the "report template" flow (SRS 04 §3 / 06 §4): a report the
+        psychometrician has configured (layout sections, cutoffs, bands,
+        typological codes, polar variables, include-toggles, PMI-D order,
+        branding) can be reused as the starting point for a new report rather
+        than rebuilt from scratch. The copy is always a fresh draft owned by
+        the requesting user; generated-report rows are NOT copied.
+
+        Optional payload: {"title": "New title"} — defaults to "<title> (copy)".
+        """
+        source = self.get_object()
+        new_title = (request.data.get("title") or f"{source.title} (copy)")[:255]
+
+        clone = Report.objects.get(pk=source.pk)
+        clone.pk = None
+        clone.id = None
+        clone._state.adding = True
+        clone.title = new_title
+        clone.status = "draft"
+        clone.created_by = request.user
+        clone.save()
+
+        # Copy each configuration child, re-pointing it at the clone.
+        for section in source.sections.all():
+            section.pk = None
+            section.id = None
+            section._state.adding = True
+            section.report = clone
+            section.save()
+        for related_name in ("cutoffs", "bands", "typological_codes", "polar_variables"):
+            for row in getattr(source, related_name).all():
+                row.pk = None
+                row.id = None
+                row._state.adding = True
+                row.report = clone
+                row.save()
+
+        return Response(
+            {"message": "Report duplicated.", "data": ReportSerializer(clone).data},
+            status=status.HTTP_201_CREATED,
         )
 
     @action(detail=True, methods=["post"])

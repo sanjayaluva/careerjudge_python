@@ -88,6 +88,15 @@ export function publishReport(id: number): Promise<{ id: number; status: string 
   return apiPost(`${BASE}/reports/${id}/publish/`);
 }
 
+/**
+ * Clone a report's full configuration into a new draft (REP-2 "templates").
+ * Copies layout sections, cutoffs, bands, codes, polar variables, include
+ * toggles, PMI-D order and branding; does not copy generated reports.
+ */
+export function duplicateReport(id: number, title?: string): Promise<Report> {
+  return apiPost<Report>(`${BASE}/reports/${id}/duplicate/`, title ? { title } : {});
+}
+
 export function generateReport(reportId: number, sessionId: number): Promise<GeneratedReport> {
   return apiPost<GeneratedReport>(`${BASE}/reports/${reportId}/generate/`, {
     session_id: sessionId,

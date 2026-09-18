@@ -62,6 +62,7 @@ import {
   STAT_CONVERSIONS,
   selectProfilingData,
   updateReport,
+  type GeneratedReport,
   type GroupReportData,
   type ProfilingSelectionResult,
   type Report,
@@ -548,6 +549,7 @@ function GenerateTab({
 // ---------------------------------------------------------------------------
 
 function GeneratedTab({ reportId }: { reportId: number }) {
+  const [preview, setPreview] = useState<GeneratedReport | null>(null);
   const { data: generated, isLoading } = useQuery({
     queryKey: ["reporting", "reports", reportId, "generated"],
     queryFn: () => listGeneratedReports(reportId),
@@ -557,6 +559,7 @@ function GeneratedTab({ reportId }: { reportId: number }) {
   const list = generated ?? [];
 
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle>Generated Reports ({list.length})</CardTitle>
@@ -594,7 +597,14 @@ function GeneratedTab({ reportId }: { reportId: number }) {
                   </TableCell>
                   <TableCell>
                     {g.status === "generated" && g.rendered_data && (
-                      <div className="flex flex-col gap-1 text-xs">
+                      <div className="flex flex-col items-start gap-1 text-xs">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPreview(g)}
+                        >
+                          Preview
+                        </Button>
                         <a
                           href={generatedReportPdfUrl(g.id)}
                           target="_blank"
@@ -603,14 +613,6 @@ function GeneratedTab({ reportId }: { reportId: number }) {
                         >
                           Download PDF ↓
                         </a>
-                        <details>
-                          <summary className="cursor-pointer text-slate-600 hover:underline">
-                            View JSON
-                          </summary>
-                          <pre className="mt-2 max-h-96 overflow-auto rounded-md bg-slate-50 p-3 text-xs">
-                            {JSON.stringify(g.rendered_data, null, 2)}
-                          </pre>
-                        </details>
                       </div>
                     )}
                     {g.status === "failed" && g.error_message && (
@@ -624,6 +626,196 @@ function GeneratedTab({ reportId }: { reportId: number }) {
         )}
       </CardContent>
     </Card>
+    {preview && preview.rendered_data && (
+      <Modal
+        open
+        onClose={() => setPreview(null)}
+        title={`Report preview — ${preview.candidate_name ?? `User ${preview.candidate}`}`}
+        size="lg"
+      >
+        <ReportPreview data={preview.rendered_data} />
+        <div className="mt-4 flex justify-end border-t border-slate-100 pt-4">
+          <a href={generatedReportPdfUrl(preview.id)} target="_blank" rel="noopener noreferrer">
+            <Button variant="outline">Download PDF ↓</Button>
+          </a>
+        </div>
+      </Modal>
+    )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Report Preview (REP-2 live preview) — render generated data in-app,
+// mirroring the PDF: score summary, section + question breakdowns, and
+// custom layout sections incl. table and SVG bar-chart (REP-1) layouts.
+// ---------------------------------------------------------------------------
+
+type PreviewRow = Record<string, unknown>;
+function _num(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  return typeof v === "number" ? String(Math.round(v * 100) / 100) : String(v);
+}
+
+function ReportPreview({ data }: { data: Record<string, unknown> }) {
+  const scoreSummary = data.score_summary as PreviewRow | undefined;
+  const sectionBreakdown = (data.section_breakdown as PreviewRow[] | undefined) ?? [];
+  const questionBreakdown = (data.question_breakdown as PreviewRow[] | undefined) ?? [];
+  const sections = (data.sections as PreviewRow[] | undefined) ?? [];
+
+  return (
+    <div className="max-h-[70vh] space-y-5 overflow-auto text-sm">
+      <div>
+        <h3 className="text-base font-bold text-slate-900">{String(data.report_title ?? "Report")}</h3>
+        <p className="text-xs text-slate-500">
+          {String(data.assessment_title ?? "")}
+          {data.candidate ? ` · ${String((data.candidate as PreviewRow).name ?? "")}` : ""}
+        </p>
+      </div>
+
+      {scoreSummary && (
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Score summary</div>
+          <p className="mt-1 text-slate-900">
+            {_num(scoreSummary.total)} / {_num(scoreSummary.max)} ({_num(scoreSummary.percentage)}%){" "}
+            {scoreSummary.passed !== undefined && (
+              <Badge variant={scoreSummary.passed ? "success" : "default"}>
+                {scoreSummary.passed ? "Pass" : "Below threshold"}
+              </Badge>
+            )}
+          </p>
+        </div>
+      )}
+
+      {sectionBreakdown.length > 0 && (
+        <PreviewScoreTable
+          title="Section breakdown"
+          variableHeader="Variable"
+          rows={sectionBreakdown}
+          labelKey="section_title"
+        />
+      )}
+
+      {questionBreakdown.length > 0 && (
+        <PreviewScoreTable
+          title="Question breakdown"
+          variableHeader="Question"
+          rows={questionBreakdown}
+          labelKey="question_label"
+        />
+      )}
+
+      {sections.map((s, i) => (
+        <PreviewCustomSection key={i} section={s} />
+      ))}
+    </div>
+  );
+}
+
+function PreviewScoreTable({
+  title,
+  variableHeader,
+  rows,
+  labelKey,
+}: {
+  title: string;
+  variableHeader: string;
+  rows: PreviewRow[];
+  labelKey: string;
+}) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">{title}</div>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="border-b border-slate-200 text-left text-slate-500">
+              <th className="py-1 pr-2">{variableHeader}</th>
+              <th className="py-1 pr-2">Raw</th>
+              <th className="py-1 pr-2">Max</th>
+              <th className="py-1 pr-2">%</th>
+              <th className="py-1">Converted</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-b border-slate-100">
+                <td className="py-1 pr-2 text-slate-900">{String(r[labelKey] ?? "—")}</td>
+                <td className="py-1 pr-2">{_num(r.raw_score)}</td>
+                <td className="py-1 pr-2">{_num(r.max_score)}</td>
+                <td className="py-1 pr-2">{_num(r.percentage)}%</td>
+                <td className="py-1">
+                  {_num(r.converted_score)}{" "}
+                  <span className="text-slate-400">({String(r.conversion_type ?? "")})</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function PreviewCustomSection({ section }: { section: PreviewRow }) {
+  const title = section.title ? String(section.title) : "";
+  const description = section.description ? String(section.description) : "";
+  const content = section.content ? String(section.content) : "";
+  const graph = section.graph as { title?: string; bars?: PreviewRow[]; max_value?: number } | undefined;
+  const table = section.table as { headers?: PreviewRow; rows?: PreviewRow[] } | undefined;
+
+  if (!title && !description && !content && !graph && !table) return null;
+
+  return (
+    <div className="rounded-md border border-slate-200 p-3">
+      {title && <div className="font-semibold text-slate-900">{title}</div>}
+      {description && <p className="mt-1 text-slate-700">{description}</p>}
+      {content && <p className="mt-1 whitespace-pre-wrap text-slate-700">{content}</p>}
+      {graph?.bars && graph.bars.length > 0 && <PreviewBarChart graph={graph} />}
+      {table?.rows && table.rows.length > 0 && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full border-collapse text-xs">
+            <tbody>
+              {table.rows.map((r, i) => (
+                <tr key={i} className="border-b border-slate-100">
+                  <td className="py-1 pr-2 text-slate-900">{String(r.variable ?? "—")}</td>
+                  <td className="py-1 pr-2">{_num(r.score)}</td>
+                  <td className="py-1">{String(r.label ?? "")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PreviewBarChart({
+  graph,
+}: {
+  graph: { title?: string; bars?: PreviewRow[]; max_value?: number };
+}) {
+  const bars = graph.bars ?? [];
+  const maxValue = graph.max_value && graph.max_value > 0 ? graph.max_value : 100;
+  return (
+    <div className="mt-2 space-y-1">
+      {graph.title && <div className="text-xs font-medium text-slate-700">{graph.title}</div>}
+      {bars.map((b, i) => {
+        const value = typeof b.value === "number" ? b.value : 0;
+        const pct = Math.max(0, Math.min(100, (value / maxValue) * 100));
+        const colour = typeof b.colour_code === "string" && b.colour_code ? b.colour_code : "#3b82f6";
+        return (
+          <div key={i} className="flex items-center gap-2">
+            <span className="w-28 shrink-0 truncate text-xs text-slate-600">{String(b.variable ?? "")}</span>
+            <div className="h-3 flex-1 rounded bg-slate-100">
+              <div className="h-3 rounded" style={{ width: `${pct}%`, background: colour }} />
+            </div>
+            <span className="w-10 shrink-0 text-right text-xs text-slate-600">{_num(value)}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1754,7 +1946,7 @@ function LayoutTab({ reportId }: { reportId: number }) {
   const createMutation = useMutation({
     mutationFn: () => {
       const table_graph_config = layout
-        ? { layout, ...(layout === "table" && tableTitle ? { table_title: tableTitle } : {}) }
+        ? { layout, ...(tableTitle ? { table_title: tableTitle } : {}) }
         : null;
       const payload = {
         section_type: sectionType,
@@ -1967,12 +2159,14 @@ function LayoutTab({ reportId }: { reportId: number }) {
             >
               <option value="">None</option>
               <option value="table">Table (section scores)</option>
-              <option value="graph">Graph (not yet rendered)</option>
+              <option value="graph">Graph (bar chart of section scores)</option>
             </select>
           </div>
-          {layout === "table" && (
+          {(layout === "table" || layout === "graph") && (
             <div className="sm:col-span-2">
-              <Label htmlFor="ls-table-title">Table title</Label>
+              <Label htmlFor="ls-table-title">
+                {layout === "graph" ? "Chart title" : "Table title"}
+              </Label>
               <Input
                 id="ls-table-title"
                 value={tableTitle}
@@ -1982,9 +2176,9 @@ function LayoutTab({ reportId }: { reportId: number }) {
             </div>
           )}
           {layout === "graph" && (
-            <p className="text-xs text-amber-600 sm:col-span-2">
-              Graph rendering isn&apos;t implemented yet — the layout choice is saved, but the PDF
-              will show a note instead of a chart. Use &quot;Table&quot; for a rendered layout.
+            <p className="text-xs text-slate-500 sm:col-span-2">
+              The graph renders as a bar chart of the report&apos;s section scores, coloured by any
+              matching section bands, in both the PDF and the in-app preview.
             </p>
           )}
           <div className="flex items-center gap-2 sm:col-span-2">

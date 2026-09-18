@@ -526,3 +526,68 @@ def test_create_section_band_without_section_is_rejected(psy_client, psychometri
         format="json",
     )
     assert resp.status_code == 400, f"Got {resp.status_code}: {resp.data}"
+
+
+# ---------------------------------------------------------------------------
+# Report duplication / templates (REP-2)
+# ---------------------------------------------------------------------------
+
+
+def test_duplicate_report_clones_config(psy_client, psychometrician_user):
+    """REP-2: POST /reports/<id>/duplicate/ clones config into a new draft."""
+    from apps.assessment.models import AssessmentSection
+    from apps.reporting.models import ReportBand, ReportSection
+
+    assessment = Assessment.objects.create(title="A", status="published")
+    section = AssessmentSection.objects.create(
+        assessment=assessment, title="Verbal", level=1, order=1
+    )
+    report = Report.objects.create(
+        title="Master",
+        report_type="interpretative",
+        scope="general",
+        assessment=assessment,
+        status="published",
+        include_fmi=True,
+        created_by=psychometrician_user,
+    )
+    ReportSection.objects.create(
+        report=report, section_type="custom", title="Intro", order=1,
+        table_graph_config={"layout": "graph"},
+    )
+    ReportBand.objects.create(
+        report=report, target_type="section", section=section, band_number=1,
+        range_min=0, range_max=50, band_label="Low",
+    )
+
+    resp = psy_client.post(f"/api/reporting/reports/{report.id}/duplicate/", {}, format="json")
+    assert resp.status_code == 201, f"Got {resp.status_code}: {resp.data}"
+    new_id = resp.data["data"]["id"]
+    assert new_id != report.id
+    assert resp.data["data"]["title"] == "Master (copy)"
+    assert resp.data["data"]["status"] == "draft"
+    assert resp.data["data"]["include_fmi"] is True
+
+    clone = Report.objects.get(pk=new_id)
+    assert clone.sections.count() == 1
+    assert clone.sections.first().table_graph_config == {"layout": "graph"}
+    assert clone.bands.count() == 1
+    assert clone.bands.first().band_label == "Low"
+    # Source is untouched.
+    assert report.sections.count() == 1
+    assert report.bands.count() == 1
+
+
+def test_duplicate_report_accepts_custom_title(psy_client, psychometrician_user):
+    assessment = Assessment.objects.create(title="A", status="published")
+    report = Report.objects.create(
+        title="Master", report_type="descriptive", scope="general",
+        assessment=assessment, status="draft", created_by=psychometrician_user,
+    )
+    resp = psy_client.post(
+        f"/api/reporting/reports/{report.id}/duplicate/",
+        {"title": "2026 Intake Template"},
+        format="json",
+    )
+    assert resp.status_code == 201
+    assert resp.data["data"]["title"] == "2026 Intake Template"

@@ -3,7 +3,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import {
   Badge,
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui";
 import {
   createReport,
+  duplicateReport,
   listReports,
   REPORT_STATUSES,
   REPORT_TYPES,
@@ -44,6 +45,7 @@ const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
 export default function ReportsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const toast = useToast();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -66,6 +68,16 @@ export default function ReportsPage() {
       void queryClient.invalidateQueries({ queryKey: REPORT_KEY });
       setCreateOpen(false);
       toast.success("Report created.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: (id: number) => duplicateReport(id),
+    onSuccess: (report) => {
+      void queryClient.invalidateQueries({ queryKey: REPORT_KEY });
+      toast.success("Report duplicated — opening the draft copy.");
+      navigate(`/reports/${report.id}`);
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -127,6 +139,7 @@ export default function ReportsPage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Created by</TableHead>
                 <TableHead>Created</TableHead>
+                {canManage && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -151,6 +164,19 @@ export default function ReportsPage() {
                   <TableCell className="text-slate-500">
                     {new Date(r.created_at).toLocaleDateString()}
                   </TableCell>
+                  {canManage && (
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => duplicateMutation.mutate(r.id)}
+                        loading={duplicateMutation.isPending && duplicateMutation.variables === r.id}
+                        title="Use this report as a template"
+                      >
+                        Duplicate
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
