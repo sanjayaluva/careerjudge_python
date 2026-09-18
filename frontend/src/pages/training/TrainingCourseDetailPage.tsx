@@ -47,6 +47,8 @@ import {
   listCompletionParameters,
   listCourseRegistrations,
   listCourseUpdateRequests,
+  approveCourseUpdateRequest,
+  declineCourseUpdateRequest,
   listMyCourses,
   notifyLiveSessionStudents,
   publishCourse,
@@ -1121,6 +1123,8 @@ function CompletionParametersTab({ course }: { course: TrainingCourse }) {
 function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "cj_admin";
   const [showForm, setShowForm] = useState(false);
   const [reqType, setReqType] = useState<"update" | "delete">("update");
   const [reason, setReason] = useState("");
@@ -1130,6 +1134,20 @@ function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
     queryFn: () => listCourseUpdateRequests(),
   });
   const courseRequests = (requests ?? []).filter((r) => r.course === courseId);
+
+  // TRN-2 (§7): admin approves or declines a pending course-change request.
+  const reviewMutation = useMutation({
+    mutationFn: (v: { id: number; approve: boolean; note: string }) =>
+      v.approve
+        ? approveCourseUpdateRequest(v.id, v.note)
+        : declineCourseUpdateRequest(v.id, v.note),
+    onSuccess: () => {
+      toast.success("Request reviewed.");
+      void queryClient.invalidateQueries({ queryKey: ["training", "course-update-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["training", "course", courseId] });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
 
   const requestMutation = useMutation({
     mutationFn: () => requestCourseUpdate(courseId, { request_type: reqType, reason }),
@@ -1183,6 +1201,30 @@ function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
                 <p className="mt-1 text-slate-600">{r.reason}</p>
                 {r.admin_note && (
                   <p className="mt-1 text-xs text-slate-500">Admin note: {r.admin_note}</p>
+                )}
+                {isAdmin && r.status === "pending" && (
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      size="sm"
+                      loading={reviewMutation.isPending}
+                      onClick={() => {
+                        const note = window.prompt("Admin note (optional):") ?? "";
+                        reviewMutation.mutate({ id: r.id, approve: true, note });
+                      }}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const note = window.prompt("Reason for declining (optional):") ?? "";
+                        reviewMutation.mutate({ id: r.id, approve: false, note });
+                      }}
+                    >
+                      Decline
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}
