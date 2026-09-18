@@ -2,8 +2,8 @@
  * Counseling page — browse counsellors + view my sessions.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import {
   Alert,
@@ -57,6 +57,10 @@ import { JoinSessionButton } from "./JoinSession";
 export default function CounselingPage() {
   const { user } = useAuth();
   const isCounsellor = user?.role === "counsellor";
+  // CNS-3 (§2.1): show a payment-received confirmation when Stripe redirects
+  // back to /counseling?payment=success.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paymentSuccess = searchParams.get("payment") === "success";
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -88,6 +92,28 @@ export default function CounselingPage() {
             Book a session with one of our professional counsellors
           </p>
         </div>
+
+        {paymentSuccess && (
+          <div className="mx-6 mb-2 rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+            <p className="font-medium">Payment received — your booking is confirmed.</p>
+            <p className="mt-1">
+              Your appointment will be confirmed by the counsellor within 6 hours (SRS §2.1). If you
+              need any help, contact the helpdesk.
+            </p>
+            <div className="mt-2 flex gap-3">
+              <Link to="/concerns" className="text-primary-600 hover:underline">
+                Contact Helpdesk
+              </Link>
+              <button
+                type="button"
+                className="text-slate-500 hover:underline"
+                onClick={() => setSearchParams({})}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         <Tabs defaultValue="browse">
           <div className="px-6">
@@ -284,6 +310,9 @@ function BookingModal({
   const timeslots = week?.slots;
   const maxWeeksAhead = settings?.max_weeks_ahead ?? 3;
 
+  // CNS-4: show the spec §2.1 confirmation message after a (free) booking
+  // instead of a generic toast.
+  const [booked, setBooked] = useState(false);
   const bookMutation = useMutation({
     mutationFn: () => {
       if (!selectedSlot) throw new Error("No slot selected");
@@ -311,8 +340,7 @@ function BookingModal({
         window.location.href = data.checkout_url;
         return;
       }
-      toast.success("Session booked! Awaiting counsellor confirmation.");
-      onClose();
+      setBooked(true);
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -328,6 +356,22 @@ function BookingModal({
       size="md"
     >
       <div className="space-y-4">
+        {booked ? (
+          <div className="space-y-4 py-2">
+            <div className="rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+              <p className="font-medium">Your booking is confirmed.</p>
+              <p className="mt-1">
+                Your appointment will be confirmed by the counsellor within 6 hours. If the
+                counsellor is not available, you can select a fresh timeslot; or press Cancel and
+                your money will be refunded within 48 hours (SRS §2.1).
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={onClose}>Done</Button>
+            </div>
+          </div>
+        ) : (
+          <>
         {/* Report 3 §1.7: counsellor profile details */}
         <div className="flex items-start gap-3 rounded-md border border-slate-100 p-3">
           {counsellor.avatar ? (
@@ -489,6 +533,8 @@ function BookingModal({
             Book session (${counsellor.hourly_rate})
           </Button>
         </div>
+          </>
+        )}
       </div>
     </Modal>
   );
@@ -745,6 +791,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
               <span className="text-xs text-amber-700">
                 {new Date(fu.proposed_time).toLocaleString()}
               </span>
+              <FollowupCountdown target={fu.proposed_time} />
               <Button
                 size="sm"
                 onClick={() => confirmFuMut.mutate(fu.id)}
@@ -951,4 +998,21 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
       )}
     </div>
   );
+}
+
+// CNS-5 (§3.3): live countdown to a proposed follow-up session.
+function FollowupCountdown({ target }: { target: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const diff = new Date(target).getTime() - now;
+  if (Number.isNaN(diff)) return null;
+  if (diff <= 0) return <span className="text-xs font-medium text-amber-800">now</span>;
+  const days = Math.floor(diff / 86_400_000);
+  const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+  const mins = Math.floor((diff % 3_600_000) / 60_000);
+  const parts = [days ? `${days}d` : "", hours ? `${hours}h` : "", `${mins}m`].filter(Boolean);
+  return <span className="text-xs font-medium text-amber-800">in {parts.join(" ")}</span>;
 }
