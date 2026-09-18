@@ -59,6 +59,7 @@ import {
   retrieveAssessment,
   startSession,
   updateAssessment,
+  updateAssignedQuestion,
   updateSection,
 } from "@/api/assessment";
 import {
@@ -759,6 +760,21 @@ function QuestionAssignmentTab({
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  // ASM-7: set a per-assessment score override on an assigned question.
+  const scoreMutation = useMutation({
+    mutationFn: (v: { aqId: number; score_override: number | null }) =>
+      updateAssignedQuestion(assessmentId, selectedSectionId!, v.aqId, {
+        score_override: v.score_override,
+      }),
+    onSuccess: () => {
+      toast.success("Score updated.");
+      void queryClient.invalidateQueries({
+        queryKey: ["assessment-section-questions", assessmentId, selectedSectionId],
+      });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   const assignedIds = new Set((assignedQuestions ?? []).map((q) => q.question));
 
   if (sections.length === 0) {
@@ -823,6 +839,28 @@ function QuestionAssignmentTab({
                     </span>
                     {aq.question_detail?.difficulty_level && (
                       <span className="text-slate-400">{aq.question_detail.difficulty_level}</span>
+                    )}
+                    {canManage && (
+                      <label
+                        className="flex items-center gap-1 text-slate-400"
+                        title="Per-assessment score override — leave blank to use the question's own score (SRS §4)"
+                      >
+                        Score
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.5"
+                          defaultValue={aq.score_override ?? ""}
+                          className="w-14 rounded border border-slate-200 px-1.5 py-0.5 text-xs"
+                          onBlur={(e) => {
+                            const raw = e.target.value.trim();
+                            const val = raw === "" ? null : Number(raw);
+                            if (val !== (aq.score_override ?? null)) {
+                              scoreMutation.mutate({ aqId: aq.id, score_override: val });
+                            }
+                          }}
+                        />
+                      </label>
                     )}
                     {canManage && (
                       <button

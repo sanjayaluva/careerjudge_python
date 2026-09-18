@@ -290,6 +290,22 @@ export function removeQuestion(
   return apiDelete(`${BASE}/${assessmentId}/sections/${sectionId}/questions/${questionId}/`);
 }
 
+/**
+ * ASM-7: set a per-assessment score override (and/or per-question timer) on an
+ * assigned question. `assessmentQuestionId` is the AssessmentQuestion row id.
+ */
+export function updateAssignedQuestion(
+  assessmentId: number,
+  sectionId: number,
+  assessmentQuestionId: number,
+  payload: Partial<{ score_override: number | null; duration_seconds: number | null }>,
+): Promise<AssessmentQuestion> {
+  return apiPatch<AssessmentQuestion>(
+    `${BASE}/${assessmentId}/sections/${sectionId}/questions/${assessmentQuestionId}/`,
+    payload,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Sessions
 // ---------------------------------------------------------------------------
