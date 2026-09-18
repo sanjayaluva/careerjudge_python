@@ -51,8 +51,8 @@ CNS-5,Countdown for proposed follow-up on counselee dashboard,Doc 8 §3.3,SIGNED
 CNS-8,Feedback readable only by Admin (not counselee),Doc 8 §2.3,SIGNED-DONE,done,M1,counseling/views.py feedback GET admin-only,counseling/tests,Restricted to cj_admin/superuser per §2.3
 ADM-1,Signup email on default (Active) single-create path,Doc 9 §2.2,SIGNED-DONE,done,M1,accounts/serializers.py (send email on every invited create),accounts/tests,Email now sent regardless of is_active
 ADM-2,Concern routing raise + admin inbox,Doc 9 §4,SIGNED-PENDING,pending,M3,tasks concern model/view;tasks.ts:166-171,,Drop in-app resolve (spec = email/phone)
-ADM-3,Task assignment picklist of unassigned upstream tasks,Doc 9 §3.1.2/3,SIGNED-PENDING,pending,M3,TasksPage.tsx:457-465,,
-ADM-4,SME task category/subcategory/type as QB dropdowns,Doc 9 §3.1.1,SIGNED-PENDING,pending,M3,TasksPage.tsx:494-522,,
+ADM-3,Task assignment picklist of unassigned upstream tasks,Doc 9 §3.1.2/3,SIGNED-DONE,done,M3,TasksPage AssignTaskModal parent-task picklist,tsc; vitest,M3: unassigned-upstream picklist
+ADM-4,SME task category/subcategory/type as QB dropdowns,Doc 9 §3.1.1,SIGNED-DONE,done,M3,TasksPage AssignTaskModal QB category/subcategory/type dropdowns,tsc; vitest,M3: QB-populated dropdowns
 TRN-1,Gate nested lesson/topic/session/content edit+delete,Doc 7 §5,SIGNED-DONE,done,M1,training/views.py _CourseStructureEditGuardMixin on 5 nested viewsets,training/tests/test_training.py (4 gating tests),update/partial_update/destroy now gated
 TRN-2,Admin approve/decline UI for course-change requests,Doc 7 §5,SIGNED-PENDING,pending,M3,training.ts:417;427;TrainingCourseDetailPage.tsx:1121,,
 TRN-3,Trainer assignment-report review/score/feedback UI,Doc 7 §2.3.2/§5,SIGNED-PENDING,pending,M3,training.ts:788;801,,Drop approve-late-submission sub-claim
