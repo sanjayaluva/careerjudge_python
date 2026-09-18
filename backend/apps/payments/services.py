@@ -111,6 +111,128 @@ def verify_stripe_payment(session_id: str) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# Razorpay (E-PLT-4) — the dossier's primary gateway. Order creation uses the
+# razorpay SDK when installed + configured (else the caller falls back to
+# manual, like Stripe). Signature verification is pure-stdlib HMAC-SHA256, so
+# the verify + webhook paths work and are testable without the SDK.
+# ---------------------------------------------------------------------------
+
+
+def create_razorpay_order(payment: Payment) -> dict | None:
+    """Create a Razorpay order for a payment and return the checkout params.
+
+    Returns a dict {order_id, key_id, amount, currency, name} the frontend
+    feeds to the Razorpay Checkout widget, or None when Razorpay is not
+    configured / the SDK is unavailable (caller falls back to manual).
+    """
+    settings = PaymentSettings.get()
+    if not settings.is_razorpay_configured:
+        logger.info("Razorpay not configured — payment stays pending for manual processing.")
+        return None
+
+    try:
+        import razorpay
+
+        client = razorpay.Client(auth=(settings.razorpay_key_id, settings.razorpay_key_secret))
+        amount_paise = int(float(payment.amount) * 100)
+        order = client.order.create(
+            {
+                "amount": amount_paise,
+                "currency": settings.currency,
+                "receipt": f"pay_{payment.id}",
+                "notes": {
+                    "payment_id": str(payment.id),
+                    "module": payment.module,
+                    "item_id": str(payment.item_id),
+                },
+            }
+        )
+        payment.provider = "razorpay"
+        payment.provider_session_id = order["id"]
+        payment.save(update_fields=["provider", "provider_session_id"])
+        return {
+            "order_id": order["id"],
+            "key_id": settings.razorpay_key_id,
+            "amount": amount_paise,
+            "currency": settings.currency,
+            "name": payment.description or f"{payment.module}#{payment.item_id}",
+        }
+    except Exception as e:
+        logger.error("Razorpay order creation failed: %s", e)
+        return None
+
+
+def _razorpay_signature(message: str, secret: str) -> str:
+    import hashlib
+    import hmac
+
+    return hmac.new(
+        secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+
+
+def verify_razorpay_payment(order_id: str, payment_id: str, signature: str) -> bool:
+    """Verify a Razorpay payment signature and mark the payment paid.
+
+    Razorpay signs ``<order_id>|<payment_id>`` with the key secret (HMAC
+    SHA-256). We recompute it with stdlib and compare in constant time.
+    """
+    import hmac
+
+    settings = PaymentSettings.get()
+    if not settings.is_razorpay_configured:
+        return False
+    expected = _razorpay_signature(f"{order_id}|{payment_id}", settings.razorpay_key_secret)
+    if not hmac.compare_digest(expected, signature or ""):
+        logger.warning("Razorpay signature mismatch for order %s", order_id)
+        return False
+    payment = Payment.objects.filter(provider_session_id=order_id).first()
+    if payment and payment.status != "paid":
+        payment.status = "paid"
+        payment.paid_at = timezone.now()
+        payment.save(update_fields=["status", "paid_at"])
+        _update_module_payment_status(payment)
+    return True
+
+
+def handle_razorpay_webhook(payload: bytes, signature: str) -> bool:
+    """Handle a Razorpay webhook: verify the body signature (HMAC SHA-256 with
+    the webhook secret), then mark the referenced order's payment paid."""
+    import hmac
+    import json
+
+    settings = PaymentSettings.get()
+    if not settings.is_razorpay_configured or not settings.razorpay_webhook_secret:
+        return False
+    expected = _razorpay_signature(
+        payload.decode("utf-8"), settings.razorpay_webhook_secret
+    )
+    if not hmac.compare_digest(expected, signature or ""):
+        logger.warning("Razorpay webhook signature mismatch.")
+        return False
+    try:
+        event = json.loads(payload.decode("utf-8"))
+        entity = (
+            event.get("payload", {})
+            .get("payment", {})
+            .get("entity", {})
+        )
+        order_id = entity.get("order_id")
+        if order_id:
+            payment = Payment.objects.filter(provider_session_id=order_id).first()
+            if payment and payment.status != "paid":
+                payment.status = "paid"
+                payment.paid_at = timezone.now()
+                payment.save(update_fields=["status", "paid_at"])
+                _update_module_payment_status(payment)
+                logger.info("Payment #%d marked paid via Razorpay webhook.", payment.id)
+        return True
+    except Exception as e:
+        logger.error("Razorpay webhook handling failed: %s", e)
+        return False
+
+
 def handle_stripe_webhook(payload: bytes, signature: str) -> bool:
     """Handle a Stripe webhook event."""
     settings = PaymentSettings.get()

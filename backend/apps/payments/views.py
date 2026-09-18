@@ -21,9 +21,12 @@ from .models import Payment, PaymentSettings
 from .serializers import PaymentSerializer
 from .services import (
     _update_module_payment_status,
+    create_razorpay_order,
     create_stripe_checkout_session,
     get_or_create_payment,
+    handle_razorpay_webhook,
     handle_stripe_webhook,
+    verify_razorpay_payment,
     verify_stripe_payment,
 )
 
@@ -128,6 +131,21 @@ class PaymentViewSet(ModelViewSet):
                 status=status.HTTP_200_OK,
             )
 
+        # E-PLT-4: Razorpay is the dossier's primary gateway. When it's the
+        # active provider and configured, create a Razorpay order and return
+        # the checkout params for the frontend widget.
+        settings_obj = PaymentSettings.get()
+        if settings_obj.active_provider == "razorpay" and settings_obj.is_razorpay_configured:
+            order = create_razorpay_order(payment)
+            if order:
+                return Response(
+                    {
+                        "message": "Razorpay order created.",
+                        "data": {"provider": "razorpay", "order": order},
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
         # Try Stripe checkout
         frontend_url = request.build_absolute_uri("/").rstrip("/")
         success_url = f"{frontend_url}/payments/success?session_id={{CHECKOUT_SESSION_ID}}"
@@ -181,6 +199,25 @@ class PaymentViewSet(ModelViewSet):
 
         Body: { "session_id": "cs_test_..." }
         """
+        # E-PLT-4: Razorpay verification — the frontend returns the order id,
+        # payment id and signature from the checkout widget.
+        razorpay_order_id = request.data.get("razorpay_order_id")
+        if razorpay_order_id:
+            ok = verify_razorpay_payment(
+                razorpay_order_id,
+                request.data.get("razorpay_payment_id", ""),
+                request.data.get("razorpay_signature", ""),
+            )
+            if ok:
+                return Response(
+                    {"message": "Payment verified successfully.", "data": {"status": "paid"}},
+                    status=status.HTTP_200_OK,
+                )
+            return Response(
+                {"error": {"code": "verification_failed", "message": "Signature verification failed."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         session_id = request.data.get("session_id")
         if not session_id:
             return Response(
@@ -287,3 +324,14 @@ def stripe_webhook(request):
     if success:
         return HttpResponse(status=200)
     return HttpResponse(status=400)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def razorpay_webhook(request):
+    """Razorpay webhook endpoint (E-PLT-4) — no auth; the body is verified by
+    the X-Razorpay-Signature HMAC against the configured webhook secret."""
+    payload = request.body
+    signature = request.META.get("HTTP_X_RAZORPAY_SIGNATURE", "")
+    success = handle_razorpay_webhook(payload, signature)
+    return HttpResponse(status=200 if success else 400)

@@ -36,7 +36,7 @@ import {
   startSession,
 } from "@/api/assessment";
 import { extractApiError, extractApiErrorCode } from "@/api/client";
-import { createCheckout } from "@/api/payments";
+import { createCheckout, openRazorpayCheckout } from "@/api/payments";
 import { useAuth } from "@/hooks/useAuth";
 
 const ASSESS_KEY = ["assessments"];
@@ -131,6 +131,12 @@ export default function AssessmentsPage() {
             amount: a?.price ?? "0",
             description: `Assessment: ${a?.title ?? ""}`,
           });
+          if (res.order) {
+            const paid = await openRazorpayCheckout(res.order);
+            if (paid) startSessionMutation.mutate(assessmentId);
+            else toast.error("Payment not completed. Start again once it has cleared.");
+            return;
+          }
           if (res.checkout_url) {
             window.location.href = res.checkout_url;
             return;

@@ -70,7 +70,7 @@ import {
   retrieveQuestion,
 } from "@/api/questionBank";
 import { extractApiError, extractApiErrorCode } from "@/api/client";
-import { createCheckout } from "@/api/payments";
+import { createCheckout, openRazorpayCheckout } from "@/api/payments";
 import { useAuth } from "@/hooks/useAuth";
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
   draft: "default",
@@ -138,6 +138,13 @@ export default function AssessmentDetailPage() {
             amount: assessment?.price ?? "0",
             description: `Assessment: ${assessment?.title ?? ""}`,
           });
+          if (res.order) {
+            // E-PLT-4: Razorpay is the active gateway — open its widget.
+            const paid = await openRazorpayCheckout(res.order);
+            if (paid) startSessionMutation.mutate();
+            else toast.error("Payment not completed. Start again once it has cleared.");
+            return;
+          }
           if (res.checkout_url) {
             window.location.href = res.checkout_url;
             return;
