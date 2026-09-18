@@ -57,8 +57,8 @@ TRN-1,Gate nested lesson/topic/session/content edit+delete,Doc 7 §5,SIGNED-DONE
 TRN-2,Admin approve/decline UI for course-change requests,Doc 7 §5,SIGNED-DONE,done,M3,TrainingCourseDetailPage CourseUpdateRequestsTab approve/decline,tsc,M3: admin approve/decline UI
 TRN-3,Trainer assignment-report review/score/feedback UI,Doc 7 §2.3.2/§5,SIGNED-PENDING,pending,M3,training.ts:788;801,,Drop approve-late-submission sub-claim
 TRN-5,Student<->trainer messaging surfaced in player,Doc 7 §5/§6,SIGNED-PENDING,pending,M3,training.ts:740;744,,Async messaging not live chat
-TRN-7,Uniform structure gating (create ok; edits admin-gated),Doc 7 §2.2/§5,SIGNED-PENDING,pending,M3,training/views.py:1268;1301,,Do NOT block initial creation
-TRN-8,Trainer views live-session consent list,Doc 7 §5,SIGNED-PENDING,pending,M3,training.ts:824,,
+TRN-7,Uniform structure gating (create ok; edits admin-gated),Doc 7 §2.2/§5,SIGNED-DONE,done,M3,training/views.py lessons; TrainingCourseDetailPage ConsentListButton,training suite; tsc,M3: uniform lesson/topic/session/content gating
+TRN-8,Trainer views live-session consent list,Doc 7 §5,SIGNED-DONE,done,M3,training/views.py lessons; TrainingCourseDetailPage ConsentListButton,training suite; tsc,M3: consent list UI
 TRN-10,Content<->assessment interlinking UI,Doc 7 §2.4.1.1,SIGNED-PENDING,pending,M3,training.ts interlink,,
 PLT-1,Messaging module front-end (Send Message),User Details p.1,SIGNED-PENDING,pending,M5,messaging/views.py (backend exists),,Signed per-role right; scope to standard roles
 PLT-3,Pay-for-test gate on start-session,SRS CJ_UC030,SIGNED-PENDING,pending,M5,assessment/models.py;views.start_session,,Reuse Stripe; NOT a cart
