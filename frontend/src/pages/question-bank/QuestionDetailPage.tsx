@@ -100,6 +100,11 @@ const TYPE_SPECIFIC_FIELDS: FieldConfig[] = [
   { key: "passage_title", label: "Passage Title", showForTypes: ["MCQ_PASSAGE_DISPLAY_MULTI"] },
   { key: "passage_body", label: "Passage Body", showForTypes: ["MCQ_PASSAGE_DISPLAY_MULTI"] },
   { key: "discrimination_index", label: "Discrimination Index" },
+  { key: "item_difficulty_index", label: "Item Difficulty Index" },
+  { key: "top_group_difficulty_index", label: "Top-Group Difficulty Index" },
+  { key: "bottom_group_difficulty_index", label: "Bottom-Group Difficulty Index" },
+  { key: "difference_difficulty_index", label: "Difference Difficulty Index" },
+  { key: "item_total_correlation", label: "Item-Total Correlation" },
 ];
 
 const COMMON_FIELDS: FieldConfig[] = [

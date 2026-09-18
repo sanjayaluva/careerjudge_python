@@ -97,6 +97,11 @@ export interface QuestionDetail extends QuestionListItem {
   passage_body: string;
   exposure_limit: number | null;
   discrimination_index: number | null;
+  item_difficulty_index: number | null;
+  top_group_difficulty_index: number | null;
+  bottom_group_difficulty_index: number | null;
+  difference_difficulty_index: number | null;
+  item_total_correlation: number | null;
   options: ResponseOption[];
   media_files: { id: number; media_type: string; file: string; created_at: string }[];
   flash_items: {

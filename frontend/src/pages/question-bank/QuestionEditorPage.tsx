@@ -18,7 +18,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 
-import { Alert, AlertDescription, Button, Label, Spinner } from "@/components/ui";
+import { Alert, AlertDescription, Button, Input, Label, Spinner } from "@/components/ui";
 import {
   bulkSaveOptions,
   createFlashItem,
@@ -92,6 +92,7 @@ export default function QuestionEditorPage() {
   const [cognitiveLevel, setCognitiveLevel] = useState("");
   const [workedSolution, setWorkedSolution] = useState("");
   const [categoryId, setCategoryId] = useState<number | "">("");
+  const [expiresAt, setExpiresAt] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   // Fetch categories for the category dropdown.
@@ -169,6 +170,7 @@ export default function QuestionEditorPage() {
     setCognitiveLevel(q.cognitive_level ?? "");
     setWorkedSolution(q.worked_solution ?? "");
     setCategoryId(q.category ?? "");
+    setExpiresAt(q.expires_at ? q.expires_at.slice(0, 10) : "");
     setQuestionText1(q.question_text_1 ?? "");
     setQuestionText2(q.question_text_2 ?? "");
     setScoringType(q.scoring_type ?? "BINARY");
@@ -656,6 +658,9 @@ export default function QuestionEditorPage() {
     if (categoryId) payload.category = categoryId;
     else payload.category = null;
 
+    // QB-3: optional validity expiry for periodic QB review (D1 §4.3).
+    payload.expires_at = expiresAt || null;
+
     if (passageTitle) payload.passage_title = passageTitle;
     if (passageBody) payload.passage_body = passageBody;
     if (displayDuration) payload.display_duration_seconds = parseInt(displayDuration);
@@ -947,6 +952,18 @@ export default function QuestionEditorPage() {
                   <option value="Evaluation">Evaluation</option>
                   <option value="Synthesis">Synthesis</option>
                 </select>
+              </div>
+              <div>
+                <Label htmlFor="expires">Expiry (optional)</Label>
+                <Input
+                  id="expires"
+                  type="date"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Periodic QB review (D1 §4.3). Blank = no expiry.
+                </p>
               </div>
             </div>
           </div>
