@@ -42,7 +42,7 @@ QB-2,Batch activate/inactivate + exposure UI,Doc 1 §4.2/§4.3,SIGNED-DONE,done,
 QB-3,Question expiry editable (enables expired filter),Doc 1 §4.3,SIGNED-DONE,done,M2,QuestionEditorPage expires_at date field,tsc; vitest,M2: expiry editable
 QB-5,Server hard-require rating on approve / reason on send-back,Doc 1 §3.2/§3.3,SIGNED-DONE,done,M2,question_bank/serializers.py QuestionReviewCreateSerializer.validate,question_bank 143 pass (+2),M2: server-enforce rating/reason
 QT-1,Type 2a (FITB single) default scoring = list-match not 0,00_scoring_rules.json,SIGNED-DONE,done,M1,assessment/scoring.py score_question FITB_SINGLE route,assessment/tests/test_scoring.py::TestFITBSingleScoring,Routes 2a to fuzzy scorer; 3 new tests
-QT-3,Continuous multi-question rating template,00_question_types_spec.json,SIGNED-PENDING,pending,M2,types 7/8a/8b,,
+QT-3,Continuous multi-question rating template,00_question_types_spec.json,SIGNED-DONE,done,M2,SessionPlayerPage continuous-rating group (continuousTail render + handleNext),tsc; vitest; backend session path verified (visual check pending),M2: multi_question_continuous rating scroll; seed_rating_demo fixture
 QT-4,Hotspot 5b per-click confirm/cancel popup,00_question_types_spec.json,SIGNED-DONE,done,M2,SessionPlayerPage AnswerInput hotspot pendingClick + confirm/cancel,tsc; vitest (visual check advised),M2: 5b confirm/cancel popup
 CNS-1,Session-summary smoothness_reason persisted (field-name fix),Doc 8 §3.3,SIGNED-DONE,done,M1,counseling.ts+CounsellorDashboard.tsx (field rename),counseling/tests/test_counseling.py::test_summary_six_fields,Fixed smoothly_reason->smoothness_reason; test now asserts persistence
 CNS-3,Post-payment received/Helpdesk screen,Doc 8 §2.1,SIGNED-PENDING,pending,M3,counseling/views.py:514,,
