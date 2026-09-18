@@ -66,6 +66,7 @@ import {
   listQuestions,
   NORMAL_QUESTION_TYPES,
   PSYCHOMETRIC_QUESTION_TYPES_LIST,
+  retrieveQuestion,
 } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -680,6 +681,8 @@ function QuestionAssignmentTab({
   );
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  // ASM-9: preview a bank question in full before selecting it.
+  const [previewId, setPreviewId] = useState<number | null>(null);
   const toast = useToast();
   const queryClient = useQueryClient();
 
@@ -958,6 +961,9 @@ function QuestionAssignmentTab({
                         {q.difficulty_level && (
                           <span className="text-slate-400">{q.difficulty_level}</span>
                         )}
+                        <Button size="sm" variant="ghost" onClick={() => setPreviewId(q.id)}>
+                          Preview
+                        </Button>
                         {isAssigned ? (
                           <span className="text-green-600">✓ Assigned</span>
                         ) : (
@@ -979,7 +985,94 @@ function QuestionAssignmentTab({
           )}
         </CardContent>
       </Card>
+
+      {previewId !== null && (
+        <QuestionPreviewModal
+          questionId={previewId}
+          alreadyAssigned={assignedIds.has(previewId)}
+          canManage={canManage}
+          loading={assignMutation.isPending}
+          onClose={() => setPreviewId(null)}
+          onSelect={() => {
+            assignMutation.mutate(previewId);
+            setPreviewId(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function QuestionPreviewModal({
+  questionId,
+  alreadyAssigned,
+  canManage,
+  loading,
+  onClose,
+  onSelect,
+}: {
+  questionId: number;
+  alreadyAssigned: boolean;
+  canManage: boolean;
+  loading: boolean;
+  onClose: () => void;
+  onSelect: () => void;
+}) {
+  const { data: q, isLoading } = useQuery({
+    queryKey: ["question-detail-preview", questionId],
+    queryFn: () => retrieveQuestion(questionId),
+  });
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Question preview"
+      description="Review the full question before selecting it (SRS §4.1)."
+      size="lg"
+    >
+      {isLoading || !q ? (
+        <div className="flex justify-center py-8">
+          <Spinner />
+        </div>
+      ) : (
+        <div className="space-y-3 text-sm">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline">{q.question_type_label}</Badge>
+            {q.difficulty_level && <Badge variant="outline">{q.difficulty_level}</Badge>}
+            {q.cognitive_level && <Badge variant="outline">{q.cognitive_level}</Badge>}
+            <Badge variant="outline">{q.status_label}</Badge>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Question</p>
+            <p className="text-slate-700">{stripHtml(q.question_text_1) || "(no text)"}</p>
+          </div>
+          {q.worked_solution && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Worked solution
+              </p>
+              <p className="text-slate-700">{stripHtml(q.worked_solution)}</p>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500">
+            <span>Discrimination: {q.discrimination_index ?? "—"}</span>
+            <span>Item difficulty: {q.item_difficulty_index ?? "—"}</span>
+            <span>Item-total r: {q.item_total_correlation ?? "—"}</span>
+            <span>Exposure limit: {q.exposure_limit ?? "—"}</span>
+          </div>
+        </div>
+      )}
+      <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        {canManage && !alreadyAssigned && (
+          <Button type="button" loading={loading} onClick={onSelect}>
+            Select
+          </Button>
+        )}
+      </div>
+    </Modal>
   );
 }
 
