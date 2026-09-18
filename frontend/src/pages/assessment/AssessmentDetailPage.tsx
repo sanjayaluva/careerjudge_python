@@ -153,6 +153,7 @@ export default function AssessmentDetailPage() {
         title?: string;
         description?: string;
         duration_seconds?: number | null;
+        delivery_count?: number | null;
         order?: number;
       };
     }) => updateSection(aid, payload.sectionId, payload.data),
@@ -479,7 +480,9 @@ export default function AssessmentDetailPage() {
               data: {
                 title: payload.title,
                 description: payload.description,
-                // duration_seconds passed in description-level form below
+                // ASM-3: per-section timer duration; ASM-1: delivery count.
+                duration_seconds: payload.duration_seconds ?? null,
+                delivery_count: payload.delivery_count ?? null,
               },
             });
           } else {
@@ -846,6 +849,9 @@ function SectionTreeRow({
               · {Math.floor(section.duration_seconds / 60)} min
             </span>
           )}
+          {section.delivery_count != null && (
+            <span className="text-xs text-slate-400">· deliver {section.delivery_count}</span>
+          )}
         </div>
         {canManage && (
           <div className="flex items-center gap-1">
@@ -907,10 +913,15 @@ function CreateSectionModal({
     parent?: number | null;
     description?: string;
     level?: number;
+    duration_seconds?: number | null;
+    delivery_count?: number | null;
   }) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  // ASM-3 per-section timer (entered in minutes) + ASM-1 delivery count.
+  const [durationMin, setDurationMin] = useState("");
+  const [deliveryCount, setDeliveryCount] = useState("");
 
   // Sync form fields when the modal opens (create or edit).
   // useEffect deps: [open, editSection] — runs when the modal opens or when
@@ -919,6 +930,10 @@ function CreateSectionModal({
     if (!open) return;
     setTitle(editSection?.title ?? "");
     setDescription(editSection?.description ?? "");
+    setDurationMin(
+      editSection?.duration_seconds ? String(Math.round(editSection.duration_seconds / 60)) : "",
+    );
+    setDeliveryCount(editSection?.delivery_count != null ? String(editSection.delivery_count) : "");
   }, [open, editSection]);
 
   const isEdit = editSection !== null;
@@ -946,6 +961,8 @@ function CreateSectionModal({
             description,
             // ASM-4: the server derives level from the parent (parent.level + 1),
             // so Level 3/4 sub-sections are created correctly.
+            duration_seconds: durationMin.trim() ? Number(durationMin) * 60 : null,
+            delivery_count: deliveryCount.trim() ? Number(deliveryCount) : null,
           });
         }}
         className="space-y-4"
@@ -972,6 +989,37 @@ function CreateSectionModal({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What this section covers..."
           />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="sec-timer">Timer (minutes, optional)</Label>
+            <Input
+              id="sec-timer"
+              type="number"
+              min={0}
+              value={durationMin}
+              onChange={(e) => setDurationMin(e.target.value)}
+              placeholder="e.g. 15"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Per-section time limit (SRS §5.2). Used when the assessment timer level is a section
+              level.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="sec-delivery">Delivery count (optional)</Label>
+            <Input
+              id="sec-delivery"
+              type="number"
+              min={0}
+              value={deliveryCount}
+              onChange={(e) => setDeliveryCount(e.target.value)}
+              placeholder="e.g. 10"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Randomly deliver this many questions from the pool (SRS §4.1.1). Blank = deliver all.
+            </p>
+          </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" onClick={onClose}>

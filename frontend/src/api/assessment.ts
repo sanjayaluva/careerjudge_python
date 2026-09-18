@@ -47,6 +47,7 @@ export interface AssessmentSection {
   level: number;
   order: number;
   duration_seconds: number | null;
+  delivery_count: number | null;
   subsections: AssessmentSection[];
 }
 
@@ -150,7 +151,14 @@ export function listSections(assessmentId: number): Promise<AssessmentSection[]>
 
 export function createSection(
   assessmentId: number,
-  payload: { title: string; parent?: number | null; description?: string; level?: number },
+  payload: {
+    title: string;
+    parent?: number | null;
+    description?: string;
+    level?: number;
+    duration_seconds?: number | null;
+    delivery_count?: number | null;
+  },
 ): Promise<AssessmentSection> {
   return apiPost<AssessmentSection>(`${BASE}/${assessmentId}/sections/`, payload);
 }
@@ -165,6 +173,7 @@ export function updateSection(
     order: number;
     parent: number | null;
     duration_seconds: number | null;
+    delivery_count: number | null;
   }>,
 ): Promise<AssessmentSection> {
   return apiPatch<AssessmentSection>(`${BASE}/${assessmentId}/sections/${sectionId}/`, payload);
