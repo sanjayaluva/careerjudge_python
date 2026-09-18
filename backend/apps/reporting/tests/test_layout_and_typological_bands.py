@@ -271,7 +271,9 @@ def test_table_layout_builds_rows_from_section_scores_with_bands():
     assert pdf.startswith(b"%PDF-")
 
 
-def test_graph_layout_is_recorded_but_scoped_out():
+def test_graph_layout_renders_bar_chart(monkeypatch):
+    """REP-1: layout='graph' now renders an SVG bar chart of section scores
+    (previously scoped out)."""
     _assessment, _candidate, session, _sec_a, _sec_b = _make_session_two_sections()
     report = Report.objects.create(
         title="Desc",
@@ -290,7 +292,17 @@ def test_graph_layout_is_recorded_but_scoped_out():
     rendered = generate_report_data(report, session)
     entry = rendered["sections"][0]
     assert "table" not in entry
-    assert "scoped out" in entry["graph_note"]
-    # Doesn't crash PDF rendering — the note is rendered as plain text.
-    pdf = render_report_pdf(rendered)
-    assert pdf.startswith(b"%PDF-")
+    assert "graph_note" not in entry
+    graph = entry["graph"]
+    assert len(graph["bars"]) == 2
+    values = {b["variable"]: b["value"] for b in graph["bars"]}
+    assert values["Verbal"] == 90.0
+    assert values["Numerical"] == 40.0
+
+    # The graph reaches the PDF HTML as inline SVG (no WeasyPrint needed).
+    from apps.reporting.pdf import _build_custom_sections
+
+    html = _build_custom_sections(
+        [{"section_type": "chart", "title": "Score graph", "graph": graph, "is_visible": True}]
+    )
+    assert "<svg" in html and "Verbal" in html
