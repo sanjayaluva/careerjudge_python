@@ -55,8 +55,8 @@ ADM-3,Task assignment picklist of unassigned upstream tasks,Doc 9 §3.1.2/3,SIGN
 ADM-4,SME task category/subcategory/type as QB dropdowns,Doc 9 §3.1.1,SIGNED-DONE,done,M3,TasksPage AssignTaskModal QB category/subcategory/type dropdowns,tsc; vitest,M3: QB-populated dropdowns
 TRN-1,Gate nested lesson/topic/session/content edit+delete,Doc 7 §5,SIGNED-DONE,done,M1,training/views.py _CourseStructureEditGuardMixin on 5 nested viewsets,training/tests/test_training.py (4 gating tests),update/partial_update/destroy now gated
 TRN-2,Admin approve/decline UI for course-change requests,Doc 7 §5,SIGNED-DONE,done,M3,TrainingCourseDetailPage CourseUpdateRequestsTab approve/decline,tsc,M3: admin approve/decline UI
-TRN-3,Trainer assignment-report review/score/feedback UI,Doc 7 §2.3.2/§5,SIGNED-PENDING,pending,M3,training.ts:788;801,,Drop approve-late-submission sub-claim
-TRN-5,Student<->trainer messaging surfaced in player,Doc 7 §5/§6,SIGNED-PENDING,pending,M3,training.ts:740;744,,Async messaging not live chat
+TRN-3,Trainer assignment-report review/score/feedback UI,Doc 7 §2.3.2/§5,SIGNED-DONE,done,M3,TrainingCourseDetailPage RegistrationActions: ReportsReviewModal + MessagesModal,tsc; vitest,M3: assignment-report review (drop approve-late)
+TRN-5,Student<->trainer messaging surfaced in player,Doc 7 §5/§6,SIGNED-DONE,done,M3,TrainingCourseDetailPage RegistrationActions: ReportsReviewModal + MessagesModal,tsc; vitest,M3: trainer<->student messaging
 TRN-7,Uniform structure gating (create ok; edits admin-gated),Doc 7 §2.2/§5,SIGNED-DONE,done,M3,training/views.py lessons; TrainingCourseDetailPage ConsentListButton,training suite; tsc,M3: uniform lesson/topic/session/content gating
 TRN-8,Trainer views live-session consent list,Doc 7 §5,SIGNED-DONE,done,M3,training/views.py lessons; TrainingCourseDetailPage ConsentListButton,training suite; tsc,M3: consent list UI
 TRN-10,Content<->assessment interlinking UI,Doc 7 §2.4.1.1,SIGNED-PENDING,pending,M3,training.ts interlink,,
