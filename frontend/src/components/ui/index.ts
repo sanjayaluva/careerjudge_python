@@ -16,6 +16,7 @@ export {
   DropdownMenuTrigger,
 } from "./DropdownMenu";
 export { Input, type InputProps } from "./Input";
+export { Select, type SelectProps } from "./Select";
 export { Label, type LabelProps } from "./Label";
 export { MediaManager, type MediaManagerProps } from "./MediaManager";
 export { Modal, type ModalProps } from "./Modal";

@@ -18,6 +18,7 @@ import {
   Label,
   Modal,
   PageCard,
+  Select,
   Spinner,
   useToast,
 } from "@/components/ui";
@@ -294,9 +295,8 @@ function ComposeModal({
           {isLoading ? (
             <Spinner />
           ) : (
-            <select
+            <Select
               id="msg-to"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
               value={recipient}
               onChange={(e) => setRecipient(e.target.value)}
               required
@@ -311,7 +311,7 @@ function ComposeModal({
                   ))}
                 </optgroup>
               ))}
-            </select>
+            </Select>
           )}
           {!isLoading && (contacts ?? []).length === 0 && (
             <p className="mt-1 text-xs text-slate-500">No contacts available for your role.</p>
