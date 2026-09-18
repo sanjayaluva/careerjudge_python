@@ -160,9 +160,7 @@ export default function AssessmentDetailPage() {
             startSessionMutation.mutate();
             return;
           }
-          toast.error(
-            "Payment is pending confirmation. Please start again once it has cleared.",
-          );
+          toast.error("Payment is pending confirmation. Please start again once it has cleared.");
         } catch (e) {
           toast.error(extractApiError(e));
         }
@@ -1944,12 +1942,21 @@ function PsychometricGroupsTab({
         ...(needsRating ? { rating_scale_points: Number(ratingPoints) } : {}),
         items: rows
           .filter((r) => r.statement && r.section)
-          .map((r, i) => ({ statement: Number(r.statement), section: Number(r.section), order: i })),
+          .map((r, i) => ({
+            statement: Number(r.statement),
+            section: Number(r.section),
+            order: i,
+          })),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["assessment", assessmentId, "psych-groups"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["assessment", assessmentId, "psych-groups"],
+      });
       toast.success("Group created.");
-      setRows([{ statement: "", section: "" }, { statement: "", section: "" }]);
+      setRows([
+        { statement: "", section: "" },
+        { statement: "", section: "" },
+      ]);
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -1957,7 +1964,9 @@ function PsychometricGroupsTab({
   const delMut = useMutation({
     mutationFn: (id: number) => deletePsychometricGroup(assessmentId, id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["assessment", assessmentId, "psych-groups"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["assessment", assessmentId, "psych-groups"],
+      });
       toast.success("Group removed.");
     },
     onError: (err) => toast.error(extractApiError(err)),

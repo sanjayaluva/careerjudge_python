@@ -234,10 +234,7 @@ export default function QuestionBankPage() {
             </div>
             <div className="flex gap-2">
               {canManageQB && (
-                <Button
-                  variant="outline"
-                  onClick={() => navigate("/question-bank/psychometrics")}
-                >
+                <Button variant="outline" onClick={() => navigate("/question-bank/psychometrics")}>
                   Psychometric Analysis
                 </Button>
               )}
@@ -646,13 +643,7 @@ export default function QuestionBankPage() {
   );
 }
 
-function BulkImportModal({
-  onClose,
-  onImported,
-}: {
-  onClose: () => void;
-  onImported: () => void;
-}) {
+function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
   const toast = useToast();
   const [text, setText] = useState("");
   const [result, setResult] = useState<BulkImportResult | null>(null);
@@ -681,7 +672,7 @@ function BulkImportModal({
     try {
       parsed = JSON.parse(text);
     } catch {
-      toast.error("Invalid JSON. Paste an array of questions or { \"questions\": [...] }.");
+      toast.error('Invalid JSON. Paste an array of questions or { "questions": [...] }.');
       return;
     }
     const questions = Array.isArray(parsed)

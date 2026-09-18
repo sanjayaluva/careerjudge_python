@@ -631,9 +631,7 @@ class AssignmentReportFile(models.Model):
     submission.
     """
 
-    report = models.ForeignKey(
-        AssignmentReport, on_delete=models.CASCADE, related_name="files"
-    )
+    report = models.ForeignKey(AssignmentReport, on_delete=models.CASCADE, related_name="files")
     file = models.FileField(_("file"), upload_to="assignment_reports/")
     file_type = models.CharField(_("file type"), max_length=20, blank=True, default="")
     uploaded_at = models.DateTimeField(auto_now_add=True)

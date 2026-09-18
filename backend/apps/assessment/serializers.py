@@ -366,7 +366,6 @@ class PsychometricGroupSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "assessment"]
 
     def validate(self, attrs):
-        from apps.question_bank.models import Question
 
         group_type = attrs.get("group_type")
         items = attrs.get("items") or []
@@ -416,7 +415,9 @@ class PsychometricGroupSerializer(serializers.ModelSerializer):
         group = PsychometricGroup.objects.create(**validated_data)
         for idx, it in enumerate(items):
             PsychometricGroupItem.objects.create(
-                group=group, statement=it["statement"], section=it["section"],
+                group=group,
+                statement=it["statement"],
+                section=it["section"],
                 order=it.get("order", idx),
             )
         return group

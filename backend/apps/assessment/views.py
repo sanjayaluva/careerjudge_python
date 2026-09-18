@@ -161,7 +161,9 @@ def _serialize_group_for_player(group, response) -> dict:
         "raw_answer": (response.raw_answer if response else None),
         "score": None,
         "max_score": None,
-        "answered_at": (response.answered_at.isoformat() if response and response.answered_at else None),
+        "answered_at": (
+            response.answered_at.isoformat() if response and response.answered_at else None
+        ),
         "time_spent_seconds": None,
         "section_duration_seconds": None,
         "timer_section_id": None,
@@ -1216,8 +1218,7 @@ class SessionViewSet(ModelViewSet):
         )
         if groups:
             responses = {
-                r.group_id: r
-                for r in PsychometricGroupResponse.objects.filter(session=session)
+                r.group_id: r for r in PsychometricGroupResponse.objects.filter(session=session)
             }
             for group in groups:
                 resp = responses.get(group.id)
@@ -1355,9 +1356,7 @@ class SessionViewSet(ModelViewSet):
 
         from .models import PsychometricGroup, PsychometricGroupResponse
 
-        group = PsychometricGroup.objects.filter(
-            id=group_id, assessment=session.assessment
-        ).first()
+        group = PsychometricGroup.objects.filter(id=group_id, assessment=session.assessment).first()
         if group is None:
             return Response(
                 {

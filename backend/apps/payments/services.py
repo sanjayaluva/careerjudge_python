@@ -167,9 +167,7 @@ def _razorpay_signature(message: str, secret: str) -> str:
     import hashlib
     import hmac
 
-    return hmac.new(
-        secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha256
-    ).hexdigest()
+    return hmac.new(secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def verify_razorpay_payment(order_id: str, payment_id: str, signature: str) -> bool:
@@ -205,19 +203,13 @@ def handle_razorpay_webhook(payload: bytes, signature: str) -> bool:
     settings = PaymentSettings.get()
     if not settings.is_razorpay_configured or not settings.razorpay_webhook_secret:
         return False
-    expected = _razorpay_signature(
-        payload.decode("utf-8"), settings.razorpay_webhook_secret
-    )
+    expected = _razorpay_signature(payload.decode("utf-8"), settings.razorpay_webhook_secret)
     if not hmac.compare_digest(expected, signature or ""):
         logger.warning("Razorpay webhook signature mismatch.")
         return False
     try:
         event = json.loads(payload.decode("utf-8"))
-        entity = (
-            event.get("payload", {})
-            .get("payment", {})
-            .get("entity", {})
-        )
+        entity = event.get("payload", {}).get("payment", {}).get("entity", {})
         order_id = entity.get("order_id")
         if order_id:
             payment = Payment.objects.filter(provider_session_id=order_id).first()

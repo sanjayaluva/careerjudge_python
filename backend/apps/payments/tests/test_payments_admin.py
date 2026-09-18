@@ -28,7 +28,10 @@ class PaymentAdminBase(APITestCase):
 class AuthoriseTests(PaymentAdminBase):
     def _pending(self):
         return Payment.objects.create(
-            user=self.user, module="assessment", item_id=99, amount=Decimal("25.00"),
+            user=self.user,
+            module="assessment",
+            item_id=99,
+            amount=Decimal("25.00"),
             status="pending",
         )
 

@@ -344,7 +344,11 @@ function LineItemsModal({
             <Label htmlFor="li-desc" required>
               Description
             </Label>
-            <Input id="li-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <Input
+              id="li-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
           </div>
           <div>
             <Label htmlFor="li-qty">Qty</Label>
@@ -370,7 +374,11 @@ function LineItemsModal({
             />
           </div>
           <div className="flex justify-end sm:col-span-4">
-            <Button type="submit" loading={addMut.isPending} disabled={!description.trim() || !unitPrice}>
+            <Button
+              type="submit"
+              loading={addMut.isPending}
+              disabled={!description.trim() || !unitPrice}
+            >
               Add item
             </Button>
           </div>

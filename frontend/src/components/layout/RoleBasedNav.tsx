@@ -61,9 +61,7 @@ export function RoleBasedNav({ onNavigate, className }: RoleBasedNavProps) {
 
   // Report 4 Reviewer-2: a reviewer's Question Bank is their review queue.
   const labelFor = (item: (typeof NAV_ITEMS)[number]) =>
-    item.key === "question_bank" && user?.role === "reviewer"
-      ? "My Review Questions"
-      : item.label;
+    item.key === "question_bank" && user?.role === "reviewer" ? "My Review Questions" : item.label;
 
   return (
     <nav aria-label="Primary" className={cn("flex flex-col gap-0.5", className)}>

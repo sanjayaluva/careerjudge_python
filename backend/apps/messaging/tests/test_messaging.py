@@ -122,7 +122,9 @@ class IndividualMessagingTests(MessagingBaseTestCase):
             name="individual", defaults={"is_system": True, "is_frozen": True}
         )
         cls.individual = User.objects.create_user(
-            email="user@msg-test.com", password="pw12345", is_active=True,
+            email="user@msg-test.com",
+            password="pw12345",
+            is_active=True,
             role=cls.individual_role,
         )
 

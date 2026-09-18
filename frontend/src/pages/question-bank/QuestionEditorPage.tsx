@@ -116,9 +116,7 @@ export default function QuestionEditorPage() {
       setQuestionType(taskType);
     }
     if (taskCategory && categories) {
-      const match = categories.find(
-        (c) => c.name.toLowerCase() === taskCategory.toLowerCase(),
-      );
+      const match = categories.find((c) => c.name.toLowerCase() === taskCategory.toLowerCase());
       if (match) setCategoryId(match.id);
     }
     // Only mark done once categories are available (so the name match runs).

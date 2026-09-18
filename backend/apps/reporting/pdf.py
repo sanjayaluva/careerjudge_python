@@ -770,11 +770,11 @@ def _build_layout_graph_svg(graph: Any) -> str:
     if max_value <= 0:
         max_value = 100.0
 
-    row_h = 22          # vertical space per bar
+    row_h = 22  # vertical space per bar
     bar_h = 14
-    label_w = 120       # left gutter for variable names
-    track_w = 320       # width of the 100% track
-    value_w = 60        # right gutter for the value text
+    label_w = 120  # left gutter for variable names
+    track_w = 320  # width of the 100% track
+    value_w = 60  # right gutter for the value text
     pad = 8
     chart_w = label_w + track_w + value_w
     chart_h = pad * 2 + row_h * len(bars)

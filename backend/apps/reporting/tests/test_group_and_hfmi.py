@@ -552,12 +552,20 @@ def test_duplicate_report_clones_config(psy_client, psychometrician_user):
         created_by=psychometrician_user,
     )
     ReportSection.objects.create(
-        report=report, section_type="custom", title="Intro", order=1,
+        report=report,
+        section_type="custom",
+        title="Intro",
+        order=1,
         table_graph_config={"layout": "graph"},
     )
     ReportBand.objects.create(
-        report=report, target_type="section", section=section, band_number=1,
-        range_min=0, range_max=50, band_label="Low",
+        report=report,
+        target_type="section",
+        section=section,
+        band_number=1,
+        range_min=0,
+        range_max=50,
+        band_label="Low",
     )
 
     resp = psy_client.post(f"/api/reporting/reports/{report.id}/duplicate/", {}, format="json")
@@ -581,8 +589,12 @@ def test_duplicate_report_clones_config(psy_client, psychometrician_user):
 def test_duplicate_report_accepts_custom_title(psy_client, psychometrician_user):
     assessment = Assessment.objects.create(title="A", status="published")
     report = Report.objects.create(
-        title="Master", report_type="descriptive", scope="general",
-        assessment=assessment, status="draft", created_by=psychometrician_user,
+        title="Master",
+        report_type="descriptive",
+        scope="general",
+        assessment=assessment,
+        status="draft",
+        created_by=psychometrician_user,
     )
     resp = psy_client.post(
         f"/api/reporting/reports/{report.id}/duplicate/",

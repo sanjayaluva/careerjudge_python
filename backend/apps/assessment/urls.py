@@ -40,7 +40,9 @@ question_router.register("questions", AssessmentQuestionViewSet, basename="quest
 
 # PSY-A1: psychometric groups nested under an assessment
 psych_router = DefaultRouter()
-psych_router.register("psychometric-groups", PsychometricGroupViewSet, basename="psychometric-group")
+psych_router.register(
+    "psychometric-groups", PsychometricGroupViewSet, basename="psychometric-group"
+)
 
 urlpatterns = [
     # Session routes — included FIRST so /api/assessments/sessions/ matches

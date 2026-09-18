@@ -372,167 +372,167 @@ function BookingModal({
           </div>
         ) : (
           <>
-        {/* Report 3 §1.7: counsellor profile details */}
-        <div className="flex items-start gap-3 rounded-md border border-slate-100 p-3">
-          {counsellor.avatar ? (
-            <img
-              src={counsellor.avatar}
-              alt={counsellor.full_name}
-              className="h-12 w-12 rounded-full object-cover"
-            />
-          ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary-700">
-              {counsellor.full_name?.[0] ?? "?"}
+            {/* Report 3 §1.7: counsellor profile details */}
+            <div className="flex items-start gap-3 rounded-md border border-slate-100 p-3">
+              {counsellor.avatar ? (
+                <img
+                  src={counsellor.avatar}
+                  alt={counsellor.full_name}
+                  className="h-12 w-12 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary-700">
+                  {counsellor.full_name?.[0] ?? "?"}
+                </div>
+              )}
+              <div className="text-sm">
+                <div className="font-medium text-slate-900">{counsellor.full_name}</div>
+                {(counsellor.gender || counsellor.language || counsellor.location) && (
+                  <div className="mt-0.5 text-xs text-slate-500">
+                    {[counsellor.gender, counsellor.language, counsellor.location]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </div>
+                )}
+                {counsellor.bio && (
+                  <p className="mt-1 line-clamp-2 text-xs text-slate-600">{counsellor.bio}</p>
+                )}
+              </div>
             </div>
-          )}
-          <div className="text-sm">
-            <div className="font-medium text-slate-900">{counsellor.full_name}</div>
-            {(counsellor.gender || counsellor.language || counsellor.location) && (
-              <div className="mt-0.5 text-xs text-slate-500">
-                {[counsellor.gender, counsellor.language, counsellor.location]
-                  .filter(Boolean)
-                  .join(" · ")}
+
+            {/* Report 3 §1.8: registration form (topic + description prefilled
+            from the user's context) */}
+            <div>
+              <Label htmlFor="topic" required>
+                Topic / Issue
+              </Label>
+              <Input
+                id="topic"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="e.g., Career change advice"
+                required
+              />
+              {user?.full_name && (
+                <p className="mt-1 text-xs text-slate-400">
+                  Booking as {user.full_name} ({user.email})
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="desc">Description (optional)</Label>
+              <textarea
+                id="desc"
+                rows={2}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between">
+                <Label required>Available time slots</Label>
+                {/* D8 "browse future weeks" */}
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setWeekOffset((w) => Math.max(0, w - 1))}
+                    disabled={weekOffset === 0}
+                  >
+                    ← Prev week
+                  </Button>
+                  <span className="px-1 text-xs text-slate-500">
+                    {weekOffset === 0 ? "This week" : `Week +${weekOffset}`}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setWeekOffset((w) => Math.min(maxWeeksAhead, w + 1))}
+                    disabled={weekOffset >= maxWeeksAhead}
+                  >
+                    Next week →
+                  </Button>
+                </div>
+              </div>
+              {isLoading ? (
+                <Spinner />
+              ) : availableSlots.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  No available slots this week. Try browsing another week.
+                </p>
+              ) : (
+                <div className="max-h-48 space-y-1 overflow-y-auto">
+                  {availableSlots.map((slot) => (
+                    <button
+                      key={slot.id}
+                      onClick={() => setSelectedSlot(slot)}
+                      className={`block w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                        selectedSlot?.id === slot.id
+                          ? "border-primary-500 bg-primary-50 text-primary-900"
+                          : "border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      {new Date(slot.start_time).toLocaleString()} —{" "}
+                      {new Date(slot.end_time).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Report 3 §1.11: refund policy display */}
+            {settings?.cancellation_policy && (
+              <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+                <div className="mb-1 font-medium text-slate-700">Cancellation & refund policy</div>
+                {settings.cancellation_policy}
               </div>
             )}
-            {counsellor.bio && (
-              <p className="mt-1 line-clamp-2 text-xs text-slate-600">{counsellor.bio}</p>
-            )}
-          </div>
-        </div>
 
-        {/* Report 3 §1.8: registration form (topic + description prefilled
-            from the user's context) */}
-        <div>
-          <Label htmlFor="topic" required>
-            Topic / Issue
-          </Label>
-          <Input
-            id="topic"
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            placeholder="e.g., Career change advice"
-            required
-          />
-          {user?.full_name && (
-            <p className="mt-1 text-xs text-slate-400">
-              Booking as {user.full_name} ({user.email})
-            </p>
-          )}
-        </div>
-
-        <div>
-          <Label htmlFor="desc">Description (optional)</Label>
-          <textarea
-            id="desc"
-            rows={2}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between">
-            <Label required>Available time slots</Label>
-            {/* D8 "browse future weeks" */}
-            <div className="flex items-center gap-1">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setWeekOffset((w) => Math.max(0, w - 1))}
-                disabled={weekOffset === 0}
-              >
-                ← Prev week
-              </Button>
-              <span className="px-1 text-xs text-slate-500">
-                {weekOffset === 0 ? "This week" : `Week +${weekOffset}`}
+            {/* Report 3 §1.8: terms checkbox */}
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+              />
+              <span className="text-slate-700">
+                I accept the{" "}
+                {settings?.terms_and_conditions ? (
+                  <details className="inline">
+                    <summary className="cursor-pointer text-primary-600">
+                      Terms &amp; Conditions
+                    </summary>
+                    <div className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-xs text-slate-600">
+                      {settings.terms_and_conditions}
+                    </div>
+                  </details>
+                ) : (
+                  "Terms & Conditions"
+                )}
               </span>
+            </label>
+
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
               <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setWeekOffset((w) => Math.min(maxWeeksAhead, w + 1))}
-                disabled={weekOffset >= maxWeeksAhead}
+                onClick={() => bookMutation.mutate()}
+                loading={bookMutation.isPending}
+                disabled={!topic || !selectedSlot || !termsAccepted}
               >
-                Next week →
+                Book session (₹{counsellor.hourly_rate})
               </Button>
             </div>
-          </div>
-          {isLoading ? (
-            <Spinner />
-          ) : availableSlots.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              No available slots this week. Try browsing another week.
-            </p>
-          ) : (
-            <div className="max-h-48 space-y-1 overflow-y-auto">
-              {availableSlots.map((slot) => (
-                <button
-                  key={slot.id}
-                  onClick={() => setSelectedSlot(slot)}
-                  className={`block w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
-                    selectedSlot?.id === slot.id
-                      ? "border-primary-500 bg-primary-50 text-primary-900"
-                      : "border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  {new Date(slot.start_time).toLocaleString()} —{" "}
-                  {new Date(slot.end_time).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Report 3 §1.11: refund policy display */}
-        {settings?.cancellation_policy && (
-          <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600">
-            <div className="mb-1 font-medium text-slate-700">Cancellation & refund policy</div>
-            {settings.cancellation_policy}
-          </div>
-        )}
-
-        {/* Report 3 §1.8: terms checkbox */}
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={termsAccepted}
-            onChange={(e) => setTermsAccepted(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
-          />
-          <span className="text-slate-700">
-            I accept the{" "}
-            {settings?.terms_and_conditions ? (
-              <details className="inline">
-                <summary className="cursor-pointer text-primary-600">
-                  Terms &amp; Conditions
-                </summary>
-                <div className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-xs text-slate-600">
-                  {settings.terms_and_conditions}
-                </div>
-              </details>
-            ) : (
-              "Terms & Conditions"
-            )}
-          </span>
-        </label>
-
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => bookMutation.mutate()}
-            loading={bookMutation.isPending}
-            disabled={!topic || !selectedSlot || !termsAccepted}
-          >
-            Book session (₹{counsellor.hourly_rate})
-          </Button>
-        </div>
           </>
         )}
       </div>

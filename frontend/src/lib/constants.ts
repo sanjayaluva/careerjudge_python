@@ -128,14 +128,7 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
   group_admin: ["dashboard", "profile", "organizations", "assessments"],
   // Report 4 Counsellor-1/2: no assessment or profiling access — those tabs are
   // removed; the counsellor keeps Reports (limited to their own clients).
-  counsellor: [
-    "dashboard",
-    "profile",
-    "reports",
-    "counseling",
-    "tasks",
-    "invoicing",
-  ],
+  counsellor: ["dashboard", "profile", "reports", "counseling", "tasks", "invoicing"],
   channel_partner: [
     "dashboard",
     "profile",

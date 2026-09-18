@@ -1330,7 +1330,9 @@ def _course_with_assignment(trainer_user, deadline=None):
     topic = LessonTopic.objects.create(lesson=lesson, title="T1", order=1)
     session = TopicSession.objects.create(topic=topic, title="S1", order=1)
     assignment = Assignment.objects.create(
-        session=session, title="A1", report_submission_enabled=True,
+        session=session,
+        title="A1",
+        report_submission_enabled=True,
         submission_deadline=deadline,
     )
     return course, assignment
@@ -1338,8 +1340,9 @@ def _course_with_assignment(trainer_user, deadline=None):
 
 def test_past_deadline_blocks_submission(student_client, individual_user, trainer_user):
     """E-X7 baseline: a past global deadline blocks submission."""
-    from django.utils import timezone
     from datetime import timedelta
+
+    from django.utils import timezone
 
     course, assignment = _course_with_assignment(
         trainer_user, deadline=timezone.now() - timedelta(days=1)
@@ -1354,12 +1357,12 @@ def test_past_deadline_blocks_submission(student_client, individual_user, traine
     assert resp.data["error"]["code"] == "deadline_passed"
 
 
-def test_deadline_override_allows_late_submission(
-    student_client, individual_user, trainer_user
-):
+def test_deadline_override_allows_late_submission(student_client, individual_user, trainer_user):
     """E-X7: a per-student override deadline in the future re-opens submission."""
-    from django.utils import timezone
     from datetime import timedelta
+
+    from django.utils import timezone
+
     from apps.training.models import AssignmentDeadlineOverride
 
     course, assignment = _course_with_assignment(
@@ -1367,7 +1370,8 @@ def test_deadline_override_allows_late_submission(
     )
     reg = CourseRegistration.objects.create(course=course, student=individual_user)
     AssignmentDeadlineOverride.objects.create(
-        assignment=assignment, student=individual_user,
+        assignment=assignment,
+        student=individual_user,
         new_deadline=timezone.now() + timedelta(days=3),
     )
     resp = student_client.post(
@@ -1380,8 +1384,10 @@ def test_deadline_override_allows_late_submission(
 
 def test_trainer_sets_deadline_override(trainer_client, individual_user, trainer_user):
     """E-X7: trainer sets an override via the endpoint."""
-    from django.utils import timezone
     from datetime import timedelta
+
+    from django.utils import timezone
+
     from apps.training.models import AssignmentDeadlineOverride
 
     course, assignment = _course_with_assignment(trainer_user)
@@ -1415,9 +1421,7 @@ def test_multiple_report_files_attached(student_client, individual_user, trainer
     assert len(resp.data["data"]["files"]) == 2
 
 
-def test_trainer_cannot_link_assessment_to_published_course(
-    trainer_client, trainer_user
-):
+def test_trainer_cannot_link_assessment_to_published_course(trainer_client, trainer_user):
     """H11: linking an assessment to a published course (SRS §2.4) is gated."""
     from apps.assessment.models import Assessment
     from apps.training.models import CourseAssessment
@@ -1483,7 +1487,7 @@ def test_assessment_links_to_topic_and_lesson(trainer_client, trainer_user):
     """Report 4 Trainer-9: End of Topic / End of Lesson target a specific
     topic / lesson (not just a session)."""
     from apps.assessment.models import Assessment
-    from apps.training.models import CourseAssessment, CourseLesson, LessonTopic
+    from apps.training.models import CourseLesson, LessonTopic
 
     course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
     lesson = CourseLesson.objects.create(course=course, title="Lesson A", order=1)
@@ -1501,7 +1505,12 @@ def test_assessment_links_to_topic_and_lesson(trainer_client, trainer_user):
 
     r2 = trainer_client.post(
         f"/api/training/courses/{course.id}/assessments/",
-        {"assessment": a2.id, "title": "Lesson quiz", "level": "end_of_lesson", "lesson": lesson.id},
+        {
+            "assessment": a2.id,
+            "title": "Lesson quiz",
+            "level": "end_of_lesson",
+            "lesson": lesson.id,
+        },
         format="json",
     )
     assert r2.status_code == 201, r2.data

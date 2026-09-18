@@ -21,7 +21,10 @@ const passwordSchema = z
     password: z
       .string()
       .min(8, "Password must be at least 8 characters")
-      .refine(isStrongPassword, "Needs a letter, a number, and a special character, and must not start with a number"),
+      .refine(
+        isStrongPassword,
+        "Needs a letter, a number, and a special character, and must not start with a number",
+      ),
     confirmPassword: z.string().min(1, "Please confirm your password"),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -126,7 +129,8 @@ export default function VerifyEmailPage() {
                 </p>
               ) : (
                 <p id="password-hint" className="mt-1 text-xs text-slate-500">
-                  Use 8+ characters with a letter, a number, and a special character. Don’t start with a number.
+                  Use 8+ characters with a letter, a number, and a special character. Don’t start
+                  with a number.
                 </p>
               )}
             </div>

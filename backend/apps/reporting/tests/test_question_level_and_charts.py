@@ -58,12 +58,20 @@ def _session_with_attempts():
     q1 = _make_question(question_title="Capital of France", question_id_label="Q1")
     q2 = _make_question(question_title="2 + 2", question_id_label="Q2")
     QuestionAttempt.objects.create(
-        session=session, question=q1, section=section, status="attempted",
-        score=10.0, max_score=10.0,
+        session=session,
+        question=q1,
+        section=section,
+        status="attempted",
+        score=10.0,
+        max_score=10.0,
     )
     QuestionAttempt.objects.create(
-        session=session, question=q2, section=section, status="attempted",
-        score=5.0, max_score=10.0,
+        session=session,
+        question=q2,
+        section=section,
+        status="attempted",
+        score=5.0,
+        max_score=10.0,
     )
     return assessment, candidate, session, section
 
@@ -142,11 +150,19 @@ def _session_two_sections():
     assessment = Assessment.objects.create(title="A", status="published")
     candidate = _make_user("graph@test.com")
     session = AssessmentSession.objects.create(
-        assessment=assessment, candidate=candidate, status="completed",
-        total_score=130.0, max_score=200.0, percentage=65.0,
+        assessment=assessment,
+        candidate=candidate,
+        status="completed",
+        total_score=130.0,
+        max_score=200.0,
+        percentage=65.0,
     )
-    sec_a = AssessmentSection.objects.create(assessment=assessment, title="Verbal", level=1, order=1)
-    sec_b = AssessmentSection.objects.create(assessment=assessment, title="Numerical", level=1, order=2)
+    sec_a = AssessmentSection.objects.create(
+        assessment=assessment, title="Verbal", level=1, order=1
+    )
+    sec_b = AssessmentSection.objects.create(
+        assessment=assessment, title="Numerical", level=1, order=2
+    )
     SectionScore.objects.create(session=session, section=sec_a, raw_score=90.0, max_score=100.0)
     SectionScore.objects.create(session=session, section=sec_b, raw_score=40.0, max_score=100.0)
     return assessment, session
@@ -155,12 +171,19 @@ def _session_two_sections():
 def test_graph_layout_builds_bar_data():
     assessment, session = _session_two_sections()
     report = Report.objects.create(
-        title="Graph", report_type="descriptive", scope="general",
-        assessment=assessment, data_input_level="level1",
-        stat_conversion="percentage", status="published",
+        title="Graph",
+        report_type="descriptive",
+        scope="general",
+        assessment=assessment,
+        data_input_level="level1",
+        stat_conversion="percentage",
+        status="published",
     )
     ReportSection.objects.create(
-        report=report, section_type="custom", title="Scores chart", order=1,
+        report=report,
+        section_type="custom",
+        title="Scores chart",
+        order=1,
         table_graph_config={"layout": "graph", "table_title": "Aptitude"},
     )
     data = generate_report_data(report, session)

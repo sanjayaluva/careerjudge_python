@@ -506,7 +506,7 @@ class ProfilingSolutionViewSet(ModelViewSet):
             )
 
         serializer = MappingRuleSerializer(data=request.data)
-        # CP-1: the n×n grid is edited cell-by-cell (upsert below). Drop the
+        # CP-1: the n-by-n grid is edited cell-by-cell (upsert below). Drop the
         # auto-generated unique_together validator that would otherwise reject a
         # re-save of an existing (band_definition, criterion, user) cell with 400
         # before the upsert can run.

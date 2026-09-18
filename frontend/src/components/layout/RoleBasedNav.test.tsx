@@ -123,13 +123,7 @@ describe("<RoleBasedNav />", () => {
       .map((a) => a.textContent?.trim() ?? "");
 
     expect(labels).toEqual(
-      expect.arrayContaining([
-        "Dashboard",
-        "Profile",
-        "Question Bank",
-        "Tasks",
-        "Invoicing",
-      ]),
+      expect.arrayContaining(["Dashboard", "Profile", "Question Bank", "Tasks", "Invoicing"]),
     );
     expect(labels).not.toContain("Assessments");
     // 5 role modules + Contact Admin + Messages = 7.
@@ -146,13 +140,7 @@ describe("<RoleBasedNav />", () => {
       .map((a) => a.textContent?.trim() ?? "");
 
     expect(labels).toEqual(
-      expect.arrayContaining([
-        "Dashboard",
-        "Profile",
-        "My Review Questions",
-        "Tasks",
-        "Invoicing",
-      ]),
+      expect.arrayContaining(["Dashboard", "Profile", "My Review Questions", "Tasks", "Invoicing"]),
     );
     expect(labels).not.toContain("Assessments");
     expect(labels).not.toContain("Question Bank");

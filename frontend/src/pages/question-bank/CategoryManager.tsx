@@ -191,7 +191,9 @@ export function CategoryManager({
         category={deleteTarget}
         loading={deleteMutation.isPending}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={(reason) => deleteTarget && deleteMutation.mutate({ id: deleteTarget.id, reason })}
+        onConfirm={(reason) =>
+          deleteTarget && deleteMutation.mutate({ id: deleteTarget.id, reason })
+        }
       />
     </div>
   );

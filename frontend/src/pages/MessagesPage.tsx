@@ -100,9 +100,7 @@ export default function MessagesPage() {
                   >
                     <div className="flex w-full items-center justify-between">
                       <span className="text-sm font-medium text-slate-900">{other.name}</span>
-                      {c.unread_count > 0 && (
-                        <Badge variant="success">{c.unread_count}</Badge>
-                      )}
+                      {c.unread_count > 0 && <Badge variant="success">{c.unread_count}</Badge>}
                     </div>
                     <span className="text-xs text-slate-400">{roleLabel(other.role)}</span>
                     {c.last_message_preview && (
@@ -119,11 +117,7 @@ export default function MessagesPage() {
 
         <Card className="lg:col-span-2">
           {active ? (
-            <ThreadPanel
-              key={active.id}
-              conversation={active}
-              other={otherOf(active)}
-            />
+            <ThreadPanel key={active.id} conversation={active} other={otherOf(active)} />
           ) : (
             <CardContent className="flex min-h-[300px] items-center justify-center text-sm text-slate-500">
               Select a conversation to read and reply.
@@ -213,9 +207,13 @@ function ThreadPanel({
                       mine ? "bg-primary-600 text-white" : "bg-slate-100 text-slate-900"
                     }`}
                   >
-                    {m.subject && <div className="mb-0.5 text-xs font-semibold opacity-80">{m.subject}</div>}
+                    {m.subject && (
+                      <div className="mb-0.5 text-xs font-semibold opacity-80">{m.subject}</div>
+                    )}
                     <div className="whitespace-pre-wrap">{m.body}</div>
-                    <div className={`mt-1 text-[10px] ${mine ? "text-primary-100" : "text-slate-400"}`}>
+                    <div
+                      className={`mt-1 text-[10px] ${mine ? "text-primary-100" : "text-slate-400"}`}
+                    >
                       {new Date(m.created_at).toLocaleString()}
                     </div>
                   </div>
@@ -334,7 +332,11 @@ function ComposeModal({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" loading={sendMutation.isPending} disabled={!recipient || !body.trim()}>
+          <Button
+            type="submit"
+            loading={sendMutation.isPending}
+            disabled={!recipient || !body.trim()}
+          >
             Send message
           </Button>
         </div>

@@ -144,18 +144,29 @@ class CourseAssessmentSerializer(serializers.ModelSerializer):
             "order",
         ]
         read_only_fields = [
-            "id", "assessment_detail", "course", "session_title", "topic_title", "lesson_title",
+            "id",
+            "assessment_detail",
+            "course",
+            "session_title",
+            "topic_title",
+            "lesson_title",
         ]
 
     def validate(self, attrs):
         """Report 4 Trainer-9: the target must match the level."""
         level = attrs.get("level", getattr(self.instance, "level", "end_of_session"))
         if level in ("during_session", "end_of_session") and not attrs.get("session"):
-            raise serializers.ValidationError({"session": "Pick the session this assessment attaches to."})
+            raise serializers.ValidationError(
+                {"session": "Pick the session this assessment attaches to."}
+            )
         if level == "end_of_topic" and not attrs.get("topic"):
-            raise serializers.ValidationError({"topic": "Pick the topic this assessment attaches to."})
+            raise serializers.ValidationError(
+                {"topic": "Pick the topic this assessment attaches to."}
+            )
         if level == "end_of_lesson" and not attrs.get("lesson"):
-            raise serializers.ValidationError({"lesson": "Pick the lesson this assessment attaches to."})
+            raise serializers.ValidationError(
+                {"lesson": "Pick the lesson this assessment attaches to."}
+            )
         return attrs
 
 

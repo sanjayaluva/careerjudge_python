@@ -298,9 +298,8 @@ def _build_question_breakdown(
     """
     if norm is None:
         norm = _build_norm_context(report, session)
-    attempts = (
-        session.question_attempts.select_related("question", "section")
-        .order_by("section__order", "question__created_at", "sub_question_index")
+    attempts = session.question_attempts.select_related("question", "section").order_by(
+        "section__order", "question__created_at", "sub_question_index"
     )
     result = []
     for qa in attempts:
@@ -807,7 +806,9 @@ def _build_layout_graph(
             {
                 "variable": row.get("section_title"),
                 "value": value,
-                "colour_code": (band["colour_code"] if band and band.get("colour_code") else default_colour),
+                "colour_code": (
+                    band["colour_code"] if band and band.get("colour_code") else default_colour
+                ),
                 "label": band["band_label"] if band else "",
             }
         )

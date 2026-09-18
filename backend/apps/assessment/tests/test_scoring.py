@@ -19,7 +19,6 @@ from apps.assessment.scoring import (
     score_question,
     score_question_by_section,
 )
-
 from apps.question_bank.models import CorrectAnswer, ResponseOption
 
 from .factories import (

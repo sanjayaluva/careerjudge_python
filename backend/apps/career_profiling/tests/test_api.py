@@ -211,7 +211,7 @@ def test_compute_is_idempotent(psy_client, psychometrician_user):
 
 
 def test_mapping_rule_upsert_allows_editing(psy_client, psychometrician_user):
-    """CP-1: re-saving an existing n×n mapping cell updates its value (upsert),
+    """CP-1: re-saving an existing n-by-n mapping cell updates its value (upsert),
     rather than being rejected 400 by the unique_together validator."""
     from apps.career_profiling.models import MappingRule
 

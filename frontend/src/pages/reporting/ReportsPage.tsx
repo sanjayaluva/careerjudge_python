@@ -170,7 +170,9 @@ export default function ReportsPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => duplicateMutation.mutate(r.id)}
-                        loading={duplicateMutation.isPending && duplicateMutation.variables === r.id}
+                        loading={
+                          duplicateMutation.isPending && duplicateMutation.variables === r.id
+                        }
                         title="Use this report as a template"
                       >
                         Duplicate
@@ -397,7 +399,8 @@ function CreateReportModal({
                     PMI-D gap order (A1PMI − A2PMI)
                   </p>
                   <p className="mb-2 text-xs text-slate-500">
-                    Optional. Name the two assessments whose PMI is subtracted to form the gap index.
+                    Optional. Name the two assessments whose PMI is subtracted to form the gap
+                    index.
                   </p>
                   <div className="grid grid-cols-2 gap-2">
                     <PmiDField
@@ -499,6 +502,11 @@ function PmiDField({
     );
   }
   return (
-    <Input id={id} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
+    <Input
+      id={id}
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 }

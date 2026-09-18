@@ -553,9 +553,7 @@ class PsychometricGroup(models.Model):
 class PsychometricGroupItem(models.Model):
     """One statement placed in a group and assigned to a section/variable."""
 
-    group = models.ForeignKey(
-        PsychometricGroup, on_delete=models.CASCADE, related_name="items"
-    )
+    group = models.ForeignKey(PsychometricGroup, on_delete=models.CASCADE, related_name="items")
     statement = models.ForeignKey(
         "question_bank.Question",
         on_delete=models.CASCADE,
@@ -603,9 +601,7 @@ class PsychometricGroupResponse(models.Model):
     session = models.ForeignKey(
         AssessmentSession, on_delete=models.CASCADE, related_name="group_responses"
     )
-    group = models.ForeignKey(
-        PsychometricGroup, on_delete=models.CASCADE, related_name="responses"
-    )
+    group = models.ForeignKey(PsychometricGroup, on_delete=models.CASCADE, related_name="responses")
     status = models.CharField(
         _("status"), max_length=20, choices=STATUS_CHOICES, default="not_attempted"
     )

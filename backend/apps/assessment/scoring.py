@@ -156,7 +156,9 @@ def score_question_by_section(
     return {t: (v[0], v[1]) for t, v in result.items()}
 
 
-def score_psychometric_group(group, raw_answer: dict[str, Any] | None) -> dict[int, tuple[float, float]]:
+def score_psychometric_group(
+    group, raw_answer: dict[str, Any] | None
+) -> dict[int, tuple[float, float]]:
     """Score one psychometric group response (PSY-A1, signed Approach 1).
 
     Returns ``{section_id: (raw_score, max_score)}`` — each group ITEM's

@@ -23,8 +23,11 @@ def admin_client(db):
 
 def _statement(title):
     return Question.objects.create(
-        question_type="PSYCHOMETRIC_STATEMENT", question_title=title,
-        question_text_1=title, scoring_type="RANK", status="confirmed",
+        question_type="PSYCHOMETRIC_STATEMENT",
+        question_title=title,
+        question_text_1=title,
+        scoring_type="RANK",
+        status="confirmed",
     )
 
 
@@ -111,8 +114,11 @@ def test_forced_choice_rejects_same_section(admin_client):
 def test_rejects_non_statement_question(admin_client):
     a, secs = _setup()
     bad = Question.objects.create(
-        question_type="RANK_SIMPLE", question_title="tmpl", question_text_1="x",
-        scoring_type="RANK", status="confirmed",
+        question_type="RANK_SIMPLE",
+        question_title="tmpl",
+        question_text_1="x",
+        scoring_type="RANK",
+        status="confirmed",
     )
     s1 = _statement("a")
     resp = admin_client.post(

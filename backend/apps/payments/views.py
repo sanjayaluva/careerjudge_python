@@ -214,7 +214,12 @@ class PaymentViewSet(ModelViewSet):
                     status=status.HTTP_200_OK,
                 )
             return Response(
-                {"error": {"code": "verification_failed", "message": "Signature verification failed."}},
+                {
+                    "error": {
+                        "code": "verification_failed",
+                        "message": "Signature verification failed.",
+                    }
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -251,11 +256,16 @@ class PaymentViewSet(ModelViewSet):
         manual authorisation (e.g. offline / manual-gateway payments)."""
         if not _is_payments_admin(request.user):
             return Response(
-                {"error": {"code": "forbidden", "message": "Only CJ Admin can view pending payments."}},
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only CJ Admin can view pending payments.",
+                    }
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
-        payments = Payment.objects.filter(status="pending").select_related("user").order_by(
-            "-created_at"
+        payments = (
+            Payment.objects.filter(status="pending").select_related("user").order_by("-created_at")
         )
         return Response(
             {"message": "OK", "data": PaymentSerializer(payments, many=True).data},
@@ -270,7 +280,12 @@ class PaymentViewSet(ModelViewSet):
         candidate/student/counselee gets access."""
         if not _is_payments_admin(request.user):
             return Response(
-                {"error": {"code": "forbidden", "message": "Only CJ Admin can authorise payments."}},
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only CJ Admin can authorise payments.",
+                    }
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
         payment = Payment.objects.filter(pk=pk).first()

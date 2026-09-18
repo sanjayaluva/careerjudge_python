@@ -659,7 +659,9 @@ function ReportsReviewModal({
               key={rep.id}
               report={rep}
               loading={reviewMut.isPending}
-              onReview={(score, feedback) => reviewMut.mutate({ reportId: rep.id, score, feedback })}
+              onReview={(score, feedback) =>
+                reviewMut.mutate({ reportId: rep.id, score, feedback })
+              }
               onSetDeadline={(assignmentId, newDeadline) =>
                 overrideMut.mutate({ assignmentId, newDeadline })
               }
@@ -685,7 +687,9 @@ function ReportReviewRow({
   onSetDeadline: (assignmentId: number, newDeadline: string) => void;
   overrideLoading: boolean;
 }) {
-  const [score, setScore] = useState(report.trainer_score != null ? String(report.trainer_score) : "");
+  const [score, setScore] = useState(
+    report.trainer_score != null ? String(report.trainer_score) : "",
+  );
   const [feedback, setFeedback] = useState(report.trainer_feedback ?? "");
   const [override, setOverride] = useState("");
   return (
@@ -810,8 +814,12 @@ function MessagesModal({
           list.map((m) => (
             <div key={m.id} className="rounded-md border border-slate-100 p-2 text-sm">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-slate-800">{m.sender_name || m.sender_email}</span>
-                <span className="text-xs text-slate-400">{new Date(m.sent_at).toLocaleString()}</span>
+                <span className="font-medium text-slate-800">
+                  {m.sender_name || m.sender_email}
+                </span>
+                <span className="text-xs text-slate-400">
+                  {new Date(m.sent_at).toLocaleString()}
+                </span>
               </div>
               <p className="mt-0.5 text-slate-700">{m.body}</p>
             </div>
@@ -1066,7 +1074,9 @@ function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: C
           ),
         )
       : targetKind === "topic"
-        ? lessons.flatMap((l) => l.topics.map((t) => ({ id: t.id, label: `${l.title} › ${t.title}` })))
+        ? lessons.flatMap((l) =>
+            l.topics.map((t) => ({ id: t.id, label: `${l.title} › ${t.title}` })),
+          )
         : targetKind === "lesson"
           ? lessons.map((l) => ({ id: l.id, label: l.title }))
           : [];

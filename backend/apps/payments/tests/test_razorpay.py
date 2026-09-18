@@ -42,8 +42,13 @@ def test_verify_razorpay_payment_marks_paid():
     _configure_razorpay()
     user = _user()
     payment = Payment.objects.create(
-        user=user, module="assessment", item_id=7, amount=Decimal("25.00"),
-        status="pending", provider="razorpay", provider_session_id="order_ABC",
+        user=user,
+        module="assessment",
+        item_id=7,
+        amount=Decimal("25.00"),
+        status="pending",
+        provider="razorpay",
+        provider_session_id="order_ABC",
     )
     sig = _sign("order_ABC|pay_XYZ")
     assert verify_razorpay_payment("order_ABC", "pay_XYZ", sig) is True
@@ -56,8 +61,13 @@ def test_verify_razorpay_payment_rejects_bad_signature():
     _configure_razorpay()
     user = _user()
     payment = Payment.objects.create(
-        user=user, module="assessment", item_id=7, amount=Decimal("25.00"),
-        status="pending", provider="razorpay", provider_session_id="order_ABC",
+        user=user,
+        module="assessment",
+        item_id=7,
+        amount=Decimal("25.00"),
+        status="pending",
+        provider="razorpay",
+        provider_session_id="order_ABC",
     )
     assert verify_razorpay_payment("order_ABC", "pay_XYZ", "deadbeef") is False
     payment.refresh_from_db()
@@ -68,12 +78,15 @@ def test_razorpay_webhook_marks_paid():
     _configure_razorpay()
     user = _user()
     payment = Payment.objects.create(
-        user=user, module="assessment", item_id=7, amount=Decimal("25.00"),
-        status="pending", provider="razorpay", provider_session_id="order_WH",
+        user=user,
+        module="assessment",
+        item_id=7,
+        amount=Decimal("25.00"),
+        status="pending",
+        provider="razorpay",
+        provider_session_id="order_WH",
     )
-    body = json.dumps(
-        {"payload": {"payment": {"entity": {"order_id": "order_WH"}}}}
-    ).encode()
+    body = json.dumps({"payload": {"payment": {"entity": {"order_id": "order_WH"}}}}).encode()
     sig = _sign(body.decode())
     assert handle_razorpay_webhook(body, sig) is True
     payment.refresh_from_db()

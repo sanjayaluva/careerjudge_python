@@ -798,10 +798,7 @@ export function setDeadlineOverride(
   registrationId: number,
   payload: { assignment_id: number; new_deadline: string; reason?: string },
 ): Promise<{ id: number; student: number; new_deadline: string }> {
-  return apiPost(
-    `${BASE}/registrations/${registrationId}/set-deadline-override/`,
-    payload,
-  );
+  return apiPost(`${BASE}/registrations/${registrationId}/set-deadline-override/`, payload);
 }
 
 /**

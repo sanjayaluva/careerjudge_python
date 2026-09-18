@@ -167,7 +167,11 @@ export default function SessionPlayerPage() {
       // Bookmark is a client-only convenience for a group (no server state);
       // don't let a bookmark click mark the group skipped.
       if (payload.bookmark && payload.raw_answer == null) {
-        return Promise.resolve({ group_id: -payload.question_id, status: "not_attempted", raw_answer: null });
+        return Promise.resolve({
+          group_id: -payload.question_id,
+          status: "not_attempted",
+          raw_answer: null,
+        });
       }
       return submitGroupAnswer(sid, -payload.question_id, payload.raw_answer);
     }
@@ -499,7 +503,11 @@ export default function SessionPlayerPage() {
         const gq = questions[gi];
         const ga = answers[`${gq.question}_0`];
         if (ga) {
-          answerMutation.mutate({ question_id: gq.question, raw_answer: ga, sub_question_index: 0 });
+          answerMutation.mutate({
+            question_id: gq.question,
+            raw_answer: ga,
+            sub_question_index: 0,
+          });
         }
         setViewedQuestions((prev) => new Set(prev).add(gq.question));
       }
@@ -625,8 +633,8 @@ export default function SessionPlayerPage() {
         <div>
           <h1 className="text-sm font-bold text-slate-900">{session.assessment_title}</h1>
           <p className="text-xs text-slate-500">
-            {positionLabel} · Answered: {answeredCount} /{" "}
-            {totalQuestions} · Bookmarked: {bookmarkedCount} · Skipped: {skippedCount}
+            {positionLabel} · Answered: {answeredCount} / {totalQuestions} · Bookmarked:{" "}
+            {bookmarkedCount} · Skipped: {skippedCount}
           </p>
         </div>
         <div className="flex items-center gap-4">

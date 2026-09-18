@@ -38,9 +38,7 @@ def _statement(title):
 
 def _candidate():
     role, _ = Role.objects.get_or_create(name="individual", defaults={"is_system": True})
-    return User.objects.create_user(
-        email="cand@t.com", password="pw", is_active=True, role=role
-    )
+    return User.objects.create_user(email="cand@t.com", password="pw", is_active=True, role=role)
 
 
 def _rank_group(assessment, sections, statements, group_type="rank_simple", scale=None):
@@ -60,9 +58,7 @@ def _rank_group(assessment, sections, statements, group_type="rank_simple", scal
 
 
 def _psy_assessment(n_sections=4):
-    a = Assessment.objects.create(
-        title="Psy", assessment_type="psychometric", status="published"
-    )
+    a = Assessment.objects.create(title="Psy", assessment_type="psychometric", status="published")
     secs = [
         AssessmentSection.objects.create(assessment=a, title=f"Var{i}", level=1, order=i)
         for i in range(n_sections)
@@ -105,12 +101,8 @@ def test_score_forced_choice_single_selection_vs_non_selection():
 def test_score_forced_choice_two_level_uses_rating():
     a, secs = _psy_assessment(2)
     s1, s2 = _statement("a"), _statement("b")
-    group, items = _rank_group(
-        a, [secs[0], secs[1]], [s1, s2], "forced_choice_two_level", scale=5
-    )
-    by_section = score_psychometric_group(
-        group, {"selected_option_id": items[1].id, "rating": 4}
-    )
+    group, items = _rank_group(a, [secs[0], secs[1]], [s1, s2], "forced_choice_two_level", scale=5)
+    by_section = score_psychometric_group(group, {"selected_option_id": items[1].id, "rating": 4})
     # Selected earns its rating (4), the other 0; each item max = max_rating (5).
     assert by_section[secs[1].id] == (4.0, 5.0)
     assert by_section[secs[0].id] == (0.0, 5.0)
@@ -178,7 +170,10 @@ def test_answer_group_endpoint_persists_and_scores():
     assert stored.raw_answer == {"ranking": ranking}
 
     calculate_session_scores(session)
-    scores = {ss.section_id: (ss.raw_score, ss.max_score) for ss in SectionScore.objects.filter(session=session)}
+    scores = {
+        ss.section_id: (ss.raw_score, ss.max_score)
+        for ss in SectionScore.objects.filter(session=session)
+    }
     assert scores[secs[0].id] == (4.0, 4.0)
     assert scores[secs[3].id] == (1.0, 4.0)
     session.refresh_from_db()

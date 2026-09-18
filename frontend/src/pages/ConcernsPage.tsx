@@ -185,7 +185,8 @@ export default function ConcernsPage() {
                               variant="outline"
                               loading={resolveMutation.isPending}
                               onClick={() => {
-                                const comment = window.prompt("Resolution comment (optional):") ?? "";
+                                const comment =
+                                  window.prompt("Resolution comment (optional):") ?? "";
                                 resolveMutation.mutate({ id: c.id, comment });
                               }}
                             >

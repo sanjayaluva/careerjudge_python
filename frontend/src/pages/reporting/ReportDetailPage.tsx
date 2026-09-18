@@ -336,9 +336,7 @@ export default function ReportDetailPage() {
           </TabsContent>
         )}
       </Tabs>
-      {editOpen && (
-        <EditConfigModal report={report} onClose={() => setEditOpen(false)} />
-      )}
+      {editOpen && <EditConfigModal report={report} onClose={() => setEditOpen(false)} />}
     </div>
   );
 }
@@ -560,87 +558,83 @@ function GeneratedTab({ reportId }: { reportId: number }) {
 
   return (
     <>
-    <Card>
-      <CardHeader>
-        <CardTitle>Generated Reports ({list.length})</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {list.length === 0 ? (
-          <p className="py-4 text-center text-sm text-slate-500">
-            No reports generated yet. Use the Generate tab to create one.
-          </p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Candidate</TableHead>
-                <TableHead>Session</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Generated at</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.map((g) => (
-                <TableRow key={g.id}>
-                  <TableCell className="font-medium text-slate-900">
-                    {g.candidate_name ?? `User ${g.candidate}`}
-                  </TableCell>
-                  <TableCell className="text-slate-500">#{g.session}</TableCell>
-                  <TableCell>
-                    <Badge variant={g.status === "generated" ? "success" : "warning"}>
-                      {g.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-slate-500">
-                    {new Date(g.generated_at).toLocaleString()}
-                  </TableCell>
-                  <TableCell>
-                    {g.status === "generated" && g.rendered_data && (
-                      <div className="flex flex-col items-start gap-1 text-xs">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPreview(g)}
-                        >
-                          Preview
-                        </Button>
-                        <a
-                          href={generatedReportPdfUrl(g.id)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary-600 hover:underline"
-                        >
-                          Download PDF ↓
-                        </a>
-                      </div>
-                    )}
-                    {g.status === "failed" && g.error_message && (
-                      <span className="text-xs text-danger-600">{g.error_message}</span>
-                    )}
-                  </TableCell>
+      <Card>
+        <CardHeader>
+          <CardTitle>Generated Reports ({list.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {list.length === 0 ? (
+            <p className="py-4 text-center text-sm text-slate-500">
+              No reports generated yet. Use the Generate tab to create one.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Candidate</TableHead>
+                  <TableHead>Session</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Generated at</TableHead>
+                  <TableHead></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
-    {preview && preview.rendered_data && (
-      <Modal
-        open
-        onClose={() => setPreview(null)}
-        title={`Report preview — ${preview.candidate_name ?? `User ${preview.candidate}`}`}
-        size="lg"
-      >
-        <ReportPreview data={preview.rendered_data} />
-        <div className="mt-4 flex justify-end border-t border-slate-100 pt-4">
-          <a href={generatedReportPdfUrl(preview.id)} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline">Download PDF ↓</Button>
-          </a>
-        </div>
-      </Modal>
-    )}
+              </TableHeader>
+              <TableBody>
+                {list.map((g) => (
+                  <TableRow key={g.id}>
+                    <TableCell className="font-medium text-slate-900">
+                      {g.candidate_name ?? `User ${g.candidate}`}
+                    </TableCell>
+                    <TableCell className="text-slate-500">#{g.session}</TableCell>
+                    <TableCell>
+                      <Badge variant={g.status === "generated" ? "success" : "warning"}>
+                        {g.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-500">
+                      {new Date(g.generated_at).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      {g.status === "generated" && g.rendered_data && (
+                        <div className="flex flex-col items-start gap-1 text-xs">
+                          <Button variant="outline" size="sm" onClick={() => setPreview(g)}>
+                            Preview
+                          </Button>
+                          <a
+                            href={generatedReportPdfUrl(g.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary-600 hover:underline"
+                          >
+                            Download PDF ↓
+                          </a>
+                        </div>
+                      )}
+                      {g.status === "failed" && g.error_message && (
+                        <span className="text-xs text-danger-600">{g.error_message}</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+      {preview && preview.rendered_data && (
+        <Modal
+          open
+          onClose={() => setPreview(null)}
+          title={`Report preview — ${preview.candidate_name ?? `User ${preview.candidate}`}`}
+          size="lg"
+        >
+          <ReportPreview data={preview.rendered_data} />
+          <div className="mt-4 flex justify-end border-t border-slate-100 pt-4">
+            <a href={generatedReportPdfUrl(preview.id)} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline">Download PDF ↓</Button>
+            </a>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }
@@ -666,7 +660,9 @@ function ReportPreview({ data }: { data: Record<string, unknown> }) {
   return (
     <div className="max-h-[70vh] space-y-5 overflow-auto text-sm">
       <div>
-        <h3 className="text-base font-bold text-slate-900">{String(data.report_title ?? "Report")}</h3>
+        <h3 className="text-base font-bold text-slate-900">
+          {String(data.report_title ?? "Report")}
+        </h3>
         <p className="text-xs text-slate-500">
           {String(data.assessment_title ?? "")}
           {data.candidate ? ` · ${String((data.candidate as PreviewRow).name ?? "")}` : ""}
@@ -675,7 +671,9 @@ function ReportPreview({ data }: { data: Record<string, unknown> }) {
 
       {scoreSummary && (
         <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Score summary</div>
+          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Score summary
+          </div>
           <p className="mt-1 text-slate-900">
             {_num(scoreSummary.total)} / {_num(scoreSummary.max)} ({_num(scoreSummary.percentage)}%){" "}
             {scoreSummary.passed !== undefined && (
@@ -761,7 +759,8 @@ function PreviewCustomSection({ section }: { section: PreviewRow }) {
   const title = section.title ? String(section.title) : "";
   const description = section.description ? String(section.description) : "";
   const content = section.content ? String(section.content) : "";
-  const graph = section.graph as { title?: string; bars?: PreviewRow[]; max_value?: number } | undefined;
+  const graph = section.graph as
+    { title?: string; bars?: PreviewRow[]; max_value?: number } | undefined;
   const table = section.table as { headers?: PreviewRow; rows?: PreviewRow[] } | undefined;
 
   if (!title && !description && !content && !graph && !table) return null;
@@ -804,10 +803,13 @@ function PreviewBarChart({
       {bars.map((b, i) => {
         const value = typeof b.value === "number" ? b.value : 0;
         const pct = Math.max(0, Math.min(100, (value / maxValue) * 100));
-        const colour = typeof b.colour_code === "string" && b.colour_code ? b.colour_code : "#3b82f6";
+        const colour =
+          typeof b.colour_code === "string" && b.colour_code ? b.colour_code : "#3b82f6";
         return (
           <div key={i} className="flex items-center gap-2">
-            <span className="w-28 shrink-0 truncate text-xs text-slate-600">{String(b.variable ?? "")}</span>
+            <span className="w-28 shrink-0 truncate text-xs text-slate-600">
+              {String(b.variable ?? "")}
+            </span>
             <div className="h-3 flex-1 rounded bg-slate-100">
               <div className="h-3 rounded" style={{ width: `${pct}%`, background: colour }} />
             </div>
@@ -1510,14 +1512,16 @@ function BandsConfigTab({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Band Definitions (Interpretative &amp; Profiling — SRS §3.3.1, 06 §3.1–3.4)</CardTitle>
+        <CardTitle>
+          Band Definitions (Interpretative &amp; Profiling — SRS §3.3.1, 06 §3.1–3.4)
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-slate-600">
           Define score bands. Interpretative bands map a <strong>section score</strong> to a label;
           profiling bands interpret the <strong>FMI, PMI, VMI, raw summary %</strong> or the
-          <strong> PMI-D gap index</strong>. The candidate&apos;s value is matched to a band, and the
-          band&apos;s label + description is shown in the report.
+          <strong> PMI-D gap index</strong>. The candidate&apos;s value is matched to a band, and
+          the band&apos;s label + description is shown in the report.
         </p>
         {list.length > 0 && (
           <Table>

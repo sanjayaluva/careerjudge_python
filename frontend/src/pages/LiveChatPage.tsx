@@ -59,9 +59,8 @@ export default function LiveChatPage() {
   const activeConv = useMemo(() => {
     if (!agent) return null;
     return (
-      (conversations?.results ?? []).find(
-        (c) => c.user1 === agent.id || c.user2 === agent.id,
-      ) ?? null
+      (conversations?.results ?? []).find((c) => c.user1 === agent.id || c.user2 === agent.id) ??
+      null
     );
   }, [conversations, agent]);
 
@@ -108,7 +107,9 @@ export default function LiveChatPage() {
               <>
                 <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
                 {agent.full_name || agent.email}
-                <Badge variant="outline">{ROLE_LABELS[agent.role__name as RoleName] ?? agent.role__name}</Badge>
+                <Badge variant="outline">
+                  {ROLE_LABELS[agent.role__name as RoleName] ?? agent.role__name}
+                </Badge>
               </>
             ) : (
               "Support"
@@ -180,7 +181,9 @@ export default function LiveChatPage() {
                 </Button>
               </form>
               {sendMutation.isError && (
-                <p className="mt-2 text-xs text-danger-600">{extractApiError(sendMutation.error)}</p>
+                <p className="mt-2 text-xs text-danger-600">
+                  {extractApiError(sendMutation.error)}
+                </p>
               )}
             </>
           )}

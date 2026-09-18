@@ -1143,7 +1143,12 @@ class CourseRegistrationViewSet(ModelViewSet):
         new_deadline = request.data.get("new_deadline")
         if not assignment:
             return Response(
-                {"error": {"code": "not_found", "message": "Assignment not found for this course."}},
+                {
+                    "error": {
+                        "code": "not_found",
+                        "message": "Assignment not found for this course.",
+                    }
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
         if not new_deadline:
