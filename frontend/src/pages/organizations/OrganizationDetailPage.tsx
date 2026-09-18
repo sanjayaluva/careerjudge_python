@@ -24,13 +24,17 @@ import {
 } from "@/components/ui";
 import {
   addMember,
+  createAssignment,
   createGroup,
+  deleteAssignment,
   deleteGroup,
+  listAssignments,
   listMembers,
   removeMember,
   retrieveOrganization,
   updateMember,
 } from "@/api/organizations";
+import { listAssessments } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
 import { ROLE_LABELS } from "@/lib/constants";
 
@@ -109,6 +113,7 @@ export default function OrganizationDetailPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Region / Division</TableHead>
                   <TableHead>Members</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -143,6 +148,7 @@ export default function OrganizationDetailPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Employee ID</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Group</TableHead>
                   <TableHead>Admin</TableHead>
@@ -159,6 +165,10 @@ export default function OrganizationDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Assigned content section (CJ_UC030): corporate individuals see only
+          the assessments assigned to their organization. */}
+      <AssignmentsCard orgId={orgId} />
 
       <CreateGroupModal
         orgId={orgId}
@@ -183,7 +193,13 @@ function GroupRow({
   group,
 }: {
   orgId: number;
-  group: { id: number; name: string; member_count: number; created_at: string };
+  group: {
+    id: number;
+    name: string;
+    region_division?: string;
+    member_count: number;
+    created_at: string;
+  };
 }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -199,6 +215,7 @@ function GroupRow({
   return (
     <TableRow>
       <TableCell className="font-medium text-slate-900">{group.name}</TableCell>
+      <TableCell className="text-slate-500">{group.region_division || "—"}</TableCell>
       <TableCell className="text-slate-500">{group.member_count}</TableCell>
       <TableCell className="text-slate-500">
         {new Date(group.created_at).toLocaleDateString()}
@@ -235,6 +252,7 @@ function MemberRow({
     id: number;
     user: { id: number; email: string; full_name: string; role: string | null };
     group: number | null;
+    employee_id?: string;
     is_admin: boolean;
     joined_at: string;
   };
@@ -265,6 +283,7 @@ function MemberRow({
     <TableRow>
       <TableCell className="font-medium text-slate-900">{member.user.full_name || "—"}</TableCell>
       <TableCell>{member.user.email}</TableCell>
+      <TableCell className="text-slate-500">{member.employee_id || "—"}</TableCell>
       <TableCell>
         {member.user.role ? (
           <Badge variant="default">
@@ -328,6 +347,125 @@ function MemberRow({
 }
 
 // ---------------------------------------------------------------------------
+// Assigned content (CJ_UC030) — assign published assessments to the org
+// ---------------------------------------------------------------------------
+
+function AssignmentsCard({ orgId }: { orgId: number }) {
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const ASSIGN_KEY = [...ORG_KEY(orgId), "assignments"];
+
+  const { data: assignments = [] } = useQuery({
+    queryKey: ASSIGN_KEY,
+    queryFn: () => listAssignments(orgId),
+    enabled: !Number.isNaN(orgId),
+  });
+
+  const { data: assessmentsPage } = useQuery({
+    queryKey: ["assessments", "published", "for-assign"],
+    queryFn: () => listAssessments({ status: "published" }),
+  });
+  const assessments = assessmentsPage?.results ?? [];
+  const titleFor = (id: number) => assessments.find((a) => a.id === id)?.title ?? `#${id}`;
+
+  const assignMutation = useMutation({
+    mutationFn: (assessmentId: number) =>
+      createAssignment(orgId, { item_type: "assessment", item_id: assessmentId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ASSIGN_KEY });
+      setSelected("");
+      setError(null);
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (assignmentId: number) => deleteAssignment(orgId, assignmentId),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ASSIGN_KEY }),
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  const assignedIds = new Set(
+    assignments.filter((a) => a.item_type === "assessment").map((a) => a.item_id),
+  );
+  const available = assessments.filter((a) => !assignedIds.has(a.id));
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Assigned assessments</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="mb-3 text-sm text-slate-500">
+          Corporate individuals in this organization see only the assessments assigned here.
+        </p>
+        {error && (
+          <Alert variant="error" className="mb-3">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <div className="mb-4 flex items-center gap-2">
+          <select
+            className="h-10 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+          >
+            <option value="">Select a published assessment…</option>
+            {available.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.title}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            disabled={!selected || assignMutation.isPending}
+            onClick={() => selected && assignMutation.mutate(Number(selected))}
+          >
+            Assign
+          </Button>
+        </div>
+        {assignments.length === 0 ? (
+          <p className="py-2 text-center text-sm text-slate-500">No assessments assigned yet.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Assessment</TableHead>
+                <TableHead>Assigned by</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {assignments.map((a) => (
+                <TableRow key={a.id}>
+                  <TableCell className="font-medium text-slate-900">
+                    {titleFor(a.item_id)}
+                  </TableCell>
+                  <TableCell className="text-slate-500">{a.assigned_by_name || "—"}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-danger hover:bg-danger-50"
+                      loading={removeMutation.isPending}
+                      onClick={() => removeMutation.mutate(a.id)}
+                    >
+                      Remove
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Create Group Modal
 // ---------------------------------------------------------------------------
 
@@ -342,14 +480,16 @@ function CreateGroupModal({
 }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
+  const [regionDivision, setRegionDivision] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () => createGroup(orgId, { name, description }),
+    mutationFn: () => createGroup(orgId, { name, region_division: regionDivision, description }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ORG_KEY(orgId) });
       setName("");
+      setRegionDivision("");
       setDescription("");
       setError(null);
       onClose();
@@ -389,6 +529,15 @@ function CreateGroupModal({
           <Input id="grp-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </div>
         <div>
+          <Label htmlFor="grp-region">Region / Division</Label>
+          <Input
+            id="grp-region"
+            value={regionDivision}
+            onChange={(e) => setRegionDivision(e.target.value)}
+            placeholder="e.g. North Zone"
+          />
+        </div>
+        <div>
           <Label htmlFor="grp-desc">Description</Label>
           <Input
             id="grp-desc"
@@ -424,13 +573,23 @@ function AddMemberModal({
 }) {
   const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () => addMember(orgId, { user_email: email }),
+    mutationFn: () =>
+      addMember(orgId, {
+        user_email: email,
+        ...(fullName.trim() ? { full_name: fullName } : {}),
+        ...(employeeId.trim() ? { employee_id: employeeId } : {}),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: [...ORG_KEY(orgId), "members"] });
+      void queryClient.invalidateQueries({ queryKey: ORG_KEY(orgId) });
       setEmail("");
+      setFullName("");
+      setEmployeeId("");
       setError(null);
       onClose();
     },
@@ -442,7 +601,7 @@ function AddMemberModal({
       open={open}
       onClose={onClose}
       title="Add member"
-      description="Add an existing user to this organization by email."
+      description="Add an existing user by email, or onboard a new corporate individual by also entering their name."
       size="sm"
     >
       {error && (
@@ -474,9 +633,28 @@ function AddMemberModal({
             placeholder="user@example.com"
             autoFocus
           />
+        </div>
+        <div>
+          <Label htmlFor="mem-name">Full name</Label>
+          <Input
+            id="mem-name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="Leave blank to add an existing user"
+          />
           <p className="mt-1 text-xs text-slate-500">
-            The user must already have a CareerJudge account.
+            Enter a name to onboard a NEW corporate individual (they'll get a signup email). Leave
+            blank to add someone who already has an account.
           </p>
+        </div>
+        <div>
+          <Label htmlFor="mem-empid">Employee ID</Label>
+          <Input
+            id="mem-empid"
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value)}
+            placeholder="e.g. EMP001"
+          />
         </div>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>

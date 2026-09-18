@@ -10,6 +10,8 @@ export interface Organization {
   type: "corporate" | "corp_exclusive" | "channel_partner";
   status: "active" | "inactive" | "suspended";
   description: string;
+  manager_name: string;
+  tax_id: string;
   contact_email: string;
   contact_phone: string;
   website: string;
@@ -41,6 +43,7 @@ export interface Group {
   id: number;
   organization: number;
   name: string;
+  region_division: string;
   description: string;
   member_count: number;
   created_at: string;
@@ -57,8 +60,19 @@ export interface OrganizationMember {
     role: string | null;
   };
   group: number | null;
+  employee_id: string;
   is_admin: boolean;
   joined_at: string;
+}
+
+export interface OrganizationAssignment {
+  id: number;
+  organization: number;
+  item_type: "assessment" | "training_course" | "counseling";
+  item_id: number;
+  assigned_by: number | null;
+  assigned_by_name: string | null;
+  assigned_at: string;
 }
 
 export interface CreateOrganizationPayload {
@@ -66,6 +80,8 @@ export interface CreateOrganizationPayload {
   type: string;
   status?: string;
   description?: string;
+  manager_name?: string;
+  tax_id?: string;
   contact_email?: string;
   contact_phone?: string;
   website?: string;
@@ -123,7 +139,7 @@ export function listGroups(orgId: number): Promise<Group[]> {
 
 export function createGroup(
   orgId: number,
-  payload: { name: string; description?: string },
+  payload: { name: string; region_division?: string; description?: string },
 ): Promise<Group> {
   return apiPost<Group>(`${BASE}/${orgId}/groups/`, payload);
 }
@@ -139,7 +155,12 @@ export function listMembers(orgId: number): Promise<OrganizationMember[]> {
 
 export function addMember(
   orgId: number,
-  payload: { user_email: string; group_id?: number | null },
+  payload: {
+    user_email: string;
+    full_name?: string;
+    employee_id?: string;
+    group_id?: number | null;
+  },
 ): Promise<OrganizationMember> {
   return apiPost<OrganizationMember>(`${BASE}/${orgId}/members/`, payload);
 }
@@ -154,4 +175,23 @@ export function updateMember(
 
 export function removeMember(orgId: number, memberId: number): Promise<void> {
   return apiDelete(`${BASE}/${orgId}/members/${memberId}/`);
+}
+
+// Assignments — CJ Admin assigns published content to an organization so its
+// corporate individuals see only what was assigned (CJ_UC030, Doc 4).
+export function listAssignments(orgId: number): Promise<OrganizationAssignment[]> {
+  return apiGetPaged<OrganizationAssignment>(`${BASE}/${orgId}/assignments/`).then(
+    (r) => r.results,
+  );
+}
+
+export function createAssignment(
+  orgId: number,
+  payload: { item_type: "assessment" | "training_course" | "counseling"; item_id: number },
+): Promise<OrganizationAssignment> {
+  return apiPost<OrganizationAssignment>(`${BASE}/${orgId}/assignments/`, payload);
+}
+
+export function deleteAssignment(orgId: number, assignmentId: number): Promise<void> {
+  return apiDelete(`${BASE}/${orgId}/assignments/${assignmentId}/`);
 }

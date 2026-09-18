@@ -39,6 +39,19 @@ class Organization(models.Model):
     type = models.CharField(_("type"), max_length=50, choices=TYPE_CHOICES, default="corporate")
     status = models.CharField(_("status"), max_length=20, choices=STATUS_CHOICES, default="active")
     description = models.TextField(_("description"), blank=True)
+    # Doc 9 §2.2 onboarding fields: primary-contact manager + tax identifier.
+    manager_name = models.CharField(
+        _("manager name"),
+        max_length=255,
+        blank=True,
+        help_text=_("Name of the primary-contact manager (Doc 9 §2.2)."),
+    )
+    tax_id = models.CharField(
+        _("PAN/TAN"),
+        max_length=40,
+        blank=True,
+        help_text=_("PAN/TAN of the organization (Doc 9 §2.2)."),
+    )
     contact_email = models.EmailField(_("contact email"), blank=True)
     contact_phone = models.CharField(_("contact phone"), max_length=20, blank=True)
     website = models.URLField(_("website"), blank=True)
@@ -65,6 +78,13 @@ class Group(models.Model):
 
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="groups")
     name = models.CharField(_("name"), max_length=255)
+    # CJ_UC052: a corporate group carries a Region/Division.
+    region_division = models.CharField(
+        _("region/division"),
+        max_length=100,
+        blank=True,
+        help_text=_("Region or division of the corporate (CJ_UC052)."),
+    )
     description = models.TextField(_("description"), blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -92,6 +112,8 @@ class OrganizationMember(models.Model):
     group = models.ForeignKey(
         Group, on_delete=models.SET_NULL, related_name="members", null=True, blank=True
     )
+    # Doc 9 §2.3: a corporate individual is onboarded with an Employee ID.
+    employee_id = models.CharField(_("employee ID"), max_length=50, blank=True)
     is_admin = models.BooleanField(
         _("is admin"),
         default=False,

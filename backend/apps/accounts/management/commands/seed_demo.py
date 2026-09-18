@@ -114,6 +114,7 @@ ROLE_PERMISSIONS = {
         ("accounts", "add"),
         ("accounts", "change"),
         ("organizations", "view"),
+        ("organizations", "add"),
         ("organizations", "change"),
         ("assessment", "view"),
         ("assessment", "add"),

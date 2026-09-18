@@ -9,9 +9,10 @@ from rest_framework.viewsets import ModelViewSet
 from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
 
-from .models import Group, Organization, OrganizationMember
+from .models import Group, Organization, OrganizationAssignment, OrganizationMember
 from .serializers import (
     GroupSerializer,
+    OrganizationAssignmentSerializer,
     OrganizationListSerializer,
     OrganizationMemberSerializer,
     OrganizationSerializer,
@@ -248,5 +249,69 @@ class OrganizationMemberViewSet(ModelViewSet):
         instance.delete()
         return Response(
             {"message": "Member removed.", "data": {}},
+            status=status.HTTP_200_OK,
+        )
+
+
+class OrganizationAssignmentViewSet(ModelViewSet):
+    """Assign published content to an organization (CJ_UC030, Doc 4).
+
+    GET    /api/organizations/<org_id>/assignments/
+    POST   /api/organizations/<org_id>/assignments/     (assign assessment/training/counseling)
+    DELETE /api/organizations/<org_id>/assignments/<id>/
+
+    Only org managers (organizations.add/change) may assign; the org's corporate
+    individuals then see only the assessments assigned here (see
+    ``apps.organizations.scoping``).
+    """
+
+    serializer_class = OrganizationAssignmentSerializer
+    permission_classes = [IsAuthenticated, HasOrganizationsPermission]
+
+    def get_queryset(self):
+        org_id = self.kwargs.get("organization_id")
+        return OrganizationAssignment.objects.filter(organization_id=org_id).select_related(
+            "assigned_by"
+        )
+
+    def perform_create(self, serializer):
+        org_id = self.kwargs.get("organization_id")
+        org = get_object_or_404(Organization, id=org_id)
+        serializer.save(organization=org, assigned_by=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        resp = super().list(request, *args, **kwargs)
+        return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        org_id = self.kwargs.get("organization_id")
+        if OrganizationAssignment.objects.filter(
+            organization_id=org_id,
+            item_type=serializer.validated_data["item_type"],
+            item_id=serializer.validated_data["item_id"],
+        ).exists():
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "This item is already assigned to the organization.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        self.perform_create(serializer)
+        return Response(
+            {"message": "Item assigned.", "data": serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response(
+            {"message": "Assignment removed.", "data": {}},
             status=status.HTTP_200_OK,
         )

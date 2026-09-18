@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     GroupViewSet,
+    OrganizationAssignmentViewSet,
     OrganizationMemberViewSet,
     OrganizationViewSet,
 )
@@ -41,5 +42,15 @@ urlpatterns = [
             }
         ),
         name="member-detail",
+    ),
+    path(
+        "<int:organization_id>/assignments/",
+        OrganizationAssignmentViewSet.as_view({"get": "list", "post": "create"}),
+        name="assignment-list",
+    ),
+    path(
+        "<int:organization_id>/assignments/<int:pk>/",
+        OrganizationAssignmentViewSet.as_view({"get": "retrieve", "delete": "destroy"}),
+        name="assignment-detail",
     ),
 ]

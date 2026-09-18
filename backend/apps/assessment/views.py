@@ -346,6 +346,15 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
                 else:
                     qs = qs.filter(status="published")
 
+        # CJ_UC030: a corporate individual (an employee of a corporate/
+        # corp-exclusive org) sees ONLY the assessments assigned to their
+        # organization — not the whole published catalogue. Non-corporate users
+        # (plain individuals with no membership, staff, admins) are unaffected.
+        from apps.organizations.scoping import assigned_item_ids, is_corporate_individual
+
+        if is_corporate_individual(self.request.user):
+            qs = qs.filter(id__in=assigned_item_ids(self.request.user, "assessment"))
+
         return qs
 
     def perform_create(self, serializer):
