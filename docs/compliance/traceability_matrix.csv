@@ -45,9 +45,9 @@ QT-1,Type 2a (FITB single) default scoring = list-match not 0,00_scoring_rules.j
 QT-3,Continuous multi-question rating template,00_question_types_spec.json,SIGNED-DONE,done,M2,SessionPlayerPage continuous-rating group (continuousTail render + handleNext),tsc; vitest; backend session path verified (visual check pending),M2: multi_question_continuous rating scroll; seed_rating_demo fixture
 QT-4,Hotspot 5b per-click confirm/cancel popup,00_question_types_spec.json,SIGNED-DONE,done,M2,SessionPlayerPage AnswerInput hotspot pendingClick + confirm/cancel,tsc; vitest (visual check advised),M2: 5b confirm/cancel popup
 CNS-1,Session-summary smoothness_reason persisted (field-name fix),Doc 8 §3.3,SIGNED-DONE,done,M1,counseling.ts+CounsellorDashboard.tsx (field rename),counseling/tests/test_counseling.py::test_summary_six_fields,Fixed smoothly_reason->smoothness_reason; test now asserts persistence
-CNS-3,Post-payment received/Helpdesk screen,Doc 8 §2.1,SIGNED-PENDING,pending,M3,counseling/views.py:514,,
-CNS-4,Confirmed-within-6-hours message,Doc 8 §2.1,SIGNED-PENDING,pending,M3,counseling_maintenance.py:77-102,,
-CNS-5,Countdown for proposed follow-up on counselee dashboard,Doc 8 §3.3,SIGNED-PENDING,pending,M3,CounselingPage.tsx:738-766,,
+CNS-3,Post-payment received/Helpdesk screen,Doc 8 §2.1,SIGNED-DONE,done,M3,CounselingPage.tsx,tsc; vitest,M3: payment=success banner + Helpdesk
+CNS-4,Confirmed-within-6-hours message,Doc 8 §2.1,SIGNED-DONE,done,M3,CounselingPage.tsx,tsc; vitest,M3: §2.1 booking confirmation message
+CNS-5,Countdown for proposed follow-up on counselee dashboard,Doc 8 §3.3,SIGNED-DONE,done,M3,CounselingPage.tsx,tsc; vitest,M3: follow-up live countdown
 CNS-8,Feedback readable only by Admin (not counselee),Doc 8 §2.3,SIGNED-DONE,done,M1,counseling/views.py feedback GET admin-only,counseling/tests,Restricted to cj_admin/superuser per §2.3
 ADM-1,Signup email on default (Active) single-create path,Doc 9 §2.2,SIGNED-DONE,done,M1,accounts/serializers.py (send email on every invited create),accounts/tests,Email now sent regardless of is_active
 ADM-2,Concern routing raise + admin inbox,Doc 9 §4,SIGNED-DONE,done,M3,ConcernsPage.tsx + /concerns route + nav; concernsApi,tsc; vitest,M3: raise + admin inbox (resolve is beyond-spec but harmless)
