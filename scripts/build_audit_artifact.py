@@ -37,7 +37,8 @@ MILESTONES = [
     ("M5", "Platform, Live Chat, pay-for-test", "Send Message, Contact Admin and Live Chat (signed User Details.pdf) plus the pay-for-test gate. Audit floor closed."),
     ("M6", "Elective extras", "Password policy, 48-hour links, un-publish, bulk import, invoice guard and line items, admin payment authorise, Razorpay."),
     ("M6B", "Extra-scope items 3–9", "Reviewer domain routing, rich-text, editable policy pages, assignment depth, task→question autofill, UI consistency."),
-    ("M7", "Hardening &amp; audit binder", "Closed the final two signed gaps — the four-level rule and nested edit-gating — and assembled this binder."),
+    ("M7", "Hardening &amp; audit binder", "Closed two signed gaps (the four-level rule and nested edit-gating) and assembled this binder."),
+    ("M8", "Signed-scope correction", "A signed-vs-scope review against the module docs reopened psychometric Approach-1 (Doc 1 §3.1.6) and trainer-authored assessments (Doc 7 §2.4) as signed-not-built; trainer remediated, psychometric authoring+config remediated with player/scoring outstanding."),
 ]
 
 
@@ -97,11 +98,19 @@ def main():
 </header>""")
 
     # ---- Verdict line ----
+    signed_open = [r for r in signed if r["status"] != "done"]
+    if passed:
+        pending_txt = "<b>zero signed requirements pending.</b>"
+    else:
+        pending_txt = (
+            "<b>" + str(len(signed_open)) + " signed requirement(s) still open:</b> "
+            + ", ".join(f'{esc(r["clause_id"])} ({esc(r["status"])})' for r in signed_open) + "."
+        )
     P.append(f"""<section class="verdict">
   <p>{'Every signed requirement is built.' if passed else 'Signed gaps remain — see the table.'}
   <b>{signed_done} of {len(signed)}</b> signed clauses implemented, <b>{done} of {total}</b> total tracked clauses complete —
-  <b>zero signed requirements pending.</b> The only outstanding test failures in the suite are pre-existing WeasyPrint
-  native-library load errors in the PDF renderer, unrelated to any requirement.</p>
+  {pending_txt} (Other failing PDF tests in the suite are pre-existing WeasyPrint native-library load errors,
+  unrelated to any requirement.)</p>
 </section>""")
 
     # ---- Metric tiles ----
@@ -118,7 +127,7 @@ def main():
     # ---- Timeline ----
     P.append('<section class="block"><h2>Build timeline</h2>'
              '<p class="block-lede">Nine milestones, each committed per item against its clause id. '
-             'The audit floor — the signed User&nbsp;Details.pdf capabilities — closed at M5; M7 closed the last two signed gaps.</p>'
+             'The audit floor — the signed User&nbsp;Details.pdf capabilities — closed at M5; M7 closed two signed gaps; a later doc-level review (M8) reopened two more.</p>'
              '<ol class="timeline">')
     for tag, title, desc in MILESTONES:
         P.append(f'<li><span class="tl-tag">{tag}</span><div class="tl-body"><b>{title}</b><span>{desc}</span></div></li>')
@@ -131,18 +140,24 @@ def main():
 
     for key, title, cls, blurb in GROUPS:
         grp = sorted((r for r in rows if group_of(r["category"]) == key), key=lambda r: r["clause_id"])
+        done_n = sum(1 for r in grp if r['status']=='done')
+        tail = 'all done' if done_n==len(grp) else f'{done_n}/{len(grp)} done'
         P.append(f'<section class="block"><div class="grp-head"><h3>{title}</h3>'
-                 f'<span class="count {cls}">{len(grp)} clauses · all done</span></div>'
+                 f'<span class="count {cls}">{len(grp)} clauses · {tail}</span></div>'
                  f'<p class="block-lede">{blurb}</p>')
         P.append('<div class="tablewrap"><table><thead><tr>'
                  '<th class="c-id">Clause</th><th>Requirement</th><th class="c-src">Source</th>'
                  '<th>Implementing code</th><th>Covering tests</th></tr></thead><tbody>')
         for r in grp:
             note = f'<span class="note">{esc(r["notes"])}</span>' if r["notes"] else ""
+            stat = (
+                "" if r["status"] == "done"
+                else f'<span class="stat">{esc(r["status"]).upper()}</span>'
+            )
             P.append(
                 "<tr>"
                 f'<td class="c-id"><span class="cid">{esc(r["clause_id"])}</span>'
-                f'<span class="tag {cls}">{esc(r["milestone"])}</span></td>'
+                f'<span class="tag {cls}">{esc(r["milestone"])}</span>{stat}</td>'
                 f"<td><b>{esc(r['requirement'])}</b>{note}</td>"
                 f'<td class="c-src">{esc(r["source_doc"])}</td>'
                 f'<td class="c-code">{files_cell(r["implementing_files"])}</td>'
@@ -282,6 +297,8 @@ td b{font-weight:600;font-size:13px}
 .tag.sig{color:var(--sig);background:var(--sig-bg)}
 .tag.fb{color:var(--fb);background:var(--fb-bg)}
 .tag.el{color:var(--el);background:var(--el-bg)}
+.stat{display:inline-block;margin-top:5px;margin-left:5px;font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;color:var(--fb);background:var(--fb-bg)}
 .c-src{color:var(--muted);white-space:nowrap;font-size:12px}
 .c-test{color:var(--muted);font-family:"IBM Plex Mono",monospace;font-size:11px;line-height:1.7}
 .note{display:block;color:var(--muted);font-size:12px;margin-top:3px;font-weight:400}

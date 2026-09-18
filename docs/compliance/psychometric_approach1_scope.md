@@ -1,7 +1,19 @@
 # Scope & Estimate — Psychometric "Approach 1" Author Flow
 
 *Report 5 → Assessment Parameter Setting → §3 Issue 5. The client's #1 named
-critical. This document scopes the change; it is a plan, not built code.*
+critical. This is a SIGNED requirement (Doc 1 §3.1.6, Doc 1.1 §6a/§8a, Doc 3
+§4.1/§4.2.2/§4.2.3), now under remediation.*
+
+> **Status: PARTIALLY REMEDIATED.**
+> **Done & tested:** the signed **authoring** flow (a `PSYCHOMETRIC_STATEMENT`
+> question type — bare statement, no options; validator + QB editor support) and
+> the **configuration** flow (`PsychometricGroup`/`PsychometricGroupItem` models,
+> `/assessments/<id>/psychometric-groups/` API with the grouping rules enforced,
+> and a "Psychometric Groups" config tab). A psychometrician can now author
+> statements and build Rank Groups / Forced-Choice Pairs — the exact flow the
+> client asked for, replacing the error-prone Approach-2 option-tagging.
+> **Remaining:** delivering those groups to the candidate in the session player
+> and scoring from the groups (session-engine integration) — see §3.4 below.
 
 ---
 

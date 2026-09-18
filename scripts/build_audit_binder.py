@@ -30,7 +30,8 @@ MILESTONES = [
     ("M5", "Platform + Live Chat + pay-for-test", "Send Message, Contact Admin, Live Chat (signed User Details.pdf) + pay-for-test gate. AUDIT FLOOR CLOSED."),
     ("M6", "Elective extras", "Password policy, 48h links, un-publish, bulk import, invoice guard + line items, admin payment authorise, Razorpay."),
     ("M6B", "Extra-scope items 3–9", "Reviewer domain routing, rich-text, policy pages, assignment depth, task→question autofill, UI consistency."),
-    ("M7", "Hardening + audit binder", "Closed the last two signed gaps (ASM-8 level rules, H11 nested edit-gating); assembled this binder."),
+    ("M7", "Hardening + audit binder", "Closed two signed gaps (ASM-8 level rules, H11 nested edit-gating); assembled this binder."),
+    ("M8", "Signed-scope correction", "Doc-level review reopened psychometric Approach-1 and trainer-authored assessments as signed-not-built; trainer remediated, psychometric authoring+config remediated (player/scoring outstanding)."),
 ]
 
 
