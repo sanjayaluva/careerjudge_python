@@ -49,6 +49,32 @@ def test_admin_can_create_page(admin_client):
     assert resp.data["data"]["slug"] == "about"
 
 
+def test_page_type_persists(admin_client):
+    """E-X6: pages carry a policy page_type."""
+    resp = admin_client.post(
+        "/api/cms/pages/",
+        {
+            "title": "Terms & Conditions",
+            "slug": "terms",
+            "body": "<p>Terms</p>",
+            "page_type": "terms",
+            "status": "published",
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, f"Got {resp.status_code}: {resp.data}"
+    assert resp.data["data"]["page_type"] == "terms"
+
+
+def test_page_type_defaults_to_general(admin_client):
+    resp = admin_client.post(
+        "/api/cms/pages/",
+        {"title": "About", "slug": "about", "body": "<p>x</p>"},
+        format="json",
+    )
+    assert resp.data["data"]["page_type"] == "general"
+
+
 def test_list_pages(admin_client):
     Page.objects.create(title="About", slug="about", body="x", status="published")
     Page.objects.create(title="Privacy", slug="privacy", body="x", status="draft")

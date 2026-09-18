@@ -14,6 +14,7 @@ class PageSerializer(serializers.ModelSerializer):
         model = Page
         fields = [
             "id",
+            "page_type",
             "title",
             "slug",
             "body",
@@ -33,7 +34,7 @@ class PageListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Page
-        fields = ["id", "title", "slug", "status", "order", "updated_at"]
+        fields = ["id", "page_type", "title", "slug", "status", "order", "updated_at"]
         read_only_fields = ["id", "updated_at"]
 
 

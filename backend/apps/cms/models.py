@@ -22,6 +22,18 @@ class Page(models.Model):
         ("archived", "Archived"),
     ]
 
+    # E-X6: classify policy pages so admins can maintain the Terms & Conditions /
+    # refund / privacy text and the app can link to them from the footer.
+    PAGE_TYPE_CHOICES = [
+        ("general", "General page"),
+        ("terms", "Terms & Conditions"),
+        ("refund", "Refund Policy"),
+        ("privacy", "Privacy Policy"),
+    ]
+
+    page_type = models.CharField(
+        _("page type"), max_length=20, choices=PAGE_TYPE_CHOICES, default="general"
+    )
     title = models.CharField(_("title"), max_length=255)
     slug = models.SlugField(
         _("slug"), max_length=255, unique=True, help_text=_("URL path, e.g., 'about'")
