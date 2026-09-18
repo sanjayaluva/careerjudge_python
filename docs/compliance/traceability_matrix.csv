@@ -38,7 +38,7 @@ ASM-7,Set-Score UI + rating/paired/rank builders,Doc 3 §4/§4.2,SIGNED-DONE,don
 ASM-8,Enforce Rule 1 (<=4 levels) + Rule 2 (Q at last level),Doc 3 §3,SIGNED-PENDING,pending,M7,assessment/views.py,,Server-side enforcement
 ASM-9,Full question-review (open Select/Cancel),Doc 3 §4.1,SIGNED-PENDING,pending,M2,AssessmentDetailPage.tsx:709-808,,
 QB-1,Deletion approve/decline queue (remove reason-gate),Doc 1 §4.3 / CJ_UC016-17,SIGNED-PENDING,pending,M2,questionBank.ts:183;views.py:130-162,,Rescoped to M2: backend gate PRESERVED (signed D1); fix is the reason-prompt + approve/decline queue UI = the M2 QB-management screen
-QB-2,Batch activate/inactivate + exposure UI,Doc 1 §4.2/§4.3,SIGNED-PENDING,pending,M2,views.py:439-570;questionBank.ts:268-273,,
+QB-2,Batch activate/inactivate + exposure UI,Doc 1 §4.2/§4.3,SIGNED-DONE,done,M2,QuestionBankPage.tsx selection + batch bar (batchSetQuestionStatus/ExposureLimit),tsc; vitest,M2: batch activate/inactivate + exposure UI for psychometrician/admin
 QB-3,Question expiry editable (enables expired filter),Doc 1 §4.3,SIGNED-PENDING,pending,M2,question_bank model/serializer,,Editable field inferred
 QB-5,Server hard-require rating on approve / reason on send-back,Doc 1 §3.2/§3.3,SIGNED-PENDING,pending,M2,question_bank/serializers.py:420-427,,
 QT-1,Type 2a (FITB single) default scoring = list-match not 0,00_scoring_rules.json,SIGNED-DONE,done,M1,assessment/scoring.py score_question FITB_SINGLE route,assessment/tests/test_scoring.py::TestFITBSingleScoring,Routes 2a to fuzzy scorer; 3 new tests
