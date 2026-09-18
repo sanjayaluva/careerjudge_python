@@ -891,6 +891,25 @@ class AssessmentQuestionViewSet(ModelViewSet):
 
         question = get_object_or_404(Question, id=question_id)
 
+        # ASM-8 / Report 5 §3.4: a question can be assigned to an assessment
+        # ONLY ONCE — across all of its sections, not just the current one.
+        already = AssessmentQuestion.objects.filter(
+            question=question, section__assessment=assessment
+        ).exists()
+        if already:
+            return Response(
+                {
+                    "error": {
+                        "code": "question_already_assigned",
+                        "message": (
+                            "This question is already assigned to this assessment. "
+                            "A question can be assigned to an assessment only once."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Type-mismatch check: normal vs psychometric
         question_cat = question.question_category  # 'normal' or 'psychometric'
         if question_cat != assessment.assessment_type:

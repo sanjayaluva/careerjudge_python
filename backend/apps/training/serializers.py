@@ -122,6 +122,8 @@ class CourseLessonSerializer(serializers.ModelSerializer):
 class CourseAssessmentSerializer(serializers.ModelSerializer):
     assessment_detail = AssessmentListSerializer(source="assessment", read_only=True)
     session_title = serializers.CharField(source="session.title", read_only=True, default=None)
+    topic_title = serializers.CharField(source="topic.title", read_only=True, default=None)
+    lesson_title = serializers.CharField(source="lesson.title", read_only=True, default=None)
 
     class Meta:
         model = CourseAssessment
@@ -133,11 +135,28 @@ class CourseAssessmentSerializer(serializers.ModelSerializer):
             "level",
             "session",
             "session_title",
+            "topic",
+            "topic_title",
+            "lesson",
+            "lesson_title",
             "title",
             "is_scored",
             "order",
         ]
-        read_only_fields = ["id", "assessment_detail", "course", "session_title"]
+        read_only_fields = [
+            "id", "assessment_detail", "course", "session_title", "topic_title", "lesson_title",
+        ]
+
+    def validate(self, attrs):
+        """Report 4 Trainer-9: the target must match the level."""
+        level = attrs.get("level", getattr(self.instance, "level", "end_of_session"))
+        if level in ("during_session", "end_of_session") and not attrs.get("session"):
+            raise serializers.ValidationError({"session": "Pick the session this assessment attaches to."})
+        if level == "end_of_topic" and not attrs.get("topic"):
+            raise serializers.ValidationError({"topic": "Pick the topic this assessment attaches to."})
+        if level == "end_of_lesson" and not attrs.get("lesson"):
+            raise serializers.ValidationError({"lesson": "Pick the lesson this assessment attaches to."})
+        return attrs
 
 
 class LiveSessionSerializer(serializers.ModelSerializer):

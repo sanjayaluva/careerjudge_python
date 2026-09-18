@@ -771,6 +771,27 @@ class TestQuestionAssignment(AssessmentViewTestBase):
         # Should include question_detail
         assert "question_detail" in resp.json()["data"]
 
+    def test_question_assigned_only_once_per_assessment(self):
+        """Report 5 §3.4: a question can be assigned to an assessment only once,
+        even across different sections."""
+        section2 = AssessmentSection.objects.create(
+            assessment=self.assessment, title="S2", level=1, order=2
+        )
+        r1 = self.client.post(
+            f"/api/assessments/{self.assessment.id}/sections/{self.section.id}/questions/",
+            {"question": self.question.id, "order": 1},
+            format="json",
+        )
+        assert r1.status_code == status.HTTP_201_CREATED
+        # Same question, different section, same assessment → rejected.
+        r2 = self.client.post(
+            f"/api/assessments/{self.assessment.id}/sections/{section2.id}/questions/",
+            {"question": self.question.id, "order": 1},
+            format="json",
+        )
+        assert r2.status_code == status.HTTP_400_BAD_REQUEST
+        assert r2.json()["error"]["code"] == "question_already_assigned"
+
     def test_cannot_assign_question_to_non_leaf_section(self):
         """ASM-8 Rule 2: questions attach only at last-level (leaf) sections."""
         child = AssessmentSection.objects.create(

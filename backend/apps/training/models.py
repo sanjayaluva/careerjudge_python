@@ -332,11 +332,21 @@ class CourseAssessment(models.Model):
     level = models.CharField(
         _("level"), max_length=20, choices=ASSESSMENT_LEVEL_CHOICES, default="end_of_session"
     )
-    # Optional link to the specific session/topic/lesson this assessment
-    # belongs to (required for during_session/end_of_session/end_of_topic/
-    # end_of_lesson; null for end_of_course)
+    # Link to the specific element this assessment attaches to. Which one is
+    # set depends on `level` (Report 4 Trainer Issue 9 — target a specific
+    # session/topic/lesson, not just a level label):
+    #   during_session / end_of_session -> session
+    #   end_of_topic                    -> topic
+    #   end_of_lesson                   -> lesson
+    #   end_of_course                   -> none
     session = models.ForeignKey(
         TopicSession, on_delete=models.CASCADE, null=True, blank=True, related_name="assessments"
+    )
+    topic = models.ForeignKey(
+        LessonTopic, on_delete=models.CASCADE, null=True, blank=True, related_name="assessments"
+    )
+    lesson = models.ForeignKey(
+        CourseLesson, on_delete=models.CASCADE, null=True, blank=True, related_name="assessments"
     )
     title = models.CharField(_("title"), max_length=255)
     is_scored = models.BooleanField(_("is scored"), default=True)

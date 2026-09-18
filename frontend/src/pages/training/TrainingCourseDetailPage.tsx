@@ -451,8 +451,10 @@ export default function TrainingCourseDetailPage() {
                         <TableCell className="font-medium text-slate-900">{a.title}</TableCell>
                         <TableCell>
                           <Badge variant="outline">{a.level.replace(/_/g, " ")}</Badge>
-                          {a.session_title && (
-                            <div className="mt-0.5 text-xs text-slate-500">{a.session_title}</div>
+                          {(a.session_title || a.topic_title || a.lesson_title) && (
+                            <div className="mt-0.5 text-xs text-slate-500">
+                              {a.session_title ?? a.topic_title ?? a.lesson_title}
+                            </div>
                           )}
                         </TableCell>
                         <TableCell className="text-slate-500">
@@ -1040,18 +1042,34 @@ function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: C
   const [title, setTitle] = useState("");
   const [assessmentId, setAssessmentId] = useState("");
   const [level, setLevel] = useState("end_of_session");
-  const [sessionId, setSessionId] = useState("");
+  const [targetId, setTargetId] = useState("");
   const [isScored, setIsScored] = useState(true);
 
-  // Report 3 §4 Issue 3: a level-specific assessment must attach to a chosen
-  // session — flatten the course's sessions with a Lesson › Topic › Session
-  // path so the trainer picks the exact one. "End of Course" needs no session.
-  const sessionOptions = lessons.flatMap((l) =>
-    l.topics.flatMap((t) =>
-      t.sessions.map((s) => ({ id: s.id, label: `${l.title} › ${t.title} › ${s.title}` })),
-    ),
-  );
-  const needsSession = level !== "end_of_course";
+  // Report 4 Trainer Issue 9: a level-specific assessment attaches to a chosen
+  // element of the structure. Which element depends on the level:
+  //   during/end of session -> a session   end of topic -> a topic
+  //   end of lesson -> a lesson            end of course -> none
+  const targetKind =
+    level === "during_session" || level === "end_of_session"
+      ? "session"
+      : level === "end_of_topic"
+        ? "topic"
+        : level === "end_of_lesson"
+          ? "lesson"
+          : "none";
+
+  const targetOptions =
+    targetKind === "session"
+      ? lessons.flatMap((l) =>
+          l.topics.flatMap((t) =>
+            t.sessions.map((s) => ({ id: s.id, label: `${l.title} › ${t.title} › ${s.title}` })),
+          ),
+        )
+      : targetKind === "topic"
+        ? lessons.flatMap((l) => l.topics.map((t) => ({ id: t.id, label: `${l.title} › ${t.title}` })))
+        : targetKind === "lesson"
+          ? lessons.map((l) => ({ id: l.id, label: l.title }))
+          : [];
 
   // Load available assessments from the assessment module
   const { data: assessmentsData } = useQuery({
@@ -1066,14 +1084,14 @@ function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: C
         level,
         title,
         is_scored: isScored,
-        ...(needsSession && sessionId ? { session: Number(sessionId) } : {}),
+        ...(targetKind !== "none" && targetId ? { [targetKind]: Number(targetId) } : {}),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["training", "courses", courseId] });
       toast.success("Assessment linked to course.");
       setTitle("");
       setAssessmentId("");
-      setSessionId("");
+      setTargetId("");
       setShow(false);
     },
     onError: (err) => toast.error(extractApiError(err)),
@@ -1142,7 +1160,10 @@ function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: C
             id="as-level"
             className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
             value={level}
-            onChange={(e) => setLevel(e.target.value)}
+            onChange={(e) => {
+              setLevel(e.target.value);
+              setTargetId("");
+            }}
           >
             <option value="during_session">During Session</option>
             <option value="end_of_session">End of Session</option>
@@ -1152,33 +1173,29 @@ function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: C
           </select>
         </div>
       </div>
-      {needsSession && (
+      {targetKind !== "none" && (
         <div>
-          <Label htmlFor="as-session" required>
-            {level === "during_session" || level === "end_of_session"
-              ? "Session"
-              : level === "end_of_topic"
-                ? "Topic (pick a session within it)"
-                : "Lesson (pick a session within it)"}
+          <Label htmlFor="as-target" required>
+            {targetKind === "session" ? "Session" : targetKind === "topic" ? "Topic" : "Lesson"}
           </Label>
           <select
-            id="as-session"
+            id="as-target"
             className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-            value={sessionId}
-            onChange={(e) => setSessionId(e.target.value)}
+            value={targetId}
+            onChange={(e) => setTargetId(e.target.value)}
             required
           >
-            <option value="">Select the session…</option>
-            {sessionOptions.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
+            <option value="">Select the {targetKind}…</option>
+            {targetOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
               </option>
             ))}
           </select>
-          {sessionOptions.length === 0 && (
+          {targetOptions.length === 0 && (
             <p className="mt-1 text-xs text-amber-600">
               Add lessons, topics and sessions to the course structure first, then link the
-              assessment to a specific session.
+              assessment to a specific {targetKind}.
             </p>
           )}
         </div>
@@ -1197,7 +1214,7 @@ function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: C
           type="submit"
           size="sm"
           loading={mutation.isPending}
-          disabled={!title || !assessmentId || (needsSession && !sessionId)}
+          disabled={!title || !assessmentId || (targetKind !== "none" && !targetId)}
         >
           Link assessment
         </Button>

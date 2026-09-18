@@ -92,6 +92,10 @@ export interface CourseAssessment {
   level: string;
   session: number | null;
   session_title?: string | null;
+  topic: number | null;
+  topic_title?: string | null;
+  lesson: number | null;
+  lesson_title?: string | null;
   title: string;
   is_scored: boolean;
   order: number;
@@ -696,6 +700,8 @@ export function addCourseAssessment(
     title: string;
     is_scored?: boolean;
     session?: number;
+    topic?: number;
+    lesson?: number;
   },
 ): Promise<CourseAssessment> {
   return apiPost<CourseAssessment>(`${BASE}/courses/${courseId}/assessments/`, payload);

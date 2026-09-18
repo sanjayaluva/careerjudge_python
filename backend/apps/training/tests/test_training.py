@@ -1444,7 +1444,7 @@ def test_trainer_can_link_assessment_to_draft_course(trainer_client, trainer_use
     assessment = Assessment.objects.create(title="A", status="published")
     resp = trainer_client.post(
         f"/api/training/courses/{course.id}/assessments/",
-        {"assessment": assessment.id, "title": "Quiz 1", "order": 1},
+        {"assessment": assessment.id, "title": "Quiz 1", "order": 1, "level": "end_of_course"},
         format="json",
     )
     assert resp.status_code == 201, resp.data
@@ -1477,3 +1477,46 @@ def test_assessment_links_to_specific_session(trainer_client, trainer_user):
     ca = CourseAssessment.objects.get(course=course)
     assert ca.session_id == session.id
     assert resp.data["data"]["session_title"] == "Session 2"
+
+
+def test_assessment_links_to_topic_and_lesson(trainer_client, trainer_user):
+    """Report 4 Trainer-9: End of Topic / End of Lesson target a specific
+    topic / lesson (not just a session)."""
+    from apps.assessment.models import Assessment
+    from apps.training.models import CourseAssessment, CourseLesson, LessonTopic
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
+    lesson = CourseLesson.objects.create(course=course, title="Lesson A", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="Topic A", order=1)
+    a1 = Assessment.objects.create(title="Q1", status="published")
+    a2 = Assessment.objects.create(title="Q2", status="published")
+
+    r1 = trainer_client.post(
+        f"/api/training/courses/{course.id}/assessments/",
+        {"assessment": a1.id, "title": "Topic quiz", "level": "end_of_topic", "topic": topic.id},
+        format="json",
+    )
+    assert r1.status_code == 201, r1.data
+    assert r1.data["data"]["topic_title"] == "Topic A"
+
+    r2 = trainer_client.post(
+        f"/api/training/courses/{course.id}/assessments/",
+        {"assessment": a2.id, "title": "Lesson quiz", "level": "end_of_lesson", "lesson": lesson.id},
+        format="json",
+    )
+    assert r2.status_code == 201, r2.data
+    assert r2.data["data"]["lesson_title"] == "Lesson A"
+
+
+def test_assessment_link_requires_matching_target(trainer_client, trainer_user):
+    """End of Topic without a topic is rejected."""
+    from apps.assessment.models import Assessment
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
+    a = Assessment.objects.create(title="Q", status="published")
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/assessments/",
+        {"assessment": a.id, "title": "x", "level": "end_of_topic"},
+        format="json",
+    )
+    assert resp.status_code == 400, resp.data
