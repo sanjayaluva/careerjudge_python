@@ -151,6 +151,7 @@ class HasAssessmentPermission(HasModulePermission):
         "start_session": "view",
         "submit_session": "view",
         "publish": "change",
+        "unpublish": "change",
         "readiness": "view",
         # AssessmentModificationRequestViewSet custom actions (SRS §2.2/§2.3)
         "approve": "change",
@@ -449,6 +450,57 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         return Response(
             {
                 "message": "Assessment published.",
+                "data": {"id": assessment.id, "status": assessment.status},
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"])
+    def unpublish(self, request, pk=None):
+        """Return a published assessment to draft (E-ASM-11).
+
+        Elective author convenience: pull an assessment back to draft to edit
+        it. Blocked while candidates have in-progress (active/suspended)
+        sessions, so no one is editing an assessment out from under a live
+        attempt. Completed sessions are historical and don't block.
+        """
+        assessment = self.get_object()
+        if assessment.status != "published":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": (
+                            "Only a published assessment can be returned to draft. "
+                            f"Current: '{assessment.status}'"
+                        ),
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        active = assessment.sessions.filter(status__in=["active", "suspended"]).count()
+        if active > 0:
+            return Response(
+                {
+                    "error": {
+                        "code": "sessions_in_progress",
+                        "message": (
+                            f"Cannot return to draft: {active} candidate session(s) are "
+                            "in progress. Wait until they finish or are abandoned."
+                        ),
+                        "details": {"active_sessions": active},
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        assessment.status = "draft"
+        assessment.save(update_fields=["status", "updated_at"])
+        return Response(
+            {
+                "message": "Assessment returned to draft.",
                 "data": {"id": assessment.id, "status": assessment.status},
             },
             status=status.HTTP_200_OK,

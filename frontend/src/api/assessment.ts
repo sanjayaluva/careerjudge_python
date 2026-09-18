@@ -187,6 +187,11 @@ export function publishAssessment(id: number): Promise<{ id: number; status: str
   return apiPost(`${BASE}/${id}/publish/`);
 }
 
+/** E-ASM-11: return a published assessment to draft (blocked if sessions active). */
+export function unpublishAssessment(id: number): Promise<{ id: number; status: string }> {
+  return apiPost(`${BASE}/${id}/unpublish/`);
+}
+
 export interface AssessmentReadiness {
   ready: boolean;
   errors: string[];

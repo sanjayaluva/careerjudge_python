@@ -899,6 +899,33 @@ class TestSessionFlow(AssessmentViewTestBase):
         # And expose total_duration_seconds from assessment
         assert resp.json()["data"]["total_duration_seconds"] == 600
 
+    def test_unpublish_returns_to_draft(self):
+        """E-ASM-11: an author can pull a published assessment back to draft."""
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.post(f"/api/assessments/{self.assessment.id}/unpublish/")
+        assert resp.status_code == status.HTTP_200_OK, resp.content
+        self.assessment.refresh_from_db()
+        assert self.assessment.status == "draft"
+
+    def test_unpublish_blocked_with_active_session(self):
+        """E-ASM-11: can't return to draft while a candidate is mid-attempt."""
+        AssessmentSession.objects.create(
+            assessment=self.assessment, candidate=self.candidate, status="active"
+        )
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.post(f"/api/assessments/{self.assessment.id}/unpublish/")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert resp.json()["error"]["code"] == "sessions_in_progress"
+        self.assessment.refresh_from_db()
+        assert self.assessment.status == "published"
+
+    def test_unpublish_rejects_draft_assessment(self):
+        self.assessment.status = "draft"
+        self.assessment.save(update_fields=["status"])
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.post(f"/api/assessments/{self.assessment.id}/unpublish/")
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
     def test_priced_assessment_blocks_start_without_payment(self):
         """PLT-3: a priced assessment returns 402 until the candidate pays."""
         self.assessment.price = 25
