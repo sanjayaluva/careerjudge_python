@@ -1,159 +1,193 @@
 # Career Judge — Verification Guide (Reports 3, 4 & 5)
 
-**Purpose.** This maps the client's review-report items to **what the code and
-the automated tests actually show today** — so the completion of each item can
-be checked independently, by running a test or by following UI steps. It is a
-factual status map, **not** a blanket "everything is complete" claim. Where an
-item is only partly done or not done, it says so.
+**Purpose.** A factual, code-verified status map of the client's review-report
+items — so completion can be checked independently by running a test or
+following UI steps. It is **not** a blanket "complete" claim. Every Report 4 &
+Report 5 line below was verified by reading the actual code (file evidence on
+request).
 
-**How to run the automated checks.** From the repo root:
+**Run the automated checks:** `bash scripts/verify_client.sh` (needs
+`backend/.venv`). Green = the behaviour is locked by a test.
 
-```
-bash scripts/verify_client.sh
-```
+**Legend:** ✅ Done · 🟡 Partial · 🔴 Not done · ❔ Unclear.
 
-Each block runs the real test(s) that prove one report item. "passed" means the
-behaviour is implemented and locked by a test. (Any `weasyprint` failures are a
-missing PDF native library in the test machine — cairo/pango — not a product
-defect.)
-
-**Legend:** ✅ Done & test-backed · 🟡 Partial · 🔴 Not done / not to spec ·
-❔ Needs a line-by-line pass to confirm.
+**Scope note up front.** All **corporate org-scoping** (multi-tenant
+organisations, and per-org visibility/tagging for Corp Admin, Group Admin, Corp
+Exclusive and Channel Partner) is **not implemented** — verified: *no backend
+query is filtered by the user's organisation anywhere*; the `OrganizationMember`
+/ `OrganizationAssignment` / `DomainCategory` models exist but are not wired to
+any API. This was the **separate corporate change-order** and is the bulk of
+Report 4 roles 1–4. It should be stated plainly to the client.
 
 ---
 
 ## A. The two issues the client named as critical
 
-### A1. Assessment linking to a specific session/topic/lesson
-*(Report 3 §4 Issue 3 · Report 4 Trainer Issue 9)* — **✅ Now fixed.**
+**A1. Assessment linking to a specific session/topic/lesson** — ✅ **Fixed.**
+The form now has a session/topic/lesson picker (per level); the serializer
+validates the target matches the level. Tests: `test_assessment_links_to_specific_session`,
+`test_assessment_links_to_topic_and_lesson`.
 
-- **Was**: the "Link Assessment" form let the trainer choose a *level label*
-  (End of Session / Topic / Lesson) but not *which* session. The client was
-  correct.
-- **Now**: the form shows a **session picker** (Lesson › Topic › Session) and
-  requires it for every level except *End of Course*; the linked session is
-  shown in the assessments table.
-- **Verify (test)**: `test_assessment_links_to_specific_session`.
-- **Verify (UI)**: Trainer → a draft course with lessons/topics/sessions →
-  Assessments tab → *Link assessment* → pick level *End of Session* → the
-  **Session** dropdown appears → pick a session → Link → the row shows the
-  session name under the level.
-- **Still open (honest note)**: the underlying model links to a *session*. For
-  *End of Topic* / *End of Lesson* the trainer picks a session inside that
-  topic/lesson; if the client requires a direct topic-level or lesson-level
-  target (no session), that is a small further change — flag it if so.
-
-### A2. Psychometric question-type **section-tagging** (author flow)
-*(Report 5 §3 Issue 5)* — **🔴 Not to spec. The client is correct.**
-
-- The client asked for **Approach 1**: psychometric **statements are authored
-  and category-tagged in the Question Bank first** (single statements, no
-  options), then **drawn into the assessment and grouped into Rank groups /
-  Forced-Choice pairs at configuration time**, with the section derived from the
-  Question Bank category. This lets SMEs create and Reviewers review.
-- The system currently implements **Approach 2** (the one the client explicitly
-  called error-prone): options are typed into a Rank/Forced-Choice template and
-  each option is **back-tagged to a section** (`ResponseOption.section_tag`,
-  `_ensure_section_tags_have_sections`). This forces a single psychometrician to
-  do everything and cannot use SMEs/Reviewers.
-- **This is a genuine, sizeable pending item** — a new authoring + assessment-
-  configuration flow, not a small fix. It should be scoped and estimated
-  separately.
+**A2. Psychometric section-tagging (author flow)** — 🔴 **Not to spec (client is
+right).** System implements the client's deprecated *Approach 2* (options
+back-tagged via `ResponseOption.section_tag`), not *Approach 1* (statements
+authored in the QnBank first, grouped at config time). Scoped separately in
+`docs/compliance/psychometric_approach1_scope.md` (~11–12 dev-days).
 
 ---
 
-## B. Report 5 — Assessment Parameter Setting (item by item)
+## B. Report 5 — Assessment Parameter Setting (10 items: 6 ✅ · 1 🟡 · 3 🔴)
 
-| Item | Status | How to verify |
+| Item | Status | Evidence / note |
 |---|---|---|
-| §1 Multi-level timers (Level 1–4 + Question level, summing upward) | 🟡 Partial | Per-section timer + per-section order exist; the **level-summing timer model** the report describes is **not** fully built. Needs confirmation against Doc 3 §5.2. |
-| §2 Order setting per level (randomise within a level) | 🟡 Partial | Per-section `order_mode` (STATIC/RANDOM) exists; the "show all levels in sequential editable flow" view does not. |
-| §3.1 Questions attach only at the **leaf** section | ✅ Done | `test_cannot_assign_question_to_non_leaf_section`, `test_section_fifth_level_rejected` |
-| §3.2 Section list shows full path chains | ❔ | Needs UI confirmation. |
-| §3.3 Parent not listed when a child exists | ❔ | Needs UI confirmation. |
-| §3.4 One question assigned **only once** per assessment | 🔴 Not done | DB blocks the same question twice in the **same** section only, not across sections. |
-| §3.5 Psychometric author flow (Approach 1) | 🔴 Not done | See **A2**. |
-| §4 Delivery count (random N from the assigned pool, leaf only) | 🟡 Partial | `delivery_count` field + player selection exist; the leaf-only + max-count validation rules need confirmation. |
+| Timer §1 — timers at Level 1–4 + Question level | ✅ | `TIMER_LEVEL_CHOICES`; section & question `duration_seconds`; player honours both |
+| Timer §2 — durations sum upward; higher levels not user-set | 🟡 | Sum-upward done (`aggregate_duration_seconds`); **no guard** stops a duration being entered on a higher-level section |
+| Order §1 — display order per level (randomise within a level) | ✅ | `AssessmentSection.order_mode` STATIC/RANDOM + per-section shuffle in player |
+| Order §2 — "static as configured" sequential editable view | ✅ | STATIC choice + editable section order |
+| Assign §1 — questions attach only at the leaf section | ✅ | `not_leaf_section` guard (psychometric exempt). Test-backed |
+| Assign §2 — section list shows full path chains | 🔴 | Picker labels are `L{level}: {title}`, not `A ›› B ›› C` chains |
+| Assign §3 — parent not listed when a child exists | 🔴 | Picker lists every section incl. non-leaf parents |
+| Assign §4 — one question assigned **only once** per assessment | ✅ | `question_already_assigned` guard (just added). Test-backed |
+| Assign §5 — psychometric author flow (Approach 1) | 🔴 | See **A2** |
+| Delivery — random N from the assigned pool, leaf only | ✅ | `delivery_count` + `random.sample` per session; note: over-count is soft-clamped, no hard validation error |
 
 ---
 
-## C. Modules the client said they are "in the dark" about
+## C. Report 4 — roles 5–11 (the non-corporate roles)
 
-### Reporting — 🟡 substantially built, verifiable
-Built this cycle: question-level data breakdown, chart/graph rendering, report
-templates + in-app live preview, band creation for all target types (FMI / PMI
-/ VMI / raw / PMI-D), and the full profiling-report config (include-index
-toggles + PMI-D order). **Verify (test)**:
-`apps/reporting/tests/test_question_level_and_charts.py` and the wider
-`apps/reporting` suite. Open item: PDF rendering can't run in this environment
-(missing cairo/pango) — it must be checked on a machine with those libraries.
+### Role 5 — SME (5 ✅ · 1 🟡 · 1 🔴)
+| # | Status | Note |
+|---|---|---|
+| 1 sees only own questions | ✅ | `get_queryset` forces `created_by=self` for sme |
+| 2 no create-categories | ✅ | category UI gated to psychometrician/cj_admin |
+| 3 no view/take assessments | 🔴 | Assessments nav still granted to sme |
+| 4 pick specific Reviewer **and Psychometrician** (domain) | 🟡 | Auto-routes to a **domain reviewer**; no *manual* choice and **no psychometrician routing** (`assigned_psychometrician` doesn't exist) |
+| 5 create question from task (auto-fill hyperlink) | ✅ | Task → "Create question from spec" prefills type/category |
+| 6 live-chat · 7 invoice | ✅ | present |
 
-### Career Profiling — 🟡 built, needs a functional walkthrough
-The n×n mapping-rule grid, band definitions and profiling-solution config are
-present (`apps/career_profiling`). Recommend a UI walkthrough against Docs 5 & 6
-to confirm it matches the profiling process end-to-end.
+### Role 6 — Reviewer (6 ✅ · 1 🟡 · 3 🔴)
+| # | Status | Note |
+|---|---|---|
+| 1 sees only assigned questions | 🟡 | Sees own + all non-draft pipeline; assigned-only is opt-in (`?assigned=me`) |
+| 2 rename tab → "My Review Questions" | 🔴 | Still labelled "Question Bank" |
+| 3 no create-categories | ✅ | gated |
+| 4 no view/take assessments | 🔴 | Assessments nav still granted to reviewer |
+| 5 receive only own-domain questions | ✅ | domain routing via `domain_root` + `assigned_reviewer` |
+| 6 sent-back returns to same SME | ✅ | `created_by` never reassigned |
+| 7 **no rating when sending back** | 🔴 | Reviewer UI always sends a rating; not forbidden on send-back |
+| 8 second-round rating replaces old (history kept) | ✅ | each review is a new row; latest effective, all retained |
+| 9 live-chat · 10 invoice | ✅ | present |
 
-### Psychometric Analysis — 🟡 partial
-The analysis engine (index computation) and a psychometrician screen with
-run-analysis / upload-results exist (`apps/question_bank/psychometrics.py`,
-PSY-1/2). **But** the psychometrician's broader module coverage flagged in
-Report 4 (Psychometrician Issues 1–5: analysis, QB mgmt, assessment mgmt,
-profiling config, report config all "not available") is **not confirmed
-complete** and needs a role-by-role check — see Part D.
+### Role 7 — Individual User (2 ✅ · 8 🟡 · 6 🔴 · 2 ❔)
+| # | Status | Note |
+|---|---|---|
+| 1 view/take only registered+paid assessments | 🟡 | Sessions scoped to self + start is pay-gated, but the **list shows all published**, not paid-only |
+| 2 unpaid → **login popup** + Pay Now | 🟡 | Pay-gate + Pay Now exist, shown as a **toast**, not a login popup |
+| 3 registration form w/ profile autofill | 🔴 | No such form; profile has only `full_name` |
+| 4 assessment tabs Not-Attempted/Suspended/Completed | 🔴 | It's a table with a status column, not tabs |
+| 5–7 mandatory registration fields (First/Last/Gender…) | 🔴 | No registration form / field set |
+| 8 only paid+published profiling solutions | ❔ | No explicit paid-only filter observed |
+| 9 profiling tabs Not-Attempted/Suspended/Completed | 🔴 | Detail page tabs are authoring, not status |
+| 10 sees only own reports | ❔ | No individual-facing own-reports list confirmed |
+| 11 Download-PDF button | 🟡 | PDF endpoint exists; no individual-facing button confirmed |
+| 12 view only paid courses | 🟡 | Course start pay-gated; browse shows all published |
+| 13 unpaid course → popup + Pay Now | 🟡 | Redirects to checkout, not a popup |
+| 14 training tabs New/Ongoing/Completed | 🔴 | Tabs are Browse/Manage/My-Sessions |
+| 15 reorder course tabs + rename Created-by→Trainer + add Assignments | 🟡 | Registrations already hidden; **no Assignments tab**, "Created by" not renamed |
+| 16 only paid counselling · 17 unpaid popup | 🟡 | Booking is payment-aware; no paid-only browse / explicit popup |
+| 18 booking notifies counsellor (was a bug) | ✅ | **Fixed** — `notify_user(counsellor…)` on booking |
+| 19 "Counsellor" link → error page (was a bug) | ✅ | **Fixed** — `counseling/:id` route added |
+| 20 rename module tabs (My Assessments, …) | 🔴 | Not renamed |
+| 21 "/hr"→"/Session", **dollars → rupees** | 🔴 | Still `$…/hr`, "Hourly rate (USD)" |
+
+### Role 8 — Trainer (7 ✅ · 3 🟡 · 3 🔴)
+| # | Status | Note |
+|---|---|---|
+| 1 sees only own courses | 🔴 | No owner scoping — trainer sees all courses |
+| 2 remove "My Courses"; add Preview | 🟡 | Relabelled; but no content-preview for trainer |
+| 3 create structure first time, locked after publish | ✅ | draft ungated, published gated |
+| 4 request-to-modify + edit after approval | ✅ | `CourseModificationRequest` flow |
+| 5 rich-text on Text Content | 🔴 | Content body is a plain textarea (WYSIWYG only on course description) |
+| 6 edit content after adding | 🔴 | No edit-body flow (only reorder / retitle) |
+| 7 timeline/interactive questions | ✅ | Timeliner present |
+| 8 trainer **creates** assessment (training-only) | 🟡 | Backend perms exist + own-scoping; **frontend Create is gated off for trainer**; only links existing published assessments |
+| 9 link to specific session/topic/lesson | ✅ | **Fixed** (A1) |
+| 10 verify "Notify" reached the user (was a bug) | ✅ | **Fixed** — notify action confirmed |
+| 11 live-chat · 12 invoice | ✅ | present |
+
+### Role 9 — Counsellor (5 ✅ · 4 🟡 · 5 🔴 · 2 ❔)
+| # | Status | Note |
+|---|---|---|
+| 1 no assessment tab · 2 no profiling tab | 🔴 | Both still visible to counsellor (MODULE_VISIBILITY) |
+| 3 reports limited to his clients · 4 no create-report · 5 only booked-client reports | 🔴/❔ | No counsellor/client scoping on reports; create not blocked |
+| 6 no browse/book | 🟡 | Browse tab still shown; book/My-Sessions hidden |
+| 7 tagged to a counselling category | ✅ | `CounsellorProfile.categories` M2M |
+| 8 timeslots min 1 wk / max 3 wks | 🟡 | **Max 3wk enforced; min 1wk not** |
+| 9 timeslots in table format · 10 booked in weekly format | 🔴 | Flat list, no table / weekly grouping |
+| 11 remove "My Sessions" | ✅ | hidden for counsellor |
+| 12 post-booking notification | ✅ | notifies counsellor |
+| 13 ZOOM setup | 🟡 | Manual meeting-link field, not Zoom API |
+| 14 post-ZOOM notification to counselee | ✅ | on confirm |
+| 15 live-chat | 🔴 | **not** in counsellor visibility |
+| 16 invoice | ✅ | present |
+
+### Role 10 — Psychometrician (5 ✅)
+Analysis engine + QB + assessments + career-profiling + reporting all present
+and role-visible. ✅ all five.
+
+### Role 11 — CJ Admin (8 ✅ · 2 🟡 · 5 🔴)
+| # | Status | Note |
+|---|---|---|
+| 1–4 tag Corp/Group/Excl/Partner to org | 🟡 | User↔org via `OrganizationMember` works; the higher-level tagging UIs are thin/absent (corporate) |
+| 5 tag Reviewer to domain · 7 tag SME to domain | 🟡 | Domain routing is **inferred** from authored questions; **no explicit admin domain-tag** (`DomainCategory` orphaned) |
+| 6 add new domains | 🔴 | `DomainCategory` has no CRUD API |
+| 7b tag Counsellor to category | ✅ | done |
+| 8 Edit-User button | ✅ | present |
+| 9 task assignment functional | ✅ | `TaskViewSet.create` + assignee picker |
+| 10 create Parent Task | ✅ | `parent_task` FK + picker |
+| 11 one task → multiple question specs | ✅ | `TaskSpec` is one-task-many-specs |
+| 12–14 assign assessments/trainings/counselling to a Corp Org | 🔴 | `OrganizationAssignment` model exists but **no API** (corporate) |
+| 19 approve/send-back invoices · 20 confirm payment | ✅ | present |
+| 21 message any user | ✅ | messaging present |
+
+*(Role 12 Helpdesk — the client marked "not available for checking"; nothing to verify.)*
 
 ---
 
-## D. Report 4 — User roles, rights & limits (important, mostly pending)
+## D. Roles 1–4 (Corporate) — 🔴 not implemented (separate change-order)
 
-Report 4 is a large, mostly **separate** body of work: per-role scoping across
-12 roles — hiding buttons a role shouldn't see, restricting each role to its own
-data (own questions / own courses / own reports), and **corporate org tagging**
-(Corp Admin, Group Admin, Corp Exclusive, Channel Partner).
-
-**Honest status:** this was **not** systematically delivered in the completed
-scope, with these exceptions that *were* done and are test-backed:
-
-- SME→Reviewer same-domain routing (SME-4 / Reviewer-5) — ✅ `test_reviewer_routing`
-- SME task→question autofill via hyperlink (SME-5) — ✅ (UI: Task → "Create question from spec")
-- Trainer edit-gating on a published course (Trainer-3/4) — ✅ `test_trainer_cannot_*published*`
-- Rich-text on some fields (Trainer-5) — 🟡 partial
-- Send Message / Live Chat for all roles — ✅ messaging suite
-- Individual pay-before-access gate (Individual-2/13/17) — ✅ `test_priced_assessment_*`
-- Invoice create/revise/cancel for empanelled roles — ✅ `test_invoicing`
-- Counsellor category tagging, "My Sessions" cleanup, timeslot rules — ❔ needs check
-
-**Everything corporate** (Corp Admin / Group Admin / Corp Exclusive / Channel
-Partner org scoping and tagging — the bulk of Report 4) was **explicitly parked
-as a separate corporate change-order** and is **not** part of the completed
-scope. This needs to be stated plainly to the client.
+Verified: no org-scoped filtering exists; corporate models are orphaned. A few
+**adjacent, non-scoping** items do work and are usable: bulk-upload of users
+(gated by `accounts.add`), invoice create/revise/cancel, and payment history.
+Everything that depends on *"restrict this role to its own organisation's
+data"* — the substance of Report 4 roles 1–4 — is pending and belongs to the
+corporate change-order.
 
 ---
 
-## E. Reports 1–3 (Question types, Training, Counselling)
+## E. Suggested "quick wins" before the testing month (small, non-corporate)
 
-Large portions here **were** addressed and are traceable to tests (the living
-matrix is at `docs/compliance/traceability_matrix.csv`; the signed-vs-built
-summary is `docs/compliance/audit_binder.html`). Notable **confirmed** items:
-assignment add/edit + report submission + multi-file upload + deadline + trainer
-10-point review (Report 3 §3), course structure/sequencing/completion params,
-counselling booking/confirmation/refund/followup/feedback, question-scoring
-fixes. Recommend the client spot-checks these via the UI and the runner.
+These are genuinely in-scope, low-effort, and would clear several red rows:
+1. Reviewer must **not rate on send-back** (6.7) + rename tab "My Review Questions" (6.2).
+2. Hide **Assessments** from SME/Reviewer nav (5.3/6.4) and **Assessments/Profiling** from Counsellor nav (9.1/9.2).
+3. Counsellor timeslot **minimum 1-week** enforcement (9.8).
+4. Currency **$ → ₹** and "/hr" → "/Session" (7.21).
+5. Section picker: **leaf-only + full path chains** (Report 5 Assign §2/§3).
+6. Individual: **Not-Attempted / Suspended / Completed** tabs for assessments & training (7.4/7.14) — a bit larger.
+
+Bigger, discrete items: the **psychometric Approach-1 flow** (scoped separately),
+**trainer-authored assessments** (8.8), **explicit domain tagging + DomainCategory
+CRUD** (11.5/6/7), and the whole **corporate change-order**.
 
 ---
 
 ## F. Suggested agenda for the meeting
+1. Agree the **scope split in writing**: (a) SRS + Reports 1–3, (b) Report 4
+   role-permission scoping, (c) corporate platform, (d) Report 5 params.
+2. **Run `scripts/verify_client.sh` live** for the test-backed items.
+3. Walk this table top-to-bottom as the shared **done / pending list**.
+4. Approve the two discrete builds (psychometric Approach-1; and, if wanted, the
+   Report 4 non-corporate role-scoping) with the estimates.
 
-1. **Agree the scope split** in writing: (a) SRS + Reports 1–3 items, (b) Report
-   4 role-permission scoping, (c) corporate/Corp-Exclusive platform, (d) Report
-   5 assessment-parameter items. (b)–(d) were largely outside the completed
-   cycle; (c) was already a separate change order.
-2. **Two named criticals**: assessment-linking is fixed today; the psychometric
-   author flow (Approach 1) needs to be scoped as its own piece.
-3. **Run `scripts/verify_client.sh` live** so the client sees exactly which
-   items are locked by tests.
-4. **Produce a joint line-by-line reconciliation** of Reports 4 & 5 (this guide
-   is the honest starting point) so both sides share one done/pending list
-   before the testing month.
-
-*This document is intentionally candid. Please review it before sharing; adjust
-the framing to suit the commercial conversation.*
+*Intentionally candid. Review before sharing; adjust framing to suit the
+commercial conversation.*
