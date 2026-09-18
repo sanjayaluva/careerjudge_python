@@ -501,3 +501,76 @@ class AssessmentModificationRequest(models.Model):
 
     def __str__(self) -> str:
         return f"{self.action} request for '{self.assessment.title}' ({self.status})"
+
+
+# ---------------------------------------------------------------------------
+# Psychometric grouping (PSY-A1) — signed Approach 1
+#
+# Psychometric statements are authored in the Question Bank as plain text
+# (no options, Doc 1 §3.1.6). At assessment configuration the operator draws
+# statements from the QB, assigns each to a section/variable, and groups them
+# into Rank Groups or Forced-Choice Pairs (Doc 3 §4.2.2/§4.2.3). Each item
+# below records one statement's placement (which group + which section), so the
+# section comes from an explicit assignment — never from tagging an answer
+# option (which psychometric questions do not have).
+# ---------------------------------------------------------------------------
+
+
+class PsychometricGroup(models.Model):
+    """A rank group or forced-choice pair delivered as one question."""
+
+    GROUP_TYPE_CHOICES = [
+        ("rank_simple", "Simple Ranking (6a)"),
+        ("rank_then_rate", "Rank then Rate (6b)"),
+        ("forced_choice_single", "Forced Choice - Single Level (8a)"),
+        ("forced_choice_two_level", "Forced Choice - Two Level (8b)"),
+    ]
+
+    assessment = models.ForeignKey(
+        Assessment, on_delete=models.CASCADE, related_name="psychometric_groups"
+    )
+    group_type = models.CharField(_("group type"), max_length=30, choices=GROUP_TYPE_CHOICES)
+    group_number = models.PositiveIntegerField(_("group number"), default=1)
+    # For rank_then_rate / forced_choice_two_level: the rating scale size.
+    rating_scale_points = models.PositiveIntegerField(
+        _("rating scale points"), null=True, blank=True
+    )
+    order = models.PositiveIntegerField(_("order"), default=0)
+
+    class Meta:
+        ordering = ["order", "group_number"]
+        verbose_name = _("psychometric group")
+        verbose_name_plural = _("psychometric groups")
+
+    def __str__(self) -> str:
+        return f"{self.assessment.title} > {self.group_type} #{self.group_number}"
+
+    @property
+    def is_forced_choice(self) -> bool:
+        return self.group_type in ("forced_choice_single", "forced_choice_two_level")
+
+
+class PsychometricGroupItem(models.Model):
+    """One statement placed in a group and assigned to a section/variable."""
+
+    group = models.ForeignKey(
+        PsychometricGroup, on_delete=models.CASCADE, related_name="items"
+    )
+    statement = models.ForeignKey(
+        "question_bank.Question",
+        on_delete=models.CASCADE,
+        related_name="psychometric_group_items",
+    )
+    section = models.ForeignKey(
+        AssessmentSection, on_delete=models.CASCADE, related_name="psychometric_group_items"
+    )
+    order = models.PositiveIntegerField(_("order"), default=0)
+
+    class Meta:
+        ordering = ["order"]
+        unique_together = [("group", "statement")]
+        verbose_name = _("psychometric group item")
+        verbose_name_plural = _("psychometric group items")
+
+    def __str__(self) -> str:
+        return f"{self.group} :: {self.statement_id} -> section {self.section_id}"

@@ -1706,3 +1706,58 @@ class AssessmentModificationRequestViewSet(ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+
+# ---------------------------------------------------------------------------
+# Psychometric grouping (PSY-A1) — config-time author flow (signed Approach 1)
+# ---------------------------------------------------------------------------
+
+
+class PsychometricGroupViewSet(ModelViewSet):
+    """Rank groups / forced-choice pairs of Question-Bank statements.
+
+    GET/POST  /api/assessments/<assessment_id>/psychometric-groups/
+    Statements are drawn from the QB and grouped here (Doc 3 §4.2.2/§4.2.3);
+    the serializer enforces the grouping rules (one-per-section for rank;
+    two-different-sections for forced-choice).
+    """
+
+    permission_classes = [IsAuthenticated, HasAssessmentPermission]
+
+    def get_serializer_class(self):
+        from .serializers import PsychometricGroupSerializer
+
+        return PsychometricGroupSerializer
+
+    def get_queryset(self):
+        from .models import PsychometricGroup
+
+        return PsychometricGroup.objects.filter(
+            assessment_id=self.kwargs.get("assessment_id")
+        ).prefetch_related("items")
+
+    def list(self, request, *args, **kwargs):
+        serializer = self.get_serializer(self.get_queryset(), many=True)
+        return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        assessment = get_object_or_404(Assessment, id=self.kwargs.get("assessment_id"))
+        # All sections referenced must belong to this assessment.
+        for it in request.data.get("items", []):
+            if not assessment.sections.filter(id=it.get("section")).exists():
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "Every section must belong to this assessment.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(assessment=assessment)
+        return Response(
+            {"message": "Psychometric group created.", "data": serializer.data},
+            status=status.HTTP_201_CREATED,
+        )

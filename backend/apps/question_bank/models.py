@@ -96,6 +96,7 @@ PSYCHOMETRIC_QUESTION_TYPES: frozenset[str] = frozenset(
         "STANDARD_RATING_SCALE",  # 7:  Standard Rating Scale
         "FORCED_CHOICE_SINGLE_LEVEL",  # 8a: Forced-Choice - Single Level
         "FORCED_CHOICE_TWO_LEVEL",  # 8b: Forced-Choice - Two-Level
+        "PSYCHOMETRIC_STATEMENT",  # 9: bare statement, grouped at config (PSY-A1)
     }
 )
 
@@ -141,6 +142,11 @@ class Question(models.Model):
         ("STANDARD_RATING_SCALE", "7: Standard Rating Scale"),
         ("FORCED_CHOICE_SINGLE_LEVEL", "8a: Forced-Choice - Single Level"),
         ("FORCED_CHOICE_TWO_LEVEL", "8b: Forced-Choice - Two-Level"),
+        # PSY-A1 (signed Doc 1 §3.1.6): a psychometric statement is authored in
+        # the Question Bank as plain text with NO answer options; its rank /
+        # forced-choice "variants" are formed at assessment-configuration time
+        # by grouping statements (Doc 3 §4.2.2/§4.2.3).
+        ("PSYCHOMETRIC_STATEMENT", "9: Psychometric Statement (grouped at config)"),
     ]
 
     SCORING_TYPE_CHOICES = [
