@@ -721,6 +721,26 @@ class TestReviewWorkflow:
         assert resp.status_code == 200
         assert resp.json()["data"]["question_status"] == "rejected"
 
+    def test_approve_requires_rating(self, sme_client, reviewer_client):
+        """QB-5: approving without a rating is rejected server-side."""
+        qid = self._create_and_submit(sme_client)
+        resp = reviewer_client.post(
+            f"/api/question-bank/questions/{qid}/review/",
+            {"review_type": "content", "action": "approve", "comment": "ok"},
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_send_back_requires_reason(self, sme_client, reviewer_client):
+        """QB-5: sending a question back without a reason is rejected server-side."""
+        qid = self._create_and_submit(sme_client)
+        resp = reviewer_client.post(
+            f"/api/question-bank/questions/{qid}/review/",
+            {"review_type": "content", "action": "send_back"},
+            format="json",
+        )
+        assert resp.status_code == 400
+
     def test_full_workflow_approve(self, sme_client, reviewer_client, psy_client):
         """Full workflow: SME → Reviewer approve → Psychometrician approve → confirmed."""
         # Create + submit

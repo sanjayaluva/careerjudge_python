@@ -426,6 +426,18 @@ class QuestionReviewCreateSerializer(serializers.ModelSerializer):
         model = QuestionReview
         fields = ["question", "review_type", "action", "comment", "rating"]
 
+    def validate(self, attrs):
+        # QB-5 (D1 §3.2/§3.3): a rating is required to approve a question, and a
+        # reason is required to send one back to the previous stage.
+        action = attrs.get("action")
+        if action == "approve" and attrs.get("rating") in (None, ""):
+            raise serializers.ValidationError({"rating": "A rating is required to approve."})
+        if action == "send_back" and not (attrs.get("comment") or "").strip():
+            raise serializers.ValidationError(
+                {"comment": "A reason is required to send a question back."}
+            )
+        return attrs
+
     def create(self, validated_data):
         request = self.context.get("request")
         if request and request.user:
