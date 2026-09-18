@@ -225,6 +225,14 @@ export default function QuestionBankPage() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
+              {canManageQB && (
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/question-bank/psychometrics")}
+                >
+                  Psychometric Analysis
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setCategoriesOpen(true)}>
                 Categories
               </Button>
