@@ -606,3 +606,46 @@ export const TIMER_LEVELS = [
   { value: "level4", label: "Level 4" },
   { value: "question", label: "Question Level" },
 ];
+
+// ---------------------------------------------------------------------------
+// Psychometric grouping (PSY-A1) — signed Approach 1
+// ---------------------------------------------------------------------------
+
+export interface PsychometricGroupItem {
+  id?: number;
+  statement: number;
+  statement_text?: string;
+  section: number;
+  section_title?: string;
+  order?: number;
+}
+
+export interface PsychometricGroup {
+  id: number;
+  assessment: number;
+  group_type: "rank_simple" | "rank_then_rate" | "forced_choice_single" | "forced_choice_two_level";
+  group_number: number;
+  rating_scale_points: number | null;
+  order: number;
+  items: PsychometricGroupItem[];
+}
+
+export function listPsychometricGroups(assessmentId: number): Promise<PsychometricGroup[]> {
+  return apiGet<PsychometricGroup[]>(`${BASE}/${assessmentId}/psychometric-groups/`);
+}
+
+export function createPsychometricGroup(
+  assessmentId: number,
+  payload: {
+    group_type: string;
+    group_number?: number;
+    rating_scale_points?: number | null;
+    items: { statement: number; section: number; order?: number }[];
+  },
+): Promise<PsychometricGroup> {
+  return apiPost<PsychometricGroup>(`${BASE}/${assessmentId}/psychometric-groups/`, payload);
+}
+
+export function deletePsychometricGroup(assessmentId: number, groupId: number): Promise<void> {
+  return apiDelete(`${BASE}/${assessmentId}/psychometric-groups/${groupId}/`);
+}

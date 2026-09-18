@@ -509,6 +509,7 @@ export const QUESTION_TYPES = [
   { value: "STANDARD_RATING_SCALE", label: "7: Standard Rating Scale" },
   { value: "FORCED_CHOICE_SINGLE_LEVEL", label: "8a: Forced-Choice – Single Level" },
   { value: "FORCED_CHOICE_TWO_LEVEL", label: "8b: Forced-Choice – Two-Level" },
+  { value: "PSYCHOMETRIC_STATEMENT", label: "9: Psychometric Statement (grouped at config)" },
 ];
 
 // Psychometric-type question codes (must match the backend
@@ -522,6 +523,7 @@ export const PSYCHOMETRIC_QUESTION_TYPE_CODES = [
   "STANDARD_RATING_SCALE",
   "FORCED_CHOICE_SINGLE_LEVEL",
   "FORCED_CHOICE_TWO_LEVEL",
+  "PSYCHOMETRIC_STATEMENT",
 ] as const;
 
 export function isPsychometricQuestionType(questionType: string): boolean {

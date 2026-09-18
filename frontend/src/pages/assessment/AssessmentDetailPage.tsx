@@ -45,7 +45,11 @@ import {
   TIMER_LEVELS,
   approveModificationRequest,
   assignQuestion,
+  createPsychometricGroup,
   createSection,
+  deletePsychometricGroup,
+  listPsychometricGroups,
+  type PsychometricGroup,
   declineModificationRequest,
   deleteAssessment,
   deleteSection,
@@ -345,6 +349,9 @@ export default function AssessmentDetailPage() {
               assigned questions before taking the assessment — showing
               question titles/content would let them preview the test. */}
           {canManage && <TabsTrigger value="questions">Questions ({questionCount})</TabsTrigger>}
+          {canManage && a.assessment_type === "psychometric" && (
+            <TabsTrigger value="psych-groups">Psychometric Groups</TabsTrigger>
+          )}
           <TabsTrigger value="sessions">My Sessions ({sessionCount})</TabsTrigger>
         </TabsList>
 
@@ -639,6 +646,12 @@ export default function AssessmentDetailPage() {
             canManage={canEdit}
           />
         </TabsContent>
+
+        {a.assessment_type === "psychometric" && (
+          <TabsContent value="psych-groups">
+            <PsychometricGroupsTab assessmentId={aid} sections={a.sections} canManage={canEdit} />
+          </TabsContent>
+        )}
 
         {/* === SESSIONS TAB === */}
         {/* === SESSIONS TAB (My Sessions) === */}
@@ -1864,6 +1877,240 @@ function MySessionsTab({
               })}
             </TableBody>
           </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Psychometric Groups Tab (PSY-A1) — build Rank Groups / Forced-Choice Pairs
+// from Question-Bank statements (signed Approach 1).
+// ---------------------------------------------------------------------------
+
+const GROUP_TYPES = [
+  { value: "rank_simple", label: "Simple Ranking (6a)" },
+  { value: "rank_then_rate", label: "Rank then Rate (6b)" },
+  { value: "forced_choice_single", label: "Forced Choice — Single Level (8a)" },
+  { value: "forced_choice_two_level", label: "Forced Choice — Two Level (8b)" },
+];
+
+function PsychometricGroupsTab({
+  assessmentId,
+  sections,
+  canManage,
+}: {
+  assessmentId: number;
+  sections: AssessmentSection[];
+  canManage: boolean;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [groupType, setGroupType] = useState("rank_simple");
+  const [rows, setRows] = useState<{ statement: string; section: string }[]>([
+    { statement: "", section: "" },
+    { statement: "", section: "" },
+  ]);
+  const [ratingPoints, setRatingPoints] = useState("5");
+
+  const flatSections: { id: number; label: string }[] = [];
+  const flatten = (secs: AssessmentSection[], path: string[]) => {
+    for (const s of secs) {
+      const chain = [...path, s.title];
+      if (s.subsections && s.subsections.length > 0) flatten(s.subsections, chain);
+      else flatSections.push({ id: s.id, label: chain.join(" ›› ") });
+    }
+  };
+  flatten(sections, []);
+
+  const { data: groups } = useQuery({
+    queryKey: ["assessment", assessmentId, "psych-groups"],
+    queryFn: () => listPsychometricGroups(assessmentId),
+  });
+  const { data: statementsPage } = useQuery({
+    queryKey: ["psych-statements"],
+    queryFn: () => listQuestions({ question_type: "PSYCHOMETRIC_STATEMENT", status: "confirmed" }),
+  });
+  const statements = statementsPage?.results ?? [];
+
+  const isFC = groupType.startsWith("forced_choice");
+  const needsRating = groupType === "rank_then_rate" || groupType === "forced_choice_two_level";
+
+  const createMut = useMutation({
+    mutationFn: () =>
+      createPsychometricGroup(assessmentId, {
+        group_type: groupType,
+        group_number: (groups?.length ?? 0) + 1,
+        ...(needsRating ? { rating_scale_points: Number(ratingPoints) } : {}),
+        items: rows
+          .filter((r) => r.statement && r.section)
+          .map((r, i) => ({ statement: Number(r.statement), section: Number(r.section), order: i })),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["assessment", assessmentId, "psych-groups"] });
+      toast.success("Group created.");
+      setRows([{ statement: "", section: "" }, { statement: "", section: "" }]);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const delMut = useMutation({
+    mutationFn: (id: number) => deletePsychometricGroup(assessmentId, id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["assessment", assessmentId, "psych-groups"] });
+      toast.success("Group removed.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  // Forced-choice is always exactly two rows.
+  const effectiveRows = isFC ? rows.slice(0, 2) : rows;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Psychometric Groups (Approach 1 — SRS Doc 3 §4.2)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <p className="text-sm text-slate-600">
+          Draw <strong>statements</strong> from the Question Bank and group them: a{" "}
+          <strong>Rank Group</strong> takes one statement from each section; a{" "}
+          <strong>Forced-Choice Pair</strong> takes two statements from two different sections.
+        </p>
+
+        {(groups ?? []).length > 0 && (
+          <div className="space-y-2">
+            {(groups ?? []).map((g: PsychometricGroup) => (
+              <div key={g.id} className="rounded-md border border-slate-200 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">
+                    {GROUP_TYPES.find((t) => t.value === g.group_type)?.label ?? g.group_type} · #
+                    {g.group_number}
+                  </span>
+                  {canManage && (
+                    <button
+                      className="text-xs text-danger-600 hover:underline"
+                      onClick={() => delMut.mutate(g.id)}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <ul className="mt-1 space-y-0.5 text-xs text-slate-600">
+                  {g.items.map((it) => (
+                    <li key={it.id}>
+                      • {it.statement_text}{" "}
+                      <span className="text-slate-400">→ {it.section_title}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {canManage && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              createMut.mutate();
+            }}
+            className="space-y-3 border-t border-slate-100 pt-4"
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="pg-type">Group type</Label>
+                <select
+                  id="pg-type"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  value={groupType}
+                  onChange={(e) => setGroupType(e.target.value)}
+                >
+                  {GROUP_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {needsRating && (
+                <div>
+                  <Label htmlFor="pg-rate">Rating scale points</Label>
+                  <Input
+                    id="pg-rate"
+                    type="number"
+                    min="2"
+                    value={ratingPoints}
+                    onChange={(e) => setRatingPoints(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              {effectiveRows.map((row, i) => (
+                <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <select
+                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    value={row.statement}
+                    onChange={(e) => {
+                      const next = [...rows];
+                      next[i] = { ...next[i], statement: e.target.value };
+                      setRows(next);
+                    }}
+                    required
+                  >
+                    <option value="">Select a statement…</option>
+                    {statements.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.question_title || s.question_text_1}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    value={row.section}
+                    onChange={(e) => {
+                      const next = [...rows];
+                      next[i] = { ...next[i], section: e.target.value };
+                      setRows(next);
+                    }}
+                    required
+                  >
+                    <option value="">Select a section…</option>
+                    {flatSections.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            {!isFC && (
+              <button
+                type="button"
+                className="text-sm text-primary-600 hover:underline"
+                onClick={() => setRows([...rows, { statement: "", section: "" }])}
+              >
+                + Add statement (one per section)
+              </button>
+            )}
+
+            {statements.length === 0 && (
+              <p className="text-xs text-amber-600">
+                No confirmed psychometric statements in the Question Bank yet. Author statements
+                (question type “Psychometric Statement”) first.
+              </p>
+            )}
+
+            <div className="flex justify-end">
+              <Button type="submit" loading={createMut.isPending}>
+                Create group
+              </Button>
+            </div>
+          </form>
         )}
       </CardContent>
     </Card>
