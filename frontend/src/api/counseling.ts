@@ -99,7 +99,7 @@ export interface SessionSummary {
   provisional_diagnosis: string;
   case_prognosis: string;
   session_smoothness: "" | "yes" | "somewhat" | "no";
-  smoothly_reason: string;
+  smoothness_reason: string;
   followup_recommended: boolean;
   /** legacy */
   recommendations: string;

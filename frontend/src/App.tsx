@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { AdminRoute } from "@/components/layout/AdminRoute";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -98,16 +98,17 @@ export default function App() {
               />
               <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
 
-              {/* Protected */}
+              {/* Protected app — a pathless layout route so "/" stays free for
+                  the public homepage (BUG-1: previously a second path="/" route
+                  shadowed PublicHomepage, making it unreachable). Authenticated
+                  users are redirected to /dashboard by PublicHomepage itself. */}
               <Route
-                path="/"
                 element={
                   <ProtectedRoute>
                     <DashboardShell />
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route path="settings" element={<SettingsPage />} />
@@ -165,6 +166,9 @@ export default function App() {
                 <Route path="training/:id" element={<TrainingCourseDetailPage />} />
                 <Route path="training/:id/edit" element={<TrainingCourseEditorPage />} />
                 <Route path="counseling" element={<CounselingPage />} />
+                {/* BUG-2: counselling detail link (/counseling/:id) had no route
+                    and fell through to the CMS slug catch-all → 404. */}
+                <Route path="counseling/:id" element={<CounselingPage />} />
                 <Route path="cms" element={<CMSPage />} />
                 <Route path="page/:slug" element={<CMSPageViewer />} />
                 <Route path="tasks" element={<TasksPage />} />

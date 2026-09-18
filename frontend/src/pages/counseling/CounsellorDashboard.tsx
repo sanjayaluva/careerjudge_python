@@ -335,7 +335,7 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
       setProvisionalDiagnosis(existingSummary.provisional_diagnosis ?? "");
       setCasePrognosis(existingSummary.case_prognosis ?? "");
       setSessionSmoothly(existingSummary.session_smoothness ?? "");
-      setSmoothlyReason(existingSummary.smoothly_reason ?? "");
+      setSmoothlyReason(existingSummary.smoothness_reason ?? "");
       setFollowupRecommended(existingSummary.followup_recommended);
     }
   });
@@ -348,7 +348,7 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
         provisional_diagnosis: provisionalDiagnosis,
         case_prognosis: casePrognosis,
         session_smoothness: sessionSmoothly,
-        smoothly_reason: smoothlyReason,
+        smoothness_reason: smoothlyReason,
         followup_recommended: followupRecommended,
       }),
     onSuccess: () => {

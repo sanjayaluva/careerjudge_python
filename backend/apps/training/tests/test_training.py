@@ -939,6 +939,60 @@ def test_admin_decline_keeps_course_and_notifies(admin_client, trainer_client, t
 
 
 # ---------------------------------------------------------------------------
+# TRN-1 / Doc 7 §5 — nested structure edit/delete gated on published courses
+# ---------------------------------------------------------------------------
+
+
+def test_trainer_cannot_delete_published_lesson_directly(trainer_client, trainer_user):
+    """TRN-1: a trainer cannot DELETE a published course's lesson directly —
+    it must go through the request-update/approval flow (403)."""
+    from apps.training.models import CourseLesson
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = trainer_client.delete(f"/api/training/lessons/{lesson.id}/")
+    assert resp.status_code == 403
+    assert CourseLesson.objects.filter(id=lesson.id).exists()
+
+
+def test_trainer_cannot_patch_published_lesson_directly(trainer_client, trainer_user):
+    """TRN-1: a trainer cannot PATCH a published course's lesson directly (403)."""
+    from apps.training.models import CourseLesson
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = trainer_client.patch(
+        f"/api/training/lessons/{lesson.id}/", {"title": "hacked"}, format="json"
+    )
+    assert resp.status_code == 403
+    lesson.refresh_from_db()
+    assert lesson.title == "L1"
+
+
+def test_trainer_can_delete_draft_lesson(trainer_client, trainer_user):
+    """TRN-1: gating only applies once published — draft structure is freely
+    editable by the authoring trainer."""
+    from apps.training.models import CourseLesson
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = trainer_client.delete(f"/api/training/lessons/{lesson.id}/")
+    assert resp.status_code in (200, 204)
+    assert not CourseLesson.objects.filter(id=lesson.id).exists()
+
+
+def test_admin_can_delete_published_lesson_directly(admin_client, trainer_user):
+    """TRN-1: an admin bypasses the gate and may delete published structure."""
+    from apps.training.models import CourseLesson
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = admin_client.delete(f"/api/training/lessons/{lesson.id}/")
+    assert resp.status_code in (200, 204)
+    assert not CourseLesson.objects.filter(id=lesson.id).exists()
+
+
+# ---------------------------------------------------------------------------
 # Live Session Request (Report 3 §7.5/OS.4)
 # ---------------------------------------------------------------------------
 

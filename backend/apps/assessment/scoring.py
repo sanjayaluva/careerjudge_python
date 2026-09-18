@@ -45,6 +45,14 @@ def score_question(
     if question.question_type == "GRID_LIST_SELECTION":
         return _score_grid(question, raw_answer, sub_question_index)
 
+    # FITB single (2a) is text-matched against a list, not option-id matched.
+    # Route it to the fuzzy/list scorer regardless of a stale scoring_type —
+    # the model default is "BINARY", which would send a text answer through the
+    # option-id matcher and always score 0 (QT-1; 00_scoring_rules.json 2a =
+    # BINARY_FUZZY, Mode A). Mirrors the hotspot/grid special-casing above.
+    if question.question_type == "FITB_SINGLE":
+        return _score_binary_fuzzy(question, raw_answer, sub_question_index)
+
     scorer = SCORERS.get(question.scoring_type)
     if not scorer:
         # Default to binary

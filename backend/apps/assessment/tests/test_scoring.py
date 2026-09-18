@@ -20,8 +20,11 @@ from apps.assessment.scoring import (
     score_question_by_section,
 )
 
+from apps.question_bank.models import CorrectAnswer, ResponseOption
+
 from .factories import (
     UserFactory,
+    _make_question,
     get_or_create_role,
     make_fitb_question,
     make_forced_choice_question,
@@ -86,6 +89,42 @@ class TestPartialScoring(ScoringTestBase):
         score, max_score = score_question(self.q, None)
         assert score == 0.0
         assert max_score == 2.0
+
+
+class TestFITBSingleScoring(ScoringTestBase):
+    """QT-1: FITB single (2a) must be scored by list/fuzzy text match, even
+    when the question carries the wrong default scoring_type ('BINARY').
+    Before the fix, a text answer went through the option-id matcher and
+    always scored 0."""
+
+    def setUp(self):
+        self.user = UserFactory.create(role=self.individual_role)
+        # Deliberately use the buggy default scoring_type to prove the
+        # dispatch routes 2a to the fuzzy scorer regardless of it.
+        self.q = _make_question(
+            self.user,
+            "FITB_SINGLE",
+            "BINARY",
+            "FITB single",
+            question_text_1="Capital of France?",
+        )
+        opt = ResponseOption.objects.create(
+            question=self.q, option_type="TEXT", text_value="blank", order=1
+        )
+        CorrectAnswer.objects.create(response_option=opt, answer_text="Paris")
+
+    def test_correct_text_scores_1(self):
+        score, max_score = score_question(self.q, {"answers": ["Paris"]})
+        assert score == 1.0
+        assert max_score == 1.0
+
+    def test_case_insensitive_by_default(self):
+        score, _ = score_question(self.q, {"answers": ["paris"]})
+        assert score == 1.0
+
+    def test_wrong_text_scores_0(self):
+        score, _ = score_question(self.q, {"answers": ["London"]})
+        assert score == 0.0
 
 
 class TestRatingScoring(ScoringTestBase):

@@ -1,0 +1,103 @@
+clause_id,requirement,source_doc,category,status,milestone,implementing_files,covering_tests,notes
+C1,Activation email on admin/bulk user creation,Doc 9 §2.2 / CJ_UC002,SIGNED-DONE,done,,accounts/serializers.py,accounts/tests,Inactive + bulk paths done; default-Active path residual = ADM-1
+C2,n x n profiling mapping-rule table + writable bands (backend),Doc 5 §4.1.2/§4.1.1,SIGNED-DONE,done,,career_profiling/models.py,career_profiling/tests,Backend done; UI = CP-1/CP-2 pending
+C3,Counseling session summary restricted to counsellor+admin,Doc 8 §3.3,SIGNED-DONE,done,,counseling/views.py,counseling/tests/test_counseling.py,
+H1,Exclude target question from discrimination & item-total corr,Doc 2,SIGNED-DONE,done,,question_bank/psychometrics.py,question_bank/tests,Oracle-tested
+H2,All-questions correlation population filter,Doc 2,SIGNED-DONE,done,,question_bank/psychometrics.py,question_bank/tests,
+H3,PMI Max-Mapping denominator (standard + polar HM rank),Doc 5,SIGNED-DONE,done,,career_profiling/,career_profiling/tests,Oracle PMI 95.7/94.6/98.33
+H4,Real Percentile/STEN/STENINE conversions drive report logic,Doc 4 §2.3,SIGNED-DONE,done,,reporting/generation.py,reporting/tests,
+H5,PMI report + PMI-D gap index,Doc 6 §3.3,SIGNED-DONE,done,,reporting/generation.py,reporting/tests,
+H6,Bands targeting FMI/PMI/VMI/raw/PMI-D (backend),Doc 6 §3,SIGNED-DONE,done,,reporting/models.py,reporting/tests,Backend done; UI = REP-3 pending
+H7,Delivery-count random subset,Doc 3 §4.1.1,SIGNED-DONE,done,,assessment/views.py,assessment/tests,Backend done; author UI = ASM-1 pending
+H8,Deletion-request backend (question bank),Doc 1 §4.3,SIGNED-DONE,done,,question_bank/views.py,question_bank/tests,Backend done; approve UI = QB-1 pending
+H9,Post-publish edit/delete request+approval (assessment),Doc 3 §2.2/§2.3,SIGNED-DONE,done,,assessment/views.py,assessment/tests,Backend done; UI = ASM-2 pending
+H10,SME question isolation,Doc 1,SIGNED-DONE,done,,question_bank/views.py,question_bank/tests,
+H11,Trainer edit-gating on published course,Doc 7 §5,SIGNED-PARTIAL,partial,M1,training/views.py,training/tests,Course-level gated; nested levels NOT = TRN-1
+H12,Helpdesk notified on every task type,Doc 9,SIGNED-DONE,done,,notifications/,tasks/tests,
+H13,Effective ModuleRights on /api/me + nav union,User Details,SIGNED-DONE,done,,accounts/views_me.py,accounts/tests,
+H14,Empanelled-only invoice create + invoicing UI,User Details,SIGNED-DONE,done,,invoicing/,invoicing/tests,
+H15,Bookings & follow-ups through payment gateway,Doc 8,SIGNED-DONE,done,,counseling/views.py;payments/services.py,counseling/tests,
+H16,Per-session meeting link + time-gated join + countdown,Doc 8,SIGNED-DONE,done,,counseling/,counseling/tests,
+D3,Per-section/per-question timers (backend),Doc 3 §5.2,SIGNED-DONE,done,,assessment/,assessment/tests,Backend done; duration UI = ASM-3 pending
+PSY-1,Psychometrician filter/run UI,Doc 2 / CJ_UC025,SIGNED-PENDING,pending,M2,question_bank/views.py:665;questionBank.ts:305-339,,Drop download/upload sub-claim (no basis)
+PSY-2,Question detail surfaces all 6 stored indices,Doc 2,SIGNED-PENDING,pending,M2,QuestionDetailPage.tsx:102,,Deviation - low
+CP-1,Standard n x n mapping-rule UI,Doc 5 §4.1.2,SIGNED-PENDING,pending,M2,ProfilingSolutionDetailPage.tsx;careerProfiling.ts:345-359,,
+CP-2,Band-row creation UI (bands currently read-only),Doc 5 §4.1.1/§4.2.1,SIGNED-PENDING,pending,M2,ProfilingSolutionDetailPage.tsx:436-513,,
+CP-3,Define-Band variable picker (not raw section ID),Doc 5 §4.1.1,SIGNED-PENDING,pending,M2,ProfilingSolutionDetailPage.tsx:550-596,,
+REP-1,Report graph/chart layout rendering,Doc 4 §2.2/§3.1.2;Doc 6 §3.1.2,SIGNED-PENDING,pending,M4,generation.py:117-122;ReportDetailPage.tsx:1775,,Not analytics dashboards; sample report 10 is chart-built
+REP-2,Report templates/drag-drop/live preview,Doc 4 §3;Doc 6 §4,SIGNED-PENDING,pending,M4,ReportDetailPage.tsx:1730-1750,,Drop WYSIWYG-everywhere (elective M6B item 4)
+REP-3,Front-end FMI/PMI/VMI/raw/PMI-D band creation,Doc 6 §3,SIGNED-PENDING,pending,M3,reporting.ts:131-142,,
+REP-4,Full profiling-report config UI (toggles/PMI-D order),Doc 6 intro/§3.3.3,SIGNED-PENDING,pending,M3,ReportsPage.tsx:203-214,,Solution-link/edit-form thinly specified
+REP-6,Question-level data input returns data (not empty),Doc 4 §2.3,SIGNED-PENDING,pending,M4,generation.py:245-246,,"Rescoped to M4: question-level data is a feature (per-question score extraction), not a fix-first defect"
+ASM-1,Delivery Count author UI,Doc 3 §4.1.1,SIGNED-PENDING,pending,M2,AssessmentDetailPage.tsx:891-986,,
+ASM-2,Edit/delete request+approval UI,Doc 3 §2.2/§2.3,SIGNED-PENDING,pending,M2,AssessmentDetailPage.tsx:199;assessment.ts:114-123,,Drop mandatory reason input (workflow signed; reason not)
+ASM-3,Per-section/question timer duration UI,Doc 3 §5.2,SIGNED-PENDING,pending,M2,AssessmentDetailPage.tsx:482;assessment.ts:208-217,,
+ASM-4,Section level 3/4 creatable (not hardcoded 1-2),Doc 3 §3 Rule 1,SIGNED-DONE,done,M1,assessment/views.py perform_create derives level,assessment/tests/test_views.py::test_section_level_derived_from_parent_to_depth_4,Level 3/4 now creatable
+ASM-5,Per-level ordering UI (not single global toggle),Doc 3 §5.1,SIGNED-PENDING,pending,M2,EditAssessmentModal:1131-1142,,
+ASM-7,Set-Score UI + rating/paired/rank builders,Doc 3 §4/§4.2,SIGNED-PENDING,pending,M2,assessment.ts:187,,
+ASM-8,Enforce Rule 1 (<=4 levels) + Rule 2 (Q at last level),Doc 3 §3,SIGNED-PENDING,pending,M7,assessment/views.py,,Server-side enforcement
+ASM-9,Full question-review (open Select/Cancel),Doc 3 §4.1,SIGNED-PENDING,pending,M2,AssessmentDetailPage.tsx:709-808,,
+QB-1,Deletion approve/decline queue (remove reason-gate),Doc 1 §4.3 / CJ_UC016-17,SIGNED-PENDING,pending,M2,questionBank.ts:183;views.py:130-162,,Rescoped to M2: backend gate PRESERVED (signed D1); fix is the reason-prompt + approve/decline queue UI = the M2 QB-management screen
+QB-2,Batch activate/inactivate + exposure UI,Doc 1 §4.2/§4.3,SIGNED-PENDING,pending,M2,views.py:439-570;questionBank.ts:268-273,,
+QB-3,Question expiry editable (enables expired filter),Doc 1 §4.3,SIGNED-PENDING,pending,M2,question_bank model/serializer,,Editable field inferred
+QB-5,Server hard-require rating on approve / reason on send-back,Doc 1 §3.2/§3.3,SIGNED-PENDING,pending,M2,question_bank/serializers.py:420-427,,
+QT-1,Type 2a (FITB single) default scoring = list-match not 0,00_scoring_rules.json,SIGNED-DONE,done,M1,assessment/scoring.py score_question FITB_SINGLE route,assessment/tests/test_scoring.py::TestFITBSingleScoring,Routes 2a to fuzzy scorer; 3 new tests
+QT-3,Continuous multi-question rating template,00_question_types_spec.json,SIGNED-PENDING,pending,M2,types 7/8a/8b,,
+QT-4,Hotspot 5b per-click confirm/cancel popup,00_question_types_spec.json,SIGNED-PENDING,pending,M2,SessionPlayerPage.tsx:1395-1617,,Load-bearing for correct 5b scoring
+CNS-1,Session-summary smoothness_reason persisted (field-name fix),Doc 8 §3.3,SIGNED-DONE,done,M1,counseling.ts+CounsellorDashboard.tsx (field rename),counseling/tests/test_counseling.py::test_summary_six_fields,Fixed smoothly_reason->smoothness_reason; test now asserts persistence
+CNS-3,Post-payment received/Helpdesk screen,Doc 8 §2.1,SIGNED-PENDING,pending,M3,counseling/views.py:514,,
+CNS-4,Confirmed-within-6-hours message,Doc 8 §2.1,SIGNED-PENDING,pending,M3,counseling_maintenance.py:77-102,,
+CNS-5,Countdown for proposed follow-up on counselee dashboard,Doc 8 §3.3,SIGNED-PENDING,pending,M3,CounselingPage.tsx:738-766,,
+CNS-8,Feedback readable only by Admin (not counselee),Doc 8 §2.3,SIGNED-DONE,done,M1,counseling/views.py feedback GET admin-only,counseling/tests,Restricted to cj_admin/superuser per §2.3
+ADM-1,Signup email on default (Active) single-create path,Doc 9 §2.2,SIGNED-DONE,done,M1,accounts/serializers.py (send email on every invited create),accounts/tests,Email now sent regardless of is_active
+ADM-2,Concern routing raise + admin inbox,Doc 9 §4,SIGNED-PENDING,pending,M3,tasks concern model/view;tasks.ts:166-171,,Drop in-app resolve (spec = email/phone)
+ADM-3,Task assignment picklist of unassigned upstream tasks,Doc 9 §3.1.2/3,SIGNED-PENDING,pending,M3,TasksPage.tsx:457-465,,
+ADM-4,SME task category/subcategory/type as QB dropdowns,Doc 9 §3.1.1,SIGNED-PENDING,pending,M3,TasksPage.tsx:494-522,,
+TRN-1,Gate nested lesson/topic/session/content edit+delete,Doc 7 §5,SIGNED-DONE,done,M1,training/views.py _CourseStructureEditGuardMixin on 5 nested viewsets,training/tests/test_training.py (4 gating tests),update/partial_update/destroy now gated
+TRN-2,Admin approve/decline UI for course-change requests,Doc 7 §5,SIGNED-PENDING,pending,M3,training.ts:417;427;TrainingCourseDetailPage.tsx:1121,,
+TRN-3,Trainer assignment-report review/score/feedback UI,Doc 7 §2.3.2/§5,SIGNED-PENDING,pending,M3,training.ts:788;801,,Drop approve-late-submission sub-claim
+TRN-5,Student<->trainer messaging surfaced in player,Doc 7 §5/§6,SIGNED-PENDING,pending,M3,training.ts:740;744,,Async messaging not live chat
+TRN-7,Uniform structure gating (create ok; edits admin-gated),Doc 7 §2.2/§5,SIGNED-PENDING,pending,M3,training/views.py:1268;1301,,Do NOT block initial creation
+TRN-8,Trainer views live-session consent list,Doc 7 §5,SIGNED-PENDING,pending,M3,training.ts:824,,
+TRN-10,Content<->assessment interlinking UI,Doc 7 §2.4.1.1,SIGNED-PENDING,pending,M3,training.ts interlink,,
+PLT-1,Messaging module front-end (Send Message),User Details p.1,SIGNED-PENDING,pending,M5,messaging/views.py (backend exists),,Signed per-role right; scope to standard roles
+PLT-3,Pay-for-test gate on start-session,SRS CJ_UC030,SIGNED-PENDING,pending,M5,assessment/models.py;views.start_session,,Reuse Stripe; NOT a cart
+PLT-6a,Contact-Admin UI,User Details p.1;Doc 9 §4,SIGNED-PENDING,pending,M5,messaging/views.py:135-192,,
+PLT-6b,Live Chat (standard Individual User),User Details p.1,SIGNED-PENDING,pending,M5,,,CONFIRMED build - signed overrides earlier do-not-build
+R2-RANK,Rank scoring (rank -> N..1),Report 2 §1,FEEDBACK-R2,done,,assessment/scoring.py:448,assessment/tests/test_scoring.py:117,PRESERVE
+R2-RANKRATE,Rank-then-rate scoring,Report 2 §2,FEEDBACK-R2,done,,assessment/scoring.py:486,assessment/tests/test_scoring.py,PRESERVE
+R2-FC,Forced-choice scoring (selection vs non-selection),Report 2 §3,FEEDBACK-R2,done,,assessment/scoring.py:551;question_bank/validation.py:201,question_bank/tests/test_validation.py:371,PRESERVE
+R2-FC2,Forced-choice two-level scoring,Report 2 §4,FEEDBACK-R2,done,,assessment/scoring.py:594,assessment/tests/test_scoring.py:659,PRESERVE
+R2-PSROUTE,Psychometric option->section routing,Report 2 Common Issue 3,FEEDBACK-R2,done,,assessment/scoring.py:885;assessment/views.py:801;question_bank/models.py:588,assessment/tests/test_scoring.py:477,PRESERVE
+R2-VALID,Option tagging validation (distinct sections; pair rules),Report 2 §1/§2/§3,FEEDBACK-R2,done,,question_bank/validation.py:163-201,question_bank/tests/test_validation.py:287,PRESERVE
+R3-CNS-SLOT,Timeslot edit/delete + booked protection + weeks limit,Report 3 §1.1/§1.2,FEEDBACK-R3,done,,counseling/views.py:281;364,counseling/tests/test_counseling.py:757,PRESERVE
+R3-CNS-TERMS,Explicit terms acceptance + terms/refund display,Report 3 §1.8/§1.9/§1.11,FEEDBACK-R3,done,,counseling/views.py:434;CounselingPage.tsx:269,counseling/tests/test_counseling.py:638,PRESERVE
+R3-CNS-REFUND,Admin-configurable refund thresholds + auto-cancel,Report 3 §1.15/§1.12,FEEDBACK-R3,done,,counseling/models.py:509;512;counseling_maintenance.py,counseling/tests/test_counseling.py:972,PRESERVE
+R3-CNS-CANCEL,Cancel-with-reason (mandatory) + rebook prompt,Report 3 §1.16,FEEDBACK-R3,done,,counseling/views.py:600;CounselingPage.tsx:673,counseling/tests/test_counseling.py:918,PRESERVE - restored 18 Sep per preserve-feedback-updates
+R3-CNS-SUM,6-field session summary,Report 3 §2.4,FEEDBACK-R3,done,,counseling/views.py:734;CounsellorDashboard.tsx:314,counseling/tests/test_counseling.py:718,PRESERVE - CNS-1 field-name fix pending M1
+R3-CNS-FB,8-field feedback form 1-10 scale,Report 3 §2.2,FEEDBACK-R3,done,,counseling/views.py:802;CounselingPage.tsx:632,counseling/tests/test_counseling.py:679,PRESERVE
+R3-CNS-NOTIF,Booking/confirm/cancel/follow-up notifications,Report 3 §1.10/§1.13/§2.6-2.8,FEEDBACK-R3,done,,counseling/signals.py;counseling/views.py:479,counseling/tests/test_counseling.py:608,PRESERVE
+R3-CNS-PROF,Counsellor profile display + category tagging + tab hide,Report 3 §1.7/§1.17/§1.18,FEEDBACK-R3,done,,accounts/serializers.py:388;CounselingPage.tsx:97,counseling/tests/test_counseling.py:852,PRESERVE
+R3-AVATAR,Avatar upload,Report 3 §1.5,FEEDBACK-R3,done,,accounts/views_me.py:56,counseling/tests/test_counseling.py:892,PRESERVE
+R3-TRN-COMPL,Course completion parameters (mandatory-content %),Report 3 §6,FEEDBACK-R3,done,,training/views.py:385;836,training/tests/test_training.py:981,PRESERVE
+R3-TRN-UPDREQ,Course update/delete -> admin approval workflow,Report 3 §7.1/§7.2,FEEDBACK-R3,done,,training/views.py:575;1690;training.ts:386,training/tests/test_training.py:855,PRESERVE
+R3-TRN-LSREQ,Candidate live-session request,Report 3 §7.5/OS.4,FEEDBACK-R3,done,,training/views.py:1790;training/models.py:848,training/tests/test_training.py:947,PRESERVE
+R3-TRN-RESCH,Session reschedule + audit trail,Report 3 §7.4/OL.1-2,FEEDBACK-R3,done,,training/views.py:1497;training/models.py:401,training/tests/test_training.py:1057,PRESERVE
+R3-TRN-ASGN,Assignment mandatory/optional + deadline + late-approval + 0-10 + uploads,Report 3 §3.3/§3.4/§3.6/§3.8,FEEDBACK-R3,done,,training/views.py:1063;1089;1144;training/models.py:571;578,training/tests/test_training.py:533;566,PRESERVE
+R3-TRN-SEQ,Content sequencing / no-skip navigation,Report 3 §5.1,FEEDBACK-R3,done,,training.ts:132;CoursePlayer.tsx:124,,PRESERVE
+R3-TRN-REG,Registration-form snapshot + paid-course checkout,Report 3 §1.1/§1.3,FEEDBACK-R3,done,,training/models.py:483;TrainingPage.tsx:69,training/tests/test_training.py:238;254,PRESERVE
+R3-TRAINER-PERM,Trainers author assessments + QB access,Report 3 §4.1/§4.2,FEEDBACK-R3,done,,accounts/migrations/0009;assessment/views.py:222;question_bank/views.py:242,assessment/tests/test_views.py:493,PRESERVE
+E-ASM-11,Un-publish / return-to-draft,none (no clause),ELECTIVE,backlog,M6,,,No signed basis - wishlist election
+E-QB-4,Bulk full-question template import,none (no clause),ELECTIVE,backlog,M6,,,CJ_UC013 single-question only
+E-PLT-2,Admin payment authorise workflow,none (no clause),ELECTIVE,backlog,M6,,,Deferred corporate
+E-PLT-4,Razorpay-specific SDK/checkout/webhook,none (no gateway named),ELECTIVE,backlog,M6,,,Stripe satisfies make-payment
+E-PLT-7,Invoice PATCH guard + line-item CRUD + CMS MenuItem,none/thin,ELECTIVE,backlog,M6,,,
+E-SRS-1,Password special-char + no-numeric-start policy,none (not in any signed doc),ELECTIVE,backlog,M6,,,
+E-SRS-2,Registration link 48h validity,none (no duration mandated),ELECTIVE,backlog,M6,,,
+E-X3,SME->Reviewer same-domain routing (W1-13),Extra-scope quote item 3,ELECTIVE,backlog,M6B,,,
+E-X4,Rich-text everywhere editor (W9-03),Extra-scope quote item 4,ELECTIVE,backlog,M6B,,,
+E-X5,Question-display options timed/replay/columns (W4-06/07),Extra-scope quote item 5,ELECTIVE,backlog,M6B,,,
+E-X6,Admin-editable policy text (T&C/refund editor),Extra-scope quote item 6,ELECTIVE,backlog,M6B,,,
+E-X7,Assignment depth override-deadlines + multi-format uploads,Extra-scope quote item 7,ELECTIVE,backlog,M6B,,,
+E-X8,Task->question autofill,Extra-scope quote item 8,ELECTIVE,backlog,M6B,,,
+E-X9,Look-and-feel polish (W4-08/W10-02/05),Extra-scope quote item 9,ELECTIVE,backlog,M6B,,,

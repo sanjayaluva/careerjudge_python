@@ -609,6 +609,22 @@ class TestSectionCRUD(AssessmentViewTestBase):
         assert resp.status_code == status.HTTP_201_CREATED
         assert resp.json()["data"]["title"] == "Section 1"
 
+    def test_section_level_derived_from_parent_to_depth_4(self):
+        """ASM-4: the server derives level from the parent (parent.level + 1),
+        so Level 3 and 4 variables are creatable — even when the client sends a
+        wrong/hardcoded level. Doc 3 §3 allows up to four levels."""
+        parent_id = None
+        for expected_level in (1, 2, 3, 4):
+            resp = self.client.post(
+                f"/api/assessments/{self.assessment.id}/sections/",
+                # Deliberately send the wrong level (1) to prove it is ignored.
+                {"title": f"L{expected_level}", "parent": parent_id, "level": 1, "order": 1},
+                format="json",
+            )
+            assert resp.status_code == status.HTTP_201_CREATED, resp.data
+            assert resp.json()["data"]["level"] == expected_level, resp.data
+            parent_id = resp.json()["data"]["id"]
+
     def test_list_sections(self):
         AssessmentSection.objects.create(assessment=self.assessment, title="S1", level=1, order=1)
         AssessmentSection.objects.create(assessment=self.assessment, title="S2", level=1, order=2)

@@ -660,7 +660,13 @@ class AssessmentSectionViewSet(ModelViewSet):
     def perform_create(self, serializer):
         aid = self.kwargs.get("assessment_id")
         assessment = get_object_or_404(Assessment, id=aid)
-        serializer.save(assessment=assessment)
+        # ASM-4: derive the section level from its parent (parent.level + 1)
+        # instead of trusting the client, which hardcoded 1-or-2 and made
+        # Level 3/4 variables uncreatable — which in turn broke level-based
+        # timer resolution. Doc 3 §3 allows up to four variable levels.
+        parent = serializer.validated_data.get("parent")
+        level = parent.level + 1 if parent else 1
+        serializer.save(assessment=assessment, level=level)
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)

@@ -944,7 +944,8 @@ function CreateSectionModal({
             title,
             parent: parentId,
             description,
-            level: parentId ? 2 : 1, // TODO: calculate level from parent
+            // ASM-4: the server derives level from the parent (parent.level + 1),
+            // so Level 3/4 sub-sections are created correctly.
           });
         }}
         className="space-y-4"

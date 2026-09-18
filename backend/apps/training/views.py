@@ -1248,12 +1248,48 @@ class CourseRegistrationViewSet(ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class CourseLessonViewSet(ModelViewSet):
+class _CourseStructureEditGuardMixin:
+    """TRN-1 / Doc 7 §5: gate the default update/partial_update/destroy on the
+    nested course-structure viewsets through the same published-course approval
+    flow as their create actions — so a trainer cannot directly edit or delete a
+    published course's lesson/topic/session/content/assessment structure. Admins
+    and still-draft courses bypass (see _require_course_edit_allowed).
+    Subclasses implement _course_for(obj)."""
+
+    def _course_for(self, obj):  # pragma: no cover - overridden
+        raise NotImplementedError
+
+    def _guard_structure_edit(self, request):
+        return _require_course_edit_allowed(request, self._course_for(self.get_object()))
+
+    def update(self, request, *args, **kwargs):
+        denied = self._guard_structure_edit(request)
+        if denied:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        denied = self._guard_structure_edit(request)
+        if denied:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        denied = self._guard_structure_edit(request)
+        if denied:
+            return denied
+        return super().destroy(request, *args, **kwargs)
+
+
+class CourseLessonViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for lessons within a course."""
 
     queryset = CourseLesson.objects.select_related("course")
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = CourseLessonSerializer
+
+    def _course_for(self, obj):
+        return obj.course
 
     @action(detail=True, methods=["get", "post"])
     def topics(self, request, pk=None):
@@ -1280,12 +1316,15 @@ class CourseLessonViewSet(ModelViewSet):
         )
 
 
-class LessonTopicViewSet(ModelViewSet):
+class LessonTopicViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for topics within a lesson."""
 
     queryset = LessonTopic.objects.select_related("lesson")
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = LessonTopicSerializer
+
+    def _course_for(self, obj):
+        return obj.lesson.course
 
     @action(detail=True, methods=["get", "post"])
     def sessions(self, request, pk=None):
@@ -1311,12 +1350,15 @@ class LessonTopicViewSet(ModelViewSet):
         )
 
 
-class TopicSessionViewSet(ModelViewSet):
+class TopicSessionViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for sessions within a topic."""
 
     queryset = TopicSession.objects.select_related("topic")
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = TopicSessionSerializer
+
+    def _course_for(self, obj):
+        return obj.topic.lesson.course
 
     @action(detail=True, methods=["get", "post"])
     def contents(self, request, pk=None):
@@ -1571,12 +1613,15 @@ class LiveSessionViewSet(ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class SessionContentViewSet(ModelViewSet):
+class SessionContentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for session content + interactive questions (Timeliner)."""
 
     queryset = SessionContent.objects.select_related("session")
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = SessionContentSerializer
+
+    def _course_for(self, obj):
+        return obj.session.topic.lesson.course
 
     @action(detail=True, methods=["get", "post"])
     def interactive_questions(self, request, pk=None):
@@ -1619,7 +1664,7 @@ class SessionContentViewSet(ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class CourseAssessmentViewSet(ModelViewSet):
+class CourseAssessmentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for course assessments (SRS §2.4).
 
     Allows trainers to update and delete linked assessments, not just
@@ -1630,6 +1675,9 @@ class CourseAssessmentViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = CourseAssessmentSerializer
     http_method_names = ["get", "head", "options", "patch", "delete", "post"]
+
+    def _course_for(self, obj):
+        return obj.course
 
 
 # ---------------------------------------------------------------------------
