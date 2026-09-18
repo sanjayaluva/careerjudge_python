@@ -311,8 +311,10 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
     def lessons(self, request, pk=None):
         """List or add lessons to a course (SRS §2.2).
 
-        Per SRS §5: course structure modification is admin-only. Trainers
-        can view but not create/modify lessons, topics, or sessions.
+        TRN-7 / §5: lesson creation is gated the same way as topic/session/
+        content creation — a trainer may build structure while the course is
+        draft (§2.2); once published, structure changes go through the admin
+        approval flow (see _require_course_edit_allowed). Admins always pass.
         """
         course = self.get_object()
         if request.method == "GET":
@@ -321,21 +323,9 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 {"message": "OK", "data": CourseLessonSerializer(lessons, many=True).data},
                 status=status.HTTP_200_OK,
             )
-        # POST: admin-only (SRS §5)
-        user_role_name = request.user.role.name if request.user.role_id else None
-        if user_role_name != "cj_admin":
-            return Response(
-                {
-                    "error": {
-                        "code": "forbidden",
-                        "message": (
-                            "Course structure can only be modified by CJ Admin (SRS §5). "
-                            "Trainers may modify assignments and main session contents only."
-                        ),
-                    }
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        denied = _require_course_edit_allowed(request, course)
+        if denied:
+            return denied
         serializer = CourseLessonSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(course=course, order=_next_order(course.lessons))

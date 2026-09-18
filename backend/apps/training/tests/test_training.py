@@ -370,16 +370,27 @@ def test_add_lesson_to_course(admin_client, trainer_user):
     assert resp.data["data"]["title"] == "Lesson 1"
 
 
-def test_trainer_cannot_add_lesson(trainer_client, trainer_user):
-    """Per SRS §5: 'Course structure cannot be modified by trainer (Admin only)'."""
-    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
+def test_trainer_lesson_create_gated_like_other_structure(trainer_client, trainer_user):
+    """TRN-7 / §5: lesson creation is gated the same as topic/session/content —
+    a trainer may build a DRAFT course's structure, but a PUBLISHED course
+    requires admin approval (uniform gating)."""
+    draft = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
     resp = trainer_client.post(
-        f"/api/training/courses/{course.id}/lessons/",
+        f"/api/training/courses/{draft.id}/lessons/",
         {"title": "Lesson 1", "week_number": 1, "order": 1},
         format="json",
     )
-    assert resp.status_code == 403
-    assert resp.data["error"]["code"] == "forbidden"
+    assert resp.status_code == 201, resp.data
+
+    published = TrainingCourse.objects.create(
+        title="P", created_by=trainer_user, status="published"
+    )
+    resp2 = trainer_client.post(
+        f"/api/training/courses/{published.id}/lessons/",
+        {"title": "Lesson 2", "week_number": 1, "order": 1},
+        format="json",
+    )
+    assert resp2.status_code == 403
 
 
 def test_add_live_session_to_course(trainer_client, trainer_user):

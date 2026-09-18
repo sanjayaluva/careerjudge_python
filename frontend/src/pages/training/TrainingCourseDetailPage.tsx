@@ -23,6 +23,7 @@ import {
   CardTitle,
   Input,
   Label,
+  Modal,
   Spinner,
   Table,
   TableBody,
@@ -51,6 +52,7 @@ import {
   declineCourseUpdateRequest,
   listMyCourses,
   notifyLiveSessionStudents,
+  listLiveSessionConsents,
   publishCourse,
   registerForCourse,
   requestCourseUpdate,
@@ -398,6 +400,7 @@ export default function TrainingCourseDetailPage() {
                               >
                                 Notify
                               </Button>
+                              <ConsentListButton liveSessionId={s.id} />
                               <RescheduleLiveSessionButton liveSessionId={s.id} courseId={cid} />
                               <DeleteLiveSessionButton liveSessionId={s.id} courseId={cid} />
                             </div>
@@ -892,6 +895,51 @@ function AddAssessmentForm({ courseId }: { courseId: number }) {
 // ---------------------------------------------------------------------------
 // Delete buttons for Live Sessions + Assessments
 // ---------------------------------------------------------------------------
+
+// TRN-8 (§5): trainer views the live-session consent list (who will attend).
+function ConsentListButton({ liveSessionId }: { liveSessionId: number }) {
+  const [open, setOpen] = useState(false);
+  const { data: consents, isLoading } = useQuery({
+    queryKey: ["training", "live-session-consents", liveSessionId],
+    queryFn: () => listLiveSessionConsents(liveSessionId),
+    enabled: open,
+  });
+  const list = consents ?? [];
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        Consent list
+      </Button>
+      {open && (
+        <Modal open onClose={() => setOpen(false)} title="Live-session consent list" size="sm">
+          {isLoading ? (
+            <div className="flex justify-center py-6">
+              <Spinner />
+            </div>
+          ) : list.length === 0 ? (
+            <p className="py-4 text-center text-sm text-slate-500">No responses yet.</p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {list.map((c) => (
+                <li
+                  key={c.id}
+                  className="flex items-center justify-between rounded border border-slate-100 p-2"
+                >
+                  <span className="text-slate-700">
+                    {c.student_name || c.student_email || `Student #${c.student}`}
+                  </span>
+                  <Badge variant={c.status === "consented" ? "success" : "danger"}>
+                    {c.status}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Modal>
+      )}
+    </>
+  );
+}
 
 function DeleteLiveSessionButton({
   liveSessionId,
