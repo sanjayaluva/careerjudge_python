@@ -20,7 +20,7 @@ H15,Bookings & follow-ups through payment gateway,Doc 8,SIGNED-DONE,done,,counse
 H16,Per-session meeting link + time-gated join + countdown,Doc 8,SIGNED-DONE,done,,counseling/,counseling/tests,
 D3,Per-section/per-question timers (backend),Doc 3 §5.2,SIGNED-DONE,done,,assessment/,assessment/tests,Backend done; duration UI = ASM-3 pending
 PSY-1,Psychometrician filter/run UI,Doc 2 / CJ_UC025,SIGNED-DONE,done,M2,PsychometricAnalysisPage.tsx + route + QB entry point,tsc; vitest,M2: filter/run analysis screen; download/upload sub-claim dropped (no basis)
-PSY-2,Question detail surfaces all 6 stored indices,Doc 2,SIGNED-PENDING,pending,M2,QuestionDetailPage.tsx:102,,Deviation - low
+PSY-2,Question detail surfaces all 6 stored indices,Doc 2,SIGNED-DONE,done,M2,questionBank.ts QuestionDetail 6 indices; QuestionDetailPage display list,tsc; vitest,M2: all 6 indices shown
 CP-1,Standard n x n mapping-rule UI,Doc 5 §4.1.2,SIGNED-DONE,done,M2,ProfilingSolutionDetailPage StandardMappingRulesTab (n×n grid); career_profiling/views.py mapping_rules upsert,tsc; career_profiling 45 pass,M2: n×n standard mapping grid + backend upsert
 CP-2,Band-row creation UI (bands currently read-only),Doc 5 §4.1.1/§4.2.1,SIGNED-DONE,done,M2,ProfilingSolutionDetailPage BandsTab + CreateBandRowModal (createBand),tsc; vitest,M2: band-row creation per definition
 CP-3,Define-Band variable picker (not raw section ID),Doc 5 §4.1.1,SIGNED-DONE,done,M2,ProfilingSolutionDetailPage CreateBandDefinitionModal section picker (listSections),tsc; vitest,M2: variable picker replaces raw Section ID
@@ -39,7 +39,7 @@ ASM-8,Enforce Rule 1 (<=4 levels) + Rule 2 (Q at last level),Doc 3 §3,SIGNED-PE
 ASM-9,Full question-review (open Select/Cancel),Doc 3 §4.1,SIGNED-PENDING,pending,M2,AssessmentDetailPage.tsx:709-808,,
 QB-1,Deletion approve/decline queue (remove reason-gate),Doc 1 §4.3 / CJ_UC016-17,SIGNED-DONE,done,M2,questionBank.ts delete+deletion-request client; QuestionBankPage + CategoryManager reason modals + admin queue,tsc; vitest,M2: reason-on-delete + admin approve/decline queue (questions & categories); backend reason-gate PRESERVED (signed)
 QB-2,Batch activate/inactivate + exposure UI,Doc 1 §4.2/§4.3,SIGNED-DONE,done,M2,QuestionBankPage.tsx selection + batch bar (batchSetQuestionStatus/ExposureLimit),tsc; vitest,M2: batch activate/inactivate + exposure UI for psychometrician/admin
-QB-3,Question expiry editable (enables expired filter),Doc 1 §4.3,SIGNED-PENDING,pending,M2,question_bank model/serializer,,Editable field inferred
+QB-3,Question expiry editable (enables expired filter),Doc 1 §4.3,SIGNED-DONE,done,M2,QuestionEditorPage expires_at date field,tsc; vitest,M2: expiry editable
 QB-5,Server hard-require rating on approve / reason on send-back,Doc 1 §3.2/§3.3,SIGNED-PENDING,pending,M2,question_bank/serializers.py:420-427,,
 QT-1,Type 2a (FITB single) default scoring = list-match not 0,00_scoring_rules.json,SIGNED-DONE,done,M1,assessment/scoring.py score_question FITB_SINGLE route,assessment/tests/test_scoring.py::TestFITBSingleScoring,Routes 2a to fuzzy scorer; 3 new tests
 QT-3,Continuous multi-question rating template,00_question_types_spec.json,SIGNED-PENDING,pending,M2,types 7/8a/8b,,
