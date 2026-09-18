@@ -67,6 +67,7 @@ export default function QuestionBankPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
+  const [assignedToMe, setAssignedToMe] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
@@ -86,6 +87,7 @@ export default function QuestionBankPage() {
       typeFilter,
       statusFilter,
       mineOnly,
+      assignedToMe,
       categoryFilter,
     ],
     queryFn: () =>
@@ -95,6 +97,7 @@ export default function QuestionBankPage() {
         ...(typeFilter ? { question_type: typeFilter } : {}),
         ...(statusFilter ? { status: statusFilter } : {}),
         ...(mineOnly ? { mine: true } : {}),
+        ...(assignedToMe ? { assignedToMe: true } : {}),
         ...(categoryFilter ? { category: categoryFilter } : {}),
       }),
   });
@@ -351,6 +354,20 @@ export default function QuestionBankPage() {
               />
               My questions
             </label>
+            {canReviewContent && (
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={assignedToMe}
+                  onChange={(e) => {
+                    setAssignedToMe(e.target.checked);
+                    setPage(1);
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+                />
+                Assigned to me
+              </label>
+            )}
             {categoryFilter && (
               <Badge variant="primary" className="gap-1">
                 Filtered by category

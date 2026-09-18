@@ -171,6 +171,9 @@ class QuestionListSerializer(serializers.ModelSerializer):
     scoring_type_label = serializers.CharField(source="get_scoring_type_display", read_only=True)
     is_psychometric = serializers.BooleanField(read_only=True)
     question_category = serializers.CharField(read_only=True)
+    assigned_reviewer_name = serializers.CharField(
+        source="assigned_reviewer.full_name", read_only=True, default=None
+    )
 
     class Meta:
         model = Question
@@ -185,6 +188,8 @@ class QuestionListSerializer(serializers.ModelSerializer):
             "category_name",
             "status",
             "status_label",
+            "assigned_reviewer",
+            "assigned_reviewer_name",
             "scoring_type",
             "scoring_type_label",
             "difficulty_level",

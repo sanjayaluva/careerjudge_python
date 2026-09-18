@@ -68,6 +68,15 @@ class Category(models.Model):
             node = node.parent
         return " > ".join(reversed(parts))
 
+    @property
+    def domain_root(self) -> "Category":
+        """The top-level ancestor category — treated as the 'domain' for
+        reviewer routing (E-X3)."""
+        node = self
+        while node.parent_id:
+            node = node.parent
+        return node
+
 
 # ---------------------------------------------------------------------------
 # Question (UC013, UC016, UC017) — supports 21 question types
@@ -368,6 +377,16 @@ class Question(models.Model):
 
     # --- Review workflow ---
     status = models.CharField(_("status"), max_length=50, choices=STATUS_CHOICES, default="draft")
+    # E-X3: reviewer this question was routed to on submission (same-domain
+    # routing). Null until submitted, or when no domain reviewer is available.
+    assigned_reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="assigned_review_questions",
+        null=True,
+        blank=True,
+        help_text=_("Reviewer routed this question for content review (same-domain routing)."),
+    )
     exposure_limit = models.PositiveIntegerField(
         _("exposure limit"),
         null=True,

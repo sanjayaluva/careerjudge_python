@@ -207,6 +207,8 @@ export interface QuestionListParams {
   status?: string;
   difficulty?: string;
   mine?: boolean;
+  /** E-X3: a reviewer's routed queue (questions assigned to them). */
+  assignedToMe?: boolean;
   /** Periodic QB updation (D1 §4.3): "true" = expired only, "false" = valid/unset only. */
   expired?: boolean;
 }
@@ -226,6 +228,7 @@ export function listQuestions(params: QuestionListParams = {}): Promise<{
       ...(params.status ? { status: params.status } : {}),
       ...(params.difficulty ? { difficulty: params.difficulty } : {}),
       ...(params.mine ? { mine: "true" } : {}),
+      ...(params.assignedToMe ? { assigned: "me" } : {}),
       ...(params.expired !== undefined ? { expired: params.expired ? "true" : "false" } : {}),
     },
   });
