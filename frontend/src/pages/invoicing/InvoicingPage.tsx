@@ -5,6 +5,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
   Badge,
@@ -121,7 +122,14 @@ export default function InvoicingPage() {
                 : "Track invoice status across the platform."}
             </p>
           </div>
-          {canCreate && <Button onClick={() => setCreateOpen(true)}>New invoice</Button>}
+          <div className="flex gap-2">
+            {isSuperAdmin && (
+              <Link to="/admin/payments">
+                <Button variant="outline">Authorise payments</Button>
+              </Link>
+            )}
+            {canCreate && <Button onClick={() => setCreateOpen(true)}>New invoice</Button>}
+          </div>
         </div>
 
         <Tabs defaultValue="mine">

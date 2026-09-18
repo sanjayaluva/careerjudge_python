@@ -20,11 +20,18 @@ from rest_framework.viewsets import ModelViewSet
 from .models import Payment, PaymentSettings
 from .serializers import PaymentSerializer
 from .services import (
+    _update_module_payment_status,
     create_stripe_checkout_session,
     get_or_create_payment,
     handle_stripe_webhook,
     verify_stripe_payment,
 )
+
+
+def _is_payments_admin(user) -> bool:
+    if user.is_superuser:
+        return True
+    return user.role_id is not None and user.role.name == "cj_admin"
 
 
 class PaymentViewSet(ModelViewSet):
@@ -198,6 +205,69 @@ class PaymentViewSet(ModelViewSet):
         payments = self.get_queryset().order_by("-created_at")
         return Response(
             {"message": "OK", "data": PaymentSerializer(payments, many=True).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["get"])
+    def pending(self, request):
+        """Admin payment-authorise workflow (E-PLT-2): list payments awaiting
+        manual authorisation (e.g. offline / manual-gateway payments)."""
+        if not _is_payments_admin(request.user):
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can view pending payments."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        payments = Payment.objects.filter(status="pending").select_related("user").order_by(
+            "-created_at"
+        )
+        return Response(
+            {"message": "OK", "data": PaymentSerializer(payments, many=True).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"])
+    def authorise(self, request, pk=None):
+        """Admin payment-authorise workflow (E-PLT-2): CJ Admin manually
+        authorises a pending payment (offline transfer, cash, manual gateway),
+        marking it paid and propagating that to the linked module so the
+        candidate/student/counselee gets access."""
+        if not _is_payments_admin(request.user):
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can authorise payments."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        payment = Payment.objects.filter(pk=pk).first()
+        if not payment:
+            return Response(
+                {"error": {"code": "not_found", "message": "Payment not found."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if payment.status in ("paid", "free"):
+            return Response(
+                {"message": "Payment already settled.", "data": {"status": payment.status}},
+                status=status.HTTP_200_OK,
+            )
+        if payment.status not in ("pending", "failed"):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": f"Cannot authorise a payment in status '{payment.status}'.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from django.utils import timezone
+
+        payment.status = "paid"
+        payment.paid_at = timezone.now()
+        note = (request.data.get("reference") or "manual-authorisation").strip()
+        payment.provider = payment.provider or "manual"
+        payment.provider_session_id = payment.provider_session_id or note
+        payment.save(update_fields=["status", "paid_at", "provider", "provider_session_id"])
+        _update_module_payment_status(payment)
+        return Response(
+            {"message": "Payment authorised.", "data": PaymentSerializer(payment).data},
             status=status.HTTP_200_OK,
         )
 

@@ -27,6 +27,7 @@ import TasksPage from "@/pages/tasks/TasksPage";
 import TaskDetailPage from "@/pages/tasks/TaskDetailPage";
 import InvoicingPage from "@/pages/invoicing/InvoicingPage";
 import { PaymentSuccessPage, PaymentCancelPage } from "@/pages/payments/PaymentResultPages";
+import PendingPaymentsPage from "@/pages/payments/PendingPaymentsPage";
 import { PublicHomepage } from "@/pages/PublicHomepage";
 import ProfilePage from "@/pages/account/ProfilePage";
 import SettingsPage from "@/pages/account/SettingsPage";
@@ -183,6 +184,7 @@ export default function App() {
                 <Route path="live-chat" element={<LiveChatPage />} />
                 <Route path="tasks/:id" element={<TaskDetailPage />} />
                 <Route path="invoicing" element={<InvoicingPage />} />
+                <Route path="admin/payments" element={<PendingPaymentsPage />} />
               </Route>
 
               {/* Fullscreen session player — outside DashboardShell so the

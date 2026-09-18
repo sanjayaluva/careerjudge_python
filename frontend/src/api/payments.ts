@@ -45,3 +45,27 @@ export function getPaymentStatus(module: string, itemId: number): Promise<Paymen
 export function verifyPayment(sessionId: string): Promise<{ status: string }> {
   return apiPost<{ status: string }>(`${BASE}/verify/`, { session_id: sessionId });
 }
+
+export interface Payment {
+  id: number;
+  user: number;
+  module: string;
+  item_id: number;
+  amount: string;
+  currency: string;
+  status: string;
+  provider: string;
+  description: string;
+  created_at: string;
+  paid_at: string | null;
+}
+
+/** E-PLT-2: admin lists payments awaiting manual authorisation. */
+export function listPendingPayments(): Promise<Payment[]> {
+  return apiGet<Payment[]>(`${BASE}/pending/`);
+}
+
+/** E-PLT-2: admin manually authorises (marks paid) a pending payment. */
+export function authorisePayment(id: number, reference?: string): Promise<Payment> {
+  return apiPost<Payment>(`${BASE}/${id}/authorise/`, { reference: reference ?? "" });
+}
