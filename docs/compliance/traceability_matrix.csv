@@ -19,7 +19,7 @@ H14,Empanelled-only invoice create + invoicing UI,User Details,SIGNED-DONE,done,
 H15,Bookings & follow-ups through payment gateway,Doc 8,SIGNED-DONE,done,,counseling/views.py;payments/services.py,counseling/tests,
 H16,Per-session meeting link + time-gated join + countdown,Doc 8,SIGNED-DONE,done,,counseling/,counseling/tests,
 D3,Per-section/per-question timers (backend),Doc 3 §5.2,SIGNED-DONE,done,,assessment/,assessment/tests,Backend done; duration UI = ASM-3 pending
-PSY-1,Psychometrician filter/run UI,Doc 2 / CJ_UC025,SIGNED-PENDING,pending,M2,question_bank/views.py:665;questionBank.ts:305-339,,Drop download/upload sub-claim (no basis)
+PSY-1,Psychometrician filter/run UI,Doc 2 / CJ_UC025,SIGNED-DONE,done,M2,PsychometricAnalysisPage.tsx + route + QB entry point,tsc; vitest,M2: filter/run analysis screen; download/upload sub-claim dropped (no basis)
 PSY-2,Question detail surfaces all 6 stored indices,Doc 2,SIGNED-PENDING,pending,M2,QuestionDetailPage.tsx:102,,Deviation - low
 CP-1,Standard n x n mapping-rule UI,Doc 5 §4.1.2,SIGNED-DONE,done,M2,ProfilingSolutionDetailPage StandardMappingRulesTab (n×n grid); career_profiling/views.py mapping_rules upsert,tsc; career_profiling 45 pass,M2: n×n standard mapping grid + backend upsert
 CP-2,Band-row creation UI (bands currently read-only),Doc 5 §4.1.1/§4.2.1,SIGNED-DONE,done,M2,ProfilingSolutionDetailPage BandsTab + CreateBandRowModal (createBand),tsc; vitest,M2: band-row creation per definition
