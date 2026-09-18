@@ -24,6 +24,7 @@ import {
   Input,
   Label,
   Modal,
+  RichText,
   Spinner,
   Table,
   TableBody,
@@ -255,7 +256,8 @@ export default function TrainingCourseDetailPage() {
                   <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
                     Description
                   </div>
-                  <p className="mt-1 text-sm text-slate-900">{course.description}</p>
+                  {/* E-X4: render the rich-text course description. */}
+                  <RichText html={course.description} className="mt-1 text-sm text-slate-900" />
                 </div>
               )}
 

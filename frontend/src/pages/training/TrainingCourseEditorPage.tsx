@@ -30,6 +30,7 @@ import {
   Label,
   Spinner,
   useToast,
+  WysiwygEditor,
 } from "@/components/ui";
 import {
   COURSE_TYPES,
@@ -302,14 +303,8 @@ function CourseForm({
 
           <div>
             <Label htmlFor="description">Description</Label>
-            <textarea
-              id="description"
-              rows={3}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Detailed course description..."
-            />
+            {/* E-X4: rich-text course description. */}
+            <WysiwygEditor value={description} onChange={setDescription} minHeight={120} />
           </div>
 
           <div>
