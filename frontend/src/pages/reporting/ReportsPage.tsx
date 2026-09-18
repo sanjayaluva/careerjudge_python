@@ -30,6 +30,7 @@ import {
   STAT_CONVERSIONS,
 } from "@/api/reporting";
 import { listAssessments } from "@/api/assessment";
+import { listSolutions } from "@/api/careerProfiling";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -183,10 +184,23 @@ function CreateReportModal({
   const [assessmentId, setAssessmentId] = useState("");
   const [dataInputLevel, setDataInputLevel] = useState("level1");
   const [statConversion, setStatConversion] = useState("percentage");
+  // Profiling-scope configuration (SRS 06 §3.1–3.4).
+  const [solutionId, setSolutionId] = useState("");
+  const [includeRawSummary, setIncludeRawSummary] = useState(true);
+  const [includeFmi, setIncludeFmi] = useState(false);
+  const [includePmi, setIncludePmi] = useState(false);
+  const [includeVmi, setIncludeVmi] = useState(false);
+  const [pmiDFirst, setPmiDFirst] = useState("");
+  const [pmiDSecond, setPmiDSecond] = useState("");
 
   const { data: assessments } = useQuery({
     queryKey: ["assessments", "for-report"],
     queryFn: () => listAssessments({ status: "published" }),
+  });
+  const { data: solutions } = useQuery({
+    queryKey: ["profiling", "solutions", "for-report"],
+    queryFn: () => listSolutions({ status: "published" }),
+    enabled: scope === "profiling",
   });
 
   return (
@@ -210,6 +224,15 @@ function CreateReportModal({
           };
           if (scope === "general" && assessmentId) {
             payload.assessment = Number(assessmentId);
+          }
+          if (scope === "profiling") {
+            if (solutionId) payload.profiling_solution = Number(solutionId);
+            payload.include_raw_summary = includeRawSummary;
+            payload.include_fmi = includeFmi;
+            payload.include_pmi = includePmi;
+            payload.include_vmi = includeVmi;
+            payload.pmi_d_first_assessment = pmiDFirst.trim();
+            payload.pmi_d_second_assessment = pmiDSecond.trim();
           }
           onSubmit(payload);
         }}
@@ -287,6 +310,89 @@ function CreateReportModal({
             </select>
           </div>
         )}
+        {scope === "profiling" &&
+          (() => {
+            const selectedSolution = (solutions?.results ?? []).find(
+              (s) => String(s.id) === solutionId,
+            );
+            const labels = (selectedSolution?.selected_assessments ?? [])
+              .map((a) => a.label)
+              .filter(Boolean);
+            return (
+              <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-4">
+                <div>
+                  <Label htmlFor="r-solution" required>
+                    Profiling solution
+                  </Label>
+                  <select
+                    id="r-solution"
+                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    value={solutionId}
+                    onChange={(e) => {
+                      setSolutionId(e.target.value);
+                      setPmiDFirst("");
+                      setPmiDSecond("");
+                    }}
+                    required
+                  >
+                    <option value="">Select a profiling solution...</option>
+                    {(solutions?.results ?? []).map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <p className="mb-1 text-sm font-medium text-slate-700">Include indices</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        ["Raw summary %", includeRawSummary, setIncludeRawSummary],
+                        ["FMI (Final Match Index)", includeFmi, setIncludeFmi],
+                        ["PMI (Profile Match Index)", includePmi, setIncludePmi],
+                        ["VMI (Variable Match Index)", includeVmi, setIncludeVmi],
+                      ] as [string, boolean, (v: boolean) => void][]
+                    ).map(([label, val, set]) => (
+                      <label key={label} className="flex items-center gap-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={val}
+                          onChange={(e) => set(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1 text-sm font-medium text-slate-700">
+                    PMI-D gap order (A1PMI − A2PMI)
+                  </p>
+                  <p className="mb-2 text-xs text-slate-500">
+                    Optional. Name the two assessments whose PMI is subtracted to form the gap index.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <PmiDField
+                      id="r-pmid-1"
+                      placeholder="A1 (minuend)"
+                      value={pmiDFirst}
+                      onChange={setPmiDFirst}
+                      options={labels}
+                    />
+                    <PmiDField
+                      id="r-pmid-2"
+                      placeholder="A2 (subtrahend)"
+                      value={pmiDSecond}
+                      onChange={setPmiDSecond}
+                      options={labels}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <Label htmlFor="r-level">Data input level</Label>
@@ -329,5 +435,44 @@ function CreateReportModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+/**
+ * PMI-D assessment picker: a dropdown of the solution's assessment labels when
+ * known, falling back to a free-text field (SRS 06 §3.3.3).
+ */
+function PmiDField({
+  id,
+  placeholder,
+  value,
+  onChange,
+  options,
+}: {
+  id: string;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  if (options.length > 0) {
+    return (
+      <select
+        id={id}
+        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  return (
+    <Input id={id} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
   );
 }

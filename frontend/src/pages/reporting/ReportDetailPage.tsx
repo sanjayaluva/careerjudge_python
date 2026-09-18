@@ -21,6 +21,7 @@ import {
   CardTitle,
   Input,
   Label,
+  Modal,
   Spinner,
   Table,
   TableBody,
@@ -35,6 +36,8 @@ import {
   useToast,
 } from "@/components/ui";
 import {
+  BAND_TARGET_TYPES,
+  type BandTargetType,
   createBand,
   createCode,
   createCutoff,
@@ -58,8 +61,10 @@ import {
   SECTION_TYPES,
   STAT_CONVERSIONS,
   selectProfilingData,
+  updateReport,
   type GroupReportData,
   type ProfilingSelectionResult,
+  type Report,
 } from "@/api/reporting";
 import { listSections as listAssessmentSections, listSessions } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
@@ -79,6 +84,7 @@ export default function ReportDetailPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const canManage = ["cj_admin", "psychometrician", "counsellor"].includes(user?.role ?? "");
+  const [editOpen, setEditOpen] = useState(false);
 
   const { data: report, isLoading } = useQuery({
     queryKey: [...REPORT_KEY, rid],
@@ -242,12 +248,30 @@ export default function ReportDetailPage() {
                     {report.include_fmi && <Badge variant="outline">FMI</Badge>}
                     {report.include_pmi && <Badge variant="outline">PMI</Badge>}
                     {report.include_vmi && <Badge variant="outline">VMI</Badge>}
+                    {!report.include_raw_summary &&
+                      !report.include_fmi &&
+                      !report.include_pmi &&
+                      !report.include_vmi && <span className="text-sm text-slate-400">None</span>}
                   </div>
+                  {(report.pmi_d_first_assessment || report.pmi_d_second_assessment) && (
+                    <div className="mt-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        PMI-D gap order
+                      </div>
+                      <p className="mt-1 text-sm text-slate-900">
+                        {report.pmi_d_first_assessment || "—"} PMI −{" "}
+                        {report.pmi_d_second_assessment || "—"} PMI
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
               {canManage && report.status === "draft" && (
-                <div className="mt-6 flex justify-end border-t border-slate-100 pt-4">
+                <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
+                  <Button variant="outline" onClick={() => setEditOpen(true)}>
+                    Edit configuration
+                  </Button>
                   <Button
                     onClick={() => publishMutation.mutate()}
                     loading={publishMutation.isPending}
@@ -311,7 +335,128 @@ export default function ReportDetailPage() {
           </TabsContent>
         )}
       </Tabs>
+      {editOpen && (
+        <EditConfigModal report={report} onClose={() => setEditOpen(false)} />
+      )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit Configuration Modal (REP-4) — profiling data inputs, PMI-D order,
+// solution link, and shared report metadata (SRS 06 §3.1–3.4)
+// ---------------------------------------------------------------------------
+
+function EditConfigModal({ report, onClose }: { report: Report; onClose: () => void }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const isProfiling = report.scope === "profiling";
+  const [description, setDescription] = useState(report.description ?? "");
+  const [includeRawSummary, setIncludeRawSummary] = useState(report.include_raw_summary);
+  const [includeFmi, setIncludeFmi] = useState(report.include_fmi);
+  const [includePmi, setIncludePmi] = useState(report.include_pmi);
+  const [includeVmi, setIncludeVmi] = useState(report.include_vmi);
+  const [pmiDFirst, setPmiDFirst] = useState(report.pmi_d_first_assessment ?? "");
+  const [pmiDSecond, setPmiDSecond] = useState(report.pmi_d_second_assessment ?? "");
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const payload: Record<string, unknown> = { description };
+      if (isProfiling) {
+        payload.include_raw_summary = includeRawSummary;
+        payload.include_fmi = includeFmi;
+        payload.include_pmi = includePmi;
+        payload.include_vmi = includeVmi;
+        payload.pmi_d_first_assessment = pmiDFirst.trim();
+        payload.pmi_d_second_assessment = pmiDSecond.trim();
+      }
+      return updateReport(report.id, payload);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [...REPORT_KEY, report.id] });
+      toast.success("Configuration updated.");
+      onClose();
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const toggles: [string, boolean, (v: boolean) => void][] = [
+    ["Raw summary %", includeRawSummary, setIncludeRawSummary],
+    ["FMI (Final Match Index)", includeFmi, setIncludeFmi],
+    ["PMI (Profile Match Index)", includePmi, setIncludePmi],
+    ["VMI (Variable Match Index)", includeVmi, setIncludeVmi],
+  ];
+
+  return (
+    <Modal open onClose={onClose} title="Edit report configuration" size="md">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          mutation.mutate();
+        }}
+        className="space-y-4"
+      >
+        <div>
+          <Label htmlFor="ec-desc">Description</Label>
+          <textarea
+            id="ec-desc"
+            rows={2}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+        {isProfiling && (
+          <>
+            <div>
+              <p className="mb-1 text-sm font-medium text-slate-700">Include indices</p>
+              <div className="grid grid-cols-2 gap-2">
+                {toggles.map(([label, val, set]) => (
+                  <label key={label} className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={val}
+                      onChange={(e) => set(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-medium text-slate-700">
+                PMI-D gap order (A1PMI − A2PMI)
+              </p>
+              <p className="mb-2 text-xs text-slate-500">
+                Name the two assessments whose PMI is subtracted to form the gap index. Leave blank
+                to omit PMI-D.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  placeholder="A1 (minuend)"
+                  value={pmiDFirst}
+                  onChange={(e) => setPmiDFirst(e.target.value)}
+                />
+                <Input
+                  placeholder="A2 (subtrahend)"
+                  value={pmiDSecond}
+                  onChange={(e) => setPmiDSecond(e.target.value)}
+                />
+              </div>
+            </div>
+          </>
+        )}
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={mutation.isPending}>
+            Save changes
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -1122,7 +1267,9 @@ function BandsConfigTab({
     queryFn: () => listBands(reportId),
   });
   const { data: sections } = useAssessmentSections(assessmentId);
+  const [targetType, setTargetType] = useState<BandTargetType>("section");
   const [sectionId, setSectionId] = useState("");
+  const [assessmentLabel, setAssessmentLabel] = useState("");
   const [bandNumber, setBandNumber] = useState("1");
   const [rangeMin, setRangeMin] = useState("0");
   const [rangeMax, setRangeMax] = useState("100");
@@ -1130,10 +1277,17 @@ function BandsConfigTab({
   const [description, setDescription] = useState("");
   const [colourCode, setColourCode] = useState("#3b82f6");
 
+  // Section is only meaningful for interpretative (section-score) bands; the
+  // assessment-label scope only applies to PMI/VMI (SRS 06 §3.3-3.4).
+  const isSectionBand = targetType === "section";
+  const scopesByAssessment = targetType === "pmi" || targetType === "vmi";
+
   const createMutation = useMutation({
     mutationFn: () =>
       createBand(reportId, {
-        section: Number(sectionId),
+        target_type: targetType,
+        section: isSectionBand ? Number(sectionId) : null,
+        assessment_label: scopesByAssessment ? assessmentLabel.trim() : "",
         band_number: Number(bandNumber),
         range_min: Number(rangeMin),
         range_max: Number(rangeMax),
@@ -1157,22 +1311,28 @@ function BandsConfigTab({
   if (isLoading) return <Spinner />;
   const list = bands ?? [];
   const sectionList = sections ?? [];
+  const targetLabel = (t: BandTargetType) =>
+    BAND_TARGET_TYPES.find((o) => o.value === t)?.label ?? t;
+  const canSubmit = isSectionBand ? Boolean(sectionId) : true;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Band Definitions (Interpretative — SRS §3.3.1)</CardTitle>
+        <CardTitle>Band Definitions (Interpretative &amp; Profiling — SRS §3.3.1, 06 §3.1–3.4)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-slate-600">
-          Define score bands per variable. The candidate&apos;s score is matched to a band, and the
+          Define score bands. Interpretative bands map a <strong>section score</strong> to a label;
+          profiling bands interpret the <strong>FMI, PMI, VMI, raw summary %</strong> or the
+          <strong> PMI-D gap index</strong>. The candidate&apos;s value is matched to a band, and the
           band&apos;s label + description is shown in the report.
         </p>
         {list.length > 0 && (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Variable</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Variable / Scope</TableHead>
                 <TableHead>Band #</TableHead>
                 <TableHead>Range</TableHead>
                 <TableHead>Label</TableHead>
@@ -1183,7 +1343,14 @@ function BandsConfigTab({
             <TableBody>
               {list.map((b) => (
                 <TableRow key={b.id}>
-                  <TableCell className="font-medium">{b.section_title}</TableCell>
+                  <TableCell className="text-xs font-medium text-slate-600">
+                    {targetLabel(b.target_type)}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {b.target_type === "section"
+                      ? b.section_title || "—"
+                      : b.assessment_label || "All assessments"}
+                  </TableCell>
                   <TableCell>{b.band_number}</TableCell>
                   <TableCell className="text-slate-500">
                     {b.range_min}–{b.range_max}
@@ -1211,11 +1378,53 @@ function BandsConfigTab({
           className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3"
         >
           <div className="sm:col-span-3">
-            <Label htmlFor="bd-s" required>
-              Variable
+            <Label htmlFor="bd-t" required>
+              Band target
             </Label>
-            <SectionPicker sections={sectionList} value={sectionId} onChange={setSectionId} />
+            <select
+              id="bd-t"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={targetType}
+              onChange={(e) => {
+                setTargetType(e.target.value as BandTargetType);
+                setSectionId("");
+              }}
+            >
+              {BAND_TARGET_TYPES.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              {isSectionBand
+                ? "Pick the variable whose section score this band interprets."
+                : scopesByAssessment
+                  ? "Optionally scope this band to a single assessment; leave the label blank to apply to all."
+                  : targetType === "pmi_d"
+                    ? "PMI-D is a gap (A1PMI − A2PMI) and may be negative — ranges can go below 0."
+                    : "This band applies to the whole report for the selected index."}
+            </p>
           </div>
+          {isSectionBand && (
+            <div className="sm:col-span-3">
+              <Label htmlFor="bd-s" required>
+                Variable
+              </Label>
+              <SectionPicker sections={sectionList} value={sectionId} onChange={setSectionId} />
+            </div>
+          )}
+          {scopesByAssessment && (
+            <div className="sm:col-span-3">
+              <Label htmlFor="bd-al">Assessment label (scope)</Label>
+              <Input
+                id="bd-al"
+                value={assessmentLabel}
+                onChange={(e) => setAssessmentLabel(e.target.value)}
+                placeholder="e.g., CAT — leave blank for all assessments"
+              />
+            </div>
+          )}
           <div>
             <Label htmlFor="bd-n" required>
               Band number
@@ -1235,7 +1444,7 @@ function BandsConfigTab({
             <Input
               id="bd-min"
               type="number"
-              min="0"
+              min={targetType === "pmi_d" ? undefined : "0"}
               max="100"
               value={rangeMin}
               onChange={(e) => setRangeMin(e.target.value)}
@@ -1248,7 +1457,7 @@ function BandsConfigTab({
             <Input
               id="bd-max"
               type="number"
-              min="0"
+              min={targetType === "pmi_d" ? undefined : "0"}
               max="100"
               value={rangeMax}
               onChange={(e) => setRangeMax(e.target.value)}
@@ -1284,7 +1493,7 @@ function BandsConfigTab({
             />
           </div>
           <div className="flex justify-end sm:col-span-3">
-            <Button type="submit" loading={createMutation.isPending} disabled={!sectionId}>
+            <Button type="submit" loading={createMutation.isPending} disabled={!canSubmit}>
               Add band
             </Button>
           </div>
