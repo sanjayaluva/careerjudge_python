@@ -325,6 +325,18 @@ export default function TaskDetailPage() {
                           <strong>Cognitive Level:</strong> {spec.cognitive_level}
                         </p>
                       )}
+                      {/* E-X8: create a question pre-filled from this spec. */}
+                      {isAssignee && task.status === "in_progress" && (
+                        <Link
+                          to={`/question-bank/new?${new URLSearchParams({
+                            ...(spec.question_type ? { task_type: spec.question_type } : {}),
+                            ...(spec.qb_category ? { task_category: spec.qb_category } : {}),
+                          }).toString()}`}
+                          className="mt-1 inline-block text-sm font-medium text-primary-600 hover:underline"
+                        >
+                          + Create question from this spec
+                        </Link>
+                      )}
                     </div>
                   ))}
                 </CardContent>

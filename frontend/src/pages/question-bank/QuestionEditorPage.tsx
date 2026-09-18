@@ -15,7 +15,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 
 import { Alert, AlertDescription, Button, Input, Label, Spinner } from "@/components/ui";
@@ -82,6 +82,7 @@ const DEFAULT_SCORING_BY_TYPE: Record<string, string> = {
 export default function QuestionEditorPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const questionId = id ? Number(id) : null;
   const isEditMode = Boolean(questionId);
   const queryClient = useQueryClient();
@@ -101,6 +102,28 @@ export default function QuestionEditorPage() {
     queryFn: () => listCategories(),
     staleTime: 60_000,
   });
+
+  // E-X8: task→question autofill. When the editor is opened from a task
+  // (?task_type=…&task_category=…), prefill the question type and category.
+  // TaskSpec stores category NAMES, so map name→id once categories load.
+  const [prefilled, setPrefilled] = useState(false);
+  useEffect(() => {
+    if (isEditMode || prefilled) return;
+    const taskType = searchParams.get("task_type");
+    const taskCategory = searchParams.get("task_category");
+    if (!taskType && !taskCategory) return;
+    if (taskType && QUESTION_TYPES.some((t) => t.value === taskType)) {
+      setQuestionType(taskType);
+    }
+    if (taskCategory && categories) {
+      const match = categories.find(
+        (c) => c.name.toLowerCase() === taskCategory.toLowerCase(),
+      );
+      if (match) setCategoryId(match.id);
+    }
+    // Only mark done once categories are available (so the name match runs).
+    if (!taskCategory || categories) setPrefilled(true);
+  }, [isEditMode, prefilled, searchParams, categories]);
 
   // Shared question data
   const [questionText1, setQuestionText1] = useState("");
