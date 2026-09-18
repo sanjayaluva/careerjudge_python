@@ -108,20 +108,48 @@ export default function SessionPlayerPage() {
   // The shuffle is stable per session (seeded by session ID) so the candidate
   // sees the same order on refresh, but different from the authoring order.
   const questions = (() => {
-    if (!rawQuestions) return undefined;
-    if (session?.display_order === "RANDOM" && rawQuestions.length > 0) {
-      // Simple shuffle — seeded by session ID for consistency across refreshes
-      // (not cryptographically secure, but sufficient for display ordering)
-      const shuffled = [...rawQuestions];
-      let seed = sid;
-      for (let i = shuffled.length - 1; i > 0; i--) {
+    if (!rawQuestions || rawQuestions.length === 0) return rawQuestions;
+
+    // Deterministic shuffle seeded per session, so the order is stable across
+    // refreshes (not cryptographically secure — display ordering only).
+    const shuffleSeeded = <T,>(arr: T[], seedBase: number): T[] => {
+      const a = [...arr];
+      let seed = seedBase;
+      for (let i = a.length - 1; i > 0; i--) {
         seed = (seed * 9301 + 49297) % 233280;
         const j = Math.floor((seed / 233280) * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        [a[i], a[j]] = [a[j], a[i]];
       }
-      return shuffled;
+      return a;
+    };
+
+    // Assessment-level RANDOM shuffles the whole set (existing behaviour).
+    if (session?.display_order === "RANDOM") {
+      return shuffleSeeded(rawQuestions, sid);
     }
-    return rawQuestions;
+
+    // ASM-5 (§5.1): otherwise apply per-section order — shuffle questions within
+    // sections whose order_mode is RANDOM, keeping the delivered order elsewhere.
+    // Delivered questions are already grouped by section (backend sorts by
+    // level/order), so shuffle each consecutive same-section run in place.
+    if (!rawQuestions.some((q) => q.section_order_mode === "RANDOM")) {
+      return rawQuestions;
+    }
+    const result: typeof rawQuestions = [];
+    let i = 0;
+    while (i < rawQuestions.length) {
+      const sec = rawQuestions[i].section;
+      let j = i;
+      while (j < rawQuestions.length && rawQuestions[j].section === sec) j++;
+      const group = rawQuestions.slice(i, j);
+      if (group[0]?.section_order_mode === "RANDOM") {
+        result.push(...shuffleSeeded(group, sid + (sec ?? 0)));
+      } else {
+        result.push(...group);
+      }
+      i = j;
+    }
+    return result;
   })();
 
   const answerMutation = useMutation({

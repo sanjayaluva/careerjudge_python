@@ -46,6 +46,7 @@ export interface AssessmentSection {
   description: string;
   level: number;
   order: number;
+  order_mode: "STATIC" | "RANDOM";
   duration_seconds: number | null;
   delivery_count: number | null;
   subsections: AssessmentSection[];
@@ -213,6 +214,7 @@ export function createSection(
     parent?: number | null;
     description?: string;
     level?: number;
+    order_mode?: "STATIC" | "RANDOM";
     duration_seconds?: number | null;
     delivery_count?: number | null;
   },
@@ -229,6 +231,7 @@ export function updateSection(
     level: number;
     order: number;
     parent: number | null;
+    order_mode: "STATIC" | "RANDOM";
     duration_seconds: number | null;
     delivery_count: number | null;
   }>,
@@ -356,6 +359,8 @@ export interface SessionQuestion {
   section_duration_seconds: number | null;
   timer_section_id: number | null;
   question_duration_seconds: number | null;
+  /** ASM-5 (§5.1): this question's section delivery order mode. */
+  section_order_mode: "STATIC" | "RANDOM";
   question_detail: {
     id: number;
     question_title: string;

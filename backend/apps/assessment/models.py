@@ -207,6 +207,16 @@ class AssessmentSection(models.Model):
         help_text=_("1-4. Level 1 = top-level variable, Level 4 = deepest sub-variable."),
     )
     order = models.PositiveIntegerField(_("order"), default=0)
+    order_mode = models.CharField(
+        _("order mode"),
+        max_length=10,
+        choices=[("STATIC", "Static (as configured)"), ("RANDOM", "Random")],
+        default="STATIC",
+        help_text=_(
+            "ASM-5 / §5.1: delivery order of this section's questions — STATIC keeps "
+            "the configured order; RANDOM shuffles them per session (per-level ordering)."
+        ),
+    )
     duration_seconds = models.PositiveIntegerField(
         _("duration (seconds)"),
         null=True,

@@ -625,6 +625,16 @@ class TestSectionCRUD(AssessmentViewTestBase):
             assert resp.json()["data"]["level"] == expected_level, resp.data
             parent_id = resp.json()["data"]["id"]
 
+    def test_section_order_mode_roundtrips(self):
+        """ASM-5 (§5.1): a section's per-level order_mode is writable and returned."""
+        resp = self.client.post(
+            f"/api/assessments/{self.assessment.id}/sections/",
+            {"title": "Randomised", "order": 1, "order_mode": "RANDOM"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        assert resp.json()["data"]["order_mode"] == "RANDOM"
+
     def test_list_sections(self):
         AssessmentSection.objects.create(assessment=self.assessment, title="S1", level=1, order=1)
         AssessmentSection.objects.create(assessment=self.assessment, title="S2", level=1, order=2)

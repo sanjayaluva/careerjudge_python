@@ -208,6 +208,7 @@ export default function AssessmentDetailPage() {
         description?: string;
         duration_seconds?: number | null;
         delivery_count?: number | null;
+        order_mode?: "STATIC" | "RANDOM";
         order?: number;
       };
     }) => updateSection(aid, payload.sectionId, payload.data),
@@ -598,9 +599,11 @@ export default function AssessmentDetailPage() {
               data: {
                 title: payload.title,
                 description: payload.description,
-                // ASM-3: per-section timer duration; ASM-1: delivery count.
+                // ASM-3: per-section timer duration; ASM-1: delivery count;
+                // ASM-5: per-section delivery order mode.
                 duration_seconds: payload.duration_seconds ?? null,
                 delivery_count: payload.delivery_count ?? null,
+                order_mode: payload.order_mode,
               },
             });
           } else {
@@ -1175,13 +1178,16 @@ function CreateSectionModal({
     level?: number;
     duration_seconds?: number | null;
     delivery_count?: number | null;
+    order_mode?: "STATIC" | "RANDOM";
   }) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  // ASM-3 per-section timer (entered in minutes) + ASM-1 delivery count.
+  // ASM-3 per-section timer (entered in minutes) + ASM-1 delivery count +
+  // ASM-5 per-section delivery order mode.
   const [durationMin, setDurationMin] = useState("");
   const [deliveryCount, setDeliveryCount] = useState("");
+  const [orderMode, setOrderMode] = useState<"STATIC" | "RANDOM">("STATIC");
 
   // Sync form fields when the modal opens (create or edit).
   // useEffect deps: [open, editSection] — runs when the modal opens or when
@@ -1194,6 +1200,7 @@ function CreateSectionModal({
       editSection?.duration_seconds ? String(Math.round(editSection.duration_seconds / 60)) : "",
     );
     setDeliveryCount(editSection?.delivery_count != null ? String(editSection.delivery_count) : "");
+    setOrderMode(editSection?.order_mode ?? "STATIC");
   }, [open, editSection]);
 
   const isEdit = editSection !== null;
@@ -1223,6 +1230,7 @@ function CreateSectionModal({
             // so Level 3/4 sub-sections are created correctly.
             duration_seconds: durationMin.trim() ? Number(durationMin) * 60 : null,
             delivery_count: deliveryCount.trim() ? Number(deliveryCount) : null,
+            order_mode: orderMode,
           });
         }}
         className="space-y-4"
@@ -1278,6 +1286,21 @@ function CreateSectionModal({
             />
             <p className="mt-1 text-xs text-slate-500">
               Randomly deliver this many questions from the pool (SRS §4.1.1). Blank = deliver all.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="sec-order">Question order</Label>
+            <select
+              id="sec-order"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={orderMode}
+              onChange={(e) => setOrderMode(e.target.value as "STATIC" | "RANDOM")}
+            >
+              <option value="STATIC">Static (as configured)</option>
+              <option value="RANDOM">Random</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Delivery order of this section's questions (SRS §5.1).
             </p>
           </div>
         </div>

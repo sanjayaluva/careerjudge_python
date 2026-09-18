@@ -28,6 +28,7 @@ class AssessmentSectionSerializer(serializers.ModelSerializer):
             "description",
             "level",
             "order",
+            "order_mode",
             "duration_seconds",
             "delivery_count",
             "subsections",
@@ -221,6 +222,9 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
     section_duration_seconds = serializers.SerializerMethodField()
     timer_section_id = serializers.SerializerMethodField()
     question_duration_seconds = serializers.SerializerMethodField()
+    # ASM-5 (§5.1): the section's per-level delivery order mode, so the player
+    # can randomise questions within RANDOM sections.
+    section_order_mode = serializers.SerializerMethodField()
 
     class Meta:
         model = QuestionAttempt
@@ -239,6 +243,7 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
             "section_duration_seconds",
             "timer_section_id",
             "question_duration_seconds",
+            "section_order_mode",
             "question_detail",
         ]
         read_only_fields = ["id", "score", "max_score", "answered_at", "question_detail"]
@@ -246,6 +251,9 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
     def _timer_section(self, obj):
         section_map = self.context.get("section_timer_map") or {}
         return section_map.get(obj.section_id, (None, None))
+
+    def get_section_order_mode(self, obj):
+        return obj.section.order_mode if obj.section_id else "STATIC"
 
     def get_timer_section_id(self, obj):
         return self._timer_section(obj)[0]
