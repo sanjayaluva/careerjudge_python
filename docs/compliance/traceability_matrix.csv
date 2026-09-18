@@ -36,7 +36,7 @@ ASM-4,Section level 3/4 creatable (not hardcoded 1-2),Doc 3 §3 Rule 1,SIGNED-DO
 ASM-5,Per-level ordering UI (not single global toggle),Doc 3 §5.1,SIGNED-PENDING,pending,M2,EditAssessmentModal:1131-1142,,
 ASM-7,Set-Score UI + rating/paired/rank builders,Doc 3 §4/§4.2,SIGNED-DONE,done,M2,assessment.ts updateAssignedQuestion; AssessmentDetailPage QuestionAssignmentTab score input,tsc,"M2: score_override editor. Template builders are a QB-module concern, not here."
 ASM-8,Enforce Rule 1 (<=4 levels) + Rule 2 (Q at last level),Doc 3 §3,SIGNED-PENDING,pending,M7,assessment/views.py,,Server-side enforcement
-ASM-9,Full question-review (open Select/Cancel),Doc 3 §4.1,SIGNED-PENDING,pending,M2,AssessmentDetailPage.tsx:709-808,,
+ASM-9,Full question-review (open Select/Cancel),Doc 3 §4.1,SIGNED-DONE,done,M2,AssessmentDetailPage QuestionPreviewModal + Preview button,tsc; vitest,M2: open→Select/Cancel preview
 QB-1,Deletion approve/decline queue (remove reason-gate),Doc 1 §4.3 / CJ_UC016-17,SIGNED-DONE,done,M2,questionBank.ts delete+deletion-request client; QuestionBankPage + CategoryManager reason modals + admin queue,tsc; vitest,M2: reason-on-delete + admin approve/decline queue (questions & categories); backend reason-gate PRESERVED (signed)
 QB-2,Batch activate/inactivate + exposure UI,Doc 1 §4.2/§4.3,SIGNED-DONE,done,M2,QuestionBankPage.tsx selection + batch bar (batchSetQuestionStatus/ExposureLimit),tsc; vitest,M2: batch activate/inactivate + exposure UI for psychometrician/admin
 QB-3,Question expiry editable (enables expired filter),Doc 1 §4.3,SIGNED-DONE,done,M2,QuestionEditorPage expires_at date field,tsc; vitest,M2: expiry editable
