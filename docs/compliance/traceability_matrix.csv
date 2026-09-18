@@ -21,7 +21,7 @@ H16,Per-session meeting link + time-gated join + countdown,Doc 8,SIGNED-DONE,don
 D3,Per-section/per-question timers (backend),Doc 3 §5.2,SIGNED-DONE,done,,assessment/,assessment/tests,Backend done; duration UI = ASM-3 pending
 PSY-1,Psychometrician filter/run UI,Doc 2 / CJ_UC025,SIGNED-PENDING,pending,M2,question_bank/views.py:665;questionBank.ts:305-339,,Drop download/upload sub-claim (no basis)
 PSY-2,Question detail surfaces all 6 stored indices,Doc 2,SIGNED-PENDING,pending,M2,QuestionDetailPage.tsx:102,,Deviation - low
-CP-1,Standard n x n mapping-rule UI,Doc 5 §4.1.2,SIGNED-PENDING,pending,M2,ProfilingSolutionDetailPage.tsx;careerProfiling.ts:345-359,,
+CP-1,Standard n x n mapping-rule UI,Doc 5 §4.1.2,SIGNED-DONE,done,M2,ProfilingSolutionDetailPage StandardMappingRulesTab (n×n grid); career_profiling/views.py mapping_rules upsert,tsc; career_profiling 45 pass,M2: n×n standard mapping grid + backend upsert
 CP-2,Band-row creation UI (bands currently read-only),Doc 5 §4.1.1/§4.2.1,SIGNED-DONE,done,M2,ProfilingSolutionDetailPage BandsTab + CreateBandRowModal (createBand),tsc; vitest,M2: band-row creation per definition
 CP-3,Define-Band variable picker (not raw section ID),Doc 5 §4.1.1,SIGNED-DONE,done,M2,ProfilingSolutionDetailPage CreateBandDefinitionModal section picker (listSections),tsc; vitest,M2: variable picker replaces raw Section ID
 REP-1,Report graph/chart layout rendering,Doc 4 §2.2/§3.1.2;Doc 6 §3.1.2,SIGNED-PENDING,pending,M4,generation.py:117-122;ReportDetailPage.tsx:1775,,Not analytics dashboards; sample report 10 is chart-built
