@@ -208,3 +208,28 @@ def test_compute_is_idempotent(psy_client, psychometrician_user):
     psy_client.post(f"/api/career-profiling/solutions/{solution.id}/compute/", {}, format="json")
     psy_client.post(f"/api/career-profiling/solutions/{solution.id}/compute/", {}, format="json")
     assert MatchIndex.objects.filter(solution=solution).count() == 1
+
+
+def test_mapping_rule_upsert_allows_editing(psy_client, psychometrician_user):
+    """CP-1: re-saving an existing n×n mapping cell updates its value (upsert),
+    rather than being rejected 400 by the unique_together validator."""
+    from apps.career_profiling.models import MappingRule
+
+    solution = _make_solution_with_scored_candidate(psychometrician_user)
+    bd = BandDefinition.objects.filter(selected_assessment__solution=solution).first()
+    url = f"/api/career-profiling/solutions/{solution.id}/mapping_rules/"
+    payload = {
+        "band_definition": bd.id,
+        "criterion_band_code": "H",
+        "user_band_code": "L",
+        "value": 3,
+    }
+    r1 = psy_client.post(url, payload, format="json")
+    assert r1.status_code == 201, r1.data
+    assert r1.data["data"]["value"] == 3
+
+    payload["value"] = 4
+    r2 = psy_client.post(url, payload, format="json")
+    assert r2.status_code == 201, r2.data
+    assert r2.data["data"]["value"] == 4
+    assert MappingRule.objects.filter(band_definition=bd).count() == 1

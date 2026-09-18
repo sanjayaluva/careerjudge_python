@@ -1757,7 +1757,7 @@ function StandardMappingRulesTab({
             {codes.length === 0 ? (
               <p className="text-sm text-slate-500">This variable has no bands yet.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto" key={activeBd?.id}>
                 <table className="border-collapse text-sm">
                   <thead>
                     <tr>

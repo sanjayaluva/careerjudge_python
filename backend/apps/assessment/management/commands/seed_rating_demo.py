@@ -1,7 +1,7 @@
 """Seed a published psychometric assessment with a continuous rating section.
 
-Used to visually verify QT-3 (multi_question_continuous rating scroll). Creates
-four STANDARD_RATING_SCALE questions in one section of a published assessment so
+Used to visually verify QT-3 (multi_question_continuous rating scroll). Creates a
+set of STANDARD_RATING_SCALE questions in one section of a published assessment so
 a candidate can start a session and see the continuous-scroll screen.
 """
 
@@ -26,6 +26,22 @@ class Command(BaseCommand):
             "I prefer working in a team rather than alone.",
             "I stay calm under pressure.",
             "I like to plan ahead before acting.",
+            "I am comfortable speaking in front of a group.",
+            "I pay close attention to small details.",
+            "I adapt quickly when plans change.",
+            "I enjoy learning new skills.",
+            "I find it easy to make decisions.",
+            "I like taking on leadership roles.",
+            "I am motivated by challenging goals.",
+            "I prefer a structured, predictable routine.",
+            "I enjoy meeting new people.",
+            "I persevere even when a task is difficult.",
+            "I consider other people's feelings before acting.",
+            "I like to weigh all options before deciding.",
+            "I stay organised in my daily work.",
+            "I am open to feedback and criticism.",
+            "I enjoy competitive situations.",
+            "I follow through on my commitments.",
         ]
         qs = []
         for i, text in enumerate(statements, 1):

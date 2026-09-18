@@ -412,14 +412,17 @@ export default function SessionPlayerPage() {
     "FORCED_CHOICE_SINGLE_LEVEL",
     "FORCED_CHOICE_TWO_LEVEL",
   ]);
+  // Only single-sub-question items can share a continuous screen — a
+  // multi-sub-question type (e.g. FORCED_CHOICE_TWO_LEVEL) must keep its
+  // one-at-a-time sub-question flow, or later sub-questions would be dropped.
+  const isGroupable = (sq: (typeof questions)[number]) =>
+    CONTINUOUS_RATING_TYPES.has(sq.question_detail.question_type) &&
+    (sq.question_detail.sub_question_count ?? 1) <= 1;
   const continuousTail: number[] = [];
-  if (CONTINUOUS_RATING_TYPES.has(qd.question_type) && activeSubQ === 0) {
+  if (isGroupable(q) && activeSubQ === 0) {
     for (let i = currentIndex + 1; i < questions.length; i++) {
       const nq = questions[i];
-      if (
-        nq.section === q.section &&
-        CONTINUOUS_RATING_TYPES.has(nq.question_detail.question_type)
-      ) {
+      if (nq.section === q.section && isGroupable(nq)) {
         continuousTail.push(i);
       } else {
         break;
@@ -432,6 +435,20 @@ export default function SessionPlayerPage() {
   const positionLabel = continuousTail.length
     ? `Questions ${currentIndex + 1}–${groupLastIndex + 1} of ${questions.length}`
     : `Question ${currentIndex + 1} of ${questions.length}`;
+  // Snap an index to the start of its continuous-rating group, so navigating
+  // (Previous / sidebar) lands on the whole group rather than a lone member.
+  const groupStartOf = (index: number): number => {
+    if (index < 0 || index >= questions.length || !isGroupable(questions[index])) return index;
+    let start = index;
+    while (
+      start > 0 &&
+      isGroupable(questions[start - 1]) &&
+      questions[start - 1].section === questions[start].section
+    ) {
+      start--;
+    }
+    return start;
+  };
 
   const handleNext = () => {
     // Save current answer before navigating
@@ -493,7 +510,7 @@ export default function SessionPlayerPage() {
       if (q?.question) {
         setViewedQuestions((prev) => new Set(prev).add(q.question));
       }
-      setCurrentIndex((i) => i - 1);
+      setCurrentIndex((i) => groupStartOf(i - 1));
     }
   };
 
@@ -717,7 +734,7 @@ export default function SessionPlayerPage() {
                               raw_answer: currentAnswer,
                             });
                           }
-                          setCurrentIndex(i);
+                          setCurrentIndex(groupStartOf(i));
                         }}
                         title={
                           presentationActive
@@ -938,6 +955,7 @@ export default function SessionPlayerPage() {
                 </div>
               ) : (
                 <AnswerInput
+                  key={answerKey}
                   question={q}
                   currentAnswer={answers[answerKey]}
                   onChange={(ans) => {

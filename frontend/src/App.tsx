@@ -101,8 +101,9 @@ export default function App() {
 
               {/* Protected app — a pathless layout route so "/" stays free for
                   the public homepage (BUG-1: previously a second path="/" route
-                  shadowed PublicHomepage, making it unreachable). Authenticated
-                  users are redirected to /dashboard by PublicHomepage itself. */}
+                  shadowed PublicHomepage, making it unreachable). "/" now always
+                  renders PublicHomepage; it is user-aware (a signed-in visitor
+                  sees a "Go to Dashboard" CTA) but does not auto-redirect. */}
               <Route
                 element={
                   <ProtectedRoute>

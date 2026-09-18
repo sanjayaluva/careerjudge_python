@@ -506,11 +506,17 @@ class ProfilingSolutionViewSet(ModelViewSet):
             )
 
         serializer = MappingRuleSerializer(data=request.data)
+        # CP-1: the n×n grid is edited cell-by-cell (upsert below). Drop the
+        # auto-generated unique_together validator that would otherwise reject a
+        # re-save of an existing (band_definition, criterion, user) cell with 400
+        # before the upsert can run.
+        from rest_framework.validators import UniqueTogetherValidator
+
+        serializer.validators = [
+            v for v in serializer.validators if not isinstance(v, UniqueTogetherValidator)
+        ]
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        # CP-1: the n×n grid is edited cell-by-cell, so upsert on the unique
-        # (band_definition, criterion_band_code, user_band_code) key rather than
-        # rejecting a re-save of an existing cell.
         from .models import MappingRule
 
         rule, _created = MappingRule.objects.update_or_create(
