@@ -26,9 +26,12 @@ import {
   useToast,
 } from "@/components/ui";
 import {
+  approveDeletionRequest,
   batchSetExposureLimit,
   batchSetQuestionStatus,
+  declineDeletionRequest,
   deleteQuestion,
+  listDeletionRequests,
   listQuestions,
   QUESTION_STATUSES,
   QUESTION_TYPES,
@@ -94,10 +97,18 @@ export default function QuestionBankPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => deleteQuestion(id),
+    mutationFn: (v: { id: number; reason: string }) => deleteQuestion(v.id, v.reason),
     onSuccess: () => {
       setDeleteQ(null);
+      // QB-1: a non-admin's delete creates a request for admin approval; an
+      // admin deletes directly.
+      toast.success(
+        user?.role === "cj_admin"
+          ? "Question deleted."
+          : "Deletion request submitted — an admin will review it.",
+      );
       void queryClient.invalidateQueries({ queryKey: QB_KEY });
+      void queryClient.invalidateQueries({ queryKey: ["qb-deletion-requests"] });
     },
     onError: (err) => setError(extractApiError(err)),
   });
@@ -152,6 +163,26 @@ export default function QuestionBankPage() {
     onSuccess: (res) => {
       toast.success(`Exposure limit set on ${res.updated_count} question(s).`);
       clearSelection();
+      void queryClient.invalidateQueries({ queryKey: QB_KEY });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  // QB-1 (D1 §4.3): admin queue of pending deletion requests.
+  const deletionRequestsQuery = useQuery({
+    queryKey: ["qb-deletion-requests"],
+    queryFn: listDeletionRequests,
+    enabled: isAdmin,
+  });
+  const pendingDeletionRequests = (deletionRequestsQuery.data ?? []).filter(
+    (r) => r.status === "pending",
+  );
+  const reviewDeletionMutation = useMutation({
+    mutationFn: (v: { id: number; approve: boolean }) =>
+      v.approve ? approveDeletionRequest(v.id) : declineDeletionRequest(v.id),
+    onSuccess: () => {
+      toast.success("Deletion request reviewed.");
+      void queryClient.invalidateQueries({ queryKey: ["qb-deletion-requests"] });
       void queryClient.invalidateQueries({ queryKey: QB_KEY });
     },
     onError: (err) => toast.error(extractApiError(err)),
@@ -318,6 +349,49 @@ export default function QuestionBankPage() {
               </Badge>
             )}
           </div>
+
+          {/* QB-1: admin deletion-request queue (D1 §4.3) */}
+          {isAdmin && pendingDeletionRequests.length > 0 && (
+            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-800">
+                Pending deletion requests ({pendingDeletionRequests.length})
+              </p>
+              <ul className="space-y-2">
+                {pendingDeletionRequests.map((r) => (
+                  <li
+                    key={r.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-amber-200 bg-white p-2 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-medium text-slate-800">
+                        {r.target_type === "category" ? "Category" : "Question"}: {r.target_label}
+                      </span>
+                      <span className="block text-xs text-slate-500">
+                        {r.requester_name ?? "A user"} — {r.reason}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        loading={reviewDeletionMutation.isPending}
+                        onClick={() => reviewDeletionMutation.mutate({ id: r.id, approve: true })}
+                      >
+                        Approve delete
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => reviewDeletionMutation.mutate({ id: r.id, approve: false })}
+                      >
+                        Decline
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* QB-2: batch action bar (D1 §4.2/§4.3) */}
           {canManageQB && selected.size > 0 && (
@@ -523,8 +597,9 @@ export default function QuestionBankPage() {
       <DeleteQuestionModal
         question={deleteQ}
         loading={deleteMutation.isPending}
+        isAdmin={isAdmin}
         onClose={() => setDeleteQ(null)}
-        onConfirm={() => deleteQ && deleteMutation.mutate(deleteQ.id)}
+        onConfirm={(reason) => deleteQ && deleteMutation.mutate({ id: deleteQ.id, reason })}
       />
     </div>
   );
@@ -537,34 +612,67 @@ export default function QuestionBankPage() {
 function DeleteQuestionModal({
   question,
   loading,
+  isAdmin,
   onClose,
   onConfirm,
 }: {
   question: { id: number; text: string } | null;
   loading: boolean;
+  isAdmin: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (reason: string) => void;
 }) {
+  const [reason, setReason] = useState("");
+  useEffect(() => {
+    setReason("");
+  }, [question?.id]);
   if (!question) return null;
   return (
     <Modal
       open={Boolean(question)}
       onClose={onClose}
-      title="Delete question"
-      description="This action cannot be undone."
+      title={isAdmin ? "Delete question" : "Request question deletion"}
+      description={
+        isAdmin
+          ? "This action cannot be undone."
+          : "A CJ Admin will review your request before the question is removed (D1 §4.3)."
+      }
       size="sm"
     >
-      <p className="text-sm text-slate-600">Are you sure you want to delete this question?</p>
+      <p className="text-sm text-slate-600">
+        {isAdmin
+          ? "Are you sure you want to delete this question?"
+          : "Request deletion of this question?"}
+      </p>
       <p className="mt-2 rounded-md bg-slate-50 p-2 text-xs text-slate-500">
         "{question.text.substring(0, 100)}
         {question.text.length > 100 ? "..." : ""}"
       </p>
+      <div className="mt-4">
+        <label htmlFor="del-reason" className="mb-1 block text-sm font-medium text-slate-700">
+          Reason{isAdmin ? " (optional)" : " (required)"}
+        </label>
+        <textarea
+          id="del-reason"
+          rows={2}
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Why should this question be removed?"
+        />
+      </div>
       <div className="mt-6 flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="button" variant="danger" loading={loading} onClick={onConfirm}>
-          Delete question
+        <Button
+          type="button"
+          variant="danger"
+          loading={loading}
+          disabled={!isAdmin && !reason.trim()}
+          onClick={() => onConfirm(reason)}
+        >
+          {isAdmin ? "Delete question" : "Submit request"}
         </Button>
       </div>
     </Modal>

@@ -180,8 +180,10 @@ export function updateCategory(
   return apiPatch<Category>(`${BASE}/categories/${id}/`, payload);
 }
 
-export function deleteCategory(id: number): Promise<void> {
-  return apiDelete(`${BASE}/categories/${id}/`);
+export function deleteCategory(id: number, reason?: string): Promise<void> {
+  // A non-admin's delete creates a deletion request (reason required); admins
+  // delete directly (D1 §4.3).
+  return apiDelete(`${BASE}/categories/${id}/`, reason ? { data: { reason } } : undefined);
 }
 
 export function getCategoryTree(): Promise<unknown> {
@@ -239,8 +241,43 @@ export function updateQuestion(
   return apiPatch<QuestionDetail>(`${BASE}/questions/${id}/`, payload);
 }
 
-export function deleteQuestion(id: number): Promise<void> {
-  return apiDelete(`${BASE}/questions/${id}/`);
+export function deleteQuestion(id: number, reason?: string): Promise<void> {
+  return apiDelete(`${BASE}/questions/${id}/`, reason ? { data: { reason } } : undefined);
+}
+
+// ---------------------------------------------------------------------------
+// Deletion requests (QB-1 / D1 §4.3) — a non-admin's delete creates a request
+// that a CJ Admin approves or declines.
+// ---------------------------------------------------------------------------
+
+export interface QuestionBankDeletionRequest {
+  id: number;
+  target_type: "category" | "question";
+  target_id: number;
+  target_label: string;
+  requester: number;
+  requester_name: string | null;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  review_comment: string;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export function listDeletionRequests(): Promise<QuestionBankDeletionRequest[]> {
+  return apiGetPaged<QuestionBankDeletionRequest>(`${BASE}/deletion-requests/`).then(
+    (r) => r.results,
+  );
+}
+
+export function approveDeletionRequest(id: number): Promise<QuestionBankDeletionRequest> {
+  return apiPost<QuestionBankDeletionRequest>(`${BASE}/deletion-requests/${id}/approve/`, {});
+}
+
+export function declineDeletionRequest(id: number): Promise<QuestionBankDeletionRequest> {
+  return apiPost<QuestionBankDeletionRequest>(`${BASE}/deletion-requests/${id}/decline/`, {});
 }
 
 export function submitForReview(id: number): Promise<{ id: number; status: string }> {
