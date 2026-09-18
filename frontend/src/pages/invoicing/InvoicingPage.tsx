@@ -33,6 +33,8 @@ import {
   approveInvoice,
   cancelInvoice,
   createInvoice,
+  createInvoiceItem,
+  deleteInvoiceItem,
   listInvoices,
   listMyInvoices,
   listPendingInvoices,
@@ -65,6 +67,7 @@ export default function InvoicingPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [itemsInvoice, setItemsInvoice] = useState<Invoice | null>(null);
 
   const canCreate = isSuperAdmin || INVOICING_EMPANELLED_ROLES.includes(user?.role ?? "");
 
@@ -144,6 +147,11 @@ export default function InvoicingPage() {
                   inv.creator === user?.id ? (
                     <div className="flex gap-1">
                       {inv.status === "draft" && (
+                        <Button size="sm" variant="outline" onClick={() => setItemsInvoice(inv)}>
+                          Line items ({inv.items.length})
+                        </Button>
+                      )}
+                      {inv.status === "draft" && (
                         <Button
                           size="sm"
                           onClick={() => submitMut.mutate(inv.id)}
@@ -209,7 +217,158 @@ export default function InvoicingPage() {
       {createOpen && (
         <CreateInvoiceModal onClose={() => setCreateOpen(false)} onCreated={invalidateAll} />
       )}
+      {itemsInvoice && (
+        <LineItemsModal
+          invoice={itemsInvoice}
+          onClose={() => setItemsInvoice(null)}
+          onChanged={() => {
+            invalidateAll();
+            // Reflect the updated items in the open modal by re-reading from cache.
+            const fresh = (myQuery.data?.results ?? []).find((i) => i.id === itemsInvoice.id);
+            if (fresh) setItemsInvoice(fresh);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Line items (E-PLT-7)
+// ---------------------------------------------------------------------------
+
+function LineItemsModal({
+  invoice,
+  onClose,
+  onChanged,
+}: {
+  invoice: Invoice;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const toast = useToast();
+  const [description, setDescription] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [unitPrice, setUnitPrice] = useState("");
+
+  const addMut = useMutation({
+    mutationFn: () =>
+      createInvoiceItem({
+        invoice: invoice.id,
+        description: description.trim(),
+        quantity: Number(quantity),
+        unit_price: unitPrice,
+      }),
+    onSuccess: () => {
+      setDescription("");
+      setQuantity("1");
+      setUnitPrice("");
+      toast.success("Line item added.");
+      onChanged();
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const delMut = useMutation({
+    mutationFn: (id: number) => deleteInvoiceItem(id),
+    onSuccess: () => {
+      toast.success("Line item removed.");
+      onChanged();
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const items = invoice.items ?? [];
+  const itemsTotal = items.reduce((sum, i) => sum + Number(i.total), 0);
+
+  return (
+    <Modal open onClose={onClose} title={`Line items — ${invoice.invoice_number}`} size="lg">
+      <div className="space-y-4">
+        {items.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">No line items yet.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
+                <th className="py-1">Description</th>
+                <th className="py-1 text-right">Qty</th>
+                <th className="py-1 text-right">Unit</th>
+                <th className="py-1 text-right">Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => (
+                <tr key={it.id} className="border-b border-slate-100">
+                  <td className="py-1">{it.description}</td>
+                  <td className="py-1 text-right">{it.quantity}</td>
+                  <td className="py-1 text-right">{it.unit_price}</td>
+                  <td className="py-1 text-right">{it.total}</td>
+                  <td className="py-1 text-right">
+                    <button
+                      className="text-xs text-danger-600 hover:underline"
+                      onClick={() => delMut.mutate(it.id)}
+                      disabled={delMut.isPending}
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              <tr className="font-medium">
+                <td className="py-1" colSpan={3}>
+                  Items total
+                </td>
+                <td className="py-1 text-right">{itemsTotal.toFixed(2)}</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (description.trim() && unitPrice) addMut.mutate();
+          }}
+          className="grid grid-cols-1 gap-2 border-t border-slate-100 pt-4 sm:grid-cols-4"
+        >
+          <div className="sm:col-span-2">
+            <Label htmlFor="li-desc" required>
+              Description
+            </Label>
+            <Input id="li-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="li-qty">Qty</Label>
+            <Input
+              id="li-qty"
+              type="number"
+              min="1"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="li-unit" required>
+              Unit price
+            </Label>
+            <Input
+              id="li-unit"
+              type="number"
+              min="0"
+              step="0.01"
+              value={unitPrice}
+              onChange={(e) => setUnitPrice(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end sm:col-span-4">
+            <Button type="submit" loading={addMut.isPending} disabled={!description.trim() || !unitPrice}>
+              Add item
+            </Button>
+          </div>
+        </form>
+      </div>
+    </Modal>
   );
 }
 

@@ -5,7 +5,7 @@
  * (+ CJ Admin) create invoices and submit them to CJ Admin, who
  * approves/rejects/marks-paid. See backend/apps/invoicing/views.py.
  */
-import { apiClient, apiPost } from "./client";
+import { apiClient, apiDelete, apiPost } from "./client";
 
 const BASE = "/invoicing";
 
@@ -115,6 +115,20 @@ export function approveInvoice(id: number, comment?: string): Promise<Invoice> {
 
 export function rejectInvoice(id: number, comment?: string): Promise<Invoice> {
   return apiPost<Invoice>(`${BASE}/invoices/${id}/reject/`, { comment: comment ?? "" });
+}
+
+/** E-PLT-7: line items (read from the invoice's nested `items`; write here). */
+export function createInvoiceItem(payload: {
+  invoice: number;
+  description: string;
+  quantity: number;
+  unit_price: string;
+}): Promise<InvoiceItem> {
+  return apiPost<InvoiceItem>(`${BASE}/invoice-items/`, payload);
+}
+
+export function deleteInvoiceItem(id: number): Promise<void> {
+  return apiDelete(`${BASE}/invoice-items/${id}/`);
 }
 
 export function payInvoice(id: number, paymentReference?: string): Promise<Invoice> {

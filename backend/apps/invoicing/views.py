@@ -22,8 +22,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
-from .models import Invoice
-from .serializers import InvoiceSerializer
+from .models import Invoice, InvoiceItem
+from .serializers import InvoiceItemSerializer, InvoiceSerializer
 
 
 def _is_admin(user) -> bool:
@@ -101,6 +101,59 @@ class InvoiceViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save()
+
+    # E-PLT-7: fields that must never change via a plain PATCH — status moves
+    # only through submit/cancel/approve/reject/pay, and identity/audit fields
+    # are server-owned.
+    _PROTECTED_UPDATE_FIELDS = {
+        "status",
+        "creator",
+        "invoice_number",
+        "reviewed_by",
+        "review_comment",
+        "reviewed_at",
+        "paid_at",
+        "payment_reference",
+    }
+
+    def update(self, request, *args, **kwargs):
+        """PATCH guard (E-PLT-7): only the creator (or admin) may edit, only
+        while the invoice is still a draft, and never the protected fields."""
+        invoice = self.get_object()
+        if invoice.creator_id != request.user.id and not _is_admin(request.user):
+            return Response(
+                {"error": {"code": "forbidden", "message": "Not your invoice."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if invoice.status != "draft":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": (
+                            f"Only draft invoices can be edited. This invoice is "
+                            f"'{invoice.status}'."
+                        ),
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        blocked = self._PROTECTED_UPDATE_FIELDS & set(request.data.keys())
+        if blocked:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": (
+                            "These fields cannot be changed directly: "
+                            + ", ".join(sorted(blocked))
+                            + ". Use the submit/cancel/approve/reject/pay actions for status."
+                        ),
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().update(request, *args, **kwargs)
 
     @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):
@@ -284,3 +337,87 @@ class InvoiceViewSet(ModelViewSet):
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         return Response({"message": "OK", "data": InvoiceSerializer(qs, many=True).data})
+
+
+class InvoiceItemViewSet(ModelViewSet):
+    """Line-item CRUD for invoices (E-PLT-7).
+
+    Items belong to an invoice; they can only be added, edited, or removed
+    while the parent invoice is a draft, and only by its creator (or CJ Admin).
+    ``total`` is computed server-side as quantity * unit_price.
+    """
+
+    queryset = InvoiceItem.objects.select_related("invoice", "invoice__creator")
+    permission_classes = [IsAuthenticated]
+    serializer_class = InvoiceItemSerializer
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = super().get_queryset()
+        if _is_admin(user):
+            return qs
+        return qs.filter(invoice__creator=user)
+
+    def _guard_parent(self, invoice) -> Response | None:
+        if invoice.creator_id != self.request.user.id and not _is_admin(self.request.user):
+            return Response(
+                {"error": {"code": "forbidden", "message": "Not your invoice."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if invoice.status != "draft":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": f"Only draft invoices can be edited. This invoice is '{invoice.status}'.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    @staticmethod
+    def _compute_total(serializer):
+        qty = serializer.validated_data.get("quantity", 1)
+        unit = serializer.validated_data.get("unit_price", 0)
+        return qty * unit
+
+    def create(self, request, *args, **kwargs):
+        invoice_id = request.data.get("invoice")
+        invoice = Invoice.objects.filter(id=invoice_id).first()
+        if not invoice:
+            return Response(
+                {"error": {"code": "not_found", "message": "Invoice not found."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        guard = self._guard_parent(invoice)
+        if guard:
+            return guard
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(total=self._compute_total(serializer))
+        return Response(
+            {"message": "Line item added.", "data": serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    def update(self, request, *args, **kwargs):
+        item = self.get_object()
+        guard = self._guard_parent(item.invoice)
+        if guard:
+            return guard
+        partial = kwargs.pop("partial", False)
+        serializer = self.get_serializer(item, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        qty = serializer.validated_data.get("quantity", item.quantity)
+        unit = serializer.validated_data.get("unit_price", item.unit_price)
+        serializer.save(total=qty * unit)
+        return Response({"message": "Line item updated.", "data": serializer.data})
+
+    def destroy(self, request, *args, **kwargs):
+        item = self.get_object()
+        guard = self._guard_parent(item.invoice)
+        if guard:
+            return guard
+        return super().destroy(request, *args, **kwargs)
