@@ -365,6 +365,11 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 {"message": "OK", "data": CourseAssessmentSerializer(assessments, many=True).data},
                 status=status.HTTP_200_OK,
             )
+        # H11: linking an assessment to a published course edits its structure
+        # (SRS §2.4) — gate it through the same approval flow.
+        denied = _require_course_edit_allowed(request, course)
+        if denied:
+            return denied
         serializer = CourseAssessmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(course=course)

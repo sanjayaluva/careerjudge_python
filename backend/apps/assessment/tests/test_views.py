@@ -625,6 +625,26 @@ class TestSectionCRUD(AssessmentViewTestBase):
             assert resp.json()["data"]["level"] == expected_level, resp.data
             parent_id = resp.json()["data"]["id"]
 
+    def test_section_fifth_level_rejected(self):
+        """ASM-8 Rule 1: at most 4 variable levels (Doc 3 §3)."""
+        parent_id = None
+        for _ in range(4):
+            resp = self.client.post(
+                f"/api/assessments/{self.assessment.id}/sections/",
+                {"title": "L", "parent": parent_id, "order": 1},
+                format="json",
+            )
+            assert resp.status_code == status.HTTP_201_CREATED, resp.data
+            parent_id = resp.json()["data"]["id"]
+        # A 5th level under the level-4 section must be rejected.
+        resp = self.client.post(
+            f"/api/assessments/{self.assessment.id}/sections/",
+            {"title": "L5", "parent": parent_id, "order": 1},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert resp.json()["error"]["code"] == "max_levels_exceeded"
+
     def test_section_order_mode_roundtrips(self):
         """ASM-5 (§5.1): a section's per-level order_mode is writable and returned."""
         resp = self.client.post(
@@ -750,6 +770,20 @@ class TestQuestionAssignment(AssessmentViewTestBase):
         assert resp.json()["data"]["question"] == self.question.id
         # Should include question_detail
         assert "question_detail" in resp.json()["data"]
+
+    def test_cannot_assign_question_to_non_leaf_section(self):
+        """ASM-8 Rule 2: questions attach only at last-level (leaf) sections."""
+        child = AssessmentSection.objects.create(
+            assessment=self.assessment, parent=self.section, title="child", level=2, order=1
+        )
+        assert child  # self.section now has a subsection → not a leaf
+        resp = self.client.post(
+            f"/api/assessments/{self.assessment.id}/sections/{self.section.id}/questions/",
+            {"question": self.question.id, "order": 1},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert resp.json()["error"]["code"] == "not_leaf_section"
 
     def test_list_assigned_questions(self):
         AssessmentQuestion.objects.create(section=self.section, question=self.question, order=1)

@@ -1413,3 +1413,39 @@ def test_multiple_report_files_attached(student_client, individual_user, trainer
     )
     assert resp.status_code == 201, resp.data
     assert len(resp.data["data"]["files"]) == 2
+
+
+def test_trainer_cannot_link_assessment_to_published_course(
+    trainer_client, trainer_user
+):
+    """H11: linking an assessment to a published course (SRS §2.4) is gated."""
+    from apps.assessment.models import Assessment
+    from apps.training.models import CourseAssessment
+
+    course = TrainingCourse.objects.create(
+        title="Pub2", created_by=trainer_user, status="published"
+    )
+    assessment = Assessment.objects.create(title="A", status="published")
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/assessments/",
+        {"assessment": assessment.id, "title": "Quiz 1", "order": 1},
+        format="json",
+    )
+    assert resp.status_code == 403, resp.data
+    assert not CourseAssessment.objects.filter(course=course).exists()
+
+
+def test_trainer_can_link_assessment_to_draft_course(trainer_client, trainer_user):
+    """H11: draft courses stay freely editable (link an assessment)."""
+    from apps.assessment.models import Assessment
+    from apps.training.models import CourseAssessment
+
+    course = TrainingCourse.objects.create(title="Draft", created_by=trainer_user, status="draft")
+    assessment = Assessment.objects.create(title="A", status="published")
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/assessments/",
+        {"assessment": assessment.id, "title": "Quiz 1", "order": 1},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    assert CourseAssessment.objects.filter(course=course).exists()

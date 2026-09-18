@@ -756,6 +756,25 @@ class AssessmentSectionViewSet(ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # ASM-8 Rule 1 (Doc 3 §3): at most 4 variable levels. The level is
+        # derived from the parent (parent.level + 1), so a child under a
+        # level-4 section would be level 5 — reject it server-side.
+        parent = serializer.validated_data.get("parent")
+        derived_level = parent.level + 1 if parent else 1
+        if derived_level > 4:
+            return Response(
+                {
+                    "error": {
+                        "code": "max_levels_exceeded",
+                        "message": (
+                            "An assessment can have at most 4 variable levels "
+                            "(Doc 3 §3). This section would be level "
+                            f"{derived_level}."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         self.perform_create(serializer)
         return Response(
             {
@@ -835,6 +854,27 @@ class AssessmentQuestionViewSet(ModelViewSet):
         sid = self.kwargs.get("section_id")
         section = get_object_or_404(AssessmentSection, id=sid)
         assessment = section.assessment
+
+        # ASM-8 Rule 2 (Doc 3 §3): questions attach only at the last (leaf)
+        # level. A section that has sub-sections is an intermediate variable,
+        # not a leaf, so it cannot hold questions directly. Psychometric
+        # assessments are exempt — there the question attaches to the parent and
+        # the scoring engine routes each option to a tag-derived leaf section
+        # (see _ensure_section_tags_have_sections below).
+        if assessment.assessment_type != "psychometric" and section.subsections.exists():
+            return Response(
+                {
+                    "error": {
+                        "code": "not_leaf_section",
+                        "message": (
+                            "Questions can only be assigned to a last-level "
+                            "(leaf) section. This section has sub-sections — "
+                            "assign the question to one of those instead."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         question_id = request.data.get("question")
         if not question_id:
