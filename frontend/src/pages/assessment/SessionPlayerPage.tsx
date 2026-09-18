@@ -398,9 +398,12 @@ export default function SessionPlayerPage() {
       }
     }
   }
-  const groupIsLast =
-    (continuousTail[continuousTail.length - 1] ?? currentIndex) === questions.length - 1;
+  const groupLastIndex = continuousTail[continuousTail.length - 1] ?? currentIndex;
+  const groupIsLast = groupLastIndex === questions.length - 1;
   const effectiveIsLast = continuousTail.length ? groupIsLast : isLast;
+  const positionLabel = continuousTail.length
+    ? `Questions ${currentIndex + 1}–${groupLastIndex + 1} of ${questions.length}`
+    : `Question ${currentIndex + 1} of ${questions.length}`;
 
   const handleNext = () => {
     // Save current answer before navigating
@@ -556,7 +559,7 @@ export default function SessionPlayerPage() {
         <div>
           <h1 className="text-sm font-bold text-slate-900">{session.assessment_title}</h1>
           <p className="text-xs text-slate-500">
-            Question {currentIndex + 1} of {questions.length} · Answered: {answeredCount} /{" "}
+            {positionLabel} · Answered: {answeredCount} /{" "}
             {totalQuestions} · Bookmarked: {bookmarkedCount} · Skipped: {skippedCount}
           </p>
         </div>
@@ -669,7 +672,8 @@ export default function SessionPlayerPage() {
                     const isAnswered = Boolean(answers[aKey]);
                     const isBookmarked = bookmarked.has(aKey);
                     const isSkipped = skipped.has(aKey);
-                    const isCurrent = i === currentIndex;
+                    // QT-3: highlight the whole continuous-rating group as active.
+                    const isCurrent = i >= currentIndex && i <= groupLastIndex;
                     const jumpAllowed = canJumpTo(i);
                     const isDisabled = presentationActive || !jumpAllowed;
                     return (
@@ -978,7 +982,7 @@ export default function SessionPlayerPage() {
           ← Previous
         </Button>
         <p className="text-xs text-slate-400">
-          Question {currentIndex + 1} / {questions.length}
+          {positionLabel}
           {subQuestionCount > 1 && (
             <span className="ml-2 text-primary-600">
               · Sub-question {activeSubQ + 1} / {subQuestionCount}
