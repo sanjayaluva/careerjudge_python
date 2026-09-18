@@ -1026,6 +1026,9 @@ function AnswerInput({
   const qd = question.question_detail;
   const qType = qd.question_type;
   const [selectedA, setSelectedA] = useState<number | null>(null);
+  // QT-4: hotspot-multi (5b) — a click is pending until the candidate confirms
+  // it; only confirmed clicks count (cancelled clicks have no penalty).
+  const [pendingClick, setPendingClick] = useState<{ x: number; y: number } | null>(null);
 
   // MCQ types — radio or checkbox
   if (qType.startsWith("MCQ_")) {
@@ -1393,7 +1396,8 @@ function AnswerInput({
       const natY = Math.round(y * scaleY);
 
       if (isMulti) {
-        onChange({ clicks: [...clicks, { x: natX, y: natY }] });
+        // QT-4: stage the click; it only counts once the candidate confirms.
+        setPendingClick({ x: natX, y: natY });
       } else {
         // Single answer: only keep latest click
         onChange({ clicks: [{ x: natX, y: natY }] });
@@ -1484,13 +1488,41 @@ function AnswerInput({
                     </text>
                   </g>
                 ))}
+                {pendingClick && (
+                  <circle
+                    cx={pendingClick.x}
+                    cy={pendingClick.y}
+                    r={9}
+                    fill="rgba(234,179,8,0.35)"
+                    stroke="#eab308"
+                    strokeWidth="2"
+                    strokeDasharray="3 2"
+                  />
+                )}
               </svg>
             </div>
             <p className="mt-2 text-xs text-slate-500">
               {isMulti
-                ? "Click on the image to mark your answers. Multiple clicks allowed."
+                ? "Click on the image to mark your answers, then confirm each one. Only confirmed clicks count."
                 : "Click on the image to select your answer. Only your latest click counts."}
             </p>
+            {isMulti && pendingClick && (
+              <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-sm">
+                <span className="text-amber-800">Confirm your selection?</span>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    onChange({ clicks: [...clicks, pendingClick] });
+                    setPendingClick(null);
+                  }}
+                >
+                  Confirm
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setPendingClick(null)}>
+                  Cancel
+                </Button>
+              </div>
+            )}
             {clicks.length > 0 && (
               <Button
                 variant="outline"
