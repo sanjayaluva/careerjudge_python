@@ -68,7 +68,8 @@ import {
   PSYCHOMETRIC_QUESTION_TYPES_LIST,
   retrieveQuestion,
 } from "@/api/questionBank";
-import { extractApiError } from "@/api/client";
+import { extractApiError, extractApiErrorCode } from "@/api/client";
+import { createCheckout } from "@/api/payments";
 import { useAuth } from "@/hooks/useAuth";
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
   draft: "default",
@@ -114,7 +115,36 @@ export default function AssessmentDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
       navigate(`/assessments/sessions/${data.id}`);
     },
-    onError: (err) => toast.error(extractApiError(err)),
+    onError: async (err) => {
+      // PLT-3 pay-for-test gate: a priced assessment answers 402 until paid.
+      // Kick off Stripe checkout for this assessment; on return the candidate
+      // starts again and the server re-checks the payment.
+      if (extractApiErrorCode(err) === "payment_required") {
+        try {
+          const res = await createCheckout({
+            module: "assessment",
+            item_id: aid,
+            amount: assessment?.price ?? "0",
+            description: `Assessment: ${assessment?.title ?? ""}`,
+          });
+          if (res.checkout_url) {
+            window.location.href = res.checkout_url;
+            return;
+          }
+          if (res.status === "paid" || res.status === "free") {
+            startSessionMutation.mutate();
+            return;
+          }
+          toast.error(
+            "Payment is pending confirmation. Please start again once it has cleared.",
+          );
+        } catch (e) {
+          toast.error(extractApiError(e));
+        }
+        return;
+      }
+      toast.error(extractApiError(err));
+    },
   });
 
   // Readiness check — fetches whether the assessment is ready to publish.
@@ -459,12 +489,19 @@ export default function AssessmentDetailPage() {
                   </Button>
                 )}
                 {a.status === "published" && (
-                  <Button
-                    loading={startSessionMutation.isPending}
-                    onClick={() => startSessionMutation.mutate()}
-                  >
-                    Start Session
-                  </Button>
+                  <div className="flex flex-col items-end gap-1">
+                    {Number(a.price) > 0 && (
+                      <span className="text-xs text-slate-500">
+                        Paid assessment — {a.price} due before you start
+                      </span>
+                    )}
+                    <Button
+                      loading={startSessionMutation.isPending}
+                      onClick={() => startSessionMutation.mutate()}
+                    >
+                      {Number(a.price) > 0 ? `Pay & Start (${a.price})` : "Start Session"}
+                    </Button>
+                  </div>
                 )}
               </div>
             </CardContent>
@@ -1468,6 +1505,7 @@ function EditAssessmentModal({
   const [attemptRule, setAttemptRule] = useState("SINGLE_SESSION");
   const [displayOrder, setDisplayOrder] = useState<"STATIC" | "RANDOM">("STATIC");
   const [timerLevel, setTimerLevel] = useState("assessment");
+  const [price, setPrice] = useState("0");
 
   // Sync form fields when the modal opens.
   useEffect(() => {
@@ -1484,6 +1522,7 @@ function EditAssessmentModal({
     setAttemptRule(assessment.attempt_rule ?? "SINGLE_SESSION");
     setDisplayOrder((assessment.display_order as "STATIC" | "RANDOM") ?? "STATIC");
     setTimerLevel(assessment.timer_level ?? "assessment");
+    setPrice(assessment.price ?? "0");
   }, [open, assessment]);
 
   return (
@@ -1508,6 +1547,7 @@ function EditAssessmentModal({
             attempt_rule: attemptRule,
             display_order: displayOrder,
             timer_level: timerLevel,
+            price: price.trim() === "" ? "0" : price,
           });
         }}
         className="space-y-4"
@@ -1553,6 +1593,18 @@ function EditAssessmentModal({
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
               placeholder="Leave empty for no time limit"
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-price">Price (0 = free)</Label>
+            <Input
+              id="edit-price"
+              type="number"
+              min="0"
+              step="0.01"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="0.00"
             />
           </div>
           <div>

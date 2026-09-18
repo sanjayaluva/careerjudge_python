@@ -25,6 +25,8 @@ export interface Assessment {
   display_order: string;
   navigation_rule: string;
   attempt_rule: string;
+  /** PLT-3 pay-for-test: price to attempt (as a decimal string). "0.00" = free. */
+  price: string;
   created_by: number | null;
   created_by_name: string | null;
   section_count: number;

@@ -128,6 +128,17 @@ class Assessment(models.Model):
         default="SINGLE_SESSION",
     )
 
+    # Pay-for-test (PLT-3): price to attempt this assessment. 0 = free. When
+    # > 0, a candidate must have a completed payment (Payment module
+    # "assessment", item_id = this assessment) before a new session starts.
+    price = models.DecimalField(
+        _("price"),
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text=_("Price to attempt this assessment. 0 = free (no payment gate)."),
+    )
+
     # Audit
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

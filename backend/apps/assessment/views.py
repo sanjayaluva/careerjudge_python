@@ -572,6 +572,35 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+        # Pay-for-test gate (PLT-3): a priced assessment requires a completed
+        # payment before a NEW session can start. Resuming an existing session
+        # (handled above) is always allowed, so a candidate who has already
+        # paid and begun is never re-charged.
+        if assessment.price and assessment.price > 0:
+            from apps.payments.models import Payment
+
+            paid = Payment.objects.filter(
+                user=request.user,
+                module="assessment",
+                item_id=assessment.id,
+                status__in=["paid", "free"],
+            ).exists()
+            if not paid:
+                return Response(
+                    {
+                        "error": {
+                            "code": "payment_required",
+                            "message": "This assessment requires payment before you can start.",
+                            "details": {
+                                "price": str(assessment.price),
+                                "module": "assessment",
+                                "item_id": assessment.id,
+                            },
+                        }
+                    },
+                    status=status.HTTP_402_PAYMENT_REQUIRED,
+                )
+
         # Create new session
         session = AssessmentSession.objects.create(
             assessment=assessment,

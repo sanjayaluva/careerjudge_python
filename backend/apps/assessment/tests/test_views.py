@@ -899,6 +899,44 @@ class TestSessionFlow(AssessmentViewTestBase):
         # And expose total_duration_seconds from assessment
         assert resp.json()["data"]["total_duration_seconds"] == 600
 
+    def test_priced_assessment_blocks_start_without_payment(self):
+        """PLT-3: a priced assessment returns 402 until the candidate pays."""
+        self.assessment.price = 25
+        self.assessment.save(update_fields=["price"])
+        self.client.force_authenticate(user=self.candidate)
+        resp = self.client.post(f"/api/assessments/{self.assessment.id}/start_session/")
+        assert resp.status_code == status.HTTP_402_PAYMENT_REQUIRED
+        assert resp.json()["error"]["code"] == "payment_required"
+        assert resp.json()["error"]["details"]["price"] == "25.00"
+        # No session was created.
+        assert not AssessmentSession.objects.filter(
+            assessment=self.assessment, candidate=self.candidate
+        ).exists()
+
+    def test_priced_assessment_starts_after_payment(self):
+        """PLT-3: once a completed payment exists, the session starts."""
+        from apps.payments.models import Payment
+
+        self.assessment.price = 25
+        self.assessment.save(update_fields=["price"])
+        Payment.objects.create(
+            user=self.candidate,
+            module="assessment",
+            item_id=self.assessment.id,
+            amount=25,
+            status="paid",
+        )
+        self.client.force_authenticate(user=self.candidate)
+        resp = self.client.post(f"/api/assessments/{self.assessment.id}/start_session/")
+        assert resp.status_code == status.HTTP_201_CREATED
+
+    def test_free_assessment_starts_without_payment(self):
+        """PLT-3: price 0 (default) means no gate."""
+        assert self.assessment.price == 0
+        self.client.force_authenticate(user=self.candidate)
+        resp = self.client.post(f"/api/assessments/{self.assessment.id}/start_session/")
+        assert resp.status_code == status.HTTP_201_CREATED
+
     def test_cannot_start_session_for_draft_assessment(self):
         """Individual user can't start a session on a draft assessment.
 

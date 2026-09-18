@@ -35,7 +35,8 @@ import {
   publishAssessment,
   startSession,
 } from "@/api/assessment";
-import { extractApiError } from "@/api/client";
+import { extractApiError, extractApiErrorCode } from "@/api/client";
+import { createCheckout } from "@/api/payments";
 import { useAuth } from "@/hooks/useAuth";
 
 const ASSESS_KEY = ["assessments"];
@@ -119,7 +120,33 @@ export default function AssessmentsPage() {
       void queryClient.invalidateQueries({ queryKey: ["my-sessions"] });
       navigate(`/assessments/sessions/${data.id}`);
     },
-    onError: (err) => toast.error(extractApiError(err)),
+    onError: async (err, assessmentId) => {
+      // PLT-3 pay-for-test gate — a priced assessment 402s until paid.
+      if (extractApiErrorCode(err) === "payment_required") {
+        const a = (data?.results ?? []).find((x) => x.id === assessmentId);
+        try {
+          const res = await createCheckout({
+            module: "assessment",
+            item_id: assessmentId,
+            amount: a?.price ?? "0",
+            description: `Assessment: ${a?.title ?? ""}`,
+          });
+          if (res.checkout_url) {
+            window.location.href = res.checkout_url;
+            return;
+          }
+          if (res.status === "paid" || res.status === "free") {
+            startSessionMutation.mutate(assessmentId);
+            return;
+          }
+          toast.error("Payment is pending confirmation. Please start again once it has cleared.");
+        } catch (e) {
+          toast.error(extractApiError(e));
+        }
+        return;
+      }
+      toast.error(extractApiError(err));
+    },
   });
 
   const assessments = data?.results ?? [];
