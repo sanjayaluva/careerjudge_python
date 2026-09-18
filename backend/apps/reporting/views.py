@@ -620,6 +620,29 @@ class GeneratedReportViewSet(ModelViewSet):
     serializer_class = GeneratedReportSerializer
     http_method_names = ["get", "head", "options"]
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Doc 4: a corporate manager sees ONLY their own employees' reports.
+        # A corporate manager is a corp/corp-exclusive/group admin who is an
+        # admin member of at least one corporate organization. Non-corporate
+        # roles (CJ Admin, staff, individuals) keep their existing visibility.
+        user = self.request.user
+        role_name = user.role.name if getattr(user, "role", None) else None
+        if role_name in ("corp_admin", "corp_exclusive", "group_admin"):
+            from apps.organizations.models import OrganizationMember
+
+            admin_orgs = OrganizationMember.objects.filter(
+                user=user,
+                is_admin=True,
+                organization__type__in=("corporate", "corp_exclusive"),
+            ).values_list("organization_id", flat=True)
+            if admin_orgs:
+                employee_ids = OrganizationMember.objects.filter(
+                    organization_id__in=list(admin_orgs)
+                ).values_list("user_id", flat=True)
+                qs = qs.filter(candidate_id__in=list(employee_ids))
+        return qs
+
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance)

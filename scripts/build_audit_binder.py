@@ -32,6 +32,7 @@ MILESTONES = [
     ("M6B", "Extra-scope items 3–9", "Reviewer domain routing, rich-text, policy pages, assignment depth, task→question autofill, UI consistency."),
     ("M7", "Hardening + audit binder", "Closed two signed gaps (ASM-8 level rules, H11 nested edit-gating); assembled this binder."),
     ("M8", "Signed-scope correction + remediation", "Doc-level review reopened psychometric Approach-1 and trainer-authored assessments as signed-not-built; both fully remediated — trainer-authored assessments, and psychometric Approach-1 end-to-end (authoring + config + player delivery + per-section scoring)."),
+    ("M9", "Corporate / Corporate-Exclusive module", "A doc review confirmed corporate is signed (SRS UC002-006/030, Doc 9 §2.1-2.4, Corporate-Exclusive spec UC052-055). Built end-to-end (logical multi-tenancy): org-scoping + corporate user management, assessment scheduling + notify, corporate report scoping, page customization, and per-corporate branded website with generated admin."),
 ]
 
 
@@ -134,7 +135,7 @@ directly from the living traceability matrix, so each row below links a signed c
         parts.append(f'<div class="ms"><div class="tag">{tag}</div><div class="body"><b>{esc(title)}</b><span>{esc(desc)}</span></div></div>')
 
     parts.append("""<h2>Verification</h2>
-<p class="sub" style="margin-top:0">Backend: full pytest suite <b>801 passing</b>; the only 12 failures are pre-existing WeasyPrint
+<p class="sub" style="margin-top:0">Backend: full pytest suite <b>821 passing</b>; the only 12 failures are pre-existing WeasyPrint
 native-library load errors in the reporting PDF tests (cairo/pango unavailable in the CI image), unrelated to any signed
 requirement. Frontend: <code>tsc --noEmit</code> clean and <b>56/56</b> vitest specs passing. Every milestone was committed
 per item with its clause id.</p>""")

@@ -195,3 +195,79 @@ export function createAssignment(
 export function deleteAssignment(orgId: number, assignmentId: number): Promise<void> {
   return apiDelete(`${BASE}/${orgId}/assignments/${assignmentId}/`);
 }
+
+// Schedules (CJ_UC053) — schedule an assessment for employees + notify.
+export interface AssessmentSchedule {
+  id: number;
+  organization: number;
+  group: number | null;
+  assessment: number;
+  assessment_title: string;
+  group_name: string | null;
+  scheduled_at: string;
+  created_by: number | null;
+  notified: boolean;
+  created_at: string;
+}
+
+export function listSchedules(orgId: number): Promise<AssessmentSchedule[]> {
+  return apiGetPaged<AssessmentSchedule>(`${BASE}/${orgId}/schedules/`).then((r) => r.results);
+}
+
+export function createSchedule(
+  orgId: number,
+  payload: { assessment: number; scheduled_at: string; group?: number | null },
+): Promise<AssessmentSchedule> {
+  return apiPost<AssessmentSchedule>(`${BASE}/${orgId}/schedules/`, payload);
+}
+
+export function deleteSchedule(orgId: number, scheduleId: number): Promise<void> {
+  return apiDelete(`${BASE}/${orgId}/schedules/${scheduleId}/`);
+}
+
+// Website (CJ_UC054/UC055) — a corporate's branded portal.
+export interface CorporateWebsite {
+  id: number;
+  organization: number;
+  slug: string;
+  company_name: string;
+  logo_url: string;
+  layout: "classic" | "modern" | "minimal";
+  primary_color: string;
+  admin_user: number | null;
+  admin_email: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  generated_credentials?: { email: string; temporary_password: string };
+}
+
+export function getWebsite(orgId: number): Promise<CorporateWebsite | null> {
+  return apiGet<CorporateWebsite | null>(`${BASE}/${orgId}/website/`);
+}
+
+export function createWebsite(
+  orgId: number,
+  payload: {
+    company_name: string;
+    layout?: string;
+    primary_color?: string;
+    logo_url?: string;
+    admin_email?: string;
+  },
+): Promise<CorporateWebsite> {
+  return apiPost<CorporateWebsite>(`${BASE}/${orgId}/website/`, payload);
+}
+
+export function updateWebsite(
+  orgId: number,
+  payload: Partial<{
+    company_name: string;
+    layout: string;
+    primary_color: string;
+    logo_url: string;
+    is_active: boolean;
+  }>,
+): Promise<CorporateWebsite> {
+  return apiPatch<CorporateWebsite>(`${BASE}/${orgId}/website/`, payload);
+}

@@ -39,6 +39,7 @@ MILESTONES = [
     ("M6B", "Extra-scope items 3–9", "Reviewer domain routing, rich-text, editable policy pages, assignment depth, task→question autofill, UI consistency."),
     ("M7", "Hardening &amp; audit binder", "Closed two signed gaps (the four-level rule and nested edit-gating) and assembled this binder."),
     ("M8", "Signed-scope correction + remediation", "A signed-vs-scope review against the module docs reopened psychometric Approach-1 (Doc 1 §3.1.6) and trainer-authored assessments (Doc 7 §2.4) as signed-not-built; both fully remediated — trainer-authored assessments, and psychometric Approach-1 end-to-end (authoring + config + candidate delivery + per-section scoring)."),
+    ("M9", "Corporate / Corporate-Exclusive module", "A document review confirmed the corporate feature set is signed (SRS UC002-006/030, Doc 9 §2.1-2.4, and the Corporate-Exclusive spec UC052-055). Built end-to-end with logical multi-tenancy: organization-scoped data isolation, corporate user management (add + bulk, Employee IDs), assessment scheduling with employee notifications, corporate report access, page customization, and a per-corporate branded website with a generated admin login."),
 ]
 
 
@@ -172,7 +173,7 @@ def main():
   are intentionally excluded as a separate change order and form no part of this audit. Live Chat, Send Message and
   Contact Admin are included because they appear on page 1 of the signed User&nbsp;Details.pdf for the standard
   Individual User.</p>
-  <p><b>Verification.</b> Backend: 801 passing pytest specs (the 12 failures are pre-existing WeasyPrint native-library
+  <p><b>Verification.</b> Backend: 821 passing pytest specs (the 12 failures are pre-existing WeasyPrint native-library
   load errors). Frontend: type-check clean, 56 of 56 component specs passing.</p>
   <p class="foot-gen">Generated from <code>docs/compliance/traceability_matrix.csv</code> · {today}</p>
 </footer>""")

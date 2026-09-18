@@ -5,7 +5,14 @@ from rest_framework import serializers
 from apps.accounts.models import User
 from apps.accounts.serializers import UserSerializer
 
-from .models import Group, Organization, OrganizationAssignment, OrganizationMember
+from .models import (
+    AssessmentSchedule,
+    CorporateWebsite,
+    Group,
+    Organization,
+    OrganizationAssignment,
+    OrganizationMember,
+)
 
 
 class GroupSerializer(serializers.ModelSerializer):
@@ -127,6 +134,69 @@ class OrganizationAssignmentSerializer(serializers.ModelSerializer):
             "assigned_at",
         ]
         read_only_fields = ["id", "organization", "assigned_by", "assigned_by_name", "assigned_at"]
+
+
+class AssessmentScheduleSerializer(serializers.ModelSerializer):
+    """CJ_UC053: a corporate/group admin schedules an assessment for employees."""
+
+    assessment_title = serializers.CharField(source="assessment.title", read_only=True)
+    group_name = serializers.CharField(source="group.name", read_only=True, default=None)
+
+    class Meta:
+        model = AssessmentSchedule
+        fields = [
+            "id",
+            "organization",
+            "group",
+            "assessment",
+            "assessment_title",
+            "group_name",
+            "scheduled_at",
+            "created_by",
+            "notified",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "organization",
+            "assessment_title",
+            "group_name",
+            "created_by",
+            "notified",
+            "created_at",
+        ]
+
+
+class CorporateWebsiteSerializer(serializers.ModelSerializer):
+    """CJ_UC054/UC055: a corporate's branded portal."""
+
+    admin_email = serializers.EmailField(source="admin_user.email", read_only=True, default=None)
+
+    class Meta:
+        model = CorporateWebsite
+        fields = [
+            "id",
+            "organization",
+            "slug",
+            "company_name",
+            "logo_url",
+            "layout",
+            "primary_color",
+            "admin_user",
+            "admin_email",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "organization",
+            "slug",
+            "admin_user",
+            "admin_email",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class OrganizationSerializer(serializers.ModelSerializer):

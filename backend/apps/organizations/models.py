@@ -198,3 +198,96 @@ class OrganizationAssignment(models.Model):
 
     def __str__(self) -> str:
         return f"{self.organization.name} → {self.item_type}#{self.item_id}"
+
+
+# ---------------------------------------------------------------------------
+# AssessmentSchedule (CJ_UC053) — a corporate/group admin schedules an
+# assessment for their employees at a date/time; members are notified.
+# ---------------------------------------------------------------------------
+
+
+class AssessmentSchedule(models.Model):
+    """A scheduled assessment for a corporate's employees (CJ_UC053).
+
+    Scoped to an organization (and optionally a single group). On creation the
+    targeted members are notified. The assessment is referenced by FK to
+    ``assessment.Assessment`` (string ref avoids an import cycle).
+    """
+
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="assessment_schedules"
+    )
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.SET_NULL,
+        related_name="assessment_schedules",
+        null=True,
+        blank=True,
+        help_text=_("Optional — schedule for one group only; NULL = whole organization."),
+    )
+    assessment = models.ForeignKey(
+        "assessment.Assessment", on_delete=models.CASCADE, related_name="schedules"
+    )
+    scheduled_at = models.DateTimeField(_("scheduled at"))
+    created_by = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, related_name="created_schedules"
+    )
+    notified = models.BooleanField(_("members notified"), default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-scheduled_at"]
+        verbose_name = _("assessment schedule")
+        verbose_name_plural = _("assessment schedules")
+
+    def __str__(self) -> str:
+        return f"{self.organization.name} → assessment#{self.assessment_id} @ {self.scheduled_at}"
+
+
+# ---------------------------------------------------------------------------
+# CorporateWebsite (CJ_UC054 + CJ_UC055) — a per-corporate branded portal.
+#
+# Logical multi-tenancy (Option B, see docs/compliance/corporate_exclusive_scope
+# .md §4): each Corporate-Exclusive gets its own slug/subdomain, branding, and a
+# generated corporate-admin login. Data isolation is by organization membership
+# (see scoping.py), NOT a physically separate database. DNS/subdomain wiring is
+# an ops step; the app resolves a tenant by its ``slug``.
+# ---------------------------------------------------------------------------
+
+
+class CorporateWebsite(models.Model):
+    """A branded portal for one corporate (CJ_UC054 customization + CJ_UC055)."""
+
+    LAYOUT_CHOICES = [
+        ("classic", "Classic"),
+        ("modern", "Modern"),
+        ("minimal", "Minimal"),
+    ]
+
+    organization = models.OneToOneField(
+        Organization, on_delete=models.CASCADE, related_name="corporate_website"
+    )
+    slug = models.SlugField(_("slug"), max_length=63, unique=True)
+    company_name = models.CharField(_("company name"), max_length=255)
+    logo_url = models.CharField(_("logo URL"), max_length=1000, blank=True)
+    layout = models.CharField(_("layout"), max_length=20, choices=LAYOUT_CHOICES, default="classic")
+    primary_color = models.CharField(_("primary color"), max_length=9, default="#4f46e5")
+    admin_user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="administered_websites",
+        help_text=_("The generated corporate-admin account for this website (CJ_UC055)."),
+    )
+    is_active = models.BooleanField(_("active"), default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("corporate website")
+        verbose_name_plural = _("corporate websites")
+
+    def __str__(self) -> str:
+        return f"{self.company_name} ({self.slug})"

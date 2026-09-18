@@ -4,14 +4,16 @@
 **Corporate-Exclusive User** spec (separate mail) CJ_UC052–055; Doc 9 (Admin
 Process) §2.1–2.4; Doc 4 (General Report) §"corporate managers view employees".*
 
-> **Status: SIGNED, PARTIALLY FOUNDED, LARGELY UNBUILT.**
-> An `organizations` app exists (Organization / Group / OrganizationMember /
-> OrganizationAssignment models + generic CRUD API + two React pages + four
-> corporate roles seeded). But it is **generic admin CRUD, not a corporate
-> self-service platform** — the defining corporate behaviours (per-tenant
-> branded websites, page customization, assessment scheduling, org-scoped data
-> isolation, org-scoped content visibility, corporate report access) are
-> **absent or modelled-but-unwired**. This is the last signed gap after PSY-A1.
+> **Status: BUILT (all three phases complete, 19 Sep 2026).**
+> Phases 1–3 delivered end-to-end and tested: org-scoping foundation + corporate
+> user management (Phase 1); schedule-assessment + corporate report scoping
+> (Phase 2); customize-page + create-website with logical multi-tenancy
+> (Phase 3). Commits a54257f (Phase 1) + this commit (Phase 2/3). Backend 821
+> pass; frontend tsc + eslint + prettier clean, 56/56 vitest, build OK.
+> **One deployment caveat (not app code):** CJ_UC055 "Create Website" is built
+> at the application level (per-corporate slug + branding + generated admin +
+> public branding endpoint by slug); wiring each slug to a real subdomain/DNS +
+> TLS is an infrastructure/ops step. Data isolation is logical (Option B).
 
 ---
 
