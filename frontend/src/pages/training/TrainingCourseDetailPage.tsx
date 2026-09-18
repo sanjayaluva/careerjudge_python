@@ -53,6 +53,11 @@ import {
   listMyCourses,
   notifyLiveSessionStudents,
   listLiveSessionConsents,
+  listAssignmentReports,
+  reviewAssignmentReport,
+  listMessages,
+  sendMessage,
+  type AssignmentReport,
   publishCourse,
   registerForCourse,
   requestCourseUpdate,
@@ -522,6 +527,7 @@ function RegistrationsTab({ courseId }: { courseId: number }) {
                 <TableHead>Progress</TableHead>
                 <TableHead>Started</TableHead>
                 <TableHead>Registered</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -554,6 +560,9 @@ function RegistrationsTab({ courseId }: { courseId: number }) {
                   <TableCell className="text-slate-500">
                     {new Date(r.registered_at).toLocaleDateString()}
                   </TableCell>
+                  <TableCell className="text-right">
+                    <RegistrationActions registrationId={r.id} />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -561,6 +570,207 @@ function RegistrationsTab({ courseId }: { courseId: number }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// TRN-3 / TRN-5 (§2.3.2, §5/§6): per-registration assignment-report review +
+// trainer<->student messaging.
+function RegistrationActions({ registrationId }: { registrationId: number }) {
+  const [reportsOpen, setReportsOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
+  return (
+    <div className="flex justify-end gap-1">
+      <Button size="sm" variant="outline" onClick={() => setReportsOpen(true)}>
+        Reports
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => setMessagesOpen(true)}>
+        Messages
+      </Button>
+      {reportsOpen && (
+        <ReportsReviewModal registrationId={registrationId} onClose={() => setReportsOpen(false)} />
+      )}
+      {messagesOpen && (
+        <MessagesModal registrationId={registrationId} onClose={() => setMessagesOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+function ReportsReviewModal({
+  registrationId,
+  onClose,
+}: {
+  registrationId: number;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const { data: reports, isLoading } = useQuery({
+    queryKey: ["training", "assignment-reports", registrationId],
+    queryFn: () => listAssignmentReports(registrationId),
+  });
+  const reviewMut = useMutation({
+    mutationFn: (v: { reportId: number; score: number; feedback: string }) =>
+      reviewAssignmentReport(registrationId, {
+        report_id: v.reportId,
+        trainer_score: v.score,
+        trainer_feedback: v.feedback,
+      }),
+    onSuccess: () => {
+      toast.success("Report reviewed.");
+      void queryClient.invalidateQueries({
+        queryKey: ["training", "assignment-reports", registrationId],
+      });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+  const list = reports ?? [];
+  return (
+    <Modal open onClose={onClose} title="Assignment reports" size="lg">
+      {isLoading ? (
+        <div className="flex justify-center py-6">
+          <Spinner />
+        </div>
+      ) : list.length === 0 ? (
+        <p className="py-4 text-center text-sm text-slate-500">No reports submitted yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {list.map((rep) => (
+            <ReportReviewRow
+              key={rep.id}
+              report={rep}
+              loading={reviewMut.isPending}
+              onReview={(score, feedback) => reviewMut.mutate({ reportId: rep.id, score, feedback })}
+            />
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function ReportReviewRow({
+  report,
+  loading,
+  onReview,
+}: {
+  report: AssignmentReport;
+  loading: boolean;
+  onReview: (score: number, feedback: string) => void;
+}) {
+  const [score, setScore] = useState(report.trainer_score != null ? String(report.trainer_score) : "");
+  const [feedback, setFeedback] = useState(report.trainer_feedback ?? "");
+  return (
+    <div className="rounded-md border border-slate-200 p-3 text-sm">
+      <div className="flex items-center justify-between">
+        <span className="font-medium text-slate-900">
+          {report.student_name || report.student_email}
+        </span>
+        <Badge variant="outline">{report.status}</Badge>
+      </div>
+      {report.report_file_url && (
+        <a
+          href={report.report_file_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-primary-600 hover:underline"
+        >
+          View submitted report ↗
+        </a>
+      )}
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <div>
+          <label className="block text-xs text-slate-500">Score (0–10)</label>
+          <input
+            type="number"
+            min={0}
+            max={10}
+            value={score}
+            onChange={(e) => setScore(e.target.value)}
+            className="w-20 rounded border border-slate-200 px-2 py-1 text-sm"
+          />
+        </div>
+        <input
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          placeholder="Feedback"
+          className="flex-1 rounded border border-slate-200 px-2 py-1 text-sm"
+        />
+        <Button
+          size="sm"
+          loading={loading}
+          disabled={!score.trim()}
+          onClick={() => onReview(Number(score), feedback)}
+        >
+          Save
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function MessagesModal({
+  registrationId,
+  onClose,
+}: {
+  registrationId: number;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [body, setBody] = useState("");
+  const { data: messages, isLoading } = useQuery({
+    queryKey: ["training", "messages", registrationId],
+    queryFn: () => listMessages(registrationId),
+  });
+  const sendMut = useMutation({
+    mutationFn: () => sendMessage(registrationId, body.trim()),
+    onSuccess: () => {
+      setBody("");
+      void queryClient.invalidateQueries({ queryKey: ["training", "messages", registrationId] });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+  const list = messages ?? [];
+  return (
+    <Modal open onClose={onClose} title="Messages" size="md">
+      <div className="mb-3 max-h-64 space-y-2 overflow-y-auto">
+        {isLoading ? (
+          <div className="flex justify-center py-4">
+            <Spinner />
+          </div>
+        ) : list.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">No messages yet.</p>
+        ) : (
+          list.map((m) => (
+            <div key={m.id} className="rounded-md border border-slate-100 p-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-slate-800">{m.sender_name || m.sender_email}</span>
+                <span className="text-xs text-slate-400">{new Date(m.sent_at).toLocaleString()}</span>
+              </div>
+              <p className="mt-0.5 text-slate-700">{m.body}</p>
+            </div>
+          ))
+        )}
+      </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (body.trim()) sendMut.mutate();
+        }}
+        className="flex gap-2"
+      >
+        <input
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Type a message…"
+          className="flex-1 rounded border border-slate-200 px-3 py-2 text-sm"
+        />
+        <Button type="submit" loading={sendMut.isPending} disabled={!body.trim()}>
+          Send
+        </Button>
+      </form>
+    </Modal>
   );
 }
 
