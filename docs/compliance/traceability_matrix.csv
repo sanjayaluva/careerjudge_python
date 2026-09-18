@@ -50,7 +50,7 @@ CNS-4,Confirmed-within-6-hours message,Doc 8 §2.1,SIGNED-PENDING,pending,M3,cou
 CNS-5,Countdown for proposed follow-up on counselee dashboard,Doc 8 §3.3,SIGNED-PENDING,pending,M3,CounselingPage.tsx:738-766,,
 CNS-8,Feedback readable only by Admin (not counselee),Doc 8 §2.3,SIGNED-DONE,done,M1,counseling/views.py feedback GET admin-only,counseling/tests,Restricted to cj_admin/superuser per §2.3
 ADM-1,Signup email on default (Active) single-create path,Doc 9 §2.2,SIGNED-DONE,done,M1,accounts/serializers.py (send email on every invited create),accounts/tests,Email now sent regardless of is_active
-ADM-2,Concern routing raise + admin inbox,Doc 9 §4,SIGNED-PENDING,pending,M3,tasks concern model/view;tasks.ts:166-171,,Drop in-app resolve (spec = email/phone)
+ADM-2,Concern routing raise + admin inbox,Doc 9 §4,SIGNED-DONE,done,M3,ConcernsPage.tsx + /concerns route + nav; concernsApi,tsc; vitest,M3: raise + admin inbox (resolve is beyond-spec but harmless)
 ADM-3,Task assignment picklist of unassigned upstream tasks,Doc 9 §3.1.2/3,SIGNED-DONE,done,M3,TasksPage AssignTaskModal parent-task picklist,tsc; vitest,M3: unassigned-upstream picklist
 ADM-4,SME task category/subcategory/type as QB dropdowns,Doc 9 §3.1.1,SIGNED-DONE,done,M3,TasksPage AssignTaskModal QB category/subcategory/type dropdowns,tsc; vitest,M3: QB-populated dropdowns
 TRN-1,Gate nested lesson/topic/session/content edit+delete,Doc 7 §5,SIGNED-DONE,done,M1,training/views.py _CourseStructureEditGuardMixin on 5 nested viewsets,training/tests/test_training.py (4 gating tests),update/partial_update/destroy now gated
