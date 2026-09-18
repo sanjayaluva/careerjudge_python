@@ -30,7 +30,7 @@ REP-3,Front-end FMI/PMI/VMI/raw/PMI-D band creation,Doc 6 §3,SIGNED-PENDING,pen
 REP-4,Full profiling-report config UI (toggles/PMI-D order),Doc 6 intro/§3.3.3,SIGNED-PENDING,pending,M3,ReportsPage.tsx:203-214,,Solution-link/edit-form thinly specified
 REP-6,Question-level data input returns data (not empty),Doc 4 §2.3,SIGNED-PENDING,pending,M4,generation.py:245-246,,"Rescoped to M4: question-level data is a feature (per-question score extraction), not a fix-first defect"
 ASM-1,Delivery Count author UI,Doc 3 §4.1.1,SIGNED-DONE,done,M2,AssessmentDetailPage.tsx section modal; api/assessment.ts,tsc; manual,M2: delivery-count + per-section timer fields in section editor
-ASM-2,Edit/delete request+approval UI,Doc 3 §2.2/§2.3,SIGNED-PENDING,pending,M2,AssessmentDetailPage.tsx:199;assessment.ts:114-123,,Drop mandatory reason input (workflow signed; reason not)
+ASM-2,Edit/delete request+approval UI,Doc 3 §2.2/§2.3,SIGNED-DONE,done,M2,assessment.ts mod-request client; AssessmentDetailPage.tsx request modals + admin queue,tsc; 56 vitest pass,M2: request-change/delete flow + admin approve/decline; fixes the non-admin edit-gated regression
 ASM-3,Per-section/question timer duration UI,Doc 3 §5.2,SIGNED-DONE,done,M2,AssessmentDetailPage.tsx section modal; api/assessment.ts,tsc; manual,M2: delivery-count + per-section timer fields in section editor
 ASM-4,Section level 3/4 creatable (not hardcoded 1-2),Doc 3 §3 Rule 1,SIGNED-DONE,done,M1,assessment/views.py perform_create derives level,assessment/tests/test_views.py::test_section_level_derived_from_parent_to_depth_4,Level 3/4 now creatable
 ASM-5,Per-level ordering UI (not single global toggle),Doc 3 §5.1,SIGNED-PENDING,pending,M2,EditAssessmentModal:1131-1142,,
