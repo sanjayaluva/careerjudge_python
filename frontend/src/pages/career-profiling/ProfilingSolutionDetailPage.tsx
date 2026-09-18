@@ -42,11 +42,13 @@ import {
   createBand,
   createBandDefinition,
   createCriterion,
+  createMappingRule,
   createPolarMatchRule,
   createRankDefinition,
   deleteRankDefinition,
   downloadCriteriaTemplate,
   listAssessments,
+  listMappingRules,
   listMatchIndices,
   listPolarMatchRules,
   listRankDefinitions,
@@ -125,6 +127,7 @@ export default function ProfilingSolutionDetailPage() {
             Assessments ({solution.selected_assessments?.length ?? 0})
           </TabsTrigger>
           <TabsTrigger value="bands">Bands</TabsTrigger>
+          <TabsTrigger value="mapping-rules">Mapping Rules</TabsTrigger>
           <TabsTrigger value="rank-chart">Rank Chart</TabsTrigger>
           {solution.has_polar_assessment && (
             <TabsTrigger value="polar-rules">Polar Match Rules</TabsTrigger>
@@ -210,6 +213,11 @@ export default function ProfilingSolutionDetailPage() {
         {/* Bands Tab */}
         <TabsContent value="bands">
           <BandsTab solutionId={sid} solution={solution} canManage={canManage} />
+        </TabsContent>
+
+        {/* Standard Mapping Rules Tab — SRS §4.1.2 (n×n grid) */}
+        <TabsContent value="mapping-rules">
+          <StandardMappingRulesTab solutionId={sid} canManage={canManage} />
         </TabsContent>
 
         {/* Criteria Tab */}
@@ -1659,6 +1667,156 @@ function RankChartCreateButton({
 // ---------------------------------------------------------------------------
 // Polar Match Rules Tab — SRS §4.2.2 (polar solutions only)
 // ---------------------------------------------------------------------------
+
+function StandardMappingRulesTab({
+  solutionId,
+  canManage,
+}: {
+  solutionId: number;
+  canManage: boolean;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [selectedBd, setSelectedBd] = useState<number | null>(null);
+
+  const { data: rules, isLoading } = useQuery({
+    queryKey: ["career-profiling", "solutions", solutionId, "mapping-rules"],
+    queryFn: () => listMappingRules(solutionId),
+  });
+  const { data: solution } = useQuery({
+    queryKey: ["career-profiling", "solutions", solutionId],
+    queryFn: () => retrieveSolution(solutionId),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: {
+      band_definition: number;
+      criterion_band_code: string;
+      user_band_code: string;
+      value: number;
+    }) => createMappingRule(solutionId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["career-profiling", "solutions", solutionId, "mapping-rules"],
+      });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (isLoading) return <Spinner />;
+
+  const bandDefs =
+    solution?.selected_assessments?.flatMap((sa) =>
+      sa.band_definitions.map((bd) => ({
+        id: bd.id,
+        label: `${sa.label} > ${bd.section_title}`,
+        bandCodes: bd.bands.map((b) => b.band_code),
+      })),
+    ) ?? [];
+  const activeBd = bandDefs.find((b) => b.id === selectedBd) ?? bandDefs[0];
+  const codes = activeBd?.bandCodes ?? [];
+  const valueFor = (crit: string, usr: string) =>
+    (rules ?? []).find(
+      (r) =>
+        r.band_definition === activeBd?.id &&
+        r.criterion_band_code === crit &&
+        r.user_band_code === usr,
+    )?.value;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Standard Mapping Rules (SRS §4.1.2)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-slate-600">
+          Assign the mapping value for each (criterion band, user band) combination of a standard
+          variable. Rows are the criterion band; columns are the candidate's band.
+        </p>
+        {bandDefs.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">
+            Define bands first — the mapping grid is built from a variable's bands.
+          </p>
+        ) : (
+          <>
+            <div>
+              <Label htmlFor="mr-bd">Variable</Label>
+              <select
+                id="mr-bd"
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                value={activeBd?.id ?? ""}
+                onChange={(e) => setSelectedBd(Number(e.target.value))}
+              >
+                {bandDefs.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {codes.length === 0 ? (
+              <p className="text-sm text-slate-500">This variable has no bands yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="border-collapse text-sm">
+                  <thead>
+                    <tr>
+                      <th className="border border-slate-200 bg-slate-50 p-2 text-xs text-slate-500">
+                        criterion \ user
+                      </th>
+                      {codes.map((uc) => (
+                        <th
+                          key={uc}
+                          className="border border-slate-200 bg-slate-50 p-2 text-xs font-medium"
+                        >
+                          {uc}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {codes.map((cc) => (
+                      <tr key={cc}>
+                        <th className="border border-slate-200 bg-slate-50 p-2 text-xs font-medium">
+                          {cc}
+                        </th>
+                        {codes.map((uc) => (
+                          <td key={uc} className="border border-slate-200 p-1">
+                            <input
+                              type="number"
+                              min={0}
+                              disabled={!canManage || !activeBd}
+                              defaultValue={valueFor(cc, uc) ?? ""}
+                              className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-xs"
+                              onBlur={(e) => {
+                                if (!activeBd) return;
+                                const raw = e.target.value.trim();
+                                if (raw === "") return;
+                                const value = Number(raw);
+                                if (Number.isNaN(value) || value < 0 || value === valueFor(cc, uc))
+                                  return;
+                                saveMutation.mutate({
+                                  band_definition: activeBd.id,
+                                  criterion_band_code: cc,
+                                  user_band_code: uc,
+                                  value,
+                                });
+                              }}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function PolarMatchRulesTab({ solutionId, canManage }: { solutionId: number; canManage: boolean }) {
   const toast = useToast();

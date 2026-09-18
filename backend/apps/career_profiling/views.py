@@ -507,9 +507,20 @@ class ProfilingSolutionViewSet(ModelViewSet):
 
         serializer = MappingRuleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        data = serializer.validated_data
+        # CP-1: the n×n grid is edited cell-by-cell, so upsert on the unique
+        # (band_definition, criterion_band_code, user_band_code) key rather than
+        # rejecting a re-save of an existing cell.
+        from .models import MappingRule
+
+        rule, _created = MappingRule.objects.update_or_create(
+            band_definition=data["band_definition"],
+            criterion_band_code=data["criterion_band_code"],
+            user_band_code=data["user_band_code"],
+            defaults={"value": data["value"]},
+        )
         return Response(
-            {"message": "Mapping rule created.", "data": serializer.data},
+            {"message": "Mapping rule saved.", "data": MappingRuleSerializer(rule).data},
             status=status.HTTP_201_CREATED,
         )
 
