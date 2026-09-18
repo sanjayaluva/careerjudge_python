@@ -38,6 +38,7 @@ import OrganizationsPage from "@/pages/organizations/OrganizationsPage";
 import OrganizationDetailPage from "@/pages/organizations/OrganizationDetailPage";
 import ConcernsPage from "@/pages/ConcernsPage";
 import MessagesPage from "@/pages/MessagesPage";
+import LiveChatPage from "@/pages/LiveChatPage";
 import PsychometricAnalysisPage from "@/pages/question-bank/PsychometricAnalysisPage";
 import QuestionBankPage from "@/pages/question-bank/QuestionBankPage";
 import QuestionDetailPage from "@/pages/question-bank/QuestionDetailPage";
@@ -179,6 +180,7 @@ export default function App() {
                 <Route path="tasks" element={<TasksPage />} />
                 <Route path="concerns" element={<ConcernsPage />} />
                 <Route path="messages" element={<MessagesPage />} />
+                <Route path="live-chat" element={<LiveChatPage />} />
                 <Route path="tasks/:id" element={<TaskDetailPage />} />
                 <Route path="invoicing" element={<InvoicingPage />} />
               </Route>

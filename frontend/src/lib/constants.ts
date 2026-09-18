@@ -40,6 +40,7 @@ export type ModuleKey =
   | "tasks"
   | "concerns"
   | "messaging"
+  | "live_chat"
   | "invoicing";
 
 export const ROLE_LABELS: Record<RoleName, string> = {
@@ -150,6 +151,8 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "reports",
     "training",
     "counseling",
+    // PLT-6b: Live Chat is a signed Individual-User capability (User Details.pdf p.1).
+    "live_chat",
   ],
 };
 
@@ -260,6 +263,14 @@ export const NAV_ITEMS: NavItem[] = [
     roles: roleListFor("profile"),
   },
   {
+    // PLT-6b — Live Chat for the standard Individual User (User Details.pdf p.1).
+    key: "live_chat",
+    label: "Live Chat",
+    to: "/live-chat",
+    icon: "MessageCircle",
+    roles: roleListFor("live_chat"),
+  },
+  {
     key: "invoicing",
     label: "Invoicing",
     to: "/invoicing",
@@ -326,6 +337,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   tasks: "Task Management",
   concerns: "Contact Admin",
   messaging: "Messages",
+  live_chat: "Live Chat",
   invoicing: "Invoicing",
 };
 
@@ -346,5 +358,6 @@ export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
   tasks: "Admin assigns + monitors tasks for SME / Reviewer / Trainer / Counsellor.",
   concerns: "Raise an issue or feedback, routed to the admin and helpdesk.",
   messaging: "Send messages to the admin, helpdesk, and other roles you work with.",
+  live_chat: "Chat live with the CareerJudge support team.",
   invoicing: "Raise and track invoices for empanelled work; CJ Admin reviews and pays them.",
 };

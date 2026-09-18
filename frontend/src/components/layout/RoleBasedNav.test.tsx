@@ -80,9 +80,10 @@ describe("<RoleBasedNav />", () => {
         "Reports",
         "Training",
         "Counseling",
-        // Universal signed capabilities (User Details.pdf p.1).
+        // Signed Individual-User capabilities (User Details.pdf p.1).
         "Contact Admin",
         "Messages",
+        "Live Chat",
       ]),
     );
     // individual must NOT see admin-only modules.
@@ -92,8 +93,8 @@ describe("<RoleBasedNav />", () => {
     expect(labels).not.toContain("Organizations");
     expect(labels).not.toContain("Question Bank");
 
-    // Exact count check: 7 role modules + Contact Admin + Messages = 9.
-    expect(within(list).getAllByRole("link")).toHaveLength(9);
+    // 7 role modules + Contact Admin + Messages + Live Chat = 10.
+    expect(within(list).getAllByRole("link")).toHaveLength(10);
   });
 
   it("shows the corp_admin subset (no Roles & Permissions / CMS / Question Bank)", () => {
@@ -229,8 +230,8 @@ describe("<RoleBasedNav />", () => {
       // career_profiling isn't in individual's seed_demo grants but stays
       // visible via the static fallback (union, not replacement).
       expect(labels).toContain("Career Profiling");
-      // 7 role modules + Contact Admin + Messages = 9.
-      expect(within(list).getAllByRole("link")).toHaveLength(9);
+      // 7 role modules + Contact Admin + Messages + Live Chat = 10.
+      expect(within(list).getAllByRole("link")).toHaveLength(10);
     });
   });
 });
