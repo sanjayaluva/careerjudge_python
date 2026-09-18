@@ -119,8 +119,65 @@ export function updateAssessment(
   return apiPatch<AssessmentDetail>(`${BASE}/${id}/`, payload);
 }
 
-export function deleteAssessment(id: number): Promise<void> {
-  return apiDelete(`${BASE}/${id}/`);
+export function deleteAssessment(id: number, reason?: string): Promise<void> {
+  // A non-admin deleting a PUBLISHED assessment creates a modification
+  // request (the backend requires a reason); admins/drafts delete directly.
+  return apiDelete(`${BASE}/${id}/`, reason ? { data: { reason } } : undefined);
+}
+
+// ---------------------------------------------------------------------------
+// Modification Requests (ASM-2 / SRS §2.2/§2.3) — a non-admin's edit/delete of
+// a PUBLISHED assessment is routed to an admin for approval.
+// ---------------------------------------------------------------------------
+
+const MR_BASE = "/assessment-modification-requests";
+
+export interface AssessmentModificationRequest {
+  id: number;
+  assessment: number;
+  assessment_title: string;
+  requester: number;
+  requester_name: string | null;
+  action: "edit" | "delete";
+  proposed_title: string | null;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  review_comment: string;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export function listModificationRequests(): Promise<AssessmentModificationRequest[]> {
+  return apiGetPaged<AssessmentModificationRequest>(`${MR_BASE}/`).then((r) => r.results);
+}
+
+/** Request an admin-approved title change on a published assessment. */
+export function requestAssessmentTitleChange(
+  id: number,
+  title: string,
+  reason: string,
+): Promise<AssessmentModificationRequest> {
+  return apiPatch<AssessmentModificationRequest>(`${BASE}/${id}/`, { title, reason });
+}
+
+export function approveModificationRequest(
+  id: number,
+  adminNote?: string,
+): Promise<AssessmentModificationRequest> {
+  return apiPost<AssessmentModificationRequest>(`${MR_BASE}/${id}/approve/`, {
+    admin_note: adminNote ?? "",
+  });
+}
+
+export function declineModificationRequest(
+  id: number,
+  adminNote?: string,
+): Promise<AssessmentModificationRequest> {
+  return apiPost<AssessmentModificationRequest>(`${MR_BASE}/${id}/decline/`, {
+    admin_note: adminNote ?? "",
+  });
 }
 
 export function publishAssessment(id: number): Promise<{ id: number; status: string }> {

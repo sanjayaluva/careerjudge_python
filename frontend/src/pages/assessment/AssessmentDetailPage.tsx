@@ -43,14 +43,19 @@ import {
   ATTEMPT_RULES,
   NAVIGATION_RULES,
   TIMER_LEVELS,
+  approveModificationRequest,
   assignQuestion,
   createSection,
+  declineModificationRequest,
+  deleteAssessment,
   deleteSection,
   getAssessmentReadiness,
+  listModificationRequests,
   listMySessions,
   listSectionQuestions,
   publishAssessment,
   removeQuestion,
+  requestAssessmentTitleChange,
   retrieveAssessment,
   startSession,
   updateAssessment,
@@ -131,6 +136,53 @@ export default function AssessmentDetailPage() {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  // ASM-2 (SRS §2.2/§2.3): a non-admin's edit/delete of a PUBLISHED assessment
+  // is routed to an admin for approval; admins get an approve/decline queue.
+  const isCjAdmin = user?.role === "cj_admin";
+  const [requestChangeOpen, setRequestChangeOpen] = useState(false);
+  const [requestDeleteOpen, setRequestDeleteOpen] = useState(false);
+
+  const requestChangeMutation = useMutation({
+    mutationFn: (payload: { title: string; reason: string }) =>
+      requestAssessmentTitleChange(aid, payload.title, payload.reason),
+    onSuccess: () => {
+      toast.success("Change request submitted — an admin will review it.");
+      setRequestChangeOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["assessment-mod-requests"] });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const requestDeleteMutation = useMutation({
+    mutationFn: (reason: string) => deleteAssessment(aid, reason),
+    onSuccess: () => {
+      toast.success("Deletion request submitted — an admin will review it.");
+      setRequestDeleteOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["assessment-mod-requests"] });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const modRequestsQuery = useQuery({
+    queryKey: ["assessment-mod-requests"],
+    queryFn: listModificationRequests,
+    enabled: isCjAdmin,
+  });
+  const pendingRequests = (modRequestsQuery.data ?? []).filter(
+    (r) => r.assessment === aid && r.status === "pending",
+  );
+
+  const reviewMutation = useMutation({
+    mutationFn: (v: { id: number; approve: boolean }) =>
+      v.approve ? approveModificationRequest(v.id) : declineModificationRequest(v.id),
+    onSuccess: () => {
+      toast.success("Request reviewed.");
+      void queryClient.invalidateQueries({ queryKey: ["assessment-mod-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   const sectionCreateMutation = useMutation({
     mutationFn: (payload: {
       title: string;
@@ -198,6 +250,9 @@ export default function AssessmentDetailPage() {
   // - cj_admin can also edit PUBLISHED assessments (admin override per SRS §2.2)
   // This single variable drives all section/question edit-button visibility.
   const canEdit = canManage && (a.status === "draft" || user?.role === "cj_admin");
+  // ASM-2: a non-admin manager can't edit a published assessment directly, but
+  // may request an admin-approved title change / deletion.
+  const canRequestChange = canManage && a.status === "published" && !isCjAdmin;
 
   // Question count comes from the detail serializer's question_count
   // field (counts all assigned questions across all sections, including
@@ -372,6 +427,20 @@ export default function AssessmentDetailPage() {
                     Edit Assessment
                   </Button>
                 )}
+                {canRequestChange && (
+                  <>
+                    <Button variant="outline" onClick={() => setRequestChangeOpen(true)}>
+                      Request Title Change
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="text-danger hover:bg-danger-50"
+                      onClick={() => setRequestDeleteOpen(true)}
+                    >
+                      Request Deletion
+                    </Button>
+                  </>
+                )}
                 {a.status === "draft" && canManage && (
                   <Button
                     loading={publishMutation.isPending}
@@ -397,6 +466,53 @@ export default function AssessmentDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* ASM-2: admin approve/decline queue for pending title-change /
+              deletion requests on this assessment. */}
+          {isCjAdmin && pendingRequests.length > 0 && (
+            <Card className="mt-4 border-amber-200">
+              <CardHeader>
+                <CardTitle>Pending change requests ({pendingRequests.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-3">
+                  {pendingRequests.map((r) => (
+                    <li
+                      key={r.id}
+                      className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-slate-200 p-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900">
+                          {r.action === "delete"
+                            ? "Delete this assessment"
+                            : `Rename to "${r.proposed_title ?? ""}"`}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Requested by {r.requester_name ?? "a user"} — {r.reason}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          loading={reviewMutation.isPending}
+                          onClick={() => reviewMutation.mutate({ id: r.id, approve: true })}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => reviewMutation.mutate({ id: r.id, approve: false })}
+                        >
+                          Decline
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* === SECTIONS TAB === */}
@@ -525,6 +641,19 @@ export default function AssessmentDetailPage() {
         loading={assessmentUpdateMutation.isPending}
         onClose={() => setEditModalOpen(false)}
         onSubmit={(payload) => assessmentUpdateMutation.mutate(payload)}
+      />
+      <RequestChangeModal
+        open={requestChangeOpen}
+        currentTitle={a.title}
+        loading={requestChangeMutation.isPending}
+        onClose={() => setRequestChangeOpen(false)}
+        onSubmit={(title, reason) => requestChangeMutation.mutate({ title, reason })}
+      />
+      <RequestDeleteModal
+        open={requestDeleteOpen}
+        loading={requestDeleteMutation.isPending}
+        onClose={() => setRequestDeleteOpen(false)}
+        onSubmit={(reason) => requestDeleteMutation.mutate(reason)}
       />
     </div>
   );
@@ -1027,6 +1156,131 @@ function CreateSectionModal({
           </Button>
           <Button type="submit" loading={loading}>
             {isEdit ? "Save changes" : "Create section"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ASM-2: Request-change / request-delete modals (published assessments)
+// ---------------------------------------------------------------------------
+
+function RequestChangeModal({
+  open,
+  currentTitle,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  currentTitle: string;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (title: string, reason: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [reason, setReason] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    setTitle(currentTitle);
+    setReason("");
+  }, [open, currentTitle]);
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Request title change"
+      description="This assessment is published, so a title change needs admin approval (SRS §2.2)."
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit(title, reason);
+        }}
+        className="space-y-4"
+      >
+        <div>
+          <Label htmlFor="rc-title" required>
+            New title
+          </Label>
+          <Input id="rc-title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+        </div>
+        <div>
+          <Label htmlFor="rc-reason" required>
+            Reason
+          </Label>
+          <textarea
+            id="rc-reason"
+            rows={2}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            required
+          />
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading} disabled={!title.trim() || !reason.trim()}>
+            Submit request
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function RequestDeleteModal({
+  open,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  useEffect(() => {
+    if (open) setReason("");
+  }, [open]);
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Request deletion"
+      description="This assessment is published, so deletion needs admin approval (SRS §2.3)."
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit(reason);
+        }}
+        className="space-y-4"
+      >
+        <div>
+          <Label htmlFor="rd-reason" required>
+            Reason
+          </Label>
+          <textarea
+            id="rd-reason"
+            rows={2}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            required
+          />
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading} disabled={!reason.trim()}>
+            Submit request
           </Button>
         </div>
       </form>
