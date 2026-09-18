@@ -12,7 +12,7 @@ H7,Delivery-count random subset,Doc 3 §4.1.1,SIGNED-DONE,done,,assessment/views
 H8,Deletion-request backend (question bank),Doc 1 §4.3,SIGNED-DONE,done,,question_bank/views.py,question_bank/tests,Backend done; approve UI = QB-1 pending
 H9,Post-publish edit/delete request+approval (assessment),Doc 3 §2.2/§2.3,SIGNED-DONE,done,,assessment/views.py,assessment/tests,Backend done; UI = ASM-2 pending
 H10,SME question isolation,Doc 1,SIGNED-DONE,done,,question_bank/views.py,question_bank/tests,
-H11,Trainer edit-gating on published course,Doc 7 §5,SIGNED-PARTIAL,partial,M1,training/views.py,training/tests,Course-level gated; nested levels NOT = TRN-1
+H11,Trainer edit-gating on published course,Doc 7 §5,SIGNED-DONE,done,M7,training/views.py TrainingCourseViewSet.assessments gated by _require_course_edit_allowed,test_training.py::test_trainer_cannot_link_assessment_to_published_course; ::test_trainer_can_link_assessment_to_draft_course,closed the last ungated nested structural-create on published courses (SRS §2.4)
 H12,Helpdesk notified on every task type,Doc 9,SIGNED-DONE,done,,notifications/,tasks/tests,
 H13,Effective ModuleRights on /api/me + nav union,User Details,SIGNED-DONE,done,,accounts/views_me.py,accounts/tests,
 H14,Empanelled-only invoice create + invoicing UI,User Details,SIGNED-DONE,done,,invoicing/,invoicing/tests,
@@ -35,7 +35,7 @@ ASM-3,Per-section/question timer duration UI,Doc 3 §5.2,SIGNED-DONE,done,M2,Ass
 ASM-4,Section level 3/4 creatable (not hardcoded 1-2),Doc 3 §3 Rule 1,SIGNED-DONE,done,M1,assessment/views.py perform_create derives level,assessment/tests/test_views.py::test_section_level_derived_from_parent_to_depth_4,Level 3/4 now creatable
 ASM-5,Per-level ordering UI (not single global toggle),Doc 3 §5.1,SIGNED-DONE,done,M2,AssessmentSection.order_mode (model+migration+serializers); section editor select; player per-section shuffle,assessment 157 pass; tsc; vitest,M2: per-section delivery order (§5.1)
 ASM-7,Set-Score UI + rating/paired/rank builders,Doc 3 §4/§4.2,SIGNED-DONE,done,M2,assessment.ts updateAssignedQuestion; AssessmentDetailPage QuestionAssignmentTab score input,tsc,"M2: score_override editor. Template builders are a QB-module concern, not here."
-ASM-8,Enforce Rule 1 (<=4 levels) + Rule 2 (Q at last level),Doc 3 §3,SIGNED-PENDING,pending,M7,assessment/views.py,,Server-side enforcement
+ASM-8,Enforce Rule 1 (<=4 levels) + Rule 2 (Q at last level),Doc 3 §3,SIGNED-DONE,done,M7,assessment/views.py AssessmentSectionViewSet.create (Rule 1 max_levels_exceeded); AssessmentQuestionViewSet.create (Rule 2 not_leaf_section),test_views.py::test_section_fifth_level_rejected; ::test_cannot_assign_question_to_non_leaf_section,Doc 3 §3 server-side; psychometric tag-routing exempt from Rule 2
 ASM-9,Full question-review (open Select/Cancel),Doc 3 §4.1,SIGNED-DONE,done,M2,AssessmentDetailPage QuestionPreviewModal + Preview button,tsc; vitest,M2: open→Select/Cancel preview
 QB-1,Deletion approve/decline queue (remove reason-gate),Doc 1 §4.3 / CJ_UC016-17,SIGNED-DONE,done,M2,questionBank.ts delete+deletion-request client; QuestionBankPage + CategoryManager reason modals + admin queue,tsc; vitest,M2: reason-on-delete + admin approve/decline queue (questions & categories); backend reason-gate PRESERVED (signed)
 QB-2,Batch activate/inactivate + exposure UI,Doc 1 §4.2/§4.3,SIGNED-DONE,done,M2,QuestionBankPage.tsx selection + batch bar (batchSetQuestionStatus/ExposureLimit),tsc; vitest,M2: batch activate/inactivate + exposure UI for psychometrician/admin
