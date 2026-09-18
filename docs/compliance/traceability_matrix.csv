@@ -34,7 +34,7 @@ ASM-2,Edit/delete request+approval UI,Doc 3 §2.2/§2.3,SIGNED-DONE,done,M2,asse
 ASM-3,Per-section/question timer duration UI,Doc 3 §5.2,SIGNED-DONE,done,M2,AssessmentDetailPage.tsx section modal; api/assessment.ts,tsc; manual,M2: delivery-count + per-section timer fields in section editor
 ASM-4,Section level 3/4 creatable (not hardcoded 1-2),Doc 3 §3 Rule 1,SIGNED-DONE,done,M1,assessment/views.py perform_create derives level,assessment/tests/test_views.py::test_section_level_derived_from_parent_to_depth_4,Level 3/4 now creatable
 ASM-5,Per-level ordering UI (not single global toggle),Doc 3 §5.1,SIGNED-PENDING,pending,M2,EditAssessmentModal:1131-1142,,
-ASM-7,Set-Score UI + rating/paired/rank builders,Doc 3 §4/§4.2,SIGNED-PENDING,pending,M2,assessment.ts:187,,
+ASM-7,Set-Score UI + rating/paired/rank builders,Doc 3 §4/§4.2,SIGNED-DONE,done,M2,assessment.ts updateAssignedQuestion; AssessmentDetailPage QuestionAssignmentTab score input,tsc,"M2: score_override editor. Template builders are a QB-module concern, not here."
 ASM-8,Enforce Rule 1 (<=4 levels) + Rule 2 (Q at last level),Doc 3 §3,SIGNED-PENDING,pending,M7,assessment/views.py,,Server-side enforcement
 ASM-9,Full question-review (open Select/Cancel),Doc 3 §4.1,SIGNED-PENDING,pending,M2,AssessmentDetailPage.tsx:709-808,,
 QB-1,Deletion approve/decline queue (remove reason-gate),Doc 1 §4.3 / CJ_UC016-17,SIGNED-PENDING,pending,M2,questionBank.ts:183;views.py:130-162,,Rescoped to M2: backend gate PRESERVED (signed D1); fix is the reason-prompt + approve/decline queue UI = the M2 QB-management screen
