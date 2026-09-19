@@ -200,3 +200,88 @@ class InvoiceTests(InvoicingBaseTestCase):
         results = resp.json().get("results", resp.json().get("data", []))
         # SME should not see other_sme's invoices
         self.assertFalse(any("Other" in r.get("description", "") for r in results))
+
+
+class InvoicePatchGuardTests(InvoicingBaseTestCase):
+    """E-PLT-7: PATCH guard on invoices."""
+
+    def _draft(self):
+        self.client.force_authenticate(self.sme)
+        resp = self.client.post(
+            "/api/invoicing/invoices/",
+            {"description": "Editable", "amount": "1000.00"},
+            format="json",
+        )
+        return resp.json()["data"]["id"]
+
+    def test_creator_can_edit_draft(self):
+        inv_id = self._draft()
+        resp = self.client.patch(
+            f"/api/invoicing/invoices/{inv_id}/",
+            {"description": "Updated text"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+    def test_cannot_patch_status_directly(self):
+        inv_id = self._draft()
+        resp = self.client.patch(
+            f"/api/invoicing/invoices/{inv_id}/",
+            {"status": "paid"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 403, resp.content)
+
+    def test_cannot_edit_after_submit(self):
+        inv_id = self._draft()
+        self.client.post(f"/api/invoicing/invoices/{inv_id}/submit/")
+        resp = self.client.patch(
+            f"/api/invoicing/invoices/{inv_id}/",
+            {"description": "Too late"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 403, resp.content)
+
+
+class InvoiceItemTests(InvoicingBaseTestCase):
+    """E-PLT-7: line-item CRUD."""
+
+    def _draft(self):
+        self.client.force_authenticate(self.sme)
+        resp = self.client.post(
+            "/api/invoicing/invoices/",
+            {"description": "With items", "amount": "0.00"},
+            format="json",
+        )
+        return resp.json()["data"]["id"]
+
+    def test_add_line_item_computes_total(self):
+        inv_id = self._draft()
+        resp = self.client.post(
+            "/api/invoicing/invoice-items/",
+            {"invoice": inv_id, "description": "10 MCQs", "quantity": 10, "unit_price": "50.00"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(resp.json()["data"]["total"], "500.00")
+
+    def test_cannot_add_item_to_submitted_invoice(self):
+        inv_id = self._draft()
+        self.client.post(f"/api/invoicing/invoices/{inv_id}/submit/")
+        resp = self.client.post(
+            "/api/invoicing/invoice-items/",
+            {"invoice": inv_id, "description": "x", "quantity": 1, "unit_price": "5.00"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 403, resp.content)
+
+    def test_delete_line_item(self):
+        inv_id = self._draft()
+        resp = self.client.post(
+            "/api/invoicing/invoice-items/",
+            {"invoice": inv_id, "description": "row", "quantity": 1, "unit_price": "5.00"},
+            format="json",
+        )
+        item_id = resp.json()["data"]["id"]
+        resp = self.client.delete(f"/api/invoicing/invoice-items/{item_id}/")
+        self.assertIn(resp.status_code, (200, 204), resp.content)

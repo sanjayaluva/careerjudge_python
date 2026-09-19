@@ -106,6 +106,9 @@ class TestEmailVerificationToken:
         user = UserFactory()
         token = EmailVerificationToken.objects.create(user=user)
         assert token.expires_at > timezone.now()
+        # E-SRS-2: registration / activation links are valid for 48 hours.
+        delta = token.expires_at - timezone.now()
+        assert timedelta(hours=47) < delta < timedelta(hours=49)
 
     def test_is_valid_unused(self):
         user = UserFactory()

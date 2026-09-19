@@ -23,6 +23,8 @@ import {
   CardTitle,
   Input,
   Label,
+  Modal,
+  RichText,
   Spinner,
   Table,
   TableBody,
@@ -47,8 +49,18 @@ import {
   listCompletionParameters,
   listCourseRegistrations,
   listCourseUpdateRequests,
+  approveCourseUpdateRequest,
+  declineCourseUpdateRequest,
   listMyCourses,
   notifyLiveSessionStudents,
+  listLiveSessionConsents,
+  listAssignmentReports,
+  reviewAssignmentReport,
+  setDeadlineOverride,
+  listMessages,
+  sendMessage,
+  type AssignmentReport,
+  type CourseLesson,
   publishCourse,
   registerForCourse,
   requestCourseUpdate,
@@ -245,7 +257,8 @@ export default function TrainingCourseDetailPage() {
                   <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
                     Description
                   </div>
-                  <p className="mt-1 text-sm text-slate-900">{course.description}</p>
+                  {/* E-X4: render the rich-text course description. */}
+                  <RichText html={course.description} className="mt-1 text-sm text-slate-900" />
                 </div>
               )}
 
@@ -396,6 +409,7 @@ export default function TrainingCourseDetailPage() {
                               >
                                 Notify
                               </Button>
+                              <ConsentListButton liveSessionId={s.id} />
                               <RescheduleLiveSessionButton liveSessionId={s.id} courseId={cid} />
                               <DeleteLiveSessionButton liveSessionId={s.id} courseId={cid} />
                             </div>
@@ -437,6 +451,11 @@ export default function TrainingCourseDetailPage() {
                         <TableCell className="font-medium text-slate-900">{a.title}</TableCell>
                         <TableCell>
                           <Badge variant="outline">{a.level.replace(/_/g, " ")}</Badge>
+                          {(a.session_title || a.topic_title || a.lesson_title) && (
+                            <div className="mt-0.5 text-xs text-slate-500">
+                              {a.session_title ?? a.topic_title ?? a.lesson_title}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-slate-500">
                           {a.assessment_detail?.title ?? `#${a.assessment}`}
@@ -456,7 +475,7 @@ export default function TrainingCourseDetailPage() {
                   </TableBody>
                 </Table>
               )}
-              {canManage && <AddAssessmentForm courseId={cid} />}
+              {canManage && <AddAssessmentForm courseId={cid} lessons={course.lessons} />}
             </CardContent>
           </Card>
         </TabsContent>
@@ -517,6 +536,7 @@ function RegistrationsTab({ courseId }: { courseId: number }) {
                 <TableHead>Progress</TableHead>
                 <TableHead>Started</TableHead>
                 <TableHead>Registered</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -549,6 +569,9 @@ function RegistrationsTab({ courseId }: { courseId: number }) {
                   <TableCell className="text-slate-500">
                     {new Date(r.registered_at).toLocaleDateString()}
                   </TableCell>
+                  <TableCell className="text-right">
+                    <RegistrationActions registrationId={r.id} />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -556,6 +579,271 @@ function RegistrationsTab({ courseId }: { courseId: number }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// TRN-3 / TRN-5 (§2.3.2, §5/§6): per-registration assignment-report review +
+// trainer<->student messaging.
+function RegistrationActions({ registrationId }: { registrationId: number }) {
+  const [reportsOpen, setReportsOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
+  return (
+    <div className="flex justify-end gap-1">
+      <Button size="sm" variant="outline" onClick={() => setReportsOpen(true)}>
+        Reports
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => setMessagesOpen(true)}>
+        Messages
+      </Button>
+      {reportsOpen && (
+        <ReportsReviewModal registrationId={registrationId} onClose={() => setReportsOpen(false)} />
+      )}
+      {messagesOpen && (
+        <MessagesModal registrationId={registrationId} onClose={() => setMessagesOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+function ReportsReviewModal({
+  registrationId,
+  onClose,
+}: {
+  registrationId: number;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const { data: reports, isLoading } = useQuery({
+    queryKey: ["training", "assignment-reports", registrationId],
+    queryFn: () => listAssignmentReports(registrationId),
+  });
+  const reviewMut = useMutation({
+    mutationFn: (v: { reportId: number; score: number; feedback: string }) =>
+      reviewAssignmentReport(registrationId, {
+        report_id: v.reportId,
+        trainer_score: v.score,
+        trainer_feedback: v.feedback,
+      }),
+    onSuccess: () => {
+      toast.success("Report reviewed.");
+      void queryClient.invalidateQueries({
+        queryKey: ["training", "assignment-reports", registrationId],
+      });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+  // E-X7: trainer grants a per-student deadline override on an assignment.
+  const overrideMut = useMutation({
+    mutationFn: (v: { assignmentId: number; newDeadline: string }) =>
+      setDeadlineOverride(registrationId, {
+        assignment_id: v.assignmentId,
+        new_deadline: new Date(v.newDeadline).toISOString(),
+      }),
+    onSuccess: () => toast.success("Deadline override set for this student."),
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+  const list = reports ?? [];
+  return (
+    <Modal open onClose={onClose} title="Assignment reports" size="lg">
+      {isLoading ? (
+        <div className="flex justify-center py-6">
+          <Spinner />
+        </div>
+      ) : list.length === 0 ? (
+        <p className="py-4 text-center text-sm text-slate-500">No reports submitted yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {list.map((rep) => (
+            <ReportReviewRow
+              key={rep.id}
+              report={rep}
+              loading={reviewMut.isPending}
+              onReview={(score, feedback) =>
+                reviewMut.mutate({ reportId: rep.id, score, feedback })
+              }
+              onSetDeadline={(assignmentId, newDeadline) =>
+                overrideMut.mutate({ assignmentId, newDeadline })
+              }
+              overrideLoading={overrideMut.isPending}
+            />
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function ReportReviewRow({
+  report,
+  loading,
+  onReview,
+  onSetDeadline,
+  overrideLoading,
+}: {
+  report: AssignmentReport;
+  loading: boolean;
+  onReview: (score: number, feedback: string) => void;
+  onSetDeadline: (assignmentId: number, newDeadline: string) => void;
+  overrideLoading: boolean;
+}) {
+  const [score, setScore] = useState(
+    report.trainer_score != null ? String(report.trainer_score) : "",
+  );
+  const [feedback, setFeedback] = useState(report.trainer_feedback ?? "");
+  const [override, setOverride] = useState("");
+  return (
+    <div className="rounded-md border border-slate-200 p-3 text-sm">
+      <div className="flex items-center justify-between">
+        <span className="font-medium text-slate-900">
+          {report.student_name || report.student_email}
+        </span>
+        <Badge variant="outline">{report.status}</Badge>
+      </div>
+      {report.report_file_url && (
+        <a
+          href={report.report_file_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-primary-600 hover:underline"
+        >
+          View submitted report ↗
+        </a>
+      )}
+      {/* E-X7: multiple attached files */}
+      {(report.files ?? []).length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-2">
+          {(report.files ?? []).map((f) => (
+            <a
+              key={f.id}
+              href={f.file}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded bg-slate-100 px-2 py-0.5 text-xs text-primary-600 hover:underline"
+            >
+              {f.file_type || "file"} ↗
+            </a>
+          ))}
+        </div>
+      )}
+      {/* E-X7: per-student deadline override */}
+      <div className="mt-2 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-2">
+        <div>
+          <label className="block text-xs text-slate-500">Deadline override</label>
+          <input
+            type="datetime-local"
+            value={override}
+            onChange={(e) => setOverride(e.target.value)}
+            className="rounded border border-slate-200 px-2 py-1 text-sm"
+          />
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          loading={overrideLoading}
+          disabled={!override}
+          onClick={() => onSetDeadline(report.assignment, override)}
+        >
+          Set override
+        </Button>
+      </div>
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <div>
+          <label className="block text-xs text-slate-500">Score (0–10)</label>
+          <input
+            type="number"
+            min={0}
+            max={10}
+            value={score}
+            onChange={(e) => setScore(e.target.value)}
+            className="w-20 rounded border border-slate-200 px-2 py-1 text-sm"
+          />
+        </div>
+        <input
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          placeholder="Feedback"
+          className="flex-1 rounded border border-slate-200 px-2 py-1 text-sm"
+        />
+        <Button
+          size="sm"
+          loading={loading}
+          disabled={!score.trim()}
+          onClick={() => onReview(Number(score), feedback)}
+        >
+          Save
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function MessagesModal({
+  registrationId,
+  onClose,
+}: {
+  registrationId: number;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [body, setBody] = useState("");
+  const { data: messages, isLoading } = useQuery({
+    queryKey: ["training", "messages", registrationId],
+    queryFn: () => listMessages(registrationId),
+  });
+  const sendMut = useMutation({
+    mutationFn: () => sendMessage(registrationId, body.trim()),
+    onSuccess: () => {
+      setBody("");
+      void queryClient.invalidateQueries({ queryKey: ["training", "messages", registrationId] });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+  const list = messages ?? [];
+  return (
+    <Modal open onClose={onClose} title="Messages" size="md">
+      <div className="mb-3 max-h-64 space-y-2 overflow-y-auto">
+        {isLoading ? (
+          <div className="flex justify-center py-4">
+            <Spinner />
+          </div>
+        ) : list.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">No messages yet.</p>
+        ) : (
+          list.map((m) => (
+            <div key={m.id} className="rounded-md border border-slate-100 p-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-slate-800">
+                  {m.sender_name || m.sender_email}
+                </span>
+                <span className="text-xs text-slate-400">
+                  {new Date(m.sent_at).toLocaleString()}
+                </span>
+              </div>
+              <p className="mt-0.5 text-slate-700">{m.body}</p>
+            </div>
+          ))
+        )}
+      </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (body.trim()) sendMut.mutate();
+        }}
+        className="flex gap-2"
+      >
+        <input
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Type a message…"
+          className="flex-1 rounded border border-slate-200 px-3 py-2 text-sm"
+        />
+        <Button type="submit" loading={sendMut.isPending} disabled={!body.trim()}>
+          Send
+        </Button>
+      </form>
+    </Modal>
   );
 }
 
@@ -755,14 +1043,43 @@ function AddLiveSessionForm({ courseId }: { courseId: number }) {
 // Add Assessment Form (SRS §2.4)
 // ---------------------------------------------------------------------------
 
-function AddAssessmentForm({ courseId }: { courseId: number }) {
+function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: CourseLesson[] }) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [show, setShow] = useState(false);
   const [title, setTitle] = useState("");
   const [assessmentId, setAssessmentId] = useState("");
   const [level, setLevel] = useState("end_of_session");
+  const [targetId, setTargetId] = useState("");
   const [isScored, setIsScored] = useState(true);
+
+  // Report 4 Trainer Issue 9: a level-specific assessment attaches to a chosen
+  // element of the structure. Which element depends on the level:
+  //   during/end of session -> a session   end of topic -> a topic
+  //   end of lesson -> a lesson            end of course -> none
+  const targetKind =
+    level === "during_session" || level === "end_of_session"
+      ? "session"
+      : level === "end_of_topic"
+        ? "topic"
+        : level === "end_of_lesson"
+          ? "lesson"
+          : "none";
+
+  const targetOptions =
+    targetKind === "session"
+      ? lessons.flatMap((l) =>
+          l.topics.flatMap((t) =>
+            t.sessions.map((s) => ({ id: s.id, label: `${l.title} › ${t.title} › ${s.title}` })),
+          ),
+        )
+      : targetKind === "topic"
+        ? lessons.flatMap((l) =>
+            l.topics.map((t) => ({ id: t.id, label: `${l.title} › ${t.title}` })),
+          )
+        : targetKind === "lesson"
+          ? lessons.map((l) => ({ id: l.id, label: l.title }))
+          : [];
 
   // Load available assessments from the assessment module
   const { data: assessmentsData } = useQuery({
@@ -777,12 +1094,14 @@ function AddAssessmentForm({ courseId }: { courseId: number }) {
         level,
         title,
         is_scored: isScored,
+        ...(targetKind !== "none" && targetId ? { [targetKind]: Number(targetId) } : {}),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["training", "courses", courseId] });
       toast.success("Assessment linked to course.");
       setTitle("");
       setAssessmentId("");
+      setTargetId("");
       setShow(false);
     },
     onError: (err) => toast.error(extractApiError(err)),
@@ -851,7 +1170,10 @@ function AddAssessmentForm({ courseId }: { courseId: number }) {
             id="as-level"
             className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
             value={level}
-            onChange={(e) => setLevel(e.target.value)}
+            onChange={(e) => {
+              setLevel(e.target.value);
+              setTargetId("");
+            }}
           >
             <option value="during_session">During Session</option>
             <option value="end_of_session">End of Session</option>
@@ -861,6 +1183,33 @@ function AddAssessmentForm({ courseId }: { courseId: number }) {
           </select>
         </div>
       </div>
+      {targetKind !== "none" && (
+        <div>
+          <Label htmlFor="as-target" required>
+            {targetKind === "session" ? "Session" : targetKind === "topic" ? "Topic" : "Lesson"}
+          </Label>
+          <select
+            id="as-target"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            value={targetId}
+            onChange={(e) => setTargetId(e.target.value)}
+            required
+          >
+            <option value="">Select the {targetKind}…</option>
+            {targetOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          {targetOptions.length === 0 && (
+            <p className="mt-1 text-xs text-amber-600">
+              Add lessons, topics and sessions to the course structure first, then link the
+              assessment to a specific {targetKind}.
+            </p>
+          )}
+        </div>
+      )}
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
@@ -875,7 +1224,7 @@ function AddAssessmentForm({ courseId }: { courseId: number }) {
           type="submit"
           size="sm"
           loading={mutation.isPending}
-          disabled={!title || !assessmentId}
+          disabled={!title || !assessmentId || (targetKind !== "none" && !targetId)}
         >
           Link assessment
         </Button>
@@ -890,6 +1239,51 @@ function AddAssessmentForm({ courseId }: { courseId: number }) {
 // ---------------------------------------------------------------------------
 // Delete buttons for Live Sessions + Assessments
 // ---------------------------------------------------------------------------
+
+// TRN-8 (§5): trainer views the live-session consent list (who will attend).
+function ConsentListButton({ liveSessionId }: { liveSessionId: number }) {
+  const [open, setOpen] = useState(false);
+  const { data: consents, isLoading } = useQuery({
+    queryKey: ["training", "live-session-consents", liveSessionId],
+    queryFn: () => listLiveSessionConsents(liveSessionId),
+    enabled: open,
+  });
+  const list = consents ?? [];
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        Consent list
+      </Button>
+      {open && (
+        <Modal open onClose={() => setOpen(false)} title="Live-session consent list" size="sm">
+          {isLoading ? (
+            <div className="flex justify-center py-6">
+              <Spinner />
+            </div>
+          ) : list.length === 0 ? (
+            <p className="py-4 text-center text-sm text-slate-500">No responses yet.</p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {list.map((c) => (
+                <li
+                  key={c.id}
+                  className="flex items-center justify-between rounded border border-slate-100 p-2"
+                >
+                  <span className="text-slate-700">
+                    {c.student_name || c.student_email || `Student #${c.student}`}
+                  </span>
+                  <Badge variant={c.status === "consented" ? "success" : "danger"}>
+                    {c.status}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Modal>
+      )}
+    </>
+  );
+}
 
 function DeleteLiveSessionButton({
   liveSessionId,
@@ -1121,6 +1515,8 @@ function CompletionParametersTab({ course }: { course: TrainingCourse }) {
 function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "cj_admin";
   const [showForm, setShowForm] = useState(false);
   const [reqType, setReqType] = useState<"update" | "delete">("update");
   const [reason, setReason] = useState("");
@@ -1130,6 +1526,20 @@ function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
     queryFn: () => listCourseUpdateRequests(),
   });
   const courseRequests = (requests ?? []).filter((r) => r.course === courseId);
+
+  // TRN-2 (§7): admin approves or declines a pending course-change request.
+  const reviewMutation = useMutation({
+    mutationFn: (v: { id: number; approve: boolean; note: string }) =>
+      v.approve
+        ? approveCourseUpdateRequest(v.id, v.note)
+        : declineCourseUpdateRequest(v.id, v.note),
+    onSuccess: () => {
+      toast.success("Request reviewed.");
+      void queryClient.invalidateQueries({ queryKey: ["training", "course-update-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["training", "course", courseId] });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
 
   const requestMutation = useMutation({
     mutationFn: () => requestCourseUpdate(courseId, { request_type: reqType, reason }),
@@ -1183,6 +1593,30 @@ function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
                 <p className="mt-1 text-slate-600">{r.reason}</p>
                 {r.admin_note && (
                   <p className="mt-1 text-xs text-slate-500">Admin note: {r.admin_note}</p>
+                )}
+                {isAdmin && r.status === "pending" && (
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      size="sm"
+                      loading={reviewMutation.isPending}
+                      onClick={() => {
+                        const note = window.prompt("Admin note (optional):") ?? "";
+                        reviewMutation.mutate({ id: r.id, approve: true, note });
+                      }}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const note = window.prompt("Reason for declining (optional):") ?? "";
+                        reviewMutation.mutate({ id: r.id, approve: false, note });
+                      }}
+                    >
+                      Decline
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}

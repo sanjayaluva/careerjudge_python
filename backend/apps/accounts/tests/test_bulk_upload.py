@@ -175,5 +175,5 @@ class TestBulkUserTemplate:
         # Parse the CSV
         reader = csv.reader(io.StringIO(resp.content.decode("utf-8")))
         rows = list(reader)
-        assert rows[0] == ["full_name", "email", "phone", "role_name"]
+        assert rows[0] == ["full_name", "email", "phone", "role_name", "employee_id"]
         assert "John Doe" in rows[1]

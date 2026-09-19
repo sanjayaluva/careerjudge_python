@@ -28,6 +28,9 @@ export interface Report {
   include_fmi: boolean;
   include_pmi: boolean;
   include_vmi: boolean;
+  /** PMI-D = A1PMI − A2PMI. These name the minuend (A1) and subtrahend (A2). */
+  pmi_d_first_assessment: string;
+  pmi_d_second_assessment: string;
   header_text: string;
   footer_text: string;
   logo: string | null;
@@ -85,6 +88,15 @@ export function publishReport(id: number): Promise<{ id: number; status: string 
   return apiPost(`${BASE}/reports/${id}/publish/`);
 }
 
+/**
+ * Clone a report's full configuration into a new draft (REP-2 "templates").
+ * Copies layout sections, cutoffs, bands, codes, polar variables, include
+ * toggles, PMI-D order and branding; does not copy generated reports.
+ */
+export function duplicateReport(id: number, title?: string): Promise<Report> {
+  return apiPost<Report>(`${BASE}/reports/${id}/duplicate/`, title ? { title } : {});
+}
+
 export function generateReport(reportId: number, sessionId: number): Promise<GeneratedReport> {
   return apiPost<GeneratedReport>(`${BASE}/reports/${reportId}/generate/`, {
     session_id: sessionId,
@@ -128,11 +140,32 @@ export interface ReportCutoff {
   below_description: string;
 }
 
+/**
+ * Which value a band interprets (SRS 06 §3.1-3.4). `section` bands map a
+ * converted section score to a label (interpretative reports, SRS §3.3);
+ * the profiling targets band the Final/Profile/Variable Match Indices, the
+ * raw summary percentage, and the PMI gap index (PMI-D).
+ */
+export type BandTargetType = "section" | "fmi" | "pmi" | "vmi" | "raw_summary" | "pmi_d";
+
+export const BAND_TARGET_TYPES: { value: BandTargetType; label: string }[] = [
+  { value: "section", label: "Section score (interpretative)" },
+  { value: "fmi", label: "Final Match Index (FMI)" },
+  { value: "pmi", label: "Profile Match Index (PMI)" },
+  { value: "vmi", label: "Variable Match Index (VMI)" },
+  { value: "raw_summary", label: "Raw summary percentage" },
+  { value: "pmi_d", label: "PMI Gap Index (PMI-D)" },
+];
+
 export interface ReportBand {
   id: number;
   report: number;
-  section: number;
+  target_type: BandTargetType;
+  /** Only set for `target_type === "section"`; null for profiling bands. */
+  section: number | null;
   section_title: string;
+  /** For PMI/VMI bands: scopes the band to one assessment (blank = all). */
+  assessment_label: string;
   band_number: number;
   range_min: number;
   range_max: number;

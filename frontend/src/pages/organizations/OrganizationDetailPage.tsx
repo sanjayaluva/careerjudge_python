@@ -24,13 +24,23 @@ import {
 } from "@/components/ui";
 import {
   addMember,
+  createAssignment,
   createGroup,
+  createSchedule,
+  createWebsite,
+  deleteAssignment,
   deleteGroup,
+  deleteSchedule,
+  getWebsite,
+  listAssignments,
   listMembers,
+  listSchedules,
   removeMember,
   retrieveOrganization,
   updateMember,
+  updateWebsite,
 } from "@/api/organizations";
+import { listAssessments } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
 import { ROLE_LABELS } from "@/lib/constants";
 
@@ -109,6 +119,7 @@ export default function OrganizationDetailPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Region / Division</TableHead>
                   <TableHead>Members</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -143,6 +154,7 @@ export default function OrganizationDetailPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Employee ID</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Group</TableHead>
                   <TableHead>Admin</TableHead>
@@ -159,6 +171,16 @@ export default function OrganizationDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Assigned content section (CJ_UC030): corporate individuals see only
+          the assessments assigned to their organization. */}
+      <AssignmentsCard orgId={orgId} />
+
+      {/* Schedule assessments for employees (CJ_UC053). */}
+      <SchedulesCard orgId={orgId} groups={org.groups} />
+
+      {/* Branded portal / website (CJ_UC054 + CJ_UC055). */}
+      <WebsiteCard orgId={orgId} defaultName={org.name} />
 
       <CreateGroupModal
         orgId={orgId}
@@ -183,7 +205,13 @@ function GroupRow({
   group,
 }: {
   orgId: number;
-  group: { id: number; name: string; member_count: number; created_at: string };
+  group: {
+    id: number;
+    name: string;
+    region_division?: string;
+    member_count: number;
+    created_at: string;
+  };
 }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -199,6 +227,7 @@ function GroupRow({
   return (
     <TableRow>
       <TableCell className="font-medium text-slate-900">{group.name}</TableCell>
+      <TableCell className="text-slate-500">{group.region_division || "—"}</TableCell>
       <TableCell className="text-slate-500">{group.member_count}</TableCell>
       <TableCell className="text-slate-500">
         {new Date(group.created_at).toLocaleDateString()}
@@ -235,6 +264,7 @@ function MemberRow({
     id: number;
     user: { id: number; email: string; full_name: string; role: string | null };
     group: number | null;
+    employee_id?: string;
     is_admin: boolean;
     joined_at: string;
   };
@@ -265,6 +295,7 @@ function MemberRow({
     <TableRow>
       <TableCell className="font-medium text-slate-900">{member.user.full_name || "—"}</TableCell>
       <TableCell>{member.user.email}</TableCell>
+      <TableCell className="text-slate-500">{member.employee_id || "—"}</TableCell>
       <TableCell>
         {member.user.role ? (
           <Badge variant="default">
@@ -328,6 +359,450 @@ function MemberRow({
 }
 
 // ---------------------------------------------------------------------------
+// Assigned content (CJ_UC030) — assign published assessments to the org
+// ---------------------------------------------------------------------------
+
+function AssignmentsCard({ orgId }: { orgId: number }) {
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const ASSIGN_KEY = [...ORG_KEY(orgId), "assignments"];
+
+  const { data: assignments = [] } = useQuery({
+    queryKey: ASSIGN_KEY,
+    queryFn: () => listAssignments(orgId),
+    enabled: !Number.isNaN(orgId),
+  });
+
+  const { data: assessmentsPage } = useQuery({
+    queryKey: ["assessments", "published", "for-assign"],
+    queryFn: () => listAssessments({ status: "published" }),
+  });
+  const assessments = assessmentsPage?.results ?? [];
+  const titleFor = (id: number) => assessments.find((a) => a.id === id)?.title ?? `#${id}`;
+
+  const assignMutation = useMutation({
+    mutationFn: (assessmentId: number) =>
+      createAssignment(orgId, { item_type: "assessment", item_id: assessmentId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ASSIGN_KEY });
+      setSelected("");
+      setError(null);
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (assignmentId: number) => deleteAssignment(orgId, assignmentId),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ASSIGN_KEY }),
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  const assignedIds = new Set(
+    assignments.filter((a) => a.item_type === "assessment").map((a) => a.item_id),
+  );
+  const available = assessments.filter((a) => !assignedIds.has(a.id));
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Assigned assessments</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="mb-3 text-sm text-slate-500">
+          Corporate individuals in this organization see only the assessments assigned here.
+        </p>
+        {error && (
+          <Alert variant="error" className="mb-3">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <div className="mb-4 flex items-center gap-2">
+          <select
+            className="h-10 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+          >
+            <option value="">Select a published assessment…</option>
+            {available.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.title}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            disabled={!selected || assignMutation.isPending}
+            onClick={() => selected && assignMutation.mutate(Number(selected))}
+          >
+            Assign
+          </Button>
+        </div>
+        {assignments.length === 0 ? (
+          <p className="py-2 text-center text-sm text-slate-500">No assessments assigned yet.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Assessment</TableHead>
+                <TableHead>Assigned by</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {assignments.map((a) => (
+                <TableRow key={a.id}>
+                  <TableCell className="font-medium text-slate-900">
+                    {titleFor(a.item_id)}
+                  </TableCell>
+                  <TableCell className="text-slate-500">{a.assigned_by_name || "—"}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-danger hover:bg-danger-50"
+                      loading={removeMutation.isPending}
+                      onClick={() => removeMutation.mutate(a.id)}
+                    >
+                      Remove
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Schedule assessments for employees (CJ_UC053)
+// ---------------------------------------------------------------------------
+
+function SchedulesCard({
+  orgId,
+  groups,
+}: {
+  orgId: number;
+  groups: { id: number; name: string }[];
+}) {
+  const queryClient = useQueryClient();
+  const [assessmentId, setAssessmentId] = useState("");
+  const [when, setWhen] = useState("");
+  const [groupId, setGroupId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const KEY = [...ORG_KEY(orgId), "schedules"];
+
+  const { data: schedules = [] } = useQuery({
+    queryKey: KEY,
+    queryFn: () => listSchedules(orgId),
+    enabled: !Number.isNaN(orgId),
+  });
+  const { data: assessmentsPage } = useQuery({
+    queryKey: ["assessments", "published", "for-assign"],
+    queryFn: () => listAssessments({ status: "published" }),
+  });
+  const assessments = assessmentsPage?.results ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createSchedule(orgId, {
+        assessment: Number(assessmentId),
+        scheduled_at: new Date(when).toISOString(),
+        ...(groupId ? { group: Number(groupId) } : {}),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: KEY });
+      setAssessmentId("");
+      setWhen("");
+      setGroupId("");
+      setError(null);
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (id: number) => deleteSchedule(orgId, id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: KEY }),
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Scheduled assessments</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="mb-3 text-sm text-slate-500">
+          Schedule an assessment for employees — the targeted members are notified.
+        </p>
+        {error && (
+          <Alert variant="error" className="mb-3">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-4">
+          <select
+            className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={assessmentId}
+            onChange={(e) => setAssessmentId(e.target.value)}
+          >
+            <option value="">Assessment…</option>
+            {assessments.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.title}
+              </option>
+            ))}
+          </select>
+          <input
+            type="datetime-local"
+            className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={when}
+            onChange={(e) => setWhen(e.target.value)}
+          />
+          <select
+            className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={groupId}
+            onChange={(e) => setGroupId(e.target.value)}
+          >
+            <option value="">All members</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            disabled={!assessmentId || !when || createMutation.isPending}
+            onClick={() => createMutation.mutate()}
+          >
+            Schedule
+          </Button>
+        </div>
+        {schedules.length === 0 ? (
+          <p className="py-2 text-center text-sm text-slate-500">Nothing scheduled yet.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Assessment</TableHead>
+                <TableHead>When</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {schedules.map((s) => (
+                <TableRow key={s.id}>
+                  <TableCell className="font-medium text-slate-900">{s.assessment_title}</TableCell>
+                  <TableCell className="text-slate-500">
+                    {new Date(s.scheduled_at).toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-slate-500">{s.group_name || "All members"}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-danger hover:bg-danger-50"
+                      loading={removeMutation.isPending}
+                      onClick={() => removeMutation.mutate(s.id)}
+                    >
+                      Remove
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Branded portal / website (CJ_UC054 customization + CJ_UC055 create)
+// ---------------------------------------------------------------------------
+
+function WebsiteCard({ orgId, defaultName }: { orgId: number; defaultName: string }) {
+  const queryClient = useQueryClient();
+  const KEY = [...ORG_KEY(orgId), "website"];
+  const [companyName, setCompanyName] = useState(defaultName);
+  const [layout, setLayout] = useState("classic");
+  const [color, setColor] = useState("#4f46e5");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [creds, setCreds] = useState<{ email: string; temporary_password: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: website } = useQuery({
+    queryKey: KEY,
+    queryFn: () => getWebsite(orgId),
+    enabled: !Number.isNaN(orgId),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createWebsite(orgId, {
+        company_name: companyName,
+        layout,
+        primary_color: color,
+        logo_url: logoUrl,
+        ...(adminEmail ? { admin_email: adminEmail } : {}),
+      }),
+    onSuccess: (w) => {
+      if (w.generated_credentials) setCreds(w.generated_credentials);
+      void queryClient.invalidateQueries({ queryKey: KEY });
+      setError(null);
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (payload: { layout?: string; primary_color?: string; logo_url?: string }) =>
+      updateWebsite(orgId, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: KEY }),
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Corporate website</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {error && (
+          <Alert variant="error" className="mb-3">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {creds && (
+          <Alert variant="success" className="mb-3">
+            <AlertDescription>
+              Website created. Admin login (shown once): <strong>{creds.email}</strong> / temporary
+              password <strong>{creds.temporary_password}</strong> — copy it now.
+            </AlertDescription>
+          </Alert>
+        )}
+        {website ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Live at slug <code className="rounded bg-slate-100 px-1">{website.slug}</code>
+              {website.admin_email ? ` · admin ${website.admin_email}` : ""}
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <Label htmlFor="w-layout">Layout</Label>
+                <select
+                  id="w-layout"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  value={website.layout}
+                  onChange={(e) => updateMutation.mutate({ layout: e.target.value })}
+                >
+                  <option value="classic">Classic</option>
+                  <option value="modern">Modern</option>
+                  <option value="minimal">Minimal</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="w-color">Primary color</Label>
+                <input
+                  id="w-color"
+                  type="color"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-1"
+                  value={website.primary_color}
+                  onChange={(e) => updateMutation.mutate({ primary_color: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="w-logo">Logo URL</Label>
+                <Input
+                  id="w-logo"
+                  defaultValue={website.logo_url}
+                  onBlur={(e) => updateMutation.mutate({ logo_url: e.target.value })}
+                  placeholder="https://…/logo.png"
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-500">
+              Create a branded portal for this corporate — its own URL slug, branding, and a
+              generated admin login.
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="w-name" required>
+                  Company name
+                </Label>
+                <Input
+                  id="w-name"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="w-admin">Admin email (optional)</Label>
+                <Input
+                  id="w-admin"
+                  type="email"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  placeholder="auto-generated if blank"
+                />
+              </div>
+              <div>
+                <Label htmlFor="w-new-layout">Layout</Label>
+                <select
+                  id="w-new-layout"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  value={layout}
+                  onChange={(e) => setLayout(e.target.value)}
+                >
+                  <option value="classic">Classic</option>
+                  <option value="modern">Modern</option>
+                  <option value="minimal">Minimal</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="w-new-color">Primary color</Label>
+                <input
+                  id="w-new-color"
+                  type="color"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-1"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label htmlFor="w-new-logo">Logo URL</Label>
+                <Input
+                  id="w-new-logo"
+                  value={logoUrl}
+                  onChange={(e) => setLogoUrl(e.target.value)}
+                  placeholder="https://…/logo.png"
+                />
+              </div>
+            </div>
+            <Button
+              disabled={!companyName.trim() || createMutation.isPending}
+              loading={createMutation.isPending}
+              onClick={() => createMutation.mutate()}
+            >
+              Create website
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Create Group Modal
 // ---------------------------------------------------------------------------
 
@@ -342,14 +817,16 @@ function CreateGroupModal({
 }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
+  const [regionDivision, setRegionDivision] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () => createGroup(orgId, { name, description }),
+    mutationFn: () => createGroup(orgId, { name, region_division: regionDivision, description }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ORG_KEY(orgId) });
       setName("");
+      setRegionDivision("");
       setDescription("");
       setError(null);
       onClose();
@@ -389,6 +866,15 @@ function CreateGroupModal({
           <Input id="grp-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </div>
         <div>
+          <Label htmlFor="grp-region">Region / Division</Label>
+          <Input
+            id="grp-region"
+            value={regionDivision}
+            onChange={(e) => setRegionDivision(e.target.value)}
+            placeholder="e.g. North Zone"
+          />
+        </div>
+        <div>
           <Label htmlFor="grp-desc">Description</Label>
           <Input
             id="grp-desc"
@@ -424,13 +910,23 @@ function AddMemberModal({
 }) {
   const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () => addMember(orgId, { user_email: email }),
+    mutationFn: () =>
+      addMember(orgId, {
+        user_email: email,
+        ...(fullName.trim() ? { full_name: fullName } : {}),
+        ...(employeeId.trim() ? { employee_id: employeeId } : {}),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: [...ORG_KEY(orgId), "members"] });
+      void queryClient.invalidateQueries({ queryKey: ORG_KEY(orgId) });
       setEmail("");
+      setFullName("");
+      setEmployeeId("");
       setError(null);
       onClose();
     },
@@ -442,7 +938,7 @@ function AddMemberModal({
       open={open}
       onClose={onClose}
       title="Add member"
-      description="Add an existing user to this organization by email."
+      description="Add an existing user by email, or onboard a new corporate individual by also entering their name."
       size="sm"
     >
       {error && (
@@ -474,9 +970,28 @@ function AddMemberModal({
             placeholder="user@example.com"
             autoFocus
           />
+        </div>
+        <div>
+          <Label htmlFor="mem-name">Full name</Label>
+          <Input
+            id="mem-name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="Leave blank to add an existing user"
+          />
           <p className="mt-1 text-xs text-slate-500">
-            The user must already have a CareerJudge account.
+            Enter a name to onboard a NEW corporate individual (they'll get a signup email). Leave
+            blank to add someone who already has an account.
           </p>
+        </div>
+        <div>
+          <Label htmlFor="mem-empid">Employee ID</Label>
+          <Input
+            id="mem-empid"
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value)}
+            placeholder="e.g. EMP001"
+          />
         </div>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>

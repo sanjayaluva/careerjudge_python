@@ -736,7 +736,7 @@ def test_summary_six_fields(counsellor_client, counselee_user, counsellor_user):
             "provisional_diagnosis": "Career indecision",
             "case_prognosis": "Good with guidance",
             "session_smoothness": "yes",
-            "smoothly_reason": "Engaged client",
+            "smoothness_reason": "Engaged client",
             "followup_recommended": True,
         },
         format="json",
@@ -745,6 +745,9 @@ def test_summary_six_fields(counsellor_client, counselee_user, counsellor_user):
     sm = SessionSummary.objects.get(session=session)
     assert sm.client_details == "Client seeking career change"
     assert sm.session_smoothness == "yes"
+    # CNS-1: the smoothness reason must persist (regression guard — the field
+    # was silently dropped by a front-end/back-end field-name mismatch).
+    assert sm.smoothness_reason == "Engaged client"
     assert sm.followup_recommended is True
 
 

@@ -50,9 +50,20 @@ export function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-/** Returns true if the string has at least 8 chars, one letter, one digit. */
+/**
+ * Returns true if the password meets the policy (mirrors the backend
+ * AUTH_PASSWORD_VALIDATORS, incl. E-SRS-1): at least 8 chars, a letter, a
+ * digit, at least one special (non-alphanumeric) character, and not starting
+ * with a digit.
+ */
 export function isStrongPassword(value: string): boolean {
-  return value.length >= 8 && /[A-Za-z]/.test(value) && /[0-9]/.test(value);
+  return (
+    value.length >= 8 &&
+    /[A-Za-z]/.test(value) &&
+    /[0-9]/.test(value) &&
+    /[^A-Za-z0-9]/.test(value) &&
+    !/^[0-9]/.test(value)
+  );
 }
 
 /** Sleep helper for tests. */

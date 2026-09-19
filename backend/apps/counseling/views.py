@@ -765,13 +765,15 @@ class CounselingSessionViewSet(ModelViewSet):
         """Counselee's feedback (SRS §2.3).
 
         Per SRS: "User feedbacks are available only to Admin User."
-        Counselees can submit their own feedback but can only view their own.
+        Counselees can submit their own feedback but cannot read it back
+        (CNS-8: viewing is Admin-only per the signed rule).
         """
         session = self.get_object()
         if request.method == "GET":
-            # Only admin can view all feedback; counselee can view their own
+            # SRS §2.3: feedback is viewable only by the CJ Admin.
             user_role_name = request.user.role.name if request.user.role_id else None
-            if user_role_name != "cj_admin" and session.counselee_id != request.user.id:
+            is_admin = user_role_name == "cj_admin" or request.user.is_superuser
+            if not is_admin:
                 return Response(
                     {"error": {"code": "forbidden", "message": "Feedback is admin-only."}},
                     status=status.HTTP_403_FORBIDDEN,

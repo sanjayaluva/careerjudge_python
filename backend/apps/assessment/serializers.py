@@ -28,6 +28,7 @@ class AssessmentSectionSerializer(serializers.ModelSerializer):
             "description",
             "level",
             "order",
+            "order_mode",
             "duration_seconds",
             "delivery_count",
             "subsections",
@@ -91,6 +92,7 @@ class AssessmentSerializer(serializers.ModelSerializer):
             "display_order",
             "navigation_rule",
             "attempt_rule",
+            "price",
             "created_by",
             "created_at",
             "updated_at",
@@ -136,6 +138,7 @@ class AssessmentListSerializer(serializers.ModelSerializer):
             "display_order",
             "navigation_rule",
             "attempt_rule",
+            "price",
             "created_by",
             "created_by_name",
             "section_count",
@@ -221,6 +224,9 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
     section_duration_seconds = serializers.SerializerMethodField()
     timer_section_id = serializers.SerializerMethodField()
     question_duration_seconds = serializers.SerializerMethodField()
+    # ASM-5 (§5.1): the section's per-level delivery order mode, so the player
+    # can randomise questions within RANDOM sections.
+    section_order_mode = serializers.SerializerMethodField()
 
     class Meta:
         model = QuestionAttempt
@@ -239,6 +245,7 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
             "section_duration_seconds",
             "timer_section_id",
             "question_duration_seconds",
+            "section_order_mode",
             "question_detail",
         ]
         read_only_fields = ["id", "score", "max_score", "answered_at", "question_detail"]
@@ -246,6 +253,9 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
     def _timer_section(self, obj):
         section_map = self.context.get("section_timer_map") or {}
         return section_map.get(obj.section_id, (None, None))
+
+    def get_section_order_mode(self, obj):
+        return obj.section.order_mode if obj.section_id else "STATIC"
 
     def get_timer_section_id(self, obj):
         return self._timer_section(obj)[0]
@@ -318,3 +328,96 @@ class AssessmentModificationRequestSerializer(serializers.ModelSerializer):
             "reviewed_at",
             "created_at",
         ]
+
+
+# ---------------------------------------------------------------------------
+# Psychometric grouping (PSY-A1)
+# ---------------------------------------------------------------------------
+
+
+class PsychometricGroupItemSerializer(serializers.ModelSerializer):
+    statement_text = serializers.CharField(source="statement.question_text_1", read_only=True)
+    section_title = serializers.CharField(source="section.title", read_only=True)
+
+    class Meta:
+        from .models import PsychometricGroupItem
+
+        model = PsychometricGroupItem
+        fields = ["id", "statement", "statement_text", "section", "section_title", "order"]
+        read_only_fields = ["id", "statement_text", "section_title"]
+
+
+class PsychometricGroupSerializer(serializers.ModelSerializer):
+    items = PsychometricGroupItemSerializer(many=True)
+
+    class Meta:
+        from .models import PsychometricGroup
+
+        model = PsychometricGroup
+        fields = [
+            "id",
+            "assessment",
+            "group_type",
+            "group_number",
+            "rating_scale_points",
+            "order",
+            "items",
+        ]
+        read_only_fields = ["id", "assessment"]
+
+    def validate(self, attrs):
+
+        group_type = attrs.get("group_type")
+        items = attrs.get("items") or []
+        if len(items) < 2:
+            raise serializers.ValidationError({"items": "A group needs at least two statements."})
+
+        sections = [it["section"] for it in items]
+        statements = [it["statement"] for it in items]
+
+        # Every statement must be a Question-Bank psychometric STATEMENT.
+        for q in statements:
+            if q.question_type != "PSYCHOMETRIC_STATEMENT":
+                raise serializers.ValidationError(
+                    {"items": f"'{q.question_title or q.id}' is not a psychometric statement."}
+                )
+
+        # Forced-choice: exactly 2 statements from two DIFFERENT sections
+        # (Doc 1.1 §8a). Rank: one statement per section — all sections distinct
+        # (Doc 1.1 §6a: number of options = number of sections).
+        if group_type in ("forced_choice_single", "forced_choice_two_level"):
+            if len(items) != 2:
+                raise serializers.ValidationError(
+                    {"items": "A forced-choice pair must have exactly two statements."}
+                )
+            if sections[0].id == sections[1].id:
+                raise serializers.ValidationError(
+                    {"items": "A forced-choice pair must use two different sections."}
+                )
+        else:  # rank_simple / rank_then_rate
+            ids = [s.id for s in sections]
+            if len(set(ids)) != len(ids):
+                raise serializers.ValidationError(
+                    {"items": "A rank group must have one statement per section (no repeats)."}
+                )
+        if group_type in ("rank_then_rate", "forced_choice_two_level") and not attrs.get(
+            "rating_scale_points"
+        ):
+            raise serializers.ValidationError(
+                {"rating_scale_points": "A rating scale size is required for this group type."}
+            )
+        return attrs
+
+    def create(self, validated_data):
+        from .models import PsychometricGroup, PsychometricGroupItem
+
+        items = validated_data.pop("items")
+        group = PsychometricGroup.objects.create(**validated_data)
+        for idx, it in enumerate(items):
+            PsychometricGroupItem.objects.create(
+                group=group,
+                statement=it["statement"],
+                section=it["section"],
+                order=it.get("order", idx),
+            )
+        return group

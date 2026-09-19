@@ -2,8 +2,8 @@
  * Counseling page — browse counsellors + view my sessions.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import {
   Alert,
@@ -57,6 +57,10 @@ import { JoinSessionButton } from "./JoinSession";
 export default function CounselingPage() {
   const { user } = useAuth();
   const isCounsellor = user?.role === "counsellor";
+  // CNS-3 (§2.1): show a payment-received confirmation when Stripe redirects
+  // back to /counseling?payment=success.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paymentSuccess = searchParams.get("payment") === "success";
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -88,6 +92,28 @@ export default function CounselingPage() {
             Book a session with one of our professional counsellors
           </p>
         </div>
+
+        {paymentSuccess && (
+          <div className="mx-6 mb-2 rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+            <p className="font-medium">Payment received — your booking is confirmed.</p>
+            <p className="mt-1">
+              Your appointment will be confirmed by the counsellor within 6 hours (SRS §2.1). If you
+              need any help, contact the helpdesk.
+            </p>
+            <div className="mt-2 flex gap-3">
+              <Link to="/concerns" className="text-primary-600 hover:underline">
+                Contact Helpdesk
+              </Link>
+              <button
+                type="button"
+                className="text-slate-500 hover:underline"
+                onClick={() => setSearchParams({})}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         <Tabs defaultValue="browse">
           <div className="px-6">
@@ -158,7 +184,7 @@ export default function CounselingPage() {
                       <TableCell className="text-slate-500">
                         {c.category_names.join(", ") || "—"}
                       </TableCell>
-                      <TableCell className="text-slate-500">${c.hourly_rate}/hr</TableCell>
+                      <TableCell className="text-slate-500">₹{c.hourly_rate}/Session</TableCell>
                       <TableCell>
                         <Badge variant={c.upcoming_slot_count > 0 ? "success" : "default"}>
                           {c.upcoming_slot_count} slot{c.upcoming_slot_count !== 1 ? "s" : ""}
@@ -230,7 +256,7 @@ export default function CounselingPage() {
                           {s.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-slate-500">${s.fee}</TableCell>
+                      <TableCell className="text-slate-500">₹{s.fee}</TableCell>
                       <TableCell>
                         {s.status === "confirmed" ? <JoinSessionButton session={s} /> : "—"}
                       </TableCell>
@@ -284,6 +310,9 @@ function BookingModal({
   const timeslots = week?.slots;
   const maxWeeksAhead = settings?.max_weeks_ahead ?? 3;
 
+  // CNS-4: show the spec §2.1 confirmation message after a (free) booking
+  // instead of a generic toast.
+  const [booked, setBooked] = useState(false);
   const bookMutation = useMutation({
     mutationFn: () => {
       if (!selectedSlot) throw new Error("No slot selected");
@@ -311,8 +340,7 @@ function BookingModal({
         window.location.href = data.checkout_url;
         return;
       }
-      toast.success("Session booked! Awaiting counsellor confirmation.");
-      onClose();
+      setBooked(true);
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -324,171 +352,189 @@ function BookingModal({
       open
       onClose={onClose}
       title={`Book with ${counsellor.full_name}`}
-      description={`$${counsellor.hourly_rate}/hr`}
+      description={`₹${counsellor.hourly_rate}/Session`}
       size="md"
     >
       <div className="space-y-4">
-        {/* Report 3 §1.7: counsellor profile details */}
-        <div className="flex items-start gap-3 rounded-md border border-slate-100 p-3">
-          {counsellor.avatar ? (
-            <img
-              src={counsellor.avatar}
-              alt={counsellor.full_name}
-              className="h-12 w-12 rounded-full object-cover"
-            />
-          ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary-700">
-              {counsellor.full_name?.[0] ?? "?"}
+        {booked ? (
+          <div className="space-y-4 py-2">
+            <div className="rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+              <p className="font-medium">Your booking is confirmed.</p>
+              <p className="mt-1">
+                Your appointment will be confirmed by the counsellor within 6 hours. If the
+                counsellor is not available, you can select a fresh timeslot; or press Cancel and
+                your money will be refunded within 48 hours (SRS §2.1).
+              </p>
             </div>
-          )}
-          <div className="text-sm">
-            <div className="font-medium text-slate-900">{counsellor.full_name}</div>
-            {(counsellor.gender || counsellor.language || counsellor.location) && (
-              <div className="mt-0.5 text-xs text-slate-500">
-                {[counsellor.gender, counsellor.language, counsellor.location]
-                  .filter(Boolean)
-                  .join(" · ")}
+            <div className="flex justify-end">
+              <Button onClick={onClose}>Done</Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Report 3 §1.7: counsellor profile details */}
+            <div className="flex items-start gap-3 rounded-md border border-slate-100 p-3">
+              {counsellor.avatar ? (
+                <img
+                  src={counsellor.avatar}
+                  alt={counsellor.full_name}
+                  className="h-12 w-12 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary-700">
+                  {counsellor.full_name?.[0] ?? "?"}
+                </div>
+              )}
+              <div className="text-sm">
+                <div className="font-medium text-slate-900">{counsellor.full_name}</div>
+                {(counsellor.gender || counsellor.language || counsellor.location) && (
+                  <div className="mt-0.5 text-xs text-slate-500">
+                    {[counsellor.gender, counsellor.language, counsellor.location]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </div>
+                )}
+                {counsellor.bio && (
+                  <p className="mt-1 line-clamp-2 text-xs text-slate-600">{counsellor.bio}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Report 3 §1.8: registration form (topic + description prefilled
+            from the user's context) */}
+            <div>
+              <Label htmlFor="topic" required>
+                Topic / Issue
+              </Label>
+              <Input
+                id="topic"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="e.g., Career change advice"
+                required
+              />
+              {user?.full_name && (
+                <p className="mt-1 text-xs text-slate-400">
+                  Booking as {user.full_name} ({user.email})
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="desc">Description (optional)</Label>
+              <textarea
+                id="desc"
+                rows={2}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between">
+                <Label required>Available time slots</Label>
+                {/* D8 "browse future weeks" */}
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setWeekOffset((w) => Math.max(0, w - 1))}
+                    disabled={weekOffset === 0}
+                  >
+                    ← Prev week
+                  </Button>
+                  <span className="px-1 text-xs text-slate-500">
+                    {weekOffset === 0 ? "This week" : `Week +${weekOffset}`}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setWeekOffset((w) => Math.min(maxWeeksAhead, w + 1))}
+                    disabled={weekOffset >= maxWeeksAhead}
+                  >
+                    Next week →
+                  </Button>
+                </div>
+              </div>
+              {isLoading ? (
+                <Spinner />
+              ) : availableSlots.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  No available slots this week. Try browsing another week.
+                </p>
+              ) : (
+                <div className="max-h-48 space-y-1 overflow-y-auto">
+                  {availableSlots.map((slot) => (
+                    <button
+                      key={slot.id}
+                      onClick={() => setSelectedSlot(slot)}
+                      className={`block w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                        selectedSlot?.id === slot.id
+                          ? "border-primary-500 bg-primary-50 text-primary-900"
+                          : "border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      {new Date(slot.start_time).toLocaleString()} —{" "}
+                      {new Date(slot.end_time).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Report 3 §1.11: refund policy display */}
+            {settings?.cancellation_policy && (
+              <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+                <div className="mb-1 font-medium text-slate-700">Cancellation & refund policy</div>
+                {settings.cancellation_policy}
               </div>
             )}
-            {counsellor.bio && (
-              <p className="mt-1 line-clamp-2 text-xs text-slate-600">{counsellor.bio}</p>
-            )}
-          </div>
-        </div>
 
-        {/* Report 3 §1.8: registration form (topic + description prefilled
-            from the user's context) */}
-        <div>
-          <Label htmlFor="topic" required>
-            Topic / Issue
-          </Label>
-          <Input
-            id="topic"
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            placeholder="e.g., Career change advice"
-            required
-          />
-          {user?.full_name && (
-            <p className="mt-1 text-xs text-slate-400">
-              Booking as {user.full_name} ({user.email})
-            </p>
-          )}
-        </div>
-
-        <div>
-          <Label htmlFor="desc">Description (optional)</Label>
-          <textarea
-            id="desc"
-            rows={2}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between">
-            <Label required>Available time slots</Label>
-            {/* D8 "browse future weeks" */}
-            <div className="flex items-center gap-1">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setWeekOffset((w) => Math.max(0, w - 1))}
-                disabled={weekOffset === 0}
-              >
-                ← Prev week
-              </Button>
-              <span className="px-1 text-xs text-slate-500">
-                {weekOffset === 0 ? "This week" : `Week +${weekOffset}`}
+            {/* Report 3 §1.8: terms checkbox */}
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+              />
+              <span className="text-slate-700">
+                I accept the{" "}
+                {settings?.terms_and_conditions ? (
+                  <details className="inline">
+                    <summary className="cursor-pointer text-primary-600">
+                      Terms &amp; Conditions
+                    </summary>
+                    <div className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-xs text-slate-600">
+                      {settings.terms_and_conditions}
+                    </div>
+                  </details>
+                ) : (
+                  "Terms & Conditions"
+                )}
               </span>
+            </label>
+
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
               <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setWeekOffset((w) => Math.min(maxWeeksAhead, w + 1))}
-                disabled={weekOffset >= maxWeeksAhead}
+                onClick={() => bookMutation.mutate()}
+                loading={bookMutation.isPending}
+                disabled={!topic || !selectedSlot || !termsAccepted}
               >
-                Next week →
+                Book session (₹{counsellor.hourly_rate})
               </Button>
             </div>
-          </div>
-          {isLoading ? (
-            <Spinner />
-          ) : availableSlots.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              No available slots this week. Try browsing another week.
-            </p>
-          ) : (
-            <div className="max-h-48 space-y-1 overflow-y-auto">
-              {availableSlots.map((slot) => (
-                <button
-                  key={slot.id}
-                  onClick={() => setSelectedSlot(slot)}
-                  className={`block w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
-                    selectedSlot?.id === slot.id
-                      ? "border-primary-500 bg-primary-50 text-primary-900"
-                      : "border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  {new Date(slot.start_time).toLocaleString()} —{" "}
-                  {new Date(slot.end_time).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Report 3 §1.11: refund policy display */}
-        {settings?.cancellation_policy && (
-          <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600">
-            <div className="mb-1 font-medium text-slate-700">Cancellation & refund policy</div>
-            {settings.cancellation_policy}
-          </div>
+          </>
         )}
-
-        {/* Report 3 §1.8: terms checkbox */}
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={termsAccepted}
-            onChange={(e) => setTermsAccepted(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
-          />
-          <span className="text-slate-700">
-            I accept the{" "}
-            {settings?.terms_and_conditions ? (
-              <details className="inline">
-                <summary className="cursor-pointer text-primary-600">
-                  Terms &amp; Conditions
-                </summary>
-                <div className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-xs text-slate-600">
-                  {settings.terms_and_conditions}
-                </div>
-              </details>
-            ) : (
-              "Terms & Conditions"
-            )}
-          </span>
-        </label>
-
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => bookMutation.mutate()}
-            loading={bookMutation.isPending}
-            disabled={!topic || !selectedSlot || !termsAccepted}
-          >
-            Book session (${counsellor.hourly_rate})
-          </Button>
-        </div>
       </div>
     </Modal>
   );
@@ -587,7 +633,7 @@ function CounsellorDashboardWrapper() {
             </div>
             <div>
               <Label htmlFor="cp-rate" required>
-                Hourly rate (USD)
+                Rate per session (INR)
               </Label>
               <Input
                 id="cp-rate"
@@ -745,6 +791,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
               <span className="text-xs text-amber-700">
                 {new Date(fu.proposed_time).toLocaleString()}
               </span>
+              <FollowupCountdown target={fu.proposed_time} />
               <Button
                 size="sm"
                 onClick={() => confirmFuMut.mutate(fu.id)}
@@ -951,4 +998,21 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
       )}
     </div>
   );
+}
+
+// CNS-5 (§3.3): live countdown to a proposed follow-up session.
+function FollowupCountdown({ target }: { target: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const diff = new Date(target).getTime() - now;
+  if (Number.isNaN(diff)) return null;
+  if (diff <= 0) return <span className="text-xs font-medium text-amber-800">now</span>;
+  const days = Math.floor(diff / 86_400_000);
+  const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+  const mins = Math.floor((diff % 3_600_000) / 60_000);
+  const parts = [days ? `${days}d` : "", hours ? `${hours}h` : "", `${mins}m`].filter(Boolean);
+  return <span className="text-xs font-medium text-amber-800">in {parts.join(" ")}</span>;
 }

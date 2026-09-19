@@ -9,8 +9,20 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
-import { listBanners, listMenuItems, type Banner, type MenuItem } from "@/api/cms";
+import {
+  listBanners,
+  listMenuItems,
+  listPages,
+  PAGE_TYPES,
+  type Banner,
+  type MenuItem,
+} from "@/api/cms";
 import { useAuth } from "@/hooks/useAuth";
+
+const POLICY_TYPES = new Set(["terms", "refund", "privacy"]);
+const POLICY_LABEL: Record<string, string> = Object.fromEntries(
+  PAGE_TYPES.map((t) => [t.value, t.label]),
+);
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -29,6 +41,13 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
     queryKey: ["cms", "banners", "footer"],
     queryFn: () => listBanners({ active: true, position: "footer" }),
   });
+
+  // E-X6: published policy pages (Terms / Refund / Privacy) linked in the footer.
+  const { data: pages } = useQuery({
+    queryKey: ["cms", "pages", "published"],
+    queryFn: () => listPages({ status: "published" }),
+  });
+  const policyPages = (pages?.results ?? []).filter((p) => POLICY_TYPES.has(p.page_type));
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -115,7 +134,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             <div className="text-sm text-slate-500">
               © {new Date().getFullYear()} CareerJudge. All rights reserved.
             </div>
-            {/* CMS-driven footer navigation */}
+            {/* CMS-driven footer navigation + policy pages (E-X6) */}
             <nav className="flex flex-wrap items-center gap-4">
               {(footerMenu ?? []).map((item: MenuItem) => (
                 <a
@@ -127,6 +146,15 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 >
                   {item.label}
                 </a>
+              ))}
+              {policyPages.map((p) => (
+                <Link
+                  key={p.id}
+                  to={`/${p.slug}`}
+                  className="text-sm text-slate-500 hover:text-primary-600"
+                >
+                  {POLICY_LABEL[p.page_type] ?? p.title}
+                </Link>
               ))}
             </nav>
           </div>

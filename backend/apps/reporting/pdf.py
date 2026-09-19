@@ -99,6 +99,7 @@ def _build_html(data: dict[str, Any]) -> str:
 
     # Build section blocks
     section_breakdown_html = _build_section_breakdown(data.get("section_breakdown"))
+    question_breakdown_html = _build_question_breakdown(data.get("question_breakdown"))
     descriptive_html = _build_descriptive(data.get("descriptive"))
     typological_html = _build_typological(data.get("typological"))
     interpretative_html = _build_interpretative(data.get("interpretative"))
@@ -248,6 +249,7 @@ def _build_html(data: dict[str, Any]) -> str:
   {_build_score_summary_html(scores, score_summary)}
 
   {section_breakdown_html}
+  {question_breakdown_html}
   {descriptive_html}
   {typological_html}
   {interpretative_html}
@@ -326,6 +328,36 @@ def _build_section_breakdown(breakdown: Any) -> str:
       <h2>Section Breakdown</h2>
       <table>
         <thead><tr><th>Variable</th><th>Raw</th><th>Max</th><th>%</th><th>Converted</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    """
+
+
+def _build_question_breakdown(breakdown: Any) -> str:
+    """Build the per-question breakdown table (SRS 04 §2.3, REP-6)."""
+    if not breakdown or not isinstance(breakdown, list):
+        return ""
+    rows = ""
+    for q in breakdown:
+        qid = q.get("question_id_label") or ""
+        label = q.get("question_label")
+        section = q.get("section_title")
+        section_cell = f"<td>{_esc(section)}</td>" if section else "<td>—</td>"
+        rows += (
+            f"<tr>"
+            f"<td>{_esc(qid)}</td>"
+            f"<td>{_esc(label)}</td>"
+            f"{section_cell}"
+            f"<td>{_fmt(q.get('raw_score'))}</td>"
+            f"<td>{_fmt(q.get('max_score'))}</td>"
+            f"<td>{_fmt(q.get('percentage'), '%')}</td>"
+            f"<td>{_fmt(q.get('converted_score'))} <em>({_esc(q.get('conversion_type', ''))})</em></td>"
+            f"</tr>"
+        )
+    return f"""
+      <h2>Question Breakdown</h2>
+      <table>
+        <thead><tr><th>ID</th><th>Question</th><th>Variable</th><th>Raw</th><th>Max</th><th>%</th><th>Converted</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>
     """
@@ -691,9 +723,9 @@ def _build_custom_sections(sections: Any) -> str:
         stype = _esc(s.get("section_type"))
         image_data_uri = s.get("image_data_uri")
         table_html = _build_layout_table_html(s.get("table"))
-        graph_note = s.get("graph_note")
+        graph_html = _build_layout_graph_svg(s.get("graph"))
 
-        if not any((content, title, description, image_data_uri, table_html, graph_note)):
+        if not any((content, title, description, image_data_uri, table_html, graph_html)):
             continue
 
         block = (
@@ -714,9 +746,66 @@ def _build_custom_sections(sections: Any) -> str:
         block += "</div>"
         if table_html:
             block += table_html
-        if graph_note:
-            block += f"<p style='font-size:8pt;color:#b45309;'>{_esc(graph_note)}</p>"
+        if graph_html:
+            block += graph_html
         parts.append(block)
     if not parts:
         return ""
     return "<h2>Additional Sections</h2>" + "".join(parts)
+
+
+def _build_layout_graph_svg(graph: Any) -> str:
+    """Render a Graph-layout section (SRS §3.1.2/§3.2.2/§3.3.2, REP-1) as an
+    inline SVG horizontal bar chart — one bar per variable, coloured by band.
+
+    Inline SVG renders in both WeasyPrint (PDF) and browsers, needs no chart
+    library, and carries no external assets.
+    """
+    if not graph or not isinstance(graph, dict):
+        return ""
+    bars = graph.get("bars") or []
+    if not bars:
+        return ""
+    max_value = graph.get("max_value") or 100.0
+    if max_value <= 0:
+        max_value = 100.0
+
+    row_h = 22  # vertical space per bar
+    bar_h = 14
+    label_w = 120  # left gutter for variable names
+    track_w = 320  # width of the 100% track
+    value_w = 60  # right gutter for the value text
+    pad = 8
+    chart_w = label_w + track_w + value_w
+    chart_h = pad * 2 + row_h * len(bars)
+
+    svg_rows = ""
+    for i, bar in enumerate(bars):
+        y = pad + i * row_h
+        value = bar.get("value") or 0
+        width = max(0.0, min(1.0, value / max_value)) * track_w
+        colour = _esc(bar.get("colour_code") or "#3b82f6")
+        variable = _esc(bar.get("variable"))
+        text_y = y + bar_h - 2
+        svg_rows += (
+            f"<text x='0' y='{text_y}' font-size='9' fill='#334155'>{variable}</text>"
+            f"<rect x='{label_w}' y='{y}' width='{track_w}' height='{bar_h}' "
+            f"fill='#f1f5f9' rx='2'/>"
+            f"<rect x='{label_w}' y='{y}' width='{width:.1f}' height='{bar_h}' "
+            f"fill='{colour}' rx='2'/>"
+            f"<text x='{label_w + track_w + 6}' y='{text_y}' font-size='9' "
+            f"fill='#334155'>{_fmt(value)}</text>"
+        )
+    title = _esc(graph.get("title"))
+    title_html = (
+        f"<div style='font-size:9pt;font-weight:bold;margin:6pt 0 2pt 0;'>{title}</div>"
+        if title
+        else ""
+    )
+    return (
+        f"{title_html}"
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{chart_w}' height='{chart_h}' "
+        f"viewBox='0 0 {chart_w} {chart_h}' style='max-width:100%;margin-top:4pt;'>"
+        f"{svg_rows}"
+        f"</svg>"
+    )

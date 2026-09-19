@@ -171,6 +171,9 @@ class QuestionListSerializer(serializers.ModelSerializer):
     scoring_type_label = serializers.CharField(source="get_scoring_type_display", read_only=True)
     is_psychometric = serializers.BooleanField(read_only=True)
     question_category = serializers.CharField(read_only=True)
+    assigned_reviewer_name = serializers.CharField(
+        source="assigned_reviewer.full_name", read_only=True, default=None
+    )
 
     class Meta:
         model = Question
@@ -185,6 +188,8 @@ class QuestionListSerializer(serializers.ModelSerializer):
             "category_name",
             "status",
             "status_label",
+            "assigned_reviewer",
+            "assigned_reviewer_name",
             "scoring_type",
             "scoring_type_label",
             "difficulty_level",
@@ -425,6 +430,22 @@ class QuestionReviewCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuestionReview
         fields = ["question", "review_type", "action", "comment", "rating"]
+
+    def validate(self, attrs):
+        # QB-5 (D1 §3.2/§3.3): a rating is required to approve a question, and a
+        # reason is required to send one back to the previous stage.
+        action = attrs.get("action")
+        if action == "approve" and attrs.get("rating") in (None, ""):
+            raise serializers.ValidationError({"rating": "A rating is required to approve."})
+        if action == "send_back" and not (attrs.get("comment") or "").strip():
+            raise serializers.ValidationError(
+                {"comment": "A reason is required to send a question back."}
+            )
+        # Report 4 Reviewer-7: a rating applies ONLY on approval. Never store a
+        # rating for a send-back or reject, even if one was submitted.
+        if action != "approve":
+            attrs["rating"] = None
+        return attrs
 
     def create(self, validated_data):
         request = self.context.get("request")

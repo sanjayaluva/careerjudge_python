@@ -36,7 +36,9 @@ import {
   updateBanner,
   updatePage,
   type Banner,
+  PAGE_TYPES,
   type PageListItem,
+  type PageType,
 } from "@/api/cms";
 import { extractApiError } from "@/api/client";
 import { WysiwygEditor } from "@/components/ui/WysiwygEditor";
@@ -189,6 +191,7 @@ function PageEditor({ page, onClose }: { page: PageListItem | null; onClose: () 
   const [slug, setSlug] = useState(page?.slug ?? "");
   const [body, setBody] = useState("");
   const [status, setStatus] = useState("draft");
+  const [pageType, setPageType] = useState<PageType>(page?.page_type ?? "general");
 
   const { data: fullPage } = useQuery({
     queryKey: [...CMS_KEY, "pages", page?.id],
@@ -202,14 +205,15 @@ function PageEditor({ page, onClose }: { page: PageListItem | null; onClose: () 
     setSlug(fullPage.slug);
     setBody(fullPage.body);
     setStatus(fullPage.status);
+    setPageType(fullPage.page_type);
   }
 
   const saveMut = useMutation({
     mutationFn: () => {
       if (page) {
-        return updatePage(page.id, { title, slug, body, status });
+        return updatePage(page.id, { title, slug, body, status, page_type: pageType });
       }
-      return createPage({ title, slug, body, status });
+      return createPage({ title, slug, body, status, page_type: pageType });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: [...CMS_KEY, "pages"] });
@@ -265,18 +269,38 @@ function PageEditor({ page, onClose }: { page: PageListItem | null; onClose: () 
           <Label required>Body content</Label>
           <WysiwygEditor value={body} onChange={setBody} minHeight={300} />
         </div>
-        <div>
-          <Label htmlFor="p-status">Status</Label>
-          <select
-            id="p-status"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
-            <option value="archived">Archived</option>
-          </select>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="p-status">Status</Label>
+            <select
+              id="p-status"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+          <div>
+            <Label htmlFor="p-type">Page type</Label>
+            <select
+              id="p-type"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={pageType}
+              onChange={(e) => setPageType(e.target.value as PageType)}
+            >
+              {PAGE_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Policy types (Terms / Refund / Privacy) are linked from the site footer.
+            </p>
+          </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
           <Button variant="outline" onClick={onClose}>

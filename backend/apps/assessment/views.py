@@ -92,6 +92,122 @@ def _seed_session_attempts(session) -> None:
                 defaults={"section": section, "status": "not_attempted"},
             )
 
+    # PSY-A1: seed a response row per psychometric group so groups are both
+    # delivered and (unattempted → 0) scored, mirroring QuestionAttempt seeding.
+    from .models import PsychometricGroupResponse
+
+    for group in session.assessment.psychometric_groups.all():
+        PsychometricGroupResponse.objects.get_or_create(
+            session=session, group=group, defaults={"status": "not_attempted"}
+        )
+
+
+_GROUP_TYPE_TO_QTYPE = {
+    "rank_simple": ("RANK_SIMPLE", "RANK"),
+    "rank_then_rate": ("RANK_THEN_RATE", "RANK"),
+    "forced_choice_single": ("FORCED_CHOICE_SINGLE_LEVEL", "FORCED_CHOICE"),
+    "forced_choice_two_level": ("FORCED_CHOICE_TWO_LEVEL", "FORCED_CHOICE"),
+}
+
+
+def _serialize_group_for_player(group, response) -> dict:
+    """Shape a psychometric group as a synthetic session-question for the player.
+
+    The group is rendered with the EXISTING psychometric renderers (rank /
+    forced-choice), so it is delivered as a synthetic ``SessionQuestion`` whose
+    ``question_detail`` carries the matching question_type + one synthetic
+    option per group item (``option.id`` = ``PsychometricGroupItem.id``).
+
+    A negative synthetic ``question`` id (``-group.id``) is a collision-free
+    sentinel — real question ids are positive — so the player can route this
+    unit's answer to the group endpoint while every id-keyed code path (answer
+    key, viewed set, radio-group name) keeps working unchanged.
+    """
+    qtype, opt_type = _GROUP_TYPE_TO_QTYPE.get(group.group_type, ("RANK_SIMPLE", "RANK"))
+    items = list(group.items.select_related("statement").all().order_by("order"))
+    options = [
+        {
+            "id": it.id,
+            "option_type": opt_type,
+            "label": "",
+            "text_value": (it.statement.question_text_1 if it.statement_id else ""),
+            "image_file": None,
+            "is_correct": False,
+            "match_pair_id": None,
+            "predefined_score": 0,
+            "section_tag": "",
+            "selection_score": 0,
+            "non_selection_score": 0,
+            "order": it.order,
+            "sub_question_index": 0,
+        }
+        for it in items
+    ]
+    label_map = {
+        "rank_simple": "Simple Ranking",
+        "rank_then_rate": "Rank then Rate",
+        "forced_choice_single": "Forced Choice (Single Level)",
+        "forced_choice_two_level": "Forced Choice (Two Level)",
+    }
+    title = f"{label_map.get(group.group_type, 'Psychometric Group')} #{group.group_number}"
+    return {
+        "id": -group.id,
+        "session": response.session_id if response else None,
+        "question": -group.id,
+        "group_id": group.id,
+        "section": None,
+        "sub_question_index": 0,
+        "status": (response.status if response else "not_attempted"),
+        "raw_answer": (response.raw_answer if response else None),
+        "score": None,
+        "max_score": None,
+        "answered_at": (
+            response.answered_at.isoformat() if response and response.answered_at else None
+        ),
+        "time_spent_seconds": None,
+        "section_duration_seconds": None,
+        "timer_section_id": None,
+        "question_duration_seconds": None,
+        "section_order_mode": "STATIC",
+        "question_detail": {
+            "id": -group.id,
+            "question_title": title,
+            "question_type": qtype,
+            "question_type_label": title,
+            "question_text_1": title,
+            "question_text_2": "",
+            "image": None,
+            "scoring_type": "",
+            "scoring_type_label": "",
+            "difficulty_level": "",
+            "cognitive_level": "",
+            "status": "active",
+            "options": options,
+            "flash_items": [],
+            "hotspot_areas": [],
+            "media_files": [],
+            "flash_interval_ms": None,
+            "flash_display_count": None,
+            "flash_order": "",
+            "passage_title": "",
+            "passage_body": "",
+            "display_duration_seconds": None,
+            "display_mode": "unlimited",
+            "replay_mode": "permitted",
+            "option_layout": "1",
+            "hotspot_visibility": "visible",
+            "sub_question_count": 1,
+            "sub_question_texts": [],
+            "sub_question_text_2_list": [],
+            "grid_rows": None,
+            "grid_cols": None,
+            "rating_scale_points": group.rating_scale_points,
+            "rating_direction": None,
+            "image_width": None,
+            "image_height": None,
+        },
+    }
+
 
 def _ensure_section_tags_have_sections(assessment, parent_section, question) -> None:
     """Ensure every distinct ``section_tag`` on a psychometric question's
@@ -151,6 +267,7 @@ class HasAssessmentPermission(HasModulePermission):
         "start_session": "view",
         "submit_session": "view",
         "publish": "change",
+        "unpublish": "change",
         "readiness": "view",
         # AssessmentModificationRequestViewSet custom actions (SRS §2.2/§2.3)
         "approve": "change",
@@ -228,6 +345,15 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
                     qs = qs.filter(Q(status="published") | Q(created_by=self.request.user))
                 else:
                     qs = qs.filter(status="published")
+
+        # CJ_UC030: a corporate individual (an employee of a corporate/
+        # corp-exclusive org) sees ONLY the assessments assigned to their
+        # organization — not the whole published catalogue. Non-corporate users
+        # (plain individuals with no membership, staff, admins) are unaffected.
+        from apps.organizations.scoping import assigned_item_ids, is_corporate_individual
+
+        if is_corporate_individual(self.request.user):
+            qs = qs.filter(id__in=assigned_item_ids(self.request.user, "assessment"))
 
         return qs
 
@@ -454,6 +580,57 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=True, methods=["post"])
+    def unpublish(self, request, pk=None):
+        """Return a published assessment to draft (E-ASM-11).
+
+        Elective author convenience: pull an assessment back to draft to edit
+        it. Blocked while candidates have in-progress (active/suspended)
+        sessions, so no one is editing an assessment out from under a live
+        attempt. Completed sessions are historical and don't block.
+        """
+        assessment = self.get_object()
+        if assessment.status != "published":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": (
+                            "Only a published assessment can be returned to draft. "
+                            f"Current: '{assessment.status}'"
+                        ),
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        active = assessment.sessions.filter(status__in=["active", "suspended"]).count()
+        if active > 0:
+            return Response(
+                {
+                    "error": {
+                        "code": "sessions_in_progress",
+                        "message": (
+                            f"Cannot return to draft: {active} candidate session(s) are "
+                            "in progress. Wait until they finish or are abandoned."
+                        ),
+                        "details": {"active_sessions": active},
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        assessment.status = "draft"
+        assessment.save(update_fields=["status", "updated_at"])
+        return Response(
+            {
+                "message": "Assessment returned to draft.",
+                "data": {"id": assessment.id, "status": assessment.status},
+            },
+            status=status.HTTP_200_OK,
+        )
+
     @action(detail=True, methods=["get"])
     def readiness(self, request, pk=None):
         """Check if the assessment is ready to publish.
@@ -572,6 +749,35 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+        # Pay-for-test gate (PLT-3): a priced assessment requires a completed
+        # payment before a NEW session can start. Resuming an existing session
+        # (handled above) is always allowed, so a candidate who has already
+        # paid and begun is never re-charged.
+        if assessment.price and assessment.price > 0:
+            from apps.payments.models import Payment
+
+            paid = Payment.objects.filter(
+                user=request.user,
+                module="assessment",
+                item_id=assessment.id,
+                status__in=["paid", "free"],
+            ).exists()
+            if not paid:
+                return Response(
+                    {
+                        "error": {
+                            "code": "payment_required",
+                            "message": "This assessment requires payment before you can start.",
+                            "details": {
+                                "price": str(assessment.price),
+                                "module": "assessment",
+                                "item_id": assessment.id,
+                            },
+                        }
+                    },
+                    status=status.HTTP_402_PAYMENT_REQUIRED,
+                )
+
         # Create new session
         session = AssessmentSession.objects.create(
             assessment=assessment,
@@ -660,7 +866,13 @@ class AssessmentSectionViewSet(ModelViewSet):
     def perform_create(self, serializer):
         aid = self.kwargs.get("assessment_id")
         assessment = get_object_or_404(Assessment, id=aid)
-        serializer.save(assessment=assessment)
+        # ASM-4: derive the section level from its parent (parent.level + 1)
+        # instead of trusting the client, which hardcoded 1-or-2 and made
+        # Level 3/4 variables uncreatable — which in turn broke level-based
+        # timer resolution. Doc 3 §3 allows up to four variable levels.
+        parent = serializer.validated_data.get("parent")
+        level = parent.level + 1 if parent else 1
+        serializer.save(assessment=assessment, level=level)
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -669,6 +881,25 @@ class AssessmentSectionViewSet(ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # ASM-8 Rule 1 (Doc 3 §3): at most 4 variable levels. The level is
+        # derived from the parent (parent.level + 1), so a child under a
+        # level-4 section would be level 5 — reject it server-side.
+        parent = serializer.validated_data.get("parent")
+        derived_level = parent.level + 1 if parent else 1
+        if derived_level > 4:
+            return Response(
+                {
+                    "error": {
+                        "code": "max_levels_exceeded",
+                        "message": (
+                            "An assessment can have at most 4 variable levels "
+                            "(Doc 3 §3). This section would be level "
+                            f"{derived_level}."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         self.perform_create(serializer)
         return Response(
             {
@@ -749,6 +980,27 @@ class AssessmentQuestionViewSet(ModelViewSet):
         section = get_object_or_404(AssessmentSection, id=sid)
         assessment = section.assessment
 
+        # ASM-8 Rule 2 (Doc 3 §3): questions attach only at the last (leaf)
+        # level. A section that has sub-sections is an intermediate variable,
+        # not a leaf, so it cannot hold questions directly. Psychometric
+        # assessments are exempt — there the question attaches to the parent and
+        # the scoring engine routes each option to a tag-derived leaf section
+        # (see _ensure_section_tags_have_sections below).
+        if assessment.assessment_type != "psychometric" and section.subsections.exists():
+            return Response(
+                {
+                    "error": {
+                        "code": "not_leaf_section",
+                        "message": (
+                            "Questions can only be assigned to a last-level "
+                            "(leaf) section. This section has sub-sections — "
+                            "assign the question to one of those instead."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         question_id = request.data.get("question")
         if not question_id:
             return Response(
@@ -763,6 +1015,25 @@ class AssessmentQuestionViewSet(ModelViewSet):
             )
 
         question = get_object_or_404(Question, id=question_id)
+
+        # ASM-8 / Report 5 §3.4: a question can be assigned to an assessment
+        # ONLY ONCE — across all of its sections, not just the current one.
+        already = AssessmentQuestion.objects.filter(
+            question=question, section__assessment=assessment
+        ).exists()
+        if already:
+            return Response(
+                {
+                    "error": {
+                        "code": "question_already_assigned",
+                        "message": (
+                            "This question is already assigned to this assessment. "
+                            "A question can be assigned to an assessment only once."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Type-mismatch check: normal vs psychometric
         question_cat = question.question_category  # 'normal' or 'psychometric'
@@ -942,7 +1213,31 @@ class SessionViewSet(ModelViewSet):
             many=True,
             context={"section_timer_map": section_timer_map, "aq_durations": aq_durations},
         )
-        return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+        data = list(serializer.data)
+
+        # PSY-A1: append psychometric groups as synthetic session-questions so
+        # the player delivers them via the existing rank / forced-choice
+        # renderers. Seeded above; self-heal here for older sessions.
+        from .models import PsychometricGroupResponse
+
+        groups = list(
+            assessment.psychometric_groups.prefetch_related("items__statement").order_by(
+                "order", "group_number"
+            )
+        )
+        if groups:
+            responses = {
+                r.group_id: r for r in PsychometricGroupResponse.objects.filter(session=session)
+            }
+            for group in groups:
+                resp = responses.get(group.id)
+                if resp is None:
+                    resp, _ = PsychometricGroupResponse.objects.get_or_create(
+                        session=session, group=group, defaults={"status": "not_attempted"}
+                    )
+                data.append(_serialize_group_for_player(group, resp))
+
+        return Response({"message": "OK", "data": data}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
     def answer(self, request, pk=None):
@@ -1036,6 +1331,72 @@ class SessionViewSet(ModelViewSet):
             {
                 "message": "Answer saved.",
                 "data": QuestionAttemptSerializer(attempt).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="answer-group")
+    def answer_group(self, request, pk=None):
+        """Save a candidate's answer to one psychometric group (PSY-A1).
+
+        Payload:
+          - group_id: int (required) — a PsychometricGroup in this assessment
+          - raw_answer: dict (optional — omit to mark the group as skipped)
+
+        The group's answer lives on a ``PsychometricGroupResponse`` (a group is
+        not a Question, so it has no QuestionAttempt). Scoring routes each item's
+        contribution to that item's assigned section on submit.
+        """
+        session = self.get_object()
+        if session.status != "active":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": f"Session is {session.status}. Only active sessions can accept answers.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        group_id = request.data.get("group_id")
+        raw_answer = request.data.get("raw_answer")
+
+        from .models import PsychometricGroup, PsychometricGroupResponse
+
+        group = PsychometricGroup.objects.filter(id=group_id, assessment=session.assessment).first()
+        if group is None:
+            return Response(
+                {
+                    "error": {
+                        "code": "not_found",
+                        "message": "Psychometric group not found for this assessment.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        response, _created = PsychometricGroupResponse.objects.get_or_create(
+            session=session, group=group, defaults={"status": "not_attempted"}
+        )
+        if raw_answer is not None:
+            response.raw_answer = raw_answer
+            response.status = "attempted"
+            response.answered_at = timezone.now()
+        else:
+            response.status = "skipped"
+        response.save()
+
+        return Response(
+            {
+                "message": "Answer saved.",
+                "data": {
+                    "group_id": group.id,
+                    "status": response.status,
+                    "raw_answer": response.raw_answer,
+                },
             },
             status=status.HTTP_200_OK,
         )
@@ -1559,4 +1920,59 @@ class AssessmentModificationRequestViewSet(ModelViewSet):
                 "data": AssessmentModificationRequestSerializer(amr).data,
             },
             status=status.HTTP_200_OK,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Psychometric grouping (PSY-A1) — config-time author flow (signed Approach 1)
+# ---------------------------------------------------------------------------
+
+
+class PsychometricGroupViewSet(ModelViewSet):
+    """Rank groups / forced-choice pairs of Question-Bank statements.
+
+    GET/POST  /api/assessments/<assessment_id>/psychometric-groups/
+    Statements are drawn from the QB and grouped here (Doc 3 §4.2.2/§4.2.3);
+    the serializer enforces the grouping rules (one-per-section for rank;
+    two-different-sections for forced-choice).
+    """
+
+    permission_classes = [IsAuthenticated, HasAssessmentPermission]
+
+    def get_serializer_class(self):
+        from .serializers import PsychometricGroupSerializer
+
+        return PsychometricGroupSerializer
+
+    def get_queryset(self):
+        from .models import PsychometricGroup
+
+        return PsychometricGroup.objects.filter(
+            assessment_id=self.kwargs.get("assessment_id")
+        ).prefetch_related("items")
+
+    def list(self, request, *args, **kwargs):
+        serializer = self.get_serializer(self.get_queryset(), many=True)
+        return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        assessment = get_object_or_404(Assessment, id=self.kwargs.get("assessment_id"))
+        # All sections referenced must belong to this assessment.
+        for it in request.data.get("items", []):
+            if not assessment.sections.filter(id=it.get("section")).exists():
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "Every section must belong to this assessment.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(assessment=assessment)
+        return Response(
+            {"message": "Psychometric group created.", "data": serializer.data},
+            status=status.HTTP_201_CREATED,
         )

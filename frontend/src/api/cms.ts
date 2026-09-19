@@ -9,8 +9,18 @@ const BASE = "/cms";
 // Types
 // ---------------------------------------------------------------------------
 
+export type PageType = "general" | "terms" | "refund" | "privacy";
+
+export const PAGE_TYPES: { value: PageType; label: string }[] = [
+  { value: "general", label: "General page" },
+  { value: "terms", label: "Terms & Conditions" },
+  { value: "refund", label: "Refund Policy" },
+  { value: "privacy", label: "Privacy Policy" },
+];
+
 export interface Page {
   id: number;
+  page_type: PageType;
   title: string;
   slug: string;
   body: string;
@@ -24,6 +34,7 @@ export interface Page {
 
 export interface PageListItem {
   id: number;
+  page_type: PageType;
   title: string;
   slug: string;
   status: string;
@@ -93,6 +104,7 @@ export function createPage(payload: {
   body: string;
   meta_description?: string;
   status?: string;
+  page_type?: PageType;
 }): Promise<Page> {
   return apiPost<Page>(`${BASE}/pages/`, payload);
 }

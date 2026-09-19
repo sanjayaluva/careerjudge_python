@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { AdminRoute } from "@/components/layout/AdminRoute";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -27,6 +27,7 @@ import TasksPage from "@/pages/tasks/TasksPage";
 import TaskDetailPage from "@/pages/tasks/TaskDetailPage";
 import InvoicingPage from "@/pages/invoicing/InvoicingPage";
 import { PaymentSuccessPage, PaymentCancelPage } from "@/pages/payments/PaymentResultPages";
+import PendingPaymentsPage from "@/pages/payments/PendingPaymentsPage";
 import { PublicHomepage } from "@/pages/PublicHomepage";
 import ProfilePage from "@/pages/account/ProfilePage";
 import SettingsPage from "@/pages/account/SettingsPage";
@@ -36,6 +37,10 @@ import UsersPage from "@/pages/admin/UsersPage";
 import UserViewPage from "@/pages/admin/UserViewPage";
 import OrganizationsPage from "@/pages/organizations/OrganizationsPage";
 import OrganizationDetailPage from "@/pages/organizations/OrganizationDetailPage";
+import ConcernsPage from "@/pages/ConcernsPage";
+import MessagesPage from "@/pages/MessagesPage";
+import LiveChatPage from "@/pages/LiveChatPage";
+import PsychometricAnalysisPage from "@/pages/question-bank/PsychometricAnalysisPage";
 import QuestionBankPage from "@/pages/question-bank/QuestionBankPage";
 import QuestionDetailPage from "@/pages/question-bank/QuestionDetailPage";
 import QuestionEditorPage from "@/pages/question-bank/QuestionEditorPage";
@@ -98,16 +103,18 @@ export default function App() {
               />
               <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
 
-              {/* Protected */}
+              {/* Protected app — a pathless layout route so "/" stays free for
+                  the public homepage (BUG-1: previously a second path="/" route
+                  shadowed PublicHomepage, making it unreachable). "/" now always
+                  renders PublicHomepage; it is user-aware (a signed-in visitor
+                  sees a "Go to Dashboard" CTA) but does not auto-redirect. */}
               <Route
-                path="/"
                 element={
                   <ProtectedRoute>
                     <DashboardShell />
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route path="settings" element={<SettingsPage />} />
@@ -147,6 +154,7 @@ export default function App() {
                 <Route path="organizations" element={<OrganizationsPage />} />
                 <Route path="organizations/:id" element={<OrganizationDetailPage />} />
                 <Route path="question-bank" element={<QuestionBankPage />} />
+                <Route path="question-bank/psychometrics" element={<PsychometricAnalysisPage />} />
                 <Route path="question-bank/new" element={<QuestionEditorPage />} />
                 <Route path="question-bank/:id/edit" element={<QuestionEditorPage />} />
                 <Route path="question-bank/:id" element={<QuestionDetailPage />} />
@@ -165,11 +173,18 @@ export default function App() {
                 <Route path="training/:id" element={<TrainingCourseDetailPage />} />
                 <Route path="training/:id/edit" element={<TrainingCourseEditorPage />} />
                 <Route path="counseling" element={<CounselingPage />} />
+                {/* BUG-2: counselling detail link (/counseling/:id) had no route
+                    and fell through to the CMS slug catch-all → 404. */}
+                <Route path="counseling/:id" element={<CounselingPage />} />
                 <Route path="cms" element={<CMSPage />} />
                 <Route path="page/:slug" element={<CMSPageViewer />} />
                 <Route path="tasks" element={<TasksPage />} />
+                <Route path="concerns" element={<ConcernsPage />} />
+                <Route path="messages" element={<MessagesPage />} />
+                <Route path="live-chat" element={<LiveChatPage />} />
                 <Route path="tasks/:id" element={<TaskDetailPage />} />
                 <Route path="invoicing" element={<InvoicingPage />} />
+                <Route path="admin/payments" element={<PendingPaymentsPage />} />
               </Route>
 
               {/* Fullscreen session player — outside DashboardShell so the

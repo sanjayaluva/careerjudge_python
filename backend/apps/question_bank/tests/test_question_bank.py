@@ -337,6 +337,65 @@ class TestQuestionCRUD:
         assert resp.json()["data"]["status"] == "draft"
         assert resp.json()["data"]["created_by"] is not None
 
+    def test_bulk_import_creates_multiple_questions(self, sme_client):
+        """E-QB-4: bulk-import a template of full questions."""
+        resp = sme_client.post(
+            "/api/question-bank/questions/bulk-import/",
+            {
+                "questions": [
+                    {
+                        "question_type": "MCQ_TEXT_IMAGE",
+                        "question_title": "Q1",
+                        "question_text_1": "First?",
+                        "scoring_type": "BINARY",
+                    },
+                    {
+                        "question_type": "FITB_SINGLE",
+                        "question_title": "Q2",
+                        "question_text_1": "Second?",
+                        "scoring_type": "BINARY",
+                    },
+                ]
+            },
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        data = resp.json()["data"]
+        assert data["created_count"] == 2
+        assert data["error_count"] == 0
+        assert len(data["created_ids"]) == 2
+
+    def test_bulk_import_reports_row_errors(self, sme_client):
+        """A bad row is reported; valid rows still import (partial success)."""
+        resp = sme_client.post(
+            "/api/question-bank/questions/bulk-import/",
+            {
+                "questions": [
+                    {
+                        "question_type": "MCQ_TEXT_IMAGE",
+                        "question_title": "Good",
+                        "question_text_1": "OK?",
+                        "scoring_type": "BINARY",
+                    },
+                    {"question_title": "Missing type"},
+                ]
+            },
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        data = resp.json()["data"]
+        assert data["created_count"] == 1
+        assert data["error_count"] == 1
+        assert data["errors"][0]["index"] == 1
+
+    def test_bulk_import_rejects_empty(self, sme_client):
+        resp = sme_client.post(
+            "/api/question-bank/questions/bulk-import/",
+            {"questions": []},
+            format="json",
+        )
+        assert resp.status_code == 400
+
     def test_sme_can_create_all_question_types(self, sme_client):
         """Test creating questions of different types."""
         types = [
@@ -707,6 +766,26 @@ class TestReviewWorkflow:
         assert resp.status_code == 200
         assert resp.json()["data"]["question_status"] == "sent_back"
 
+    def test_send_back_does_not_store_rating(self, sme_client, reviewer_client):
+        """Report 4 Reviewer-7: a rating submitted with a send-back is ignored."""
+        from apps.question_bank.models import QuestionReview
+
+        qid = self._create_and_submit(sme_client)
+        resp = reviewer_client.post(
+            f"/api/question-bank/questions/{qid}/review/",
+            {
+                "review_type": "content",
+                "action": "send_back",
+                "comment": "Fix the grammar",
+                "rating": 2,  # should be ignored on send-back
+            },
+            format="json",
+        )
+        assert resp.status_code == 200, resp.content
+        review = QuestionReview.objects.filter(question_id=qid, action="send_back").first()
+        assert review is not None
+        assert review.rating is None
+
     def test_reviewer_can_reject(self, sme_client, reviewer_client):
         qid = self._create_and_submit(sme_client)
         resp = reviewer_client.post(
@@ -720,6 +799,26 @@ class TestReviewWorkflow:
         )
         assert resp.status_code == 200
         assert resp.json()["data"]["question_status"] == "rejected"
+
+    def test_approve_requires_rating(self, sme_client, reviewer_client):
+        """QB-5: approving without a rating is rejected server-side."""
+        qid = self._create_and_submit(sme_client)
+        resp = reviewer_client.post(
+            f"/api/question-bank/questions/{qid}/review/",
+            {"review_type": "content", "action": "approve", "comment": "ok"},
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_send_back_requires_reason(self, sme_client, reviewer_client):
+        """QB-5: sending a question back without a reason is rejected server-side."""
+        qid = self._create_and_submit(sme_client)
+        resp = reviewer_client.post(
+            f"/api/question-bank/questions/{qid}/review/",
+            {"review_type": "content", "action": "send_back"},
+            format="json",
+        )
+        assert resp.status_code == 400
 
     def test_full_workflow_approve(self, sme_client, reviewer_client, psy_client):
         """Full workflow: SME → Reviewer approve → Psychometrician approve → confirmed."""

@@ -25,6 +25,8 @@ export interface Assessment {
   display_order: string;
   navigation_rule: string;
   attempt_rule: string;
+  /** PLT-3 pay-for-test: price to attempt (as a decimal string). "0.00" = free. */
+  price: string;
   created_by: number | null;
   created_by_name: string | null;
   section_count: number;
@@ -46,7 +48,9 @@ export interface AssessmentSection {
   description: string;
   level: number;
   order: number;
+  order_mode: "STATIC" | "RANDOM";
   duration_seconds: number | null;
+  delivery_count: number | null;
   subsections: AssessmentSection[];
 }
 
@@ -118,12 +122,74 @@ export function updateAssessment(
   return apiPatch<AssessmentDetail>(`${BASE}/${id}/`, payload);
 }
 
-export function deleteAssessment(id: number): Promise<void> {
-  return apiDelete(`${BASE}/${id}/`);
+export function deleteAssessment(id: number, reason?: string): Promise<void> {
+  // A non-admin deleting a PUBLISHED assessment creates a modification
+  // request (the backend requires a reason); admins/drafts delete directly.
+  return apiDelete(`${BASE}/${id}/`, reason ? { data: { reason } } : undefined);
+}
+
+// ---------------------------------------------------------------------------
+// Modification Requests (ASM-2 / SRS §2.2/§2.3) — a non-admin's edit/delete of
+// a PUBLISHED assessment is routed to an admin for approval.
+// ---------------------------------------------------------------------------
+
+const MR_BASE = "/assessment-modification-requests";
+
+export interface AssessmentModificationRequest {
+  id: number;
+  assessment: number;
+  assessment_title: string;
+  requester: number;
+  requester_name: string | null;
+  action: "edit" | "delete";
+  proposed_title: string | null;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  review_comment: string;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export function listModificationRequests(): Promise<AssessmentModificationRequest[]> {
+  return apiGetPaged<AssessmentModificationRequest>(`${MR_BASE}/`).then((r) => r.results);
+}
+
+/** Request an admin-approved title change on a published assessment. */
+export function requestAssessmentTitleChange(
+  id: number,
+  title: string,
+  reason: string,
+): Promise<AssessmentModificationRequest> {
+  return apiPatch<AssessmentModificationRequest>(`${BASE}/${id}/`, { title, reason });
+}
+
+export function approveModificationRequest(
+  id: number,
+  adminNote?: string,
+): Promise<AssessmentModificationRequest> {
+  return apiPost<AssessmentModificationRequest>(`${MR_BASE}/${id}/approve/`, {
+    admin_note: adminNote ?? "",
+  });
+}
+
+export function declineModificationRequest(
+  id: number,
+  adminNote?: string,
+): Promise<AssessmentModificationRequest> {
+  return apiPost<AssessmentModificationRequest>(`${MR_BASE}/${id}/decline/`, {
+    admin_note: adminNote ?? "",
+  });
 }
 
 export function publishAssessment(id: number): Promise<{ id: number; status: string }> {
   return apiPost(`${BASE}/${id}/publish/`);
+}
+
+/** E-ASM-11: return a published assessment to draft (blocked if sessions active). */
+export function unpublishAssessment(id: number): Promise<{ id: number; status: string }> {
+  return apiPost(`${BASE}/${id}/unpublish/`);
 }
 
 export interface AssessmentReadiness {
@@ -150,7 +216,15 @@ export function listSections(assessmentId: number): Promise<AssessmentSection[]>
 
 export function createSection(
   assessmentId: number,
-  payload: { title: string; parent?: number | null; description?: string; level?: number },
+  payload: {
+    title: string;
+    parent?: number | null;
+    description?: string;
+    level?: number;
+    order_mode?: "STATIC" | "RANDOM";
+    duration_seconds?: number | null;
+    delivery_count?: number | null;
+  },
 ): Promise<AssessmentSection> {
   return apiPost<AssessmentSection>(`${BASE}/${assessmentId}/sections/`, payload);
 }
@@ -164,7 +238,9 @@ export function updateSection(
     level: number;
     order: number;
     parent: number | null;
+    order_mode: "STATIC" | "RANDOM";
     duration_seconds: number | null;
+    delivery_count: number | null;
   }>,
 ): Promise<AssessmentSection> {
   return apiPatch<AssessmentSection>(`${BASE}/${assessmentId}/sections/${sectionId}/`, payload);
@@ -224,6 +300,22 @@ export function removeQuestion(
   return apiDelete(`${BASE}/${assessmentId}/sections/${sectionId}/questions/${questionId}/`);
 }
 
+/**
+ * ASM-7: set a per-assessment score override (and/or per-question timer) on an
+ * assigned question. `assessmentQuestionId` is the AssessmentQuestion row id.
+ */
+export function updateAssignedQuestion(
+  assessmentId: number,
+  sectionId: number,
+  assessmentQuestionId: number,
+  payload: Partial<{ score_override: number | null; duration_seconds: number | null }>,
+): Promise<AssessmentQuestion> {
+  return apiPatch<AssessmentQuestion>(
+    `${BASE}/${assessmentId}/sections/${sectionId}/questions/${assessmentQuestionId}/`,
+    payload,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Sessions
 // ---------------------------------------------------------------------------
@@ -258,6 +350,14 @@ export interface SessionQuestion {
   question: number;
   section: number | null;
   sub_question_index: number;
+  /**
+   * PSY-A1: when set, this delivery unit is a psychometric GROUP (Rank Group /
+   * Forced-Choice Pair), not a real question. It is rendered via the existing
+   * rank / forced-choice renderers and its answer is saved to the group
+   * endpoint (``submitGroupAnswer``). The synthetic ``question`` id is
+   * ``-group_id`` so id-keyed player state stays collision-free.
+   */
+  group_id?: number;
   status: string;
   raw_answer: Record<string, unknown> | null;
   score: number | null;
@@ -274,6 +374,8 @@ export interface SessionQuestion {
   section_duration_seconds: number | null;
   timer_section_id: number | null;
   question_duration_seconds: number | null;
+  /** ASM-5 (§5.1): this question's section delivery order mode. */
+  section_order_mode: "STATIC" | "RANDOM";
   question_detail: {
     id: number;
     question_title: string;
@@ -363,6 +465,21 @@ export function submitAnswer(
   },
 ): Promise<SessionQuestion> {
   return apiPost<SessionQuestion>(`${BASE}/sessions/${sessionId}/answer/`, payload);
+}
+
+/**
+ * PSY-A1: save a candidate's answer to one psychometric group. Omit
+ * ``raw_answer`` to mark the group skipped.
+ */
+export function submitGroupAnswer(
+  sessionId: number,
+  groupId: number,
+  raw_answer?: Record<string, unknown>,
+): Promise<{ group_id: number; status: string; raw_answer: Record<string, unknown> | null }> {
+  return apiPost(`${BASE}/sessions/${sessionId}/answer-group/`, {
+    group_id: groupId,
+    raw_answer,
+  });
 }
 
 export function submitSessionResult(sessionId: number): Promise<{
@@ -512,3 +629,46 @@ export const TIMER_LEVELS = [
   { value: "level4", label: "Level 4" },
   { value: "question", label: "Question Level" },
 ];
+
+// ---------------------------------------------------------------------------
+// Psychometric grouping (PSY-A1) — signed Approach 1
+// ---------------------------------------------------------------------------
+
+export interface PsychometricGroupItem {
+  id?: number;
+  statement: number;
+  statement_text?: string;
+  section: number;
+  section_title?: string;
+  order?: number;
+}
+
+export interface PsychometricGroup {
+  id: number;
+  assessment: number;
+  group_type: "rank_simple" | "rank_then_rate" | "forced_choice_single" | "forced_choice_two_level";
+  group_number: number;
+  rating_scale_points: number | null;
+  order: number;
+  items: PsychometricGroupItem[];
+}
+
+export function listPsychometricGroups(assessmentId: number): Promise<PsychometricGroup[]> {
+  return apiGet<PsychometricGroup[]>(`${BASE}/${assessmentId}/psychometric-groups/`);
+}
+
+export function createPsychometricGroup(
+  assessmentId: number,
+  payload: {
+    group_type: string;
+    group_number?: number;
+    rating_scale_points?: number | null;
+    items: { statement: number; section: number; order?: number }[];
+  },
+): Promise<PsychometricGroup> {
+  return apiPost<PsychometricGroup>(`${BASE}/${assessmentId}/psychometric-groups/`, payload);
+}
+
+export function deletePsychometricGroup(assessmentId: number, groupId: number): Promise<void> {
+  return apiDelete(`${BASE}/${assessmentId}/psychometric-groups/${groupId}/`);
+}

@@ -97,6 +97,11 @@ export interface QuestionDetail extends QuestionListItem {
   passage_body: string;
   exposure_limit: number | null;
   discrimination_index: number | null;
+  item_difficulty_index: number | null;
+  top_group_difficulty_index: number | null;
+  bottom_group_difficulty_index: number | null;
+  difference_difficulty_index: number | null;
+  item_total_correlation: number | null;
   options: ResponseOption[];
   media_files: { id: number; media_type: string; file: string; created_at: string }[];
   flash_items: {
@@ -180,8 +185,10 @@ export function updateCategory(
   return apiPatch<Category>(`${BASE}/categories/${id}/`, payload);
 }
 
-export function deleteCategory(id: number): Promise<void> {
-  return apiDelete(`${BASE}/categories/${id}/`);
+export function deleteCategory(id: number, reason?: string): Promise<void> {
+  // A non-admin's delete creates a deletion request (reason required); admins
+  // delete directly (D1 §4.3).
+  return apiDelete(`${BASE}/categories/${id}/`, reason ? { data: { reason } } : undefined);
 }
 
 export function getCategoryTree(): Promise<unknown> {
@@ -200,6 +207,8 @@ export interface QuestionListParams {
   status?: string;
   difficulty?: string;
   mine?: boolean;
+  /** E-X3: a reviewer's routed queue (questions assigned to them). */
+  assignedToMe?: boolean;
   /** Periodic QB updation (D1 §4.3): "true" = expired only, "false" = valid/unset only. */
   expired?: boolean;
 }
@@ -219,6 +228,7 @@ export function listQuestions(params: QuestionListParams = {}): Promise<{
       ...(params.status ? { status: params.status } : {}),
       ...(params.difficulty ? { difficulty: params.difficulty } : {}),
       ...(params.mine ? { mine: "true" } : {}),
+      ...(params.assignedToMe ? { assigned: "me" } : {}),
       ...(params.expired !== undefined ? { expired: params.expired ? "true" : "false" } : {}),
     },
   });
@@ -232,6 +242,20 @@ export function createQuestion(payload: Record<string, unknown>): Promise<Questi
   return apiPost<QuestionDetail>(`${BASE}/questions/`, payload);
 }
 
+export interface BulkImportResult {
+  created_count: number;
+  created_ids: number[];
+  error_count: number;
+  errors: { index: number; errors: Record<string, unknown> }[];
+}
+
+/** E-QB-4: bulk-import full questions from a template array. */
+export function bulkImportQuestions(
+  questions: Record<string, unknown>[],
+): Promise<BulkImportResult> {
+  return apiPost<BulkImportResult>(`${BASE}/questions/bulk-import/`, { questions });
+}
+
 export function updateQuestion(
   id: number,
   payload: Record<string, unknown>,
@@ -239,8 +263,43 @@ export function updateQuestion(
   return apiPatch<QuestionDetail>(`${BASE}/questions/${id}/`, payload);
 }
 
-export function deleteQuestion(id: number): Promise<void> {
-  return apiDelete(`${BASE}/questions/${id}/`);
+export function deleteQuestion(id: number, reason?: string): Promise<void> {
+  return apiDelete(`${BASE}/questions/${id}/`, reason ? { data: { reason } } : undefined);
+}
+
+// ---------------------------------------------------------------------------
+// Deletion requests (QB-1 / D1 §4.3) — a non-admin's delete creates a request
+// that a CJ Admin approves or declines.
+// ---------------------------------------------------------------------------
+
+export interface QuestionBankDeletionRequest {
+  id: number;
+  target_type: "category" | "question";
+  target_id: number;
+  target_label: string;
+  requester: number;
+  requester_name: string | null;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  review_comment: string;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export function listDeletionRequests(): Promise<QuestionBankDeletionRequest[]> {
+  return apiGetPaged<QuestionBankDeletionRequest>(`${BASE}/deletion-requests/`).then(
+    (r) => r.results,
+  );
+}
+
+export function approveDeletionRequest(id: number): Promise<QuestionBankDeletionRequest> {
+  return apiPost<QuestionBankDeletionRequest>(`${BASE}/deletion-requests/${id}/approve/`, {});
+}
+
+export function declineDeletionRequest(id: number): Promise<QuestionBankDeletionRequest> {
+  return apiPost<QuestionBankDeletionRequest>(`${BASE}/deletion-requests/${id}/decline/`, {});
 }
 
 export function submitForReview(id: number): Promise<{ id: number; status: string }> {
@@ -450,6 +509,7 @@ export const QUESTION_TYPES = [
   { value: "STANDARD_RATING_SCALE", label: "7: Standard Rating Scale" },
   { value: "FORCED_CHOICE_SINGLE_LEVEL", label: "8a: Forced-Choice – Single Level" },
   { value: "FORCED_CHOICE_TWO_LEVEL", label: "8b: Forced-Choice – Two-Level" },
+  { value: "PSYCHOMETRIC_STATEMENT", label: "9: Psychometric Statement (grouped at config)" },
 ];
 
 // Psychometric-type question codes (must match the backend
@@ -463,6 +523,7 @@ export const PSYCHOMETRIC_QUESTION_TYPE_CODES = [
   "STANDARD_RATING_SCALE",
   "FORCED_CHOICE_SINGLE_LEVEL",
   "FORCED_CHOICE_TWO_LEVEL",
+  "PSYCHOMETRIC_STATEMENT",
 ] as const;
 
 export function isPsychometricQuestionType(questionType: string): boolean {

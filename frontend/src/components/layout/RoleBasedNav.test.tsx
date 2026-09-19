@@ -48,11 +48,14 @@ describe("<RoleBasedNav />", () => {
     setUser("cj_admin");
     renderNav();
 
-    // cj_admin sees every nav item (14 total: dashboard, profile, users,
+    // cj_admin sees every nav item (16 total: dashboard, profile, users,
     // roles, organizations, question_bank, assessments, career_profiling,
-    // reports, training, counseling, cms, tasks, invoicing).
+    // reports, training, counseling, cms, tasks, invoicing, plus the two
+    // universal capabilities Contact Admin + Messages).
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(14);
+    expect(links).toHaveLength(16);
+    expect(screen.getByText("Contact Admin")).toBeInTheDocument();
+    expect(screen.getByText("Messages")).toBeInTheDocument();
     expect(screen.getByText("CMS")).toBeInTheDocument();
     expect(screen.getByText("Roles & Permissions")).toBeInTheDocument();
     expect(screen.getByText("Users")).toBeInTheDocument();
@@ -77,6 +80,10 @@ describe("<RoleBasedNav />", () => {
         "Reports",
         "Training",
         "Counseling",
+        // Signed Individual-User capabilities (User Details.pdf p.1).
+        "Contact Admin",
+        "Messages",
+        "Live Chat",
       ]),
     );
     // individual must NOT see admin-only modules.
@@ -86,8 +93,8 @@ describe("<RoleBasedNav />", () => {
     expect(labels).not.toContain("Organizations");
     expect(labels).not.toContain("Question Bank");
 
-    // Exact count check: 7 modules for individual.
-    expect(within(list).getAllByRole("link")).toHaveLength(7);
+    // 7 role modules + Contact Admin + Messages + Live Chat = 10.
+    expect(within(list).getAllByRole("link")).toHaveLength(10);
   });
 
   it("shows the corp_admin subset (no Roles & Permissions / CMS / Question Bank)", () => {
@@ -106,7 +113,7 @@ describe("<RoleBasedNav />", () => {
     expect(labels).not.toContain("Question Bank");
   });
 
-  it("shows the sme subset (Dashboard, Profile, Question Bank, Assessments, Tasks, Invoicing)", () => {
+  it("shows the sme subset (no Assessments — Report 4 SME-3)", () => {
     setUser("sme");
     renderNav();
 
@@ -116,19 +123,14 @@ describe("<RoleBasedNav />", () => {
       .map((a) => a.textContent?.trim() ?? "");
 
     expect(labels).toEqual(
-      expect.arrayContaining([
-        "Dashboard",
-        "Profile",
-        "Question Bank",
-        "Assessments",
-        "Tasks",
-        "Invoicing",
-      ]),
+      expect.arrayContaining(["Dashboard", "Profile", "Question Bank", "Tasks", "Invoicing"]),
     );
-    expect(within(list).getAllByRole("link")).toHaveLength(6);
+    expect(labels).not.toContain("Assessments");
+    // 5 role modules + Contact Admin + Messages = 7.
+    expect(within(list).getAllByRole("link")).toHaveLength(7);
   });
 
-  it("shows the reviewer subset (Dashboard, Profile, Question Bank, Assessments, Tasks, Invoicing)", () => {
+  it("shows the reviewer subset (tab reads 'My Review Questions', no Assessments)", () => {
     setUser("reviewer");
     renderNav();
 
@@ -138,16 +140,11 @@ describe("<RoleBasedNav />", () => {
       .map((a) => a.textContent?.trim() ?? "");
 
     expect(labels).toEqual(
-      expect.arrayContaining([
-        "Dashboard",
-        "Profile",
-        "Question Bank",
-        "Assessments",
-        "Tasks",
-        "Invoicing",
-      ]),
+      expect.arrayContaining(["Dashboard", "Profile", "My Review Questions", "Tasks", "Invoicing"]),
     );
-    expect(within(list).getAllByRole("link")).toHaveLength(6);
+    expect(labels).not.toContain("Assessments");
+    expect(labels).not.toContain("Question Bank");
+    expect(within(list).getAllByRole("link")).toHaveLength(7);
   });
 
   describe("module_rights-driven rendering (RBAC single source of truth)", () => {
@@ -174,7 +171,9 @@ describe("<RoleBasedNav />", () => {
       );
       expect(labels).not.toContain("Users");
       expect(labels).not.toContain("Roles & Permissions");
-      expect(within(list).getAllByRole("link")).toHaveLength(4);
+      // Dashboard + Profile + Question Bank + Assessments + the two universal
+      // capabilities (Contact Admin, Messages) = 6.
+      expect(within(list).getAllByRole("link")).toHaveLength(6);
     });
 
     it("surfaces a ModuleRight grant not present in the static map for a seeded role", () => {
@@ -221,7 +220,8 @@ describe("<RoleBasedNav />", () => {
       // career_profiling isn't in individual's seed_demo grants but stays
       // visible via the static fallback (union, not replacement).
       expect(labels).toContain("Career Profiling");
-      expect(within(list).getAllByRole("link")).toHaveLength(7);
+      // 7 role modules + Contact Admin + Messages + Live Chat = 10.
+      expect(within(list).getAllByRole("link")).toHaveLength(10);
     });
   });
 });

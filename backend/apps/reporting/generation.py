@@ -73,6 +73,14 @@ def generate_report_data(report, session: AssessmentSession) -> dict[str, Any]:
     if report.include_section_breakdown:
         data["section_breakdown"] = _build_section_breakdown(report, session, norm)
 
+    # --- Question-level breakdown (SRS 04 §2.3): when the report's data input
+    #     level is "question", the section breakdown is empty by design (scores
+    #     are per-question, not per-variable). REP-6: populate per-question
+    #     rows from the candidate's QuestionAttempts so a question-level report
+    #     returns data instead of an empty section.
+    if report.data_input_level == "question":
+        data["question_breakdown"] = _build_question_breakdown(report, session, norm)
+
     # --- Report-type-specific logic ---
     if report.report_type == "descriptive":
         data["descriptive"] = _build_descriptive(report, session, norm)
@@ -115,10 +123,11 @@ def generate_report_data(report, session: AssessmentSession) -> dict[str, Any]:
                 section_breakdown_for_layout, section_bands_by_id, rs.table_graph_config
             )
         elif layout == "graph":
-            # Graph rendering is scoped out — recorded but not drawn.
-            entry["graph_note"] = (
-                "Graph layout is configured but not yet rendered — scoped out; use "
-                "layout='table' for an end-to-end rendered layout."
+            # SRS §3.1.2/§3.2.2/§3.3.2 Graph layout (REP-1): the same banded
+            # section scores as the Table layout, shaped as bar-chart data and
+            # rendered as an inline SVG bar chart in the PDF/preview.
+            entry["graph"] = _build_layout_graph(
+                section_breakdown_for_layout, section_bands_by_id, rs.table_graph_config
             )
         sections.append(entry)
     data["sections"] = sections
@@ -270,6 +279,47 @@ def _build_section_breakdown(
                 "raw_score": ss.raw_score,
                 "max_score": ss.max_score,
                 "percentage": ss.percentage,
+                "converted_score": converted,
+                "conversion_type": report.stat_conversion,
+            }
+        )
+    return result
+
+
+def _build_question_breakdown(
+    report, session: AssessmentSession, norm: "_NormContext | None" = None
+) -> list[dict]:
+    """Build a per-question score breakdown (SRS 04 §2.3, REP-6).
+
+    Question-level reports interpret each answered question in its own right.
+    Each attempt's score/max_score is converted through the same statistical
+    conversion + norm as section scores, so question-level and variable-level
+    reports read consistently.
+    """
+    if norm is None:
+        norm = _build_norm_context(report, session)
+    attempts = session.question_attempts.select_related("question", "section").order_by(
+        "section__order", "question__created_at", "sub_question_index"
+    )
+    result = []
+    for qa in attempts:
+        max_score = qa.max_score or 0
+        raw_score = qa.score or 0
+        percentage = round((raw_score / max_score) * 100, 2) if max_score > 0 else 0.0
+        converted = norm.convert(percentage, report.stat_conversion)
+        q = qa.question
+        label = q.question_title or (q.question_text_1 or "")[:80] or f"Question {q.id}"
+        result.append(
+            {
+                "question_id": qa.question_id,
+                "question_label": label,
+                "question_id_label": q.question_id_label,
+                "section_title": qa.section.title if qa.section else None,
+                "sub_question_index": qa.sub_question_index,
+                "status": qa.status,
+                "raw_score": raw_score,
+                "max_score": max_score,
+                "percentage": percentage,
                 "converted_score": converted,
                 "conversion_type": report.stat_conversion,
             }
@@ -731,6 +781,43 @@ def _build_layout_table(
             }
         )
     return {"headers": headers, "rows": rows}
+
+
+def _build_layout_graph(
+    section_breakdown: list[dict], section_bands_by_id: dict[int, list], config: dict | None
+) -> dict:
+    """Build the Graph layout (SRS §3.1.2/§3.2.2/§3.3.2, REP-1) for section scores.
+
+    Returns bar-chart data — one bar per variable, valued by its converted
+    score and coloured by the matched section band (falling back to a default
+    colour). ``max_value`` scales the axis: the larger of the observed scores
+    and 100 (the natural ceiling for percentage/percentile conversions).
+    """
+    config = config or {}
+    default_colour = config.get("bar_colour", "#3b82f6")
+    bars = []
+    observed_max = 0.0
+    for row in section_breakdown:
+        bands = section_bands_by_id.get(row.get("section_id"), [])
+        band = _match_band(bands, row.get("converted_score"))
+        value = row.get("converted_score") or 0
+        observed_max = max(observed_max, value)
+        bars.append(
+            {
+                "variable": row.get("section_title"),
+                "value": value,
+                "colour_code": (
+                    band["colour_code"] if band and band.get("colour_code") else default_colour
+                ),
+                "label": band["band_label"] if band else "",
+            }
+        )
+    return {
+        "title": config.get("table_title", ""),
+        "value_label": config.get("score_label", "Score"),
+        "bars": bars,
+        "max_value": max(observed_max, 100.0),
+    }
 
 
 def _pmi_by_assessment(mi) -> dict[str, float]:

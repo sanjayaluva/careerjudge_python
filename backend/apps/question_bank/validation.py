@@ -37,6 +37,12 @@ def validate_question_config(question: Question) -> list[str]:
         errors.append("Question title is required.")
     if not q.question_text_1 or not q.question_text_1.strip():
         errors.append("Question text 1 is required.")
+
+    # PSY-A1 (Doc 1 §3.1.6): a psychometric statement is just text — no options,
+    # no scoring_type (its rank/forced-choice variant is formed at config time).
+    if qtype == "PSYCHOMETRIC_STATEMENT":
+        return errors
+
     if not q.scoring_type:
         errors.append("Scoring type is required.")
 

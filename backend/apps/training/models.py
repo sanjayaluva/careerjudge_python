@@ -332,11 +332,21 @@ class CourseAssessment(models.Model):
     level = models.CharField(
         _("level"), max_length=20, choices=ASSESSMENT_LEVEL_CHOICES, default="end_of_session"
     )
-    # Optional link to the specific session/topic/lesson this assessment
-    # belongs to (required for during_session/end_of_session/end_of_topic/
-    # end_of_lesson; null for end_of_course)
+    # Link to the specific element this assessment attaches to. Which one is
+    # set depends on `level` (Report 4 Trainer Issue 9 — target a specific
+    # session/topic/lesson, not just a level label):
+    #   during_session / end_of_session -> session
+    #   end_of_topic                    -> topic
+    #   end_of_lesson                   -> lesson
+    #   end_of_course                   -> none
     session = models.ForeignKey(
         TopicSession, on_delete=models.CASCADE, null=True, blank=True, related_name="assessments"
+    )
+    topic = models.ForeignKey(
+        LessonTopic, on_delete=models.CASCADE, null=True, blank=True, related_name="assessments"
+    )
+    lesson = models.ForeignKey(
+        CourseLesson, on_delete=models.CASCADE, null=True, blank=True, related_name="assessments"
     )
     title = models.CharField(_("title"), max_length=255)
     is_scored = models.BooleanField(_("is scored"), default=True)
@@ -611,6 +621,64 @@ class AssignmentReport(models.Model):
 
     def __str__(self) -> str:
         return f"{self.student.email} > {self.assignment.title} ({self.status})"
+
+
+class AssignmentReportFile(models.Model):
+    """One of possibly several files attached to a report submission (E-X7).
+
+    The legacy single `AssignmentReport.report_file` still works; this child
+    model lets a student attach multiple files of mixed formats to the same
+    submission.
+    """
+
+    report = models.ForeignKey(AssignmentReport, on_delete=models.CASCADE, related_name="files")
+    file = models.FileField(_("file"), upload_to="assignment_reports/")
+    file_type = models.CharField(_("file type"), max_length=20, blank=True, default="")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["uploaded_at"]
+        verbose_name = _("assignment report file")
+        verbose_name_plural = _("assignment report files")
+
+    def __str__(self) -> str:
+        return f"File for report #{self.report_id}"
+
+
+class AssignmentDeadlineOverride(models.Model):
+    """A trainer-set, per-student deadline that overrides an assignment's
+    global `submission_deadline` (E-X7).
+
+    Lets a trainer grant one student more (or less) time without changing the
+    deadline for everyone.
+    """
+
+    assignment = models.ForeignKey(
+        Assignment, on_delete=models.CASCADE, related_name="deadline_overrides"
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="assignment_deadline_overrides",
+    )
+    new_deadline = models.DateTimeField(_("new deadline"))
+    reason = models.CharField(_("reason"), max_length=500, blank=True, default="")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_deadline_overrides",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("assignment deadline override")
+        verbose_name_plural = _("assignment deadline overrides")
+        unique_together = [("assignment", "student")]
+
+    def __str__(self) -> str:
+        return f"{self.student.email} > {self.assignment.title}: {self.new_deadline:%Y-%m-%d}"
 
 
 class CourseMessage(models.Model):

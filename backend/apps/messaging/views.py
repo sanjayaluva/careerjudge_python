@@ -122,6 +122,12 @@ class ConversationViewSet(ModelViewSet):
         user = self.request.user
         return super().get_queryset().filter(Q(user1=user) | Q(user2=user))
 
+    def list(self, request, *args, **kwargs):
+        # Wrap in the standard {message, data} envelope so the frontend's
+        # apiGetPaged helper (which unwraps `data`) can read the page.
+        resp = super().list(request, *args, **kwargs)
+        return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=["get"])
     def thread(self, request, pk=None):
         """Get all messages in a conversation."""
@@ -145,6 +151,9 @@ class ConversationViewSet(ModelViewSet):
 
         contactable_roles = []
         if role_name in (
+            # Standard Individual User: "Send Message" is a signed capability
+            # (User Details.pdf p.1, PLT-1) — they reach CJ Admin + Helpdesk.
+            "individual",
             "corp_admin",
             "group_admin",
             "corp_exclusive",
@@ -157,6 +166,7 @@ class ConversationViewSet(ModelViewSet):
             contactable_roles = ["cj_admin", "helpdesk"]
         elif role_name == "cj_admin":
             contactable_roles = [
+                "individual",
                 "corp_admin",
                 "group_admin",
                 "corp_exclusive",
@@ -169,6 +179,7 @@ class ConversationViewSet(ModelViewSet):
             ]
         elif role_name == "helpdesk":
             contactable_roles = [
+                "individual",
                 "cj_admin",
                 "corp_admin",
                 "group_admin",

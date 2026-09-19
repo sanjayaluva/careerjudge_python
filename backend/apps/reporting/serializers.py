@@ -51,7 +51,11 @@ class ReportCutoffSerializer(serializers.ModelSerializer):
             "above_description",
             "below_description",
         ]
-        read_only_fields = ["id", "section_title"]
+        # `report` is set by the view (POST /reports/<id>/cutoffs/ passes
+        # report=report to save()); the config endpoints never receive it in
+        # the body, so it must be read-only or is_valid() rejects it as
+        # required before the view can inject it.
+        read_only_fields = ["id", "report", "section_title"]
 
 
 class ReportBandSerializer(serializers.ModelSerializer):
@@ -73,7 +77,9 @@ class ReportBandSerializer(serializers.ModelSerializer):
             "description",
             "colour_code",
         ]
-        read_only_fields = ["id", "section_title"]
+        # `report` is injected by the view via save(report=report); keep it
+        # read-only so is_valid() does not demand it in the request body.
+        read_only_fields = ["id", "report", "section_title"]
         extra_kwargs = {
             # section is only required for target_type='section'; profiling
             # bands (fmi/pmi/vmi/raw_summary/pmi_d) leave it blank.
@@ -96,7 +102,8 @@ class TypologicalCodeSerializer(serializers.ModelSerializer):
     class Meta:
         model = TypologicalCode
         fields = ["id", "report", "section", "section_title", "code", "top_n"]
-        read_only_fields = ["id", "section_title"]
+        # `report` is injected by the view via save(report=report).
+        read_only_fields = ["id", "report", "section_title"]
 
 
 class PolarVariableSerializer(serializers.ModelSerializer):
@@ -105,7 +112,8 @@ class PolarVariableSerializer(serializers.ModelSerializer):
     class Meta:
         model = PolarVariable
         fields = ["id", "report", "section", "section_title", "opposite_name"]
-        read_only_fields = ["id", "section_title"]
+        # `report` is injected by the view via save(report=report).
+        read_only_fields = ["id", "report", "section_title"]
 
 
 class ReportSerializer(serializers.ModelSerializer):

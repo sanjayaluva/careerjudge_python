@@ -43,25 +43,38 @@ import {
   ATTEMPT_RULES,
   NAVIGATION_RULES,
   TIMER_LEVELS,
+  approveModificationRequest,
   assignQuestion,
+  createPsychometricGroup,
   createSection,
+  deletePsychometricGroup,
+  listPsychometricGroups,
+  type PsychometricGroup,
+  declineModificationRequest,
+  deleteAssessment,
   deleteSection,
   getAssessmentReadiness,
+  listModificationRequests,
   listMySessions,
   listSectionQuestions,
   publishAssessment,
+  unpublishAssessment,
   removeQuestion,
+  requestAssessmentTitleChange,
   retrieveAssessment,
   startSession,
   updateAssessment,
+  updateAssignedQuestion,
   updateSection,
 } from "@/api/assessment";
 import {
   listQuestions,
   NORMAL_QUESTION_TYPES,
   PSYCHOMETRIC_QUESTION_TYPES_LIST,
+  retrieveQuestion,
 } from "@/api/questionBank";
-import { extractApiError } from "@/api/client";
+import { extractApiError, extractApiErrorCode } from "@/api/client";
+import { createCheckout, openRazorpayCheckout } from "@/api/payments";
 import { useAuth } from "@/hooks/useAuth";
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
   draft: "default",
@@ -84,7 +97,10 @@ export default function AssessmentDetailPage() {
   const [sectionToDelete, setSectionToDelete] = useState<AssessmentSection | null>(null);
 
   const toast = useToast();
-  const canManage = ["cj_admin", "corp_admin", "psychometrician"].includes(user?.role ?? "");
+  // Signed (Doc 7 §2.4.1): trainers author + configure their own assessments.
+  const canManage = ["cj_admin", "corp_admin", "psychometrician", "trainer"].includes(
+    user?.role ?? "",
+  );
 
   const { data: assessment, isLoading } = useQuery({
     queryKey: ["assessments", aid],
@@ -101,13 +117,57 @@ export default function AssessmentDetailPage() {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  const unpublishMutation = useMutation({
+    mutationFn: () => unpublishAssessment(aid),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
+      void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
+      toast.success("Assessment returned to draft.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   const startSessionMutation = useMutation({
     mutationFn: () => startSession(aid),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
       navigate(`/assessments/sessions/${data.id}`);
     },
-    onError: (err) => toast.error(extractApiError(err)),
+    onError: async (err) => {
+      // PLT-3 pay-for-test gate: a priced assessment answers 402 until paid.
+      // Kick off Stripe checkout for this assessment; on return the candidate
+      // starts again and the server re-checks the payment.
+      if (extractApiErrorCode(err) === "payment_required") {
+        try {
+          const res = await createCheckout({
+            module: "assessment",
+            item_id: aid,
+            amount: assessment?.price ?? "0",
+            description: `Assessment: ${assessment?.title ?? ""}`,
+          });
+          if (res.order) {
+            // E-PLT-4: Razorpay is the active gateway — open its widget.
+            const paid = await openRazorpayCheckout(res.order);
+            if (paid) startSessionMutation.mutate();
+            else toast.error("Payment not completed. Start again once it has cleared.");
+            return;
+          }
+          if (res.checkout_url) {
+            window.location.href = res.checkout_url;
+            return;
+          }
+          if (res.status === "paid" || res.status === "free") {
+            startSessionMutation.mutate();
+            return;
+          }
+          toast.error("Payment is pending confirmation. Please start again once it has cleared.");
+        } catch (e) {
+          toast.error(extractApiError(e));
+        }
+        return;
+      }
+      toast.error(extractApiError(err));
+    },
   });
 
   // Readiness check — fetches whether the assessment is ready to publish.
@@ -127,6 +187,53 @@ export default function AssessmentDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
       void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
       setEditModalOpen(false);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  // ASM-2 (SRS §2.2/§2.3): a non-admin's edit/delete of a PUBLISHED assessment
+  // is routed to an admin for approval; admins get an approve/decline queue.
+  const isCjAdmin = user?.role === "cj_admin";
+  const [requestChangeOpen, setRequestChangeOpen] = useState(false);
+  const [requestDeleteOpen, setRequestDeleteOpen] = useState(false);
+
+  const requestChangeMutation = useMutation({
+    mutationFn: (payload: { title: string; reason: string }) =>
+      requestAssessmentTitleChange(aid, payload.title, payload.reason),
+    onSuccess: () => {
+      toast.success("Change request submitted — an admin will review it.");
+      setRequestChangeOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["assessment-mod-requests"] });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const requestDeleteMutation = useMutation({
+    mutationFn: (reason: string) => deleteAssessment(aid, reason),
+    onSuccess: () => {
+      toast.success("Deletion request submitted — an admin will review it.");
+      setRequestDeleteOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["assessment-mod-requests"] });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const modRequestsQuery = useQuery({
+    queryKey: ["assessment-mod-requests"],
+    queryFn: listModificationRequests,
+    enabled: isCjAdmin,
+  });
+  const pendingRequests = (modRequestsQuery.data ?? []).filter(
+    (r) => r.assessment === aid && r.status === "pending",
+  );
+
+  const reviewMutation = useMutation({
+    mutationFn: (v: { id: number; approve: boolean }) =>
+      v.approve ? approveModificationRequest(v.id) : declineModificationRequest(v.id),
+    onSuccess: () => {
+      toast.success("Request reviewed.");
+      void queryClient.invalidateQueries({ queryKey: ["assessment-mod-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -153,6 +260,8 @@ export default function AssessmentDetailPage() {
         title?: string;
         description?: string;
         duration_seconds?: number | null;
+        delivery_count?: number | null;
+        order_mode?: "STATIC" | "RANDOM";
         order?: number;
       };
     }) => updateSection(aid, payload.sectionId, payload.data),
@@ -197,6 +306,9 @@ export default function AssessmentDetailPage() {
   // - cj_admin can also edit PUBLISHED assessments (admin override per SRS §2.2)
   // This single variable drives all section/question edit-button visibility.
   const canEdit = canManage && (a.status === "draft" || user?.role === "cj_admin");
+  // ASM-2: a non-admin manager can't edit a published assessment directly, but
+  // may request an admin-approved title change / deletion.
+  const canRequestChange = canManage && a.status === "published" && !isCjAdmin;
 
   // Question count comes from the detail serializer's question_count
   // field (counts all assigned questions across all sections, including
@@ -235,6 +347,9 @@ export default function AssessmentDetailPage() {
               assigned questions before taking the assessment — showing
               question titles/content would let them preview the test. */}
           {canManage && <TabsTrigger value="questions">Questions ({questionCount})</TabsTrigger>}
+          {canManage && a.assessment_type === "psychometric" && (
+            <TabsTrigger value="psych-groups">Psychometric Groups</TabsTrigger>
+          )}
           <TabsTrigger value="sessions">My Sessions ({sessionCount})</TabsTrigger>
         </TabsList>
 
@@ -371,6 +486,20 @@ export default function AssessmentDetailPage() {
                     Edit Assessment
                   </Button>
                 )}
+                {canRequestChange && (
+                  <>
+                    <Button variant="outline" onClick={() => setRequestChangeOpen(true)}>
+                      Request Title Change
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="text-danger hover:bg-danger-50"
+                      onClick={() => setRequestDeleteOpen(true)}
+                    >
+                      Request Deletion
+                    </Button>
+                  </>
+                )}
                 {a.status === "draft" && canManage && (
                   <Button
                     loading={publishMutation.isPending}
@@ -385,17 +514,81 @@ export default function AssessmentDetailPage() {
                     Publish Assessment
                   </Button>
                 )}
-                {a.status === "published" && (
+                {a.status === "published" && canEdit && (
                   <Button
-                    loading={startSessionMutation.isPending}
-                    onClick={() => startSessionMutation.mutate()}
+                    variant="outline"
+                    loading={unpublishMutation.isPending}
+                    title="Return this assessment to draft to edit it (E-ASM-11)"
+                    onClick={() => unpublishMutation.mutate()}
                   >
-                    Start Session
+                    Return to draft
                   </Button>
+                )}
+                {a.status === "published" && (
+                  <div className="flex flex-col items-end gap-1">
+                    {Number(a.price) > 0 && (
+                      <span className="text-xs text-slate-500">
+                        Paid assessment — {a.price} due before you start
+                      </span>
+                    )}
+                    <Button
+                      loading={startSessionMutation.isPending}
+                      onClick={() => startSessionMutation.mutate()}
+                    >
+                      {Number(a.price) > 0 ? `Pay & Start (${a.price})` : "Start Session"}
+                    </Button>
+                  </div>
                 )}
               </div>
             </CardContent>
           </Card>
+
+          {/* ASM-2: admin approve/decline queue for pending title-change /
+              deletion requests on this assessment. */}
+          {isCjAdmin && pendingRequests.length > 0 && (
+            <Card className="mt-4 border-amber-200">
+              <CardHeader>
+                <CardTitle>Pending change requests ({pendingRequests.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-3">
+                  {pendingRequests.map((r) => (
+                    <li
+                      key={r.id}
+                      className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-slate-200 p-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900">
+                          {r.action === "delete"
+                            ? "Delete this assessment"
+                            : `Rename to "${r.proposed_title ?? ""}"`}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Requested by {r.requester_name ?? "a user"} — {r.reason}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          loading={reviewMutation.isPending}
+                          onClick={() => reviewMutation.mutate({ id: r.id, approve: true })}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => reviewMutation.mutate({ id: r.id, approve: false })}
+                        >
+                          Decline
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* === SECTIONS TAB === */}
@@ -452,6 +645,12 @@ export default function AssessmentDetailPage() {
           />
         </TabsContent>
 
+        {a.assessment_type === "psychometric" && (
+          <TabsContent value="psych-groups">
+            <PsychometricGroupsTab assessmentId={aid} sections={a.sections} canManage={canEdit} />
+          </TabsContent>
+        )}
+
         {/* === SESSIONS TAB === */}
         {/* === SESSIONS TAB (My Sessions) === */}
         <TabsContent value="sessions">
@@ -479,7 +678,11 @@ export default function AssessmentDetailPage() {
               data: {
                 title: payload.title,
                 description: payload.description,
-                // duration_seconds passed in description-level form below
+                // ASM-3: per-section timer duration; ASM-1: delivery count;
+                // ASM-5: per-section delivery order mode.
+                duration_seconds: payload.duration_seconds ?? null,
+                delivery_count: payload.delivery_count ?? null,
+                order_mode: payload.order_mode,
               },
             });
           } else {
@@ -523,6 +726,19 @@ export default function AssessmentDetailPage() {
         onClose={() => setEditModalOpen(false)}
         onSubmit={(payload) => assessmentUpdateMutation.mutate(payload)}
       />
+      <RequestChangeModal
+        open={requestChangeOpen}
+        currentTitle={a.title}
+        loading={requestChangeMutation.isPending}
+        onClose={() => setRequestChangeOpen(false)}
+        onSubmit={(title, reason) => requestChangeMutation.mutate({ title, reason })}
+      />
+      <RequestDeleteModal
+        open={requestDeleteOpen}
+        loading={requestDeleteMutation.isPending}
+        onClose={() => setRequestDeleteOpen(false)}
+        onSubmit={(reason) => requestDeleteMutation.mutate(reason)}
+      />
     </div>
   );
 }
@@ -547,21 +763,27 @@ function QuestionAssignmentTab({
   );
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  // ASM-9: preview a bank question in full before selecting it.
+  const [previewId, setPreviewId] = useState<number | null>(null);
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  // Flatten sections for the dropdown (show level + title)
+  // Report 5 §3.2/§3.3: questions attach only at the LAST (leaf) section, and
+  // the picker shows the full path chain — e.g. "Analytical ›› Assignment ›› L1".
+  // Sections that have sub-sections are intermediate variables and are omitted.
   const flatSections: { id: number; label: string }[] = [];
-  const flatten = (secs: AssessmentSection[], depth: number) => {
+  const flatten = (secs: AssessmentSection[], path: string[]) => {
     for (const s of secs) {
-      flatSections.push({
-        id: s.id,
-        label: `${"  ".repeat(depth)}L${s.level}: ${s.title}`,
-      });
-      if (s.subsections) flatten(s.subsections, depth + 1);
+      const chain = [...path, s.title];
+      const hasChildren = Boolean(s.subsections && s.subsections.length > 0);
+      if (hasChildren) {
+        flatten(s.subsections!, chain);
+      } else {
+        flatSections.push({ id: s.id, label: chain.join(" ›› ") });
+      }
     }
   };
-  flatten(sections, 0);
+  flatten(sections, []);
 
   // Load assigned questions for the selected section
   const { data: assignedQuestions, isLoading: assignedLoading } = useQuery({
@@ -623,6 +845,21 @@ function QuestionAssignmentTab({
       // Also refresh readiness + assessment detail (Issue 5).
       void queryClient.invalidateQueries({ queryKey: ["assessments", assessmentId] });
       void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", assessmentId] });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  // ASM-7: set a per-assessment score override on an assigned question.
+  const scoreMutation = useMutation({
+    mutationFn: (v: { aqId: number; score_override: number | null }) =>
+      updateAssignedQuestion(assessmentId, selectedSectionId!, v.aqId, {
+        score_override: v.score_override,
+      }),
+    onSuccess: () => {
+      toast.success("Score updated.");
+      void queryClient.invalidateQueries({
+        queryKey: ["assessment-section-questions", assessmentId, selectedSectionId],
+      });
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -691,6 +928,28 @@ function QuestionAssignmentTab({
                     </span>
                     {aq.question_detail?.difficulty_level && (
                       <span className="text-slate-400">{aq.question_detail.difficulty_level}</span>
+                    )}
+                    {canManage && (
+                      <label
+                        className="flex items-center gap-1 text-slate-400"
+                        title="Per-assessment score override — leave blank to use the question's own score (SRS §4)"
+                      >
+                        Score
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.5"
+                          defaultValue={aq.score_override ?? ""}
+                          className="w-14 rounded border border-slate-200 px-1.5 py-0.5 text-xs"
+                          onBlur={(e) => {
+                            const raw = e.target.value.trim();
+                            const val = raw === "" ? null : Number(raw);
+                            if (val !== (aq.score_override ?? null)) {
+                              scoreMutation.mutate({ aqId: aq.id, score_override: val });
+                            }
+                          }}
+                        />
+                      </label>
                     )}
                     {canManage && (
                       <button
@@ -788,6 +1047,9 @@ function QuestionAssignmentTab({
                         {q.difficulty_level && (
                           <span className="text-slate-400">{q.difficulty_level}</span>
                         )}
+                        <Button size="sm" variant="ghost" onClick={() => setPreviewId(q.id)}>
+                          Preview
+                        </Button>
                         {isAssigned ? (
                           <span className="text-green-600">✓ Assigned</span>
                         ) : (
@@ -809,7 +1071,94 @@ function QuestionAssignmentTab({
           )}
         </CardContent>
       </Card>
+
+      {previewId !== null && (
+        <QuestionPreviewModal
+          questionId={previewId}
+          alreadyAssigned={assignedIds.has(previewId)}
+          canManage={canManage}
+          loading={assignMutation.isPending}
+          onClose={() => setPreviewId(null)}
+          onSelect={() => {
+            assignMutation.mutate(previewId);
+            setPreviewId(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function QuestionPreviewModal({
+  questionId,
+  alreadyAssigned,
+  canManage,
+  loading,
+  onClose,
+  onSelect,
+}: {
+  questionId: number;
+  alreadyAssigned: boolean;
+  canManage: boolean;
+  loading: boolean;
+  onClose: () => void;
+  onSelect: () => void;
+}) {
+  const { data: q, isLoading } = useQuery({
+    queryKey: ["question-detail-preview", questionId],
+    queryFn: () => retrieveQuestion(questionId),
+  });
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Question preview"
+      description="Review the full question before selecting it (SRS §4.1)."
+      size="lg"
+    >
+      {isLoading || !q ? (
+        <div className="flex justify-center py-8">
+          <Spinner />
+        </div>
+      ) : (
+        <div className="space-y-3 text-sm">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline">{q.question_type_label}</Badge>
+            {q.difficulty_level && <Badge variant="outline">{q.difficulty_level}</Badge>}
+            {q.cognitive_level && <Badge variant="outline">{q.cognitive_level}</Badge>}
+            <Badge variant="outline">{q.status_label}</Badge>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Question</p>
+            <p className="text-slate-700">{stripHtml(q.question_text_1) || "(no text)"}</p>
+          </div>
+          {q.worked_solution && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Worked solution
+              </p>
+              <p className="text-slate-700">{stripHtml(q.worked_solution)}</p>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500">
+            <span>Discrimination: {q.discrimination_index ?? "—"}</span>
+            <span>Item difficulty: {q.item_difficulty_index ?? "—"}</span>
+            <span>Item-total r: {q.item_total_correlation ?? "—"}</span>
+            <span>Exposure limit: {q.exposure_limit ?? "—"}</span>
+          </div>
+        </div>
+      )}
+      <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        {canManage && !alreadyAssigned && (
+          <Button type="button" loading={loading} onClick={onSelect}>
+            Select
+          </Button>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -845,6 +1194,9 @@ function SectionTreeRow({
             <span className="text-xs text-slate-400">
               · {Math.floor(section.duration_seconds / 60)} min
             </span>
+          )}
+          {section.delivery_count != null && (
+            <span className="text-xs text-slate-400">· deliver {section.delivery_count}</span>
           )}
         </div>
         {canManage && (
@@ -907,10 +1259,18 @@ function CreateSectionModal({
     parent?: number | null;
     description?: string;
     level?: number;
+    duration_seconds?: number | null;
+    delivery_count?: number | null;
+    order_mode?: "STATIC" | "RANDOM";
   }) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  // ASM-3 per-section timer (entered in minutes) + ASM-1 delivery count +
+  // ASM-5 per-section delivery order mode.
+  const [durationMin, setDurationMin] = useState("");
+  const [deliveryCount, setDeliveryCount] = useState("");
+  const [orderMode, setOrderMode] = useState<"STATIC" | "RANDOM">("STATIC");
 
   // Sync form fields when the modal opens (create or edit).
   // useEffect deps: [open, editSection] — runs when the modal opens or when
@@ -919,6 +1279,11 @@ function CreateSectionModal({
     if (!open) return;
     setTitle(editSection?.title ?? "");
     setDescription(editSection?.description ?? "");
+    setDurationMin(
+      editSection?.duration_seconds ? String(Math.round(editSection.duration_seconds / 60)) : "",
+    );
+    setDeliveryCount(editSection?.delivery_count != null ? String(editSection.delivery_count) : "");
+    setOrderMode(editSection?.order_mode ?? "STATIC");
   }, [open, editSection]);
 
   const isEdit = editSection !== null;
@@ -944,7 +1309,11 @@ function CreateSectionModal({
             title,
             parent: parentId,
             description,
-            level: parentId ? 2 : 1, // TODO: calculate level from parent
+            // ASM-4: the server derives level from the parent (parent.level + 1),
+            // so Level 3/4 sub-sections are created correctly.
+            duration_seconds: durationMin.trim() ? Number(durationMin) * 60 : null,
+            delivery_count: deliveryCount.trim() ? Number(deliveryCount) : null,
+            order_mode: orderMode,
           });
         }}
         className="space-y-4"
@@ -972,12 +1341,183 @@ function CreateSectionModal({
             placeholder="What this section covers..."
           />
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="sec-timer">Timer (minutes, optional)</Label>
+            <Input
+              id="sec-timer"
+              type="number"
+              min={0}
+              value={durationMin}
+              onChange={(e) => setDurationMin(e.target.value)}
+              placeholder="e.g. 15"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Per-section time limit (SRS §5.2). Used when the assessment timer level is a section
+              level.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="sec-delivery">Delivery count (optional)</Label>
+            <Input
+              id="sec-delivery"
+              type="number"
+              min={0}
+              value={deliveryCount}
+              onChange={(e) => setDeliveryCount(e.target.value)}
+              placeholder="e.g. 10"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Randomly deliver this many questions from the pool (SRS §4.1.1). Blank = deliver all.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="sec-order">Question order</Label>
+            <select
+              id="sec-order"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={orderMode}
+              onChange={(e) => setOrderMode(e.target.value as "STATIC" | "RANDOM")}
+            >
+              <option value="STATIC">Static (as configured)</option>
+              <option value="RANDOM">Random</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Delivery order of this section's questions (SRS §5.1).
+            </p>
+          </div>
+        </div>
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button type="submit" loading={loading}>
             {isEdit ? "Save changes" : "Create section"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ASM-2: Request-change / request-delete modals (published assessments)
+// ---------------------------------------------------------------------------
+
+function RequestChangeModal({
+  open,
+  currentTitle,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  currentTitle: string;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (title: string, reason: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [reason, setReason] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    setTitle(currentTitle);
+    setReason("");
+  }, [open, currentTitle]);
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Request title change"
+      description="This assessment is published, so a title change needs admin approval (SRS §2.2)."
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit(title, reason);
+        }}
+        className="space-y-4"
+      >
+        <div>
+          <Label htmlFor="rc-title" required>
+            New title
+          </Label>
+          <Input id="rc-title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+        </div>
+        <div>
+          <Label htmlFor="rc-reason" required>
+            Reason
+          </Label>
+          <textarea
+            id="rc-reason"
+            rows={2}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            required
+          />
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading} disabled={!title.trim() || !reason.trim()}>
+            Submit request
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function RequestDeleteModal({
+  open,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  useEffect(() => {
+    if (open) setReason("");
+  }, [open]);
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Request deletion"
+      description="This assessment is published, so deletion needs admin approval (SRS §2.3)."
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit(reason);
+        }}
+        className="space-y-4"
+      >
+        <div>
+          <Label htmlFor="rd-reason" required>
+            Reason
+          </Label>
+          <textarea
+            id="rd-reason"
+            rows={2}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            required
+          />
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading} disabled={!reason.trim()}>
+            Submit request
           </Button>
         </div>
       </form>
@@ -1011,6 +1551,7 @@ function EditAssessmentModal({
   const [attemptRule, setAttemptRule] = useState("SINGLE_SESSION");
   const [displayOrder, setDisplayOrder] = useState<"STATIC" | "RANDOM">("STATIC");
   const [timerLevel, setTimerLevel] = useState("assessment");
+  const [price, setPrice] = useState("0");
 
   // Sync form fields when the modal opens.
   useEffect(() => {
@@ -1027,6 +1568,7 @@ function EditAssessmentModal({
     setAttemptRule(assessment.attempt_rule ?? "SINGLE_SESSION");
     setDisplayOrder((assessment.display_order as "STATIC" | "RANDOM") ?? "STATIC");
     setTimerLevel(assessment.timer_level ?? "assessment");
+    setPrice(assessment.price ?? "0");
   }, [open, assessment]);
 
   return (
@@ -1051,6 +1593,7 @@ function EditAssessmentModal({
             attempt_rule: attemptRule,
             display_order: displayOrder,
             timer_level: timerLevel,
+            price: price.trim() === "" ? "0" : price,
           });
         }}
         className="space-y-4"
@@ -1096,6 +1639,18 @@ function EditAssessmentModal({
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
               placeholder="Leave empty for no time limit"
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-price">Price (0 = free)</Label>
+            <Input
+              id="edit-price"
+              type="number"
+              min="0"
+              step="0.01"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="0.00"
             />
           </div>
           <div>
@@ -1320,6 +1875,251 @@ function MySessionsTab({
               })}
             </TableBody>
           </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Psychometric Groups Tab (PSY-A1) — build Rank Groups / Forced-Choice Pairs
+// from Question-Bank statements (signed Approach 1).
+// ---------------------------------------------------------------------------
+
+const GROUP_TYPES = [
+  { value: "rank_simple", label: "Simple Ranking (6a)" },
+  { value: "rank_then_rate", label: "Rank then Rate (6b)" },
+  { value: "forced_choice_single", label: "Forced Choice — Single Level (8a)" },
+  { value: "forced_choice_two_level", label: "Forced Choice — Two Level (8b)" },
+];
+
+function PsychometricGroupsTab({
+  assessmentId,
+  sections,
+  canManage,
+}: {
+  assessmentId: number;
+  sections: AssessmentSection[];
+  canManage: boolean;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [groupType, setGroupType] = useState("rank_simple");
+  const [rows, setRows] = useState<{ statement: string; section: string }[]>([
+    { statement: "", section: "" },
+    { statement: "", section: "" },
+  ]);
+  const [ratingPoints, setRatingPoints] = useState("5");
+
+  const flatSections: { id: number; label: string }[] = [];
+  const flatten = (secs: AssessmentSection[], path: string[]) => {
+    for (const s of secs) {
+      const chain = [...path, s.title];
+      if (s.subsections && s.subsections.length > 0) flatten(s.subsections, chain);
+      else flatSections.push({ id: s.id, label: chain.join(" ›› ") });
+    }
+  };
+  flatten(sections, []);
+
+  const { data: groups } = useQuery({
+    queryKey: ["assessment", assessmentId, "psych-groups"],
+    queryFn: () => listPsychometricGroups(assessmentId),
+  });
+  const { data: statementsPage } = useQuery({
+    queryKey: ["psych-statements"],
+    queryFn: () => listQuestions({ question_type: "PSYCHOMETRIC_STATEMENT", status: "confirmed" }),
+  });
+  const statements = statementsPage?.results ?? [];
+
+  const isFC = groupType.startsWith("forced_choice");
+  const needsRating = groupType === "rank_then_rate" || groupType === "forced_choice_two_level";
+
+  const createMut = useMutation({
+    mutationFn: () =>
+      createPsychometricGroup(assessmentId, {
+        group_type: groupType,
+        group_number: (groups?.length ?? 0) + 1,
+        ...(needsRating ? { rating_scale_points: Number(ratingPoints) } : {}),
+        items: rows
+          .filter((r) => r.statement && r.section)
+          .map((r, i) => ({
+            statement: Number(r.statement),
+            section: Number(r.section),
+            order: i,
+          })),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["assessment", assessmentId, "psych-groups"],
+      });
+      toast.success("Group created.");
+      setRows([
+        { statement: "", section: "" },
+        { statement: "", section: "" },
+      ]);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const delMut = useMutation({
+    mutationFn: (id: number) => deletePsychometricGroup(assessmentId, id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["assessment", assessmentId, "psych-groups"],
+      });
+      toast.success("Group removed.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  // Forced-choice is always exactly two rows.
+  const effectiveRows = isFC ? rows.slice(0, 2) : rows;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Psychometric Groups (Approach 1 — SRS Doc 3 §4.2)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <p className="text-sm text-slate-600">
+          Draw <strong>statements</strong> from the Question Bank and group them: a{" "}
+          <strong>Rank Group</strong> takes one statement from each section; a{" "}
+          <strong>Forced-Choice Pair</strong> takes two statements from two different sections.
+        </p>
+
+        {(groups ?? []).length > 0 && (
+          <div className="space-y-2">
+            {(groups ?? []).map((g: PsychometricGroup) => (
+              <div key={g.id} className="rounded-md border border-slate-200 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">
+                    {GROUP_TYPES.find((t) => t.value === g.group_type)?.label ?? g.group_type} · #
+                    {g.group_number}
+                  </span>
+                  {canManage && (
+                    <button
+                      className="text-xs text-danger-600 hover:underline"
+                      onClick={() => delMut.mutate(g.id)}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <ul className="mt-1 space-y-0.5 text-xs text-slate-600">
+                  {g.items.map((it) => (
+                    <li key={it.id}>
+                      • {it.statement_text}{" "}
+                      <span className="text-slate-400">→ {it.section_title}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {canManage && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              createMut.mutate();
+            }}
+            className="space-y-3 border-t border-slate-100 pt-4"
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="pg-type">Group type</Label>
+                <select
+                  id="pg-type"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  value={groupType}
+                  onChange={(e) => setGroupType(e.target.value)}
+                >
+                  {GROUP_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {needsRating && (
+                <div>
+                  <Label htmlFor="pg-rate">Rating scale points</Label>
+                  <Input
+                    id="pg-rate"
+                    type="number"
+                    min="2"
+                    value={ratingPoints}
+                    onChange={(e) => setRatingPoints(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              {effectiveRows.map((row, i) => (
+                <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <select
+                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    value={row.statement}
+                    onChange={(e) => {
+                      const next = [...rows];
+                      next[i] = { ...next[i], statement: e.target.value };
+                      setRows(next);
+                    }}
+                    required
+                  >
+                    <option value="">Select a statement…</option>
+                    {statements.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.question_title || s.question_text_1}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    value={row.section}
+                    onChange={(e) => {
+                      const next = [...rows];
+                      next[i] = { ...next[i], section: e.target.value };
+                      setRows(next);
+                    }}
+                    required
+                  >
+                    <option value="">Select a section…</option>
+                    {flatSections.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            {!isFC && (
+              <button
+                type="button"
+                className="text-sm text-primary-600 hover:underline"
+                onClick={() => setRows([...rows, { statement: "", section: "" }])}
+              >
+                + Add statement (one per section)
+              </button>
+            )}
+
+            {statements.length === 0 && (
+              <p className="text-xs text-amber-600">
+                No confirmed psychometric statements in the Question Bank yet. Author statements
+                (question type “Psychometric Statement”) first.
+              </p>
+            )}
+
+            <div className="flex justify-end">
+              <Button type="submit" loading={createMut.isPending}>
+                Create group
+              </Button>
+            </div>
+          </form>
         )}
       </CardContent>
     </Card>

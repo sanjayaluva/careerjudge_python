@@ -12,7 +12,7 @@
  *   - Only visible to psychometrician + cj_admin (canManage)
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, FolderPlus, Pencil, Trash2 } from "lucide-react";
 
 import {
@@ -94,10 +94,11 @@ export function CategoryManager({
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => deleteCategory(id),
+    mutationFn: (v: { id: number; reason: string }) => deleteCategory(v.id, v.reason),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: TREE_KEY });
       void queryClient.invalidateQueries({ queryKey: CAT_KEY });
+      void queryClient.invalidateQueries({ queryKey: ["qb-deletion-requests"] });
       setDeleteTarget(null);
     },
     onError: (err) => setError(extractApiError(err)),
@@ -190,7 +191,9 @@ export function CategoryManager({
         category={deleteTarget}
         loading={deleteMutation.isPending}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onConfirm={(reason) =>
+          deleteTarget && deleteMutation.mutate({ id: deleteTarget.id, reason })
+        }
       />
     </div>
   );
@@ -473,8 +476,12 @@ function DeleteCategoryModal({
   category: Category | null;
   loading: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (reason: string) => void;
 }) {
+  const [reason, setReason] = useState("");
+  useEffect(() => {
+    setReason("");
+  }, [category?.id]);
   if (!category) return null;
   return (
     <Modal
@@ -488,11 +495,30 @@ function DeleteCategoryModal({
         Are you sure you want to delete the category{" "}
         <span className="font-medium text-slate-900">"{category.name}"</span>?
       </p>
+      <div className="mt-4">
+        <label htmlFor="del-cat-reason" className="mb-1 block text-sm font-medium text-slate-700">
+          Reason (required)
+        </label>
+        <textarea
+          id="del-cat-reason"
+          rows={2}
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Why remove this category? A non-admin's request is reviewed by a CJ Admin (D1 §4.3)."
+        />
+      </div>
       <div className="mt-6 flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="button" variant="danger" loading={loading} onClick={onConfirm}>
+        <Button
+          type="button"
+          variant="danger"
+          loading={loading}
+          disabled={!reason.trim()}
+          onClick={() => onConfirm(reason)}
+        >
           Delete category
         </Button>
       </div>

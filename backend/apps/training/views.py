@@ -27,7 +27,9 @@ from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
 
 from .models import (
+    AssignmentDeadlineOverride,
     AssignmentReport,
+    AssignmentReportFile,
     CourseAssessment,
     CourseLesson,
     CourseMessage,
@@ -88,6 +90,7 @@ class HasTrainingPermission(HasModulePermission):
         "assignment_reports": "add",
         "review_report": "change",
         "approve_late_submission": "change",
+        "set_deadline_override": "change",
         "request_update": "change",
         "consent": "add",
         "consents": "view",
@@ -311,8 +314,10 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
     def lessons(self, request, pk=None):
         """List or add lessons to a course (SRS §2.2).
 
-        Per SRS §5: course structure modification is admin-only. Trainers
-        can view but not create/modify lessons, topics, or sessions.
+        TRN-7 / §5: lesson creation is gated the same way as topic/session/
+        content creation — a trainer may build structure while the course is
+        draft (§2.2); once published, structure changes go through the admin
+        approval flow (see _require_course_edit_allowed). Admins always pass.
         """
         course = self.get_object()
         if request.method == "GET":
@@ -321,21 +326,9 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 {"message": "OK", "data": CourseLessonSerializer(lessons, many=True).data},
                 status=status.HTTP_200_OK,
             )
-        # POST: admin-only (SRS §5)
-        user_role_name = request.user.role.name if request.user.role_id else None
-        if user_role_name != "cj_admin":
-            return Response(
-                {
-                    "error": {
-                        "code": "forbidden",
-                        "message": (
-                            "Course structure can only be modified by CJ Admin (SRS §5). "
-                            "Trainers may modify assignments and main session contents only."
-                        ),
-                    }
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        denied = _require_course_edit_allowed(request, course)
+        if denied:
+            return denied
         serializer = CourseLessonSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(course=course, order=_next_order(course.lessons))
@@ -372,6 +365,11 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 {"message": "OK", "data": CourseAssessmentSerializer(assessments, many=True).data},
                 status=status.HTTP_200_OK,
             )
+        # H11: linking an assessment to a published course edits its structure
+        # (SRS §2.4) — gate it through the same approval flow.
+        denied = _require_course_edit_allowed(request, course)
+        if denied:
+            return denied
         serializer = CourseAssessmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(course=course)
@@ -1067,10 +1065,13 @@ class CourseRegistrationViewSet(ModelViewSet):
         existing = AssignmentReport.objects.filter(
             assignment=assignment, student=request.user
         ).first()
-        deadline_passed = (
-            assignment.submission_deadline is not None
-            and assignment.submission_deadline < timezone.now()
-        )
+        # E-X7: a per-student deadline override (trainer-granted) takes
+        # precedence over the assignment's global deadline.
+        override = AssignmentDeadlineOverride.objects.filter(
+            assignment=assignment, student=request.user
+        ).first()
+        effective_deadline = override.new_deadline if override else assignment.submission_deadline
+        deadline_passed = effective_deadline is not None and effective_deadline < timezone.now()
         late_ok = bool(existing and existing.late_submission_approved)
         if deadline_passed and not late_ok:
             return Response(
@@ -1103,9 +1104,80 @@ class CourseRegistrationViewSet(ModelViewSet):
             },
         )
 
+        # E-X7: accept multiple attached files of mixed formats.
+        extra_files = request.FILES.getlist("report_files")
+        for f in extra_files:
+            ext = f.name.rsplit(".", 1)[-1].lower() if "." in f.name else ""
+            AssignmentReportFile.objects.create(report=report, file=f, file_type=ext)
+
         return Response(
             {"message": "Report submitted.", "data": AssignmentReportSerializer(report).data},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="set-deadline-override")
+    def set_deadline_override(self, request, pk=None):
+        """Trainer sets a deadline override for this registration's student on
+        one assignment (E-X7).
+
+        Body: {assignment_id, new_deadline (ISO), reason?}
+        """
+        from .models import Assignment
+
+        registration = self.get_object()
+        course = registration.course
+        user_role_name = request.user.role.name if request.user.role_id else None
+        if course.created_by_id != request.user.id and user_role_name != "cj_admin":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the course trainer or admin can set a deadline override.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        assignment = Assignment.objects.filter(
+            id=request.data.get("assignment_id"), session__topic__lesson__course=course
+        ).first()
+        new_deadline = request.data.get("new_deadline")
+        if not assignment:
+            return Response(
+                {
+                    "error": {
+                        "code": "not_found",
+                        "message": "Assignment not found for this course.",
+                    }
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not new_deadline:
+            return Response(
+                {"error": {"code": "validation_error", "message": "new_deadline is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        override, _created = AssignmentDeadlineOverride.objects.update_or_create(
+            assignment=assignment,
+            student=registration.student,
+            defaults={
+                "new_deadline": new_deadline,
+                "reason": request.data.get("reason", ""),
+                "created_by": request.user,
+            },
+        )
+        # Re-read so new_deadline is a parsed datetime (update_or_create leaves
+        # the raw input on the in-memory instance).
+        override.refresh_from_db()
+        return Response(
+            {
+                "message": "Deadline override set.",
+                "data": {
+                    "id": override.id,
+                    "student": override.student_id,
+                    "new_deadline": override.new_deadline.isoformat(),
+                },
+            },
+            status=status.HTTP_200_OK,
         )
 
     @action(detail=True, methods=["post"], url_path="review-report")
@@ -1248,12 +1320,48 @@ class CourseRegistrationViewSet(ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class CourseLessonViewSet(ModelViewSet):
+class _CourseStructureEditGuardMixin:
+    """TRN-1 / Doc 7 §5: gate the default update/partial_update/destroy on the
+    nested course-structure viewsets through the same published-course approval
+    flow as their create actions — so a trainer cannot directly edit or delete a
+    published course's lesson/topic/session/content/assessment structure. Admins
+    and still-draft courses bypass (see _require_course_edit_allowed).
+    Subclasses implement _course_for(obj)."""
+
+    def _course_for(self, obj):  # pragma: no cover - overridden
+        raise NotImplementedError
+
+    def _guard_structure_edit(self, request):
+        return _require_course_edit_allowed(request, self._course_for(self.get_object()))
+
+    def update(self, request, *args, **kwargs):
+        denied = self._guard_structure_edit(request)
+        if denied:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        denied = self._guard_structure_edit(request)
+        if denied:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        denied = self._guard_structure_edit(request)
+        if denied:
+            return denied
+        return super().destroy(request, *args, **kwargs)
+
+
+class CourseLessonViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for lessons within a course."""
 
     queryset = CourseLesson.objects.select_related("course")
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = CourseLessonSerializer
+
+    def _course_for(self, obj):
+        return obj.course
 
     @action(detail=True, methods=["get", "post"])
     def topics(self, request, pk=None):
@@ -1280,12 +1388,15 @@ class CourseLessonViewSet(ModelViewSet):
         )
 
 
-class LessonTopicViewSet(ModelViewSet):
+class LessonTopicViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for topics within a lesson."""
 
     queryset = LessonTopic.objects.select_related("lesson")
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = LessonTopicSerializer
+
+    def _course_for(self, obj):
+        return obj.lesson.course
 
     @action(detail=True, methods=["get", "post"])
     def sessions(self, request, pk=None):
@@ -1311,12 +1422,15 @@ class LessonTopicViewSet(ModelViewSet):
         )
 
 
-class TopicSessionViewSet(ModelViewSet):
+class TopicSessionViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for sessions within a topic."""
 
     queryset = TopicSession.objects.select_related("topic")
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = TopicSessionSerializer
+
+    def _course_for(self, obj):
+        return obj.topic.lesson.course
 
     @action(detail=True, methods=["get", "post"])
     def contents(self, request, pk=None):
@@ -1571,12 +1685,15 @@ class LiveSessionViewSet(ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class SessionContentViewSet(ModelViewSet):
+class SessionContentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for session content + interactive questions (Timeliner)."""
 
     queryset = SessionContent.objects.select_related("session")
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = SessionContentSerializer
+
+    def _course_for(self, obj):
+        return obj.session.topic.lesson.course
 
     @action(detail=True, methods=["get", "post"])
     def interactive_questions(self, request, pk=None):
@@ -1619,7 +1736,7 @@ class SessionContentViewSet(ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class CourseAssessmentViewSet(ModelViewSet):
+class CourseAssessmentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for course assessments (SRS §2.4).
 
     Allows trainers to update and delete linked assessments, not just
@@ -1630,6 +1747,9 @@ class CourseAssessmentViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = CourseAssessmentSerializer
     http_method_names = ["get", "head", "options", "patch", "delete", "post"]
+
+    def _course_for(self, obj):
+        return obj.course
 
 
 # ---------------------------------------------------------------------------

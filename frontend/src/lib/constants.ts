@@ -38,6 +38,9 @@ export type ModuleKey =
   | "counseling"
   | "cms"
   | "tasks"
+  | "concerns"
+  | "messaging"
+  | "live_chat"
   | "invoicing";
 
 export const ROLE_LABELS: Record<RoleName, string> = {
@@ -117,20 +120,15 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "tasks",
     "invoicing",
   ],
-  sme: ["dashboard", "profile", "question_bank", "assessments", "tasks", "invoicing"],
-  reviewer: ["dashboard", "profile", "question_bank", "assessments", "tasks", "invoicing"],
+  // Report 4 SME-3 / Reviewer-4: SME & Reviewer have no right to view/take
+  // assessments — the Assessments tab is removed from their nav.
+  sme: ["dashboard", "profile", "question_bank", "tasks", "invoicing"],
+  reviewer: ["dashboard", "profile", "question_bank", "tasks", "invoicing"],
   trainer: ["dashboard", "profile", "assessments", "training", "tasks", "invoicing"],
   group_admin: ["dashboard", "profile", "organizations", "assessments"],
-  counsellor: [
-    "dashboard",
-    "profile",
-    "assessments",
-    "career_profiling",
-    "reports",
-    "counseling",
-    "tasks",
-    "invoicing",
-  ],
+  // Report 4 Counsellor-1/2: no assessment or profiling access — those tabs are
+  // removed; the counsellor keeps Reports (limited to their own clients).
+  counsellor: ["dashboard", "profile", "reports", "counseling", "tasks", "invoicing"],
   channel_partner: [
     "dashboard",
     "profile",
@@ -148,6 +146,8 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "reports",
     "training",
     "counseling",
+    // PLT-6b: Live Chat is a signed Individual-User capability (User Details.pdf p.1).
+    "live_chat",
   ],
 };
 
@@ -242,6 +242,30 @@ export const NAV_ITEMS: NavItem[] = [
     roles: roleListFor("tasks"),
   },
   {
+    // ADM-2 / D9 §4 — raise a concern (all roles) + admin inbox.
+    key: "concerns",
+    label: "Contact Admin",
+    to: "/concerns",
+    icon: "MessageSquare",
+    roles: roleListFor("profile"),
+  },
+  {
+    // PLT-1 — "Send Message" role-scoped messaging (User Details.pdf p.1).
+    key: "messaging",
+    label: "Messages",
+    to: "/messages",
+    icon: "Mail",
+    roles: roleListFor("profile"),
+  },
+  {
+    // PLT-6b — Live Chat for the standard Individual User (User Details.pdf p.1).
+    key: "live_chat",
+    label: "Live Chat",
+    to: "/live-chat",
+    icon: "MessageCircle",
+    roles: roleListFor("live_chat"),
+  },
+  {
     key: "invoicing",
     label: "Invoicing",
     to: "/invoicing",
@@ -306,6 +330,9 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   counseling: "Counseling",
   cms: "CMS",
   tasks: "Task Management",
+  concerns: "Contact Admin",
+  messaging: "Messages",
+  live_chat: "Live Chat",
   invoicing: "Invoicing",
 };
 
@@ -324,5 +351,8 @@ export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
   counseling: "Schedule and track counseling sessions.",
   cms: "Manage static content and pages.",
   tasks: "Admin assigns + monitors tasks for SME / Reviewer / Trainer / Counsellor.",
+  concerns: "Raise an issue or feedback, routed to the admin and helpdesk.",
+  messaging: "Send messages to the admin, helpdesk, and other roles you work with.",
+  live_chat: "Chat live with the CareerJudge support team.",
   invoicing: "Raise and track invoices for empanelled work; CJ Admin reviews and pays them.",
 };

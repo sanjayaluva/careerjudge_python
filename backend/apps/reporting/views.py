@@ -54,6 +54,7 @@ class HasReportingPermission(HasModulePermission):
         "partial_update": "change",
         "destroy": "delete",
         "publish": "change",
+        "duplicate": "add",
         "generate": "view",
         "generate_group": "view",
         "select_data": "view",
@@ -138,6 +139,51 @@ class ReportViewSet(ActionSerializerMixin, ModelViewSet):
         return Response(
             {"message": "Report published.", "data": {"id": report.id, "status": report.status}},
             status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"])
+    def duplicate(self, request, pk=None):
+        """Clone this report's full configuration into a new draft report.
+
+        This is the "report template" flow (SRS 04 §3 / 06 §4): a report the
+        psychometrician has configured (layout sections, cutoffs, bands,
+        typological codes, polar variables, include-toggles, PMI-D order,
+        branding) can be reused as the starting point for a new report rather
+        than rebuilt from scratch. The copy is always a fresh draft owned by
+        the requesting user; generated-report rows are NOT copied.
+
+        Optional payload: {"title": "New title"} — defaults to "<title> (copy)".
+        """
+        source = self.get_object()
+        new_title = (request.data.get("title") or f"{source.title} (copy)")[:255]
+
+        clone = Report.objects.get(pk=source.pk)
+        clone.pk = None
+        clone.id = None
+        clone._state.adding = True
+        clone.title = new_title
+        clone.status = "draft"
+        clone.created_by = request.user
+        clone.save()
+
+        # Copy each configuration child, re-pointing it at the clone.
+        for section in source.sections.all():
+            section.pk = None
+            section.id = None
+            section._state.adding = True
+            section.report = clone
+            section.save()
+        for related_name in ("cutoffs", "bands", "typological_codes", "polar_variables"):
+            for row in getattr(source, related_name).all():
+                row.pk = None
+                row.id = None
+                row._state.adding = True
+                row.report = clone
+                row.save()
+
+        return Response(
+            {"message": "Report duplicated.", "data": ReportSerializer(clone).data},
+            status=status.HTTP_201_CREATED,
         )
 
     @action(detail=True, methods=["post"])
@@ -573,6 +619,29 @@ class GeneratedReportViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = GeneratedReportSerializer
     http_method_names = ["get", "head", "options"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Doc 4: a corporate manager sees ONLY their own employees' reports.
+        # A corporate manager is a corp/corp-exclusive/group admin who is an
+        # admin member of at least one corporate organization. Non-corporate
+        # roles (CJ Admin, staff, individuals) keep their existing visibility.
+        user = self.request.user
+        role_name = user.role.name if getattr(user, "role", None) else None
+        if role_name in ("corp_admin", "corp_exclusive", "group_admin"):
+            from apps.organizations.models import OrganizationMember
+
+            admin_orgs = OrganizationMember.objects.filter(
+                user=user,
+                is_admin=True,
+                organization__type__in=("corporate", "corp_exclusive"),
+            ).values_list("organization_id", flat=True)
+            if admin_orgs:
+                employee_ids = OrganizationMember.objects.filter(
+                    organization_id__in=list(admin_orgs)
+                ).values_list("user_id", flat=True)
+                qs = qs.filter(candidate_id__in=list(employee_ids))
+        return qs
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()

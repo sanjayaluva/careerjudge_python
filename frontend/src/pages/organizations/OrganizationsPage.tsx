@@ -245,6 +245,8 @@ function CreateOrganizationModal({ open, onClose }: { open: boolean; onClose: ()
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [type, setType] = useState("corporate");
+  const [managerName, setManagerName] = useState("");
+  const [taxId, setTaxId] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [description, setDescription] = useState("");
   const [city, setCity] = useState("");
@@ -264,6 +266,8 @@ function CreateOrganizationModal({ open, onClose }: { open: boolean; onClose: ()
   function resetForm() {
     setName("");
     setType("corporate");
+    setManagerName("");
+    setTaxId("");
     setContactEmail("");
     setDescription("");
     setCity("");
@@ -281,6 +285,8 @@ function CreateOrganizationModal({ open, onClose }: { open: boolean; onClose: ()
     mutation.mutate({
       name,
       type,
+      manager_name: managerName,
+      tax_id: taxId,
       contact_email: contactEmail,
       description,
       city,
@@ -326,6 +332,18 @@ function CreateOrganizationModal({ open, onClose }: { open: boolean; onClose: ()
               <option value="corp_exclusive">Corporate Exclusive</option>
               <option value="channel_partner">Channel Partner</option>
             </select>
+          </div>
+          <div>
+            <Label htmlFor="org-manager">Manager (primary contact)</Label>
+            <Input
+              id="org-manager"
+              value={managerName}
+              onChange={(e) => setManagerName(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="org-taxid">PAN / TAN</Label>
+            <Input id="org-taxid" value={taxId} onChange={(e) => setTaxId(e.target.value)} />
           </div>
           <div>
             <Label htmlFor="org-email">Contact email</Label>

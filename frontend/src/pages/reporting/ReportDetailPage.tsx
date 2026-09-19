@@ -21,6 +21,7 @@ import {
   CardTitle,
   Input,
   Label,
+  Modal,
   Spinner,
   Table,
   TableBody,
@@ -35,6 +36,8 @@ import {
   useToast,
 } from "@/components/ui";
 import {
+  BAND_TARGET_TYPES,
+  type BandTargetType,
   createBand,
   createCode,
   createCutoff,
@@ -58,8 +61,11 @@ import {
   SECTION_TYPES,
   STAT_CONVERSIONS,
   selectProfilingData,
+  updateReport,
+  type GeneratedReport,
   type GroupReportData,
   type ProfilingSelectionResult,
+  type Report,
 } from "@/api/reporting";
 import { listSections as listAssessmentSections, listSessions } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
@@ -79,6 +85,7 @@ export default function ReportDetailPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const canManage = ["cj_admin", "psychometrician", "counsellor"].includes(user?.role ?? "");
+  const [editOpen, setEditOpen] = useState(false);
 
   const { data: report, isLoading } = useQuery({
     queryKey: [...REPORT_KEY, rid],
@@ -242,12 +249,30 @@ export default function ReportDetailPage() {
                     {report.include_fmi && <Badge variant="outline">FMI</Badge>}
                     {report.include_pmi && <Badge variant="outline">PMI</Badge>}
                     {report.include_vmi && <Badge variant="outline">VMI</Badge>}
+                    {!report.include_raw_summary &&
+                      !report.include_fmi &&
+                      !report.include_pmi &&
+                      !report.include_vmi && <span className="text-sm text-slate-400">None</span>}
                   </div>
+                  {(report.pmi_d_first_assessment || report.pmi_d_second_assessment) && (
+                    <div className="mt-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        PMI-D gap order
+                      </div>
+                      <p className="mt-1 text-sm text-slate-900">
+                        {report.pmi_d_first_assessment || "—"} PMI −{" "}
+                        {report.pmi_d_second_assessment || "—"} PMI
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
               {canManage && report.status === "draft" && (
-                <div className="mt-6 flex justify-end border-t border-slate-100 pt-4">
+                <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
+                  <Button variant="outline" onClick={() => setEditOpen(true)}>
+                    Edit configuration
+                  </Button>
                   <Button
                     onClick={() => publishMutation.mutate()}
                     loading={publishMutation.isPending}
@@ -311,7 +336,126 @@ export default function ReportDetailPage() {
           </TabsContent>
         )}
       </Tabs>
+      {editOpen && <EditConfigModal report={report} onClose={() => setEditOpen(false)} />}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit Configuration Modal (REP-4) — profiling data inputs, PMI-D order,
+// solution link, and shared report metadata (SRS 06 §3.1–3.4)
+// ---------------------------------------------------------------------------
+
+function EditConfigModal({ report, onClose }: { report: Report; onClose: () => void }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const isProfiling = report.scope === "profiling";
+  const [description, setDescription] = useState(report.description ?? "");
+  const [includeRawSummary, setIncludeRawSummary] = useState(report.include_raw_summary);
+  const [includeFmi, setIncludeFmi] = useState(report.include_fmi);
+  const [includePmi, setIncludePmi] = useState(report.include_pmi);
+  const [includeVmi, setIncludeVmi] = useState(report.include_vmi);
+  const [pmiDFirst, setPmiDFirst] = useState(report.pmi_d_first_assessment ?? "");
+  const [pmiDSecond, setPmiDSecond] = useState(report.pmi_d_second_assessment ?? "");
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const payload: Record<string, unknown> = { description };
+      if (isProfiling) {
+        payload.include_raw_summary = includeRawSummary;
+        payload.include_fmi = includeFmi;
+        payload.include_pmi = includePmi;
+        payload.include_vmi = includeVmi;
+        payload.pmi_d_first_assessment = pmiDFirst.trim();
+        payload.pmi_d_second_assessment = pmiDSecond.trim();
+      }
+      return updateReport(report.id, payload);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [...REPORT_KEY, report.id] });
+      toast.success("Configuration updated.");
+      onClose();
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const toggles: [string, boolean, (v: boolean) => void][] = [
+    ["Raw summary %", includeRawSummary, setIncludeRawSummary],
+    ["FMI (Final Match Index)", includeFmi, setIncludeFmi],
+    ["PMI (Profile Match Index)", includePmi, setIncludePmi],
+    ["VMI (Variable Match Index)", includeVmi, setIncludeVmi],
+  ];
+
+  return (
+    <Modal open onClose={onClose} title="Edit report configuration" size="md">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          mutation.mutate();
+        }}
+        className="space-y-4"
+      >
+        <div>
+          <Label htmlFor="ec-desc">Description</Label>
+          <textarea
+            id="ec-desc"
+            rows={2}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+        {isProfiling && (
+          <>
+            <div>
+              <p className="mb-1 text-sm font-medium text-slate-700">Include indices</p>
+              <div className="grid grid-cols-2 gap-2">
+                {toggles.map(([label, val, set]) => (
+                  <label key={label} className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={val}
+                      onChange={(e) => set(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 text-sm font-medium text-slate-700">
+                PMI-D gap order (A1PMI − A2PMI)
+              </p>
+              <p className="mb-2 text-xs text-slate-500">
+                Name the two assessments whose PMI is subtracted to form the gap index. Leave blank
+                to omit PMI-D.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  placeholder="A1 (minuend)"
+                  value={pmiDFirst}
+                  onChange={(e) => setPmiDFirst(e.target.value)}
+                />
+                <Input
+                  placeholder="A2 (subtrahend)"
+                  value={pmiDSecond}
+                  onChange={(e) => setPmiDSecond(e.target.value)}
+                />
+              </div>
+            </div>
+          </>
+        )}
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={mutation.isPending}>
+            Save changes
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -403,6 +547,7 @@ function GenerateTab({
 // ---------------------------------------------------------------------------
 
 function GeneratedTab({ reportId }: { reportId: number }) {
+  const [preview, setPreview] = useState<GeneratedReport | null>(null);
   const { data: generated, isLoading } = useQuery({
     queryKey: ["reporting", "reports", reportId, "generated"],
     queryFn: () => listGeneratedReports(reportId),
@@ -412,73 +557,267 @@ function GeneratedTab({ reportId }: { reportId: number }) {
   const list = generated ?? [];
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Generated Reports ({list.length})</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {list.length === 0 ? (
-          <p className="py-4 text-center text-sm text-slate-500">
-            No reports generated yet. Use the Generate tab to create one.
-          </p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Candidate</TableHead>
-                <TableHead>Session</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Generated at</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.map((g) => (
-                <TableRow key={g.id}>
-                  <TableCell className="font-medium text-slate-900">
-                    {g.candidate_name ?? `User ${g.candidate}`}
-                  </TableCell>
-                  <TableCell className="text-slate-500">#{g.session}</TableCell>
-                  <TableCell>
-                    <Badge variant={g.status === "generated" ? "success" : "warning"}>
-                      {g.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-slate-500">
-                    {new Date(g.generated_at).toLocaleString()}
-                  </TableCell>
-                  <TableCell>
-                    {g.status === "generated" && g.rendered_data && (
-                      <div className="flex flex-col gap-1 text-xs">
-                        <a
-                          href={generatedReportPdfUrl(g.id)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary-600 hover:underline"
-                        >
-                          Download PDF ↓
-                        </a>
-                        <details>
-                          <summary className="cursor-pointer text-slate-600 hover:underline">
-                            View JSON
-                          </summary>
-                          <pre className="mt-2 max-h-96 overflow-auto rounded-md bg-slate-50 p-3 text-xs">
-                            {JSON.stringify(g.rendered_data, null, 2)}
-                          </pre>
-                        </details>
-                      </div>
-                    )}
-                    {g.status === "failed" && g.error_message && (
-                      <span className="text-xs text-danger-600">{g.error_message}</span>
-                    )}
-                  </TableCell>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Generated Reports ({list.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {list.length === 0 ? (
+            <p className="py-4 text-center text-sm text-slate-500">
+              No reports generated yet. Use the Generate tab to create one.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Candidate</TableHead>
+                  <TableHead>Session</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Generated at</TableHead>
+                  <TableHead></TableHead>
                 </TableRow>
+              </TableHeader>
+              <TableBody>
+                {list.map((g) => (
+                  <TableRow key={g.id}>
+                    <TableCell className="font-medium text-slate-900">
+                      {g.candidate_name ?? `User ${g.candidate}`}
+                    </TableCell>
+                    <TableCell className="text-slate-500">#{g.session}</TableCell>
+                    <TableCell>
+                      <Badge variant={g.status === "generated" ? "success" : "warning"}>
+                        {g.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-500">
+                      {new Date(g.generated_at).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      {g.status === "generated" && g.rendered_data && (
+                        <div className="flex flex-col items-start gap-1 text-xs">
+                          <Button variant="outline" size="sm" onClick={() => setPreview(g)}>
+                            Preview
+                          </Button>
+                          <a
+                            href={generatedReportPdfUrl(g.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary-600 hover:underline"
+                          >
+                            Download PDF ↓
+                          </a>
+                        </div>
+                      )}
+                      {g.status === "failed" && g.error_message && (
+                        <span className="text-xs text-danger-600">{g.error_message}</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+      {preview && preview.rendered_data && (
+        <Modal
+          open
+          onClose={() => setPreview(null)}
+          title={`Report preview — ${preview.candidate_name ?? `User ${preview.candidate}`}`}
+          size="lg"
+        >
+          <ReportPreview data={preview.rendered_data} />
+          <div className="mt-4 flex justify-end border-t border-slate-100 pt-4">
+            <a href={generatedReportPdfUrl(preview.id)} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline">Download PDF ↓</Button>
+            </a>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Report Preview (REP-2 live preview) — render generated data in-app,
+// mirroring the PDF: score summary, section + question breakdowns, and
+// custom layout sections incl. table and SVG bar-chart (REP-1) layouts.
+// ---------------------------------------------------------------------------
+
+type PreviewRow = Record<string, unknown>;
+function _num(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  return typeof v === "number" ? String(Math.round(v * 100) / 100) : String(v);
+}
+
+function ReportPreview({ data }: { data: Record<string, unknown> }) {
+  const scoreSummary = data.score_summary as PreviewRow | undefined;
+  const sectionBreakdown = (data.section_breakdown as PreviewRow[] | undefined) ?? [];
+  const questionBreakdown = (data.question_breakdown as PreviewRow[] | undefined) ?? [];
+  const sections = (data.sections as PreviewRow[] | undefined) ?? [];
+
+  return (
+    <div className="max-h-[70vh] space-y-5 overflow-auto text-sm">
+      <div>
+        <h3 className="text-base font-bold text-slate-900">
+          {String(data.report_title ?? "Report")}
+        </h3>
+        <p className="text-xs text-slate-500">
+          {String(data.assessment_title ?? "")}
+          {data.candidate ? ` · ${String((data.candidate as PreviewRow).name ?? "")}` : ""}
+        </p>
+      </div>
+
+      {scoreSummary && (
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Score summary
+          </div>
+          <p className="mt-1 text-slate-900">
+            {_num(scoreSummary.total)} / {_num(scoreSummary.max)} ({_num(scoreSummary.percentage)}%){" "}
+            {scoreSummary.passed !== undefined && (
+              <Badge variant={scoreSummary.passed ? "success" : "default"}>
+                {scoreSummary.passed ? "Pass" : "Below threshold"}
+              </Badge>
+            )}
+          </p>
+        </div>
+      )}
+
+      {sectionBreakdown.length > 0 && (
+        <PreviewScoreTable
+          title="Section breakdown"
+          variableHeader="Variable"
+          rows={sectionBreakdown}
+          labelKey="section_title"
+        />
+      )}
+
+      {questionBreakdown.length > 0 && (
+        <PreviewScoreTable
+          title="Question breakdown"
+          variableHeader="Question"
+          rows={questionBreakdown}
+          labelKey="question_label"
+        />
+      )}
+
+      {sections.map((s, i) => (
+        <PreviewCustomSection key={i} section={s} />
+      ))}
+    </div>
+  );
+}
+
+function PreviewScoreTable({
+  title,
+  variableHeader,
+  rows,
+  labelKey,
+}: {
+  title: string;
+  variableHeader: string;
+  rows: PreviewRow[];
+  labelKey: string;
+}) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">{title}</div>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="border-b border-slate-200 text-left text-slate-500">
+              <th className="py-1 pr-2">{variableHeader}</th>
+              <th className="py-1 pr-2">Raw</th>
+              <th className="py-1 pr-2">Max</th>
+              <th className="py-1 pr-2">%</th>
+              <th className="py-1">Converted</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-b border-slate-100">
+                <td className="py-1 pr-2 text-slate-900">{String(r[labelKey] ?? "—")}</td>
+                <td className="py-1 pr-2">{_num(r.raw_score)}</td>
+                <td className="py-1 pr-2">{_num(r.max_score)}</td>
+                <td className="py-1 pr-2">{_num(r.percentage)}%</td>
+                <td className="py-1">
+                  {_num(r.converted_score)}{" "}
+                  <span className="text-slate-400">({String(r.conversion_type ?? "")})</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function PreviewCustomSection({ section }: { section: PreviewRow }) {
+  const title = section.title ? String(section.title) : "";
+  const description = section.description ? String(section.description) : "";
+  const content = section.content ? String(section.content) : "";
+  const graph = section.graph as
+    { title?: string; bars?: PreviewRow[]; max_value?: number } | undefined;
+  const table = section.table as { headers?: PreviewRow; rows?: PreviewRow[] } | undefined;
+
+  if (!title && !description && !content && !graph && !table) return null;
+
+  return (
+    <div className="rounded-md border border-slate-200 p-3">
+      {title && <div className="font-semibold text-slate-900">{title}</div>}
+      {description && <p className="mt-1 text-slate-700">{description}</p>}
+      {content && <p className="mt-1 whitespace-pre-wrap text-slate-700">{content}</p>}
+      {graph?.bars && graph.bars.length > 0 && <PreviewBarChart graph={graph} />}
+      {table?.rows && table.rows.length > 0 && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full border-collapse text-xs">
+            <tbody>
+              {table.rows.map((r, i) => (
+                <tr key={i} className="border-b border-slate-100">
+                  <td className="py-1 pr-2 text-slate-900">{String(r.variable ?? "—")}</td>
+                  <td className="py-1 pr-2">{_num(r.score)}</td>
+                  <td className="py-1">{String(r.label ?? "")}</td>
+                </tr>
               ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PreviewBarChart({
+  graph,
+}: {
+  graph: { title?: string; bars?: PreviewRow[]; max_value?: number };
+}) {
+  const bars = graph.bars ?? [];
+  const maxValue = graph.max_value && graph.max_value > 0 ? graph.max_value : 100;
+  return (
+    <div className="mt-2 space-y-1">
+      {graph.title && <div className="text-xs font-medium text-slate-700">{graph.title}</div>}
+      {bars.map((b, i) => {
+        const value = typeof b.value === "number" ? b.value : 0;
+        const pct = Math.max(0, Math.min(100, (value / maxValue) * 100));
+        const colour =
+          typeof b.colour_code === "string" && b.colour_code ? b.colour_code : "#3b82f6";
+        return (
+          <div key={i} className="flex items-center gap-2">
+            <span className="w-28 shrink-0 truncate text-xs text-slate-600">
+              {String(b.variable ?? "")}
+            </span>
+            <div className="h-3 flex-1 rounded bg-slate-100">
+              <div className="h-3 rounded" style={{ width: `${pct}%`, background: colour }} />
+            </div>
+            <span className="w-10 shrink-0 text-right text-xs text-slate-600">{_num(value)}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1122,7 +1461,9 @@ function BandsConfigTab({
     queryFn: () => listBands(reportId),
   });
   const { data: sections } = useAssessmentSections(assessmentId);
+  const [targetType, setTargetType] = useState<BandTargetType>("section");
   const [sectionId, setSectionId] = useState("");
+  const [assessmentLabel, setAssessmentLabel] = useState("");
   const [bandNumber, setBandNumber] = useState("1");
   const [rangeMin, setRangeMin] = useState("0");
   const [rangeMax, setRangeMax] = useState("100");
@@ -1130,10 +1471,17 @@ function BandsConfigTab({
   const [description, setDescription] = useState("");
   const [colourCode, setColourCode] = useState("#3b82f6");
 
+  // Section is only meaningful for interpretative (section-score) bands; the
+  // assessment-label scope only applies to PMI/VMI (SRS 06 §3.3-3.4).
+  const isSectionBand = targetType === "section";
+  const scopesByAssessment = targetType === "pmi" || targetType === "vmi";
+
   const createMutation = useMutation({
     mutationFn: () =>
       createBand(reportId, {
-        section: Number(sectionId),
+        target_type: targetType,
+        section: isSectionBand ? Number(sectionId) : null,
+        assessment_label: scopesByAssessment ? assessmentLabel.trim() : "",
         band_number: Number(bandNumber),
         range_min: Number(rangeMin),
         range_max: Number(rangeMax),
@@ -1157,22 +1505,30 @@ function BandsConfigTab({
   if (isLoading) return <Spinner />;
   const list = bands ?? [];
   const sectionList = sections ?? [];
+  const targetLabel = (t: BandTargetType) =>
+    BAND_TARGET_TYPES.find((o) => o.value === t)?.label ?? t;
+  const canSubmit = isSectionBand ? Boolean(sectionId) : true;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Band Definitions (Interpretative — SRS §3.3.1)</CardTitle>
+        <CardTitle>
+          Band Definitions (Interpretative &amp; Profiling — SRS §3.3.1, 06 §3.1–3.4)
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-slate-600">
-          Define score bands per variable. The candidate&apos;s score is matched to a band, and the
-          band&apos;s label + description is shown in the report.
+          Define score bands. Interpretative bands map a <strong>section score</strong> to a label;
+          profiling bands interpret the <strong>FMI, PMI, VMI, raw summary %</strong> or the
+          <strong> PMI-D gap index</strong>. The candidate&apos;s value is matched to a band, and
+          the band&apos;s label + description is shown in the report.
         </p>
         {list.length > 0 && (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Variable</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Variable / Scope</TableHead>
                 <TableHead>Band #</TableHead>
                 <TableHead>Range</TableHead>
                 <TableHead>Label</TableHead>
@@ -1183,7 +1539,14 @@ function BandsConfigTab({
             <TableBody>
               {list.map((b) => (
                 <TableRow key={b.id}>
-                  <TableCell className="font-medium">{b.section_title}</TableCell>
+                  <TableCell className="text-xs font-medium text-slate-600">
+                    {targetLabel(b.target_type)}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {b.target_type === "section"
+                      ? b.section_title || "—"
+                      : b.assessment_label || "All assessments"}
+                  </TableCell>
                   <TableCell>{b.band_number}</TableCell>
                   <TableCell className="text-slate-500">
                     {b.range_min}–{b.range_max}
@@ -1211,11 +1574,53 @@ function BandsConfigTab({
           className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3"
         >
           <div className="sm:col-span-3">
-            <Label htmlFor="bd-s" required>
-              Variable
+            <Label htmlFor="bd-t" required>
+              Band target
             </Label>
-            <SectionPicker sections={sectionList} value={sectionId} onChange={setSectionId} />
+            <select
+              id="bd-t"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={targetType}
+              onChange={(e) => {
+                setTargetType(e.target.value as BandTargetType);
+                setSectionId("");
+              }}
+            >
+              {BAND_TARGET_TYPES.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              {isSectionBand
+                ? "Pick the variable whose section score this band interprets."
+                : scopesByAssessment
+                  ? "Optionally scope this band to a single assessment; leave the label blank to apply to all."
+                  : targetType === "pmi_d"
+                    ? "PMI-D is a gap (A1PMI − A2PMI) and may be negative — ranges can go below 0."
+                    : "This band applies to the whole report for the selected index."}
+            </p>
           </div>
+          {isSectionBand && (
+            <div className="sm:col-span-3">
+              <Label htmlFor="bd-s" required>
+                Variable
+              </Label>
+              <SectionPicker sections={sectionList} value={sectionId} onChange={setSectionId} />
+            </div>
+          )}
+          {scopesByAssessment && (
+            <div className="sm:col-span-3">
+              <Label htmlFor="bd-al">Assessment label (scope)</Label>
+              <Input
+                id="bd-al"
+                value={assessmentLabel}
+                onChange={(e) => setAssessmentLabel(e.target.value)}
+                placeholder="e.g., CAT — leave blank for all assessments"
+              />
+            </div>
+          )}
           <div>
             <Label htmlFor="bd-n" required>
               Band number
@@ -1235,7 +1640,7 @@ function BandsConfigTab({
             <Input
               id="bd-min"
               type="number"
-              min="0"
+              min={targetType === "pmi_d" ? undefined : "0"}
               max="100"
               value={rangeMin}
               onChange={(e) => setRangeMin(e.target.value)}
@@ -1248,7 +1653,7 @@ function BandsConfigTab({
             <Input
               id="bd-max"
               type="number"
-              min="0"
+              min={targetType === "pmi_d" ? undefined : "0"}
               max="100"
               value={rangeMax}
               onChange={(e) => setRangeMax(e.target.value)}
@@ -1284,7 +1689,7 @@ function BandsConfigTab({
             />
           </div>
           <div className="flex justify-end sm:col-span-3">
-            <Button type="submit" loading={createMutation.isPending} disabled={!sectionId}>
+            <Button type="submit" loading={createMutation.isPending} disabled={!canSubmit}>
               Add band
             </Button>
           </div>
@@ -1545,7 +1950,7 @@ function LayoutTab({ reportId }: { reportId: number }) {
   const createMutation = useMutation({
     mutationFn: () => {
       const table_graph_config = layout
-        ? { layout, ...(layout === "table" && tableTitle ? { table_title: tableTitle } : {}) }
+        ? { layout, ...(tableTitle ? { table_title: tableTitle } : {}) }
         : null;
       const payload = {
         section_type: sectionType,
@@ -1758,12 +2163,14 @@ function LayoutTab({ reportId }: { reportId: number }) {
             >
               <option value="">None</option>
               <option value="table">Table (section scores)</option>
-              <option value="graph">Graph (not yet rendered)</option>
+              <option value="graph">Graph (bar chart of section scores)</option>
             </select>
           </div>
-          {layout === "table" && (
+          {(layout === "table" || layout === "graph") && (
             <div className="sm:col-span-2">
-              <Label htmlFor="ls-table-title">Table title</Label>
+              <Label htmlFor="ls-table-title">
+                {layout === "graph" ? "Chart title" : "Table title"}
+              </Label>
               <Input
                 id="ls-table-title"
                 value={tableTitle}
@@ -1773,9 +2180,9 @@ function LayoutTab({ reportId }: { reportId: number }) {
             </div>
           )}
           {layout === "graph" && (
-            <p className="text-xs text-amber-600 sm:col-span-2">
-              Graph rendering isn&apos;t implemented yet — the layout choice is saved, but the PDF
-              will show a note instead of a chart. Use &quot;Table&quot; for a rendered layout.
+            <p className="text-xs text-slate-500 sm:col-span-2">
+              The graph renders as a bar chart of the report&apos;s section scores, coloured by any
+              matching section bands, in both the PDF and the in-app preview.
             </p>
           )}
           <div className="flex items-center gap-2 sm:col-span-2">

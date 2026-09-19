@@ -114,6 +114,7 @@ ROLE_PERMISSIONS = {
         ("accounts", "add"),
         ("accounts", "change"),
         ("organizations", "view"),
+        ("organizations", "add"),
         ("organizations", "change"),
         ("assessment", "view"),
         ("assessment", "add"),
@@ -161,7 +162,7 @@ ROLE_PERMISSIONS = {
         ("question_bank", "change"),
         ("question_bank", "delete"),
         ("question_bank", "request_delete"),
-        ("assessment", "view"),
+        # Report 4 SME-3: SME has no right to view/take assessments.
         # H14: empanelled role — bills CJ Admin for question authoring (Doc 4).
         ("invoicing", "view"),
         ("invoicing", "add"),
@@ -172,7 +173,7 @@ ROLE_PERMISSIONS = {
         ("question_bank", "review"),
         ("question_bank", "approve"),
         ("question_bank", "reject"),
-        ("assessment", "view"),
+        # Report 4 Reviewer-4: reviewer has no right to view/take assessments.
         # H14: empanelled role — bills CJ Admin for review work (Doc 4).
         ("invoicing", "view"),
         ("invoicing", "add"),
@@ -207,7 +208,8 @@ ROLE_PERMISSIONS = {
         ("counseling", "add"),
         ("counseling", "change"),
         ("accounts", "view"),
-        ("assessment", "view"),
+        # Report 4 Counsellor-1/2: no assessment or profiling access.
+        # Reports are kept (limited to the counsellor's own clients).
         ("reporting", "view"),
         # H14: empanelled role — bills CJ Admin for counselling delivery (Doc 4).
         ("invoicing", "view"),

@@ -34,7 +34,8 @@ export default function SettingsPage() {
     const next: typeof errors = {};
     if (!oldPassword) next.old = "Current password is required.";
     if (!isStrongPassword(newPassword)) {
-      next.new = "Password must be at least 8 characters with a letter and a number.";
+      next.new =
+        "Password needs 8+ characters with a letter, a number, and a special character, and must not start with a number.";
     }
     if (newPassword !== confirm) next.confirm = "Passwords do not match.";
     setErrors(next);

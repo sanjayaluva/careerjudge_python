@@ -20,11 +20,21 @@ from rest_framework.viewsets import ModelViewSet
 from .models import Payment, PaymentSettings
 from .serializers import PaymentSerializer
 from .services import (
+    _update_module_payment_status,
+    create_razorpay_order,
     create_stripe_checkout_session,
     get_or_create_payment,
+    handle_razorpay_webhook,
     handle_stripe_webhook,
+    verify_razorpay_payment,
     verify_stripe_payment,
 )
+
+
+def _is_payments_admin(user) -> bool:
+    if user.is_superuser:
+        return True
+    return user.role_id is not None and user.role.name == "cj_admin"
 
 
 class PaymentViewSet(ModelViewSet):
@@ -121,6 +131,21 @@ class PaymentViewSet(ModelViewSet):
                 status=status.HTTP_200_OK,
             )
 
+        # E-PLT-4: Razorpay is the dossier's primary gateway. When it's the
+        # active provider and configured, create a Razorpay order and return
+        # the checkout params for the frontend widget.
+        settings_obj = PaymentSettings.get()
+        if settings_obj.active_provider == "razorpay" and settings_obj.is_razorpay_configured:
+            order = create_razorpay_order(payment)
+            if order:
+                return Response(
+                    {
+                        "message": "Razorpay order created.",
+                        "data": {"provider": "razorpay", "order": order},
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
         # Try Stripe checkout
         frontend_url = request.build_absolute_uri("/").rstrip("/")
         success_url = f"{frontend_url}/payments/success?session_id={{CHECKOUT_SESSION_ID}}"
@@ -174,6 +199,30 @@ class PaymentViewSet(ModelViewSet):
 
         Body: { "session_id": "cs_test_..." }
         """
+        # E-PLT-4: Razorpay verification — the frontend returns the order id,
+        # payment id and signature from the checkout widget.
+        razorpay_order_id = request.data.get("razorpay_order_id")
+        if razorpay_order_id:
+            ok = verify_razorpay_payment(
+                razorpay_order_id,
+                request.data.get("razorpay_payment_id", ""),
+                request.data.get("razorpay_signature", ""),
+            )
+            if ok:
+                return Response(
+                    {"message": "Payment verified successfully.", "data": {"status": "paid"}},
+                    status=status.HTTP_200_OK,
+                )
+            return Response(
+                {
+                    "error": {
+                        "code": "verification_failed",
+                        "message": "Signature verification failed.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         session_id = request.data.get("session_id")
         if not session_id:
             return Response(
@@ -201,6 +250,79 @@ class PaymentViewSet(ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=False, methods=["get"])
+    def pending(self, request):
+        """Admin payment-authorise workflow (E-PLT-2): list payments awaiting
+        manual authorisation (e.g. offline / manual-gateway payments)."""
+        if not _is_payments_admin(request.user):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only CJ Admin can view pending payments.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        payments = (
+            Payment.objects.filter(status="pending").select_related("user").order_by("-created_at")
+        )
+        return Response(
+            {"message": "OK", "data": PaymentSerializer(payments, many=True).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"])
+    def authorise(self, request, pk=None):
+        """Admin payment-authorise workflow (E-PLT-2): CJ Admin manually
+        authorises a pending payment (offline transfer, cash, manual gateway),
+        marking it paid and propagating that to the linked module so the
+        candidate/student/counselee gets access."""
+        if not _is_payments_admin(request.user):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only CJ Admin can authorise payments.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        payment = Payment.objects.filter(pk=pk).first()
+        if not payment:
+            return Response(
+                {"error": {"code": "not_found", "message": "Payment not found."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if payment.status in ("paid", "free"):
+            return Response(
+                {"message": "Payment already settled.", "data": {"status": payment.status}},
+                status=status.HTTP_200_OK,
+            )
+        if payment.status not in ("pending", "failed"):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": f"Cannot authorise a payment in status '{payment.status}'.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from django.utils import timezone
+
+        payment.status = "paid"
+        payment.paid_at = timezone.now()
+        note = (request.data.get("reference") or "manual-authorisation").strip()
+        payment.provider = payment.provider or "manual"
+        payment.provider_session_id = payment.provider_session_id or note
+        payment.save(update_fields=["status", "paid_at", "provider", "provider_session_id"])
+        _update_module_payment_status(payment)
+        return Response(
+            {"message": "Payment authorised.", "data": PaymentSerializer(payment).data},
+            status=status.HTTP_200_OK,
+        )
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -217,3 +339,14 @@ def stripe_webhook(request):
     if success:
         return HttpResponse(status=200)
     return HttpResponse(status=400)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def razorpay_webhook(request):
+    """Razorpay webhook endpoint (E-PLT-4) — no auth; the body is verified by
+    the X-Razorpay-Signature HMAC against the configured webhook secret."""
+    payload = request.body
+    signature = request.META.get("HTTP_X_RAZORPAY_SIGNATURE", "")
+    success = handle_razorpay_webhook(payload, signature)
+    return HttpResponse(status=200 if success else 400)

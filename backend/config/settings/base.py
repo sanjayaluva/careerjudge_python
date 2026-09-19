@@ -120,6 +120,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    # E-SRS-1: elective dossier password policy.
+    {"NAME": "apps.accounts.validators.SpecialCharacterValidator"},
+    {"NAME": "apps.accounts.validators.NoLeadingDigitValidator"},
 ]
 
 LANGUAGE_CODE = "en-us"

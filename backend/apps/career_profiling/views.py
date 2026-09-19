@@ -506,10 +506,27 @@ class ProfilingSolutionViewSet(ModelViewSet):
             )
 
         serializer = MappingRuleSerializer(data=request.data)
+        # CP-1: the n-by-n grid is edited cell-by-cell (upsert below). Drop the
+        # auto-generated unique_together validator that would otherwise reject a
+        # re-save of an existing (band_definition, criterion, user) cell with 400
+        # before the upsert can run.
+        from rest_framework.validators import UniqueTogetherValidator
+
+        serializer.validators = [
+            v for v in serializer.validators if not isinstance(v, UniqueTogetherValidator)
+        ]
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        data = serializer.validated_data
+        from .models import MappingRule
+
+        rule, _created = MappingRule.objects.update_or_create(
+            band_definition=data["band_definition"],
+            criterion_band_code=data["criterion_band_code"],
+            user_band_code=data["user_band_code"],
+            defaults={"value": data["value"]},
+        )
         return Response(
-            {"message": "Mapping rule created.", "data": serializer.data},
+            {"message": "Mapping rule saved.", "data": MappingRuleSerializer(rule).data},
             status=status.HTTP_201_CREATED,
         )
 

@@ -17,6 +17,7 @@ import {
   getSessionQuestions,
   retrieveSession,
   submitAnswer,
+  submitGroupAnswer,
   submitSessionResult,
   suspendSession,
 } from "@/api/assessment";
@@ -108,29 +109,77 @@ export default function SessionPlayerPage() {
   // The shuffle is stable per session (seeded by session ID) so the candidate
   // sees the same order on refresh, but different from the authoring order.
   const questions = (() => {
-    if (!rawQuestions) return undefined;
-    if (session?.display_order === "RANDOM" && rawQuestions.length > 0) {
-      // Simple shuffle — seeded by session ID for consistency across refreshes
-      // (not cryptographically secure, but sufficient for display ordering)
-      const shuffled = [...rawQuestions];
-      let seed = sid;
-      for (let i = shuffled.length - 1; i > 0; i--) {
+    if (!rawQuestions || rawQuestions.length === 0) return rawQuestions;
+
+    // Deterministic shuffle seeded per session, so the order is stable across
+    // refreshes (not cryptographically secure — display ordering only).
+    const shuffleSeeded = <T,>(arr: T[], seedBase: number): T[] => {
+      const a = [...arr];
+      let seed = seedBase;
+      for (let i = a.length - 1; i > 0; i--) {
         seed = (seed * 9301 + 49297) % 233280;
         const j = Math.floor((seed / 233280) * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        [a[i], a[j]] = [a[j], a[i]];
       }
-      return shuffled;
+      return a;
+    };
+
+    // Assessment-level RANDOM shuffles the whole set (existing behaviour).
+    if (session?.display_order === "RANDOM") {
+      return shuffleSeeded(rawQuestions, sid);
     }
-    return rawQuestions;
+
+    // ASM-5 (§5.1): otherwise apply per-section order — shuffle questions within
+    // sections whose order_mode is RANDOM, keeping the delivered order elsewhere.
+    // Delivered questions are already grouped by section (backend sorts by
+    // level/order), so shuffle each consecutive same-section run in place.
+    if (!rawQuestions.some((q) => q.section_order_mode === "RANDOM")) {
+      return rawQuestions;
+    }
+    const result: typeof rawQuestions = [];
+    let i = 0;
+    while (i < rawQuestions.length) {
+      const sec = rawQuestions[i].section;
+      let j = i;
+      while (j < rawQuestions.length && rawQuestions[j].section === sec) j++;
+      const group = rawQuestions.slice(i, j);
+      if (group[0]?.section_order_mode === "RANDOM") {
+        result.push(...shuffleSeeded(group, sid + (sec ?? 0)));
+      } else {
+        result.push(...group);
+      }
+      i = j;
+    }
+    return result;
   })();
 
+  // PSY-A1: a psychometric group is delivered with a negative synthetic
+  // question id (``-group_id``). Route its answer to the group endpoint; every
+  // real (positive-id) question keeps the normal answer endpoint, so all the
+  // existing call sites (Next/Prev/Skip/Bookmark/Submit) work unchanged.
+  const persistAnswer = (payload: {
+    question_id: number;
+    raw_answer?: Record<string, unknown>;
+    bookmark?: boolean;
+    sub_question_index?: number;
+  }): Promise<unknown> => {
+    if (payload.question_id < 0) {
+      // Bookmark is a client-only convenience for a group (no server state);
+      // don't let a bookmark click mark the group skipped.
+      if (payload.bookmark && payload.raw_answer == null) {
+        return Promise.resolve({
+          group_id: -payload.question_id,
+          status: "not_attempted",
+          raw_answer: null,
+        });
+      }
+      return submitGroupAnswer(sid, -payload.question_id, payload.raw_answer);
+    }
+    return submitAnswer(sid, payload);
+  };
+
   const answerMutation = useMutation({
-    mutationFn: (payload: {
-      question_id: number;
-      raw_answer?: Record<string, unknown>;
-      bookmark?: boolean;
-      sub_question_index?: number;
-    }) => submitAnswer(sid, payload),
+    mutationFn: persistAnswer,
     onError: (err) => toast.error(extractApiError(err)),
   });
 
@@ -375,6 +424,57 @@ export default function SessionPlayerPage() {
     );
   };
 
+  // QT-3: rating items (STANDARD_RATING_SCALE / FORCED_CHOICE_*) in the same
+  // section render as one continuous-scroll screen. The first item renders in
+  // the normal question area; the rest of its same-section rating run renders
+  // below it, and Next advances past the whole group.
+  const CONTINUOUS_RATING_TYPES = new Set([
+    "STANDARD_RATING_SCALE",
+    "FORCED_CHOICE_SINGLE_LEVEL",
+    "FORCED_CHOICE_TWO_LEVEL",
+  ]);
+  // Only single-sub-question items can share a continuous screen — a
+  // multi-sub-question type (e.g. FORCED_CHOICE_TWO_LEVEL) must keep its
+  // one-at-a-time sub-question flow, or later sub-questions would be dropped.
+  // PSY-A1: a psychometric group already renders every statement on one screen
+  // and saves via the group endpoint, so it must NOT be folded into the
+  // continuous-rating scroll grouping (which saves per question id).
+  const isGroupable = (sq: (typeof questions)[number]) =>
+    sq.group_id == null &&
+    CONTINUOUS_RATING_TYPES.has(sq.question_detail.question_type) &&
+    (sq.question_detail.sub_question_count ?? 1) <= 1;
+  const continuousTail: number[] = [];
+  if (isGroupable(q) && activeSubQ === 0) {
+    for (let i = currentIndex + 1; i < questions.length; i++) {
+      const nq = questions[i];
+      if (nq.section === q.section && isGroupable(nq)) {
+        continuousTail.push(i);
+      } else {
+        break;
+      }
+    }
+  }
+  const groupLastIndex = continuousTail[continuousTail.length - 1] ?? currentIndex;
+  const groupIsLast = groupLastIndex === questions.length - 1;
+  const effectiveIsLast = continuousTail.length ? groupIsLast : isLast;
+  const positionLabel = continuousTail.length
+    ? `Questions ${currentIndex + 1}–${groupLastIndex + 1} of ${questions.length}`
+    : `Question ${currentIndex + 1} of ${questions.length}`;
+  // Snap an index to the start of its continuous-rating group, so navigating
+  // (Previous / sidebar) lands on the whole group rather than a lone member.
+  const groupStartOf = (index: number): number => {
+    if (index < 0 || index >= questions.length || !isGroupable(questions[index])) return index;
+    let start = index;
+    while (
+      start > 0 &&
+      isGroupable(questions[start - 1]) &&
+      questions[start - 1].section === questions[start].section
+    ) {
+      start--;
+    }
+    return start;
+  };
+
   const handleNext = () => {
     // Save current answer before navigating
     const currentAnswer = answers[answerKey];
@@ -394,6 +494,24 @@ export default function SessionPlayerPage() {
     // Requirement 3: sub-questions must be delivered in order 1,2,3.
     if (subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) {
       setActiveSubQ((s) => s + 1);
+      return;
+    }
+    // QT-3: a continuous-rating group shows every member on one screen — save
+    // each member's answer and advance past the whole group.
+    if (continuousTail.length) {
+      for (const gi of continuousTail) {
+        const gq = questions[gi];
+        const ga = answers[`${gq.question}_0`];
+        if (ga) {
+          answerMutation.mutate({
+            question_id: gq.question,
+            raw_answer: ga,
+            sub_question_index: 0,
+          });
+        }
+        setViewedQuestions((prev) => new Set(prev).add(gq.question));
+      }
+      if (!groupIsLast) setCurrentIndex(continuousTail[continuousTail.length - 1] + 1);
       return;
     }
     // Otherwise, move to the next question in the assessment.
@@ -421,7 +539,7 @@ export default function SessionPlayerPage() {
       if (q?.question) {
         setViewedQuestions((prev) => new Set(prev).add(q.question));
       }
-      setCurrentIndex((i) => i - 1);
+      setCurrentIndex((i) => groupStartOf(i - 1));
     }
   };
 
@@ -485,7 +603,7 @@ export default function SessionPlayerPage() {
     for (const [key, ans] of Object.entries(answers)) {
       const [qId, subIdx] = key.split("_");
       savePromises.push(
-        submitAnswer(sid, {
+        persistAnswer({
           question_id: Number(qId),
           sub_question_index: Number(subIdx),
           raw_answer: ans,
@@ -515,8 +633,8 @@ export default function SessionPlayerPage() {
         <div>
           <h1 className="text-sm font-bold text-slate-900">{session.assessment_title}</h1>
           <p className="text-xs text-slate-500">
-            Question {currentIndex + 1} of {questions.length} · Answered: {answeredCount} /{" "}
-            {totalQuestions} · Bookmarked: {bookmarkedCount} · Skipped: {skippedCount}
+            {positionLabel} · Answered: {answeredCount} / {totalQuestions} · Bookmarked:{" "}
+            {bookmarkedCount} · Skipped: {skippedCount}
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -628,7 +746,8 @@ export default function SessionPlayerPage() {
                     const isAnswered = Boolean(answers[aKey]);
                     const isBookmarked = bookmarked.has(aKey);
                     const isSkipped = skipped.has(aKey);
-                    const isCurrent = i === currentIndex;
+                    // QT-3: highlight the whole continuous-rating group as active.
+                    const isCurrent = i >= currentIndex && i <= groupLastIndex;
                     const jumpAllowed = canJumpTo(i);
                     const isDisabled = presentationActive || !jumpAllowed;
                     return (
@@ -644,7 +763,7 @@ export default function SessionPlayerPage() {
                               raw_answer: currentAnswer,
                             });
                           }
-                          setCurrentIndex(i);
+                          setCurrentIndex(groupStartOf(i));
                         }}
                         title={
                           presentationActive
@@ -865,6 +984,7 @@ export default function SessionPlayerPage() {
                 </div>
               ) : (
                 <AnswerInput
+                  key={answerKey}
                   question={q}
                   currentAnswer={answers[answerKey]}
                   onChange={(ans) => {
@@ -880,6 +1000,39 @@ export default function SessionPlayerPage() {
                   }}
                   activeSubQ={activeSubQ}
                 />
+              )}
+              {continuousTail.length > 0 && !presentationActive && (
+                <div className="mt-6 space-y-6 border-t border-slate-200 pt-6">
+                  {continuousTail.map((gi) => {
+                    const gq = questions[gi];
+                    const gKey = `${gq.question}_0`;
+                    return (
+                      <div key={gq.id}>
+                        <div
+                          className="prose prose-sm mb-3 max-w-none text-base font-medium text-slate-900 [&_p]:my-1"
+                          dangerouslySetInnerHTML={{
+                            __html: gq.question_detail.question_text_1 || "",
+                          }}
+                        />
+                        <AnswerInput
+                          question={gq}
+                          currentAnswer={answers[gKey]}
+                          onChange={(ans) => {
+                            setAnswers({ ...answers, [gKey]: ans });
+                            if (skipped.has(gKey)) {
+                              setSkipped((prev) => {
+                                const next = new Set(prev);
+                                next.delete(gKey);
+                                return next;
+                              });
+                            }
+                          }}
+                          activeSubQ={0}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -904,7 +1057,7 @@ export default function SessionPlayerPage() {
           ← Previous
         </Button>
         <p className="text-xs text-slate-400">
-          Question {currentIndex + 1} / {questions.length}
+          {positionLabel}
           {subQuestionCount > 1 && (
             <span className="ml-2 text-primary-600">
               · Sub-question {activeSubQ + 1} / {subQuestionCount}
@@ -916,19 +1069,21 @@ export default function SessionPlayerPage() {
               and move on. Disabled during a timed presentation — same gate
               as Next/Submit — so it can't be used to bypass anti-cheat
               content gating. */}
-          <Button
-            variant="ghost"
-            onClick={handleSkip}
-            disabled={presentationActive}
-            title={
-              presentationActive
-                ? "Answer options will appear after the presentation ends"
-                : "Skip this question without answering it"
-            }
-          >
-            Skip
-          </Button>
-          {isLast && !(subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) ? (
+          {continuousTail.length === 0 && (
+            <Button
+              variant="ghost"
+              onClick={handleSkip}
+              disabled={presentationActive}
+              title={
+                presentationActive
+                  ? "Answer options will appear after the presentation ends"
+                  : "Skip this question without answering it"
+              }
+            >
+              Skip
+            </Button>
+          )}
+          {effectiveIsLast && !(subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) ? (
             <Button
               onClick={handleSubmit}
               loading={submitMutation.isPending}
@@ -1026,6 +1181,9 @@ function AnswerInput({
   const qd = question.question_detail;
   const qType = qd.question_type;
   const [selectedA, setSelectedA] = useState<number | null>(null);
+  // QT-4: hotspot-multi (5b) — a click is pending until the candidate confirms
+  // it; only confirmed clicks count (cancelled clicks have no penalty).
+  const [pendingClick, setPendingClick] = useState<{ x: number; y: number } | null>(null);
 
   // MCQ types — radio or checkbox
   if (qType.startsWith("MCQ_")) {
@@ -1393,7 +1551,8 @@ function AnswerInput({
       const natY = Math.round(y * scaleY);
 
       if (isMulti) {
-        onChange({ clicks: [...clicks, { x: natX, y: natY }] });
+        // QT-4: stage the click; it only counts once the candidate confirms.
+        setPendingClick({ x: natX, y: natY });
       } else {
         // Single answer: only keep latest click
         onChange({ clicks: [{ x: natX, y: natY }] });
@@ -1484,13 +1643,41 @@ function AnswerInput({
                     </text>
                   </g>
                 ))}
+                {pendingClick && (
+                  <circle
+                    cx={pendingClick.x}
+                    cy={pendingClick.y}
+                    r={9}
+                    fill="rgba(234,179,8,0.35)"
+                    stroke="#eab308"
+                    strokeWidth="2"
+                    strokeDasharray="3 2"
+                  />
+                )}
               </svg>
             </div>
             <p className="mt-2 text-xs text-slate-500">
               {isMulti
-                ? "Click on the image to mark your answers. Multiple clicks allowed."
+                ? "Click on the image to mark your answers, then confirm each one. Only confirmed clicks count."
                 : "Click on the image to select your answer. Only your latest click counts."}
             </p>
+            {isMulti && pendingClick && (
+              <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-sm">
+                <span className="text-amber-800">Confirm your selection?</span>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    onChange({ clicks: [...clicks, pendingClick] });
+                    setPendingClick(null);
+                  }}
+                >
+                  Confirm
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setPendingClick(null)}>
+                  Cancel
+                </Button>
+              </div>
+            )}
             {clicks.length > 0 && (
               <Button
                 variant="outline"

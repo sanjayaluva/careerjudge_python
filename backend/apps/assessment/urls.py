@@ -8,6 +8,7 @@ from .views import (
     AssessmentQuestionViewSet,
     AssessmentSectionViewSet,
     AssessmentViewSet,
+    PsychometricGroupViewSet,
     SessionViewSet,
 )
 
@@ -37,6 +38,12 @@ section_router.register("sections", AssessmentSectionViewSet, basename="section"
 question_router = DefaultRouter()
 question_router.register("questions", AssessmentQuestionViewSet, basename="question")
 
+# PSY-A1: psychometric groups nested under an assessment
+psych_router = DefaultRouter()
+psych_router.register(
+    "psychometric-groups", PsychometricGroupViewSet, basename="psychometric-group"
+)
+
 urlpatterns = [
     # Session routes — included FIRST so /api/assessments/sessions/ matches
     # before /api/assessments/<pk>/ (which would treat 'sessions' as a pk).
@@ -46,6 +53,11 @@ urlpatterns = [
     path(
         "assessments/<int:assessment_id>/",
         include(section_router.urls),
+    ),
+    # Psychometric groups (nested under assessment) — PSY-A1
+    path(
+        "assessments/<int:assessment_id>/",
+        include(psych_router.urls),
     ),
     # Assessment questions (nested under section)
     path(

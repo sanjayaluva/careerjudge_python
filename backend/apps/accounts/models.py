@@ -501,7 +501,8 @@ class EmailVerificationToken(models.Model):
         if not self.expires_at:
             from datetime import timedelta
 
-            self.expires_at = timezone.now() + timedelta(hours=24)
+            # E-SRS-2: registration / activation links are valid for 48 hours.
+            self.expires_at = timezone.now() + timedelta(hours=48)
         super().save(*args, **kwargs)
 
 

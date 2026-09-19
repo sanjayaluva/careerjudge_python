@@ -20,7 +20,8 @@ export default function ResetPasswordPage() {
   const validate = (): boolean => {
     const next: typeof errors = {};
     if (!isStrongPassword(password)) {
-      next.password = "Password must be at least 8 characters with a letter and a number.";
+      next.password =
+        "Password needs 8+ characters with a letter, a number, and a special character, and must not start with a number.";
     }
     if (password !== confirm) {
       next.confirm = "Passwords do not match.";

@@ -15,10 +15,10 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 
-import { Alert, AlertDescription, Button, Label, Spinner } from "@/components/ui";
+import { Alert, AlertDescription, Button, Input, Label, Spinner } from "@/components/ui";
 import {
   bulkSaveOptions,
   createFlashItem,
@@ -82,6 +82,7 @@ const DEFAULT_SCORING_BY_TYPE: Record<string, string> = {
 export default function QuestionEditorPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const questionId = id ? Number(id) : null;
   const isEditMode = Boolean(questionId);
   const queryClient = useQueryClient();
@@ -92,6 +93,7 @@ export default function QuestionEditorPage() {
   const [cognitiveLevel, setCognitiveLevel] = useState("");
   const [workedSolution, setWorkedSolution] = useState("");
   const [categoryId, setCategoryId] = useState<number | "">("");
+  const [expiresAt, setExpiresAt] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   // Fetch categories for the category dropdown.
@@ -100,6 +102,26 @@ export default function QuestionEditorPage() {
     queryFn: () => listCategories(),
     staleTime: 60_000,
   });
+
+  // E-X8: task→question autofill. When the editor is opened from a task
+  // (?task_type=…&task_category=…), prefill the question type and category.
+  // TaskSpec stores category NAMES, so map name→id once categories load.
+  const [prefilled, setPrefilled] = useState(false);
+  useEffect(() => {
+    if (isEditMode || prefilled) return;
+    const taskType = searchParams.get("task_type");
+    const taskCategory = searchParams.get("task_category");
+    if (!taskType && !taskCategory) return;
+    if (taskType && QUESTION_TYPES.some((t) => t.value === taskType)) {
+      setQuestionType(taskType);
+    }
+    if (taskCategory && categories) {
+      const match = categories.find((c) => c.name.toLowerCase() === taskCategory.toLowerCase());
+      if (match) setCategoryId(match.id);
+    }
+    // Only mark done once categories are available (so the name match runs).
+    if (!taskCategory || categories) setPrefilled(true);
+  }, [isEditMode, prefilled, searchParams, categories]);
 
   // Shared question data
   const [questionText1, setQuestionText1] = useState("");
@@ -169,6 +191,7 @@ export default function QuestionEditorPage() {
     setCognitiveLevel(q.cognitive_level ?? "");
     setWorkedSolution(q.worked_solution ?? "");
     setCategoryId(q.category ?? "");
+    setExpiresAt(q.expires_at ? q.expires_at.slice(0, 10) : "");
     setQuestionText1(q.question_text_1 ?? "");
     setQuestionText2(q.question_text_2 ?? "");
     setScoringType(q.scoring_type ?? "BINARY");
@@ -656,6 +679,9 @@ export default function QuestionEditorPage() {
     if (categoryId) payload.category = categoryId;
     else payload.category = null;
 
+    // QB-3: optional validity expiry for periodic QB review (D1 §4.3).
+    payload.expires_at = expiresAt || null;
+
     if (passageTitle) payload.passage_title = passageTitle;
     if (passageBody) payload.passage_body = passageBody;
     if (displayDuration) payload.display_duration_seconds = parseInt(displayDuration);
@@ -947,6 +973,18 @@ export default function QuestionEditorPage() {
                   <option value="Evaluation">Evaluation</option>
                   <option value="Synthesis">Synthesis</option>
                 </select>
+              </div>
+              <div>
+                <Label htmlFor="expires">Expiry (optional)</Label>
+                <Input
+                  id="expires"
+                  type="date"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Periodic QB review (D1 §4.3). Blank = no expiry.
+                </p>
               </div>
             </div>
           </div>

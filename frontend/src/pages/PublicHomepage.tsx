@@ -1,13 +1,14 @@
 /**
  * Public Homepage — the landing page for careerjudge.pp.ua
  *
- * Shows:
- * - Hero banner (from CMS) with title, subtitle, CTA
- * - Services overview (hardcoded sections pointing to modules)
+ * Shows a static marketing landing page:
+ * - Hero banner with title, subtitle, CTA
+ * - Services overview (sections pointing to modules)
  * - Call-to-action section
  *
- * All content is driven by CMS banners where available. If no banners
- * are configured, sensible defaults are shown.
+ * Content is static and user-aware (guest vs. signed-in CTAs). The SRS does
+ * not require a CMS-driven homepage, so the copy is hardcoded here (BUG-3:
+ * a previous comment claimed CMS-driven content that was never fetched).
  */
 import { Link } from "react-router-dom";
 

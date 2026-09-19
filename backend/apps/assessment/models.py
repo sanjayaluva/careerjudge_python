@@ -128,6 +128,17 @@ class Assessment(models.Model):
         default="SINGLE_SESSION",
     )
 
+    # Pay-for-test (PLT-3): price to attempt this assessment. 0 = free. When
+    # > 0, a candidate must have a completed payment (Payment module
+    # "assessment", item_id = this assessment) before a new session starts.
+    price = models.DecimalField(
+        _("price"),
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text=_("Price to attempt this assessment. 0 = free (no payment gate)."),
+    )
+
     # Audit
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -207,6 +218,16 @@ class AssessmentSection(models.Model):
         help_text=_("1-4. Level 1 = top-level variable, Level 4 = deepest sub-variable."),
     )
     order = models.PositiveIntegerField(_("order"), default=0)
+    order_mode = models.CharField(
+        _("order mode"),
+        max_length=10,
+        choices=[("STATIC", "Static (as configured)"), ("RANDOM", "Random")],
+        default="STATIC",
+        help_text=_(
+            "ASM-5 / §5.1: delivery order of this section's questions — STATIC keeps "
+            "the configured order; RANDOM shuffles them per session (per-level ordering)."
+        ),
+    )
     duration_seconds = models.PositiveIntegerField(
         _("duration (seconds)"),
         null=True,
@@ -480,3 +501,117 @@ class AssessmentModificationRequest(models.Model):
 
     def __str__(self) -> str:
         return f"{self.action} request for '{self.assessment.title}' ({self.status})"
+
+
+# ---------------------------------------------------------------------------
+# Psychometric grouping (PSY-A1) — signed Approach 1
+#
+# Psychometric statements are authored in the Question Bank as plain text
+# (no options, Doc 1 §3.1.6). At assessment configuration the operator draws
+# statements from the QB, assigns each to a section/variable, and groups them
+# into Rank Groups or Forced-Choice Pairs (Doc 3 §4.2.2/§4.2.3). Each item
+# below records one statement's placement (which group + which section), so the
+# section comes from an explicit assignment — never from tagging an answer
+# option (which psychometric questions do not have).
+# ---------------------------------------------------------------------------
+
+
+class PsychometricGroup(models.Model):
+    """A rank group or forced-choice pair delivered as one question."""
+
+    GROUP_TYPE_CHOICES = [
+        ("rank_simple", "Simple Ranking (6a)"),
+        ("rank_then_rate", "Rank then Rate (6b)"),
+        ("forced_choice_single", "Forced Choice - Single Level (8a)"),
+        ("forced_choice_two_level", "Forced Choice - Two Level (8b)"),
+    ]
+
+    assessment = models.ForeignKey(
+        Assessment, on_delete=models.CASCADE, related_name="psychometric_groups"
+    )
+    group_type = models.CharField(_("group type"), max_length=30, choices=GROUP_TYPE_CHOICES)
+    group_number = models.PositiveIntegerField(_("group number"), default=1)
+    # For rank_then_rate / forced_choice_two_level: the rating scale size.
+    rating_scale_points = models.PositiveIntegerField(
+        _("rating scale points"), null=True, blank=True
+    )
+    order = models.PositiveIntegerField(_("order"), default=0)
+
+    class Meta:
+        ordering = ["order", "group_number"]
+        verbose_name = _("psychometric group")
+        verbose_name_plural = _("psychometric groups")
+
+    def __str__(self) -> str:
+        return f"{self.assessment.title} > {self.group_type} #{self.group_number}"
+
+    @property
+    def is_forced_choice(self) -> bool:
+        return self.group_type in ("forced_choice_single", "forced_choice_two_level")
+
+
+class PsychometricGroupItem(models.Model):
+    """One statement placed in a group and assigned to a section/variable."""
+
+    group = models.ForeignKey(PsychometricGroup, on_delete=models.CASCADE, related_name="items")
+    statement = models.ForeignKey(
+        "question_bank.Question",
+        on_delete=models.CASCADE,
+        related_name="psychometric_group_items",
+    )
+    section = models.ForeignKey(
+        AssessmentSection, on_delete=models.CASCADE, related_name="psychometric_group_items"
+    )
+    order = models.PositiveIntegerField(_("order"), default=0)
+
+    class Meta:
+        ordering = ["order"]
+        unique_together = [("group", "statement")]
+        verbose_name = _("psychometric group item")
+        verbose_name_plural = _("psychometric group items")
+
+    def __str__(self) -> str:
+        return f"{self.group} :: {self.statement_id} -> section {self.section_id}"
+
+
+class PsychometricGroupResponse(models.Model):
+    """A candidate's answer to one psychometric group within a session (PSY-A1).
+
+    A psychometric group (Rank Group / Forced-Choice Pair) is delivered as one
+    unit — the candidate ranks/rates/selects among the group's statements. The
+    group is NOT a Question, so its answer cannot live on a QuestionAttempt;
+    this model is the group's equivalent attempt store. ``raw_answer`` uses the
+    same shapes the player already produces for the matching question type:
+
+      - rank_simple:      {"ranking": [item_id, ...]}
+      - rank_then_rate:   {"ranking": [...], "ratings": {"<item_id>": r}}
+      - forced_choice_*:  {"selected_option_id": item_id, "rating": r?}
+
+    where each ``item_id`` is a ``PsychometricGroupItem`` id. Scoring routes each
+    item's contribution to that item's explicitly-assigned section
+    (``PsychometricGroupItem.section``) — see ``scoring.score_psychometric_group``.
+    """
+
+    STATUS_CHOICES = [
+        ("not_attempted", "Not Attempted"),
+        ("attempted", "Attempted"),
+        ("skipped", "Skipped"),
+    ]
+
+    session = models.ForeignKey(
+        AssessmentSession, on_delete=models.CASCADE, related_name="group_responses"
+    )
+    group = models.ForeignKey(PsychometricGroup, on_delete=models.CASCADE, related_name="responses")
+    status = models.CharField(
+        _("status"), max_length=20, choices=STATUS_CHOICES, default="not_attempted"
+    )
+    raw_answer = models.JSONField(_("raw answer"), null=True, blank=True)
+    answered_at = models.DateTimeField(_("answered at"), null=True, blank=True)
+
+    class Meta:
+        unique_together = [("session", "group")]
+        verbose_name = _("psychometric group response")
+        verbose_name_plural = _("psychometric group responses")
+
+    def __str__(self) -> str:
+        return f"Session #{self.session_id} - Group #{self.group_id} ({self.status})"

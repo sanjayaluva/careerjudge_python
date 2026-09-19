@@ -49,7 +49,10 @@ const EVERY_MODULE_KEY: ModuleKey[] = MODULE_VISIBILITY.cj_admin;
 
 // Every authenticated user sees these regardless of role/grants — they have
 // no backend ModuleRight equivalent to derive from.
-const ALWAYS_VISIBLE_MODULES: ModuleKey[] = ["dashboard", "profile"];
+// dashboard/profile are universal; "concerns" (Contact Admin) and "messaging"
+// (Send Message) are signed universal user capabilities (User Details.pdf p.1),
+// available to every authenticated role including the Individual User.
+const ALWAYS_VISIBLE_MODULES: ModuleKey[] = ["dashboard", "profile", "concerns", "messaging"];
 
 function isModuleVisible(
   module: ModuleKey,

@@ -43,6 +43,22 @@ class HasAccountsPermission(HasModulePermission):
     }
 
 
+_CORPORATE_ROLES = ("corp_admin", "corp_exclusive", "group_admin", "channel_partner")
+
+
+def _is_corporate_member(user) -> bool:
+    """True when ``user`` belongs to a corporate/corp-exclusive organization.
+
+    Such users are owned by their corporate admin: per CJ_UC003/UC004 the CJ
+    Admin cannot modify or delete them.
+    """
+    from apps.organizations.models import OrganizationMember
+
+    return OrganizationMember.objects.filter(
+        user=user, organization__type__in=("corporate", "corp_exclusive")
+    ).exists()
+
+
 class UserViewSet(ModelViewSet):
     """CRUD for users — admin only.
 
@@ -93,6 +109,28 @@ class UserViewSet(ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+
+        # Doc 9 §2.3: when a corporate admin adds a user, auto-link the new
+        # account to the creator's organization so it is scoped to that
+        # corporate (and carries the supplied Employee ID). CJ Admin / staff
+        # creating users are unaffected (no membership → no linkage).
+        requester = request.user
+        req_role = requester.role.name if getattr(requester, "role", None) else None
+        if req_role in _CORPORATE_ROLES:
+            from apps.organizations.models import OrganizationMember
+            from apps.organizations.scoping import user_primary_organization
+
+            org = user_primary_organization(requester)
+            if (
+                org is not None
+                and not OrganizationMember.objects.filter(organization=org, user=user).exists()
+            ):
+                OrganizationMember.objects.create(
+                    organization=org,
+                    user=user,
+                    employee_id=(request.data.get("employee_id") or ""),
+                )
+
         return Response(
             {
                 "message": "User created.",
@@ -104,6 +142,24 @@ class UserViewSet(ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
+
+        # CJ_UC003: the CJ Admin cannot modify a corporate user's details —
+        # they belong to the corporate admin. (Corporate roles editing their
+        # own org's users, and self-service, are unaffected.)
+        requester = request.user
+        req_role = requester.role.name if getattr(requester, "role", None) else None
+        if (requester.is_superuser or req_role == "cj_admin") and _is_corporate_member(instance):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Corporate users cannot be modified by CJ Admin (CJ_UC003).",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
@@ -126,11 +182,28 @@ class UserViewSet(ModelViewSet):
         if instance.role and instance.role.name == "individual":
             requester = request.user
 
-            # CJ Admin or superuser → full access
+            # CJ_UC004: the CJ Admin cannot delete a CORPORATE individual —
+            # that user belongs to the corporate admin. Plain (non-corporate)
+            # individuals remain deletable by CJ Admin as before.
+            if (
+                requester.is_superuser or (requester.role and requester.role.name == "cj_admin")
+            ) and _is_corporate_member(instance):
+                return Response(
+                    {
+                        "error": {
+                            "code": "forbidden",
+                            "message": "Corporate individual users cannot be deleted by CJ Admin (CJ_UC004).",
+                            "details": {},
+                        }
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            # CJ Admin or superuser → full access (non-corporate individuals)
             if requester.is_superuser:
                 pass  # allowed
             elif requester.role and requester.role.name == "cj_admin":
-                pass  # allowed — CJ Admin can delete any individual user
+                pass  # allowed — CJ Admin can delete any non-corporate individual
             elif requester.role and requester.role.name in (
                 "corp_admin",
                 "corp_exclusive",
@@ -541,11 +614,21 @@ class BulkUserUploadView(APIView):
         skipped = []
         errors = []
 
+        # Doc 9 §2.3: a corporate admin's bulk upload links every created user to
+        # the uploader's organization. CJ Admin / staff uploads link nothing.
+        upload_org = None
+        req_role = request.user.role.name if getattr(request.user, "role", None) else None
+        if req_role in _CORPORATE_ROLES:
+            from apps.organizations.scoping import user_primary_organization
+
+            upload_org = user_primary_organization(request.user)
+
         for row_num, row in enumerate(reader, start=2):  # start=2 (1=header)
             full_name = (row.get("full_name") or "").strip()
             email = (row.get("email") or "").strip().lower()
             phone = (row.get("phone") or "").strip()
             role_name = (row.get("role_name") or "").strip().lower()
+            employee_id = (row.get("employee_id") or "").strip()
 
             # Skip comment rows (lines starting with #)
             if full_name.startswith("#"):
@@ -613,6 +696,16 @@ class BulkUserUploadView(APIView):
                 from apps.accounts.models import UserProfile
 
                 UserProfile.objects.get_or_create(user=user)
+                # Corporate bulk upload: link the new user to the uploader's org
+                # (with the row's Employee ID), scoping them to that corporate.
+                if upload_org is not None:
+                    from apps.organizations.models import OrganizationMember
+
+                    OrganizationMember.objects.get_or_create(
+                        organization=upload_org,
+                        user=user,
+                        defaults={"employee_id": employee_id},
+                    )
                 # Invited user: mint an activation token and send the same
                 # verification email self-registration uses, so they can
                 # actually activate their account (D9 §2.2-2.3).
@@ -658,8 +751,8 @@ class BulkUserTemplateView(APIView):
         )
 
         writer = csv.writer(response)
-        writer.writerow(["full_name", "email", "phone", "role_name"])
-        writer.writerow(["John Doe", "john.doe@example.com", "+1234567890", "individual"])
-        writer.writerow(["Jane Smith", "jane.smith@example.com", "", ""])
+        writer.writerow(["full_name", "email", "phone", "role_name", "employee_id"])
+        writer.writerow(["John Doe", "john.doe@example.com", "+1234567890", "individual", "EMP001"])
+        writer.writerow(["Jane Smith", "jane.smith@example.com", "", "", "EMP002"])
 
         return response

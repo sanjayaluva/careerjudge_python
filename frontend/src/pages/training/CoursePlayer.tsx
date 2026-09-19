@@ -652,7 +652,7 @@ function AssignmentsPanel({
   const queryClient = useQueryClient();
   const [submittingFor, setSubmittingFor] = useState<number | null>(null);
   const [reportText, setReportText] = useState("");
-  const [reportFile, setReportFile] = useState<File | null>(null);
+  const [reportFiles, setReportFiles] = useState<File[]>([]);
 
   const { data: existingReports } = useQuery({
     queryKey: ["training", "assignment-reports", registrationId],
@@ -661,12 +661,14 @@ function AssignmentsPanel({
 
   const submitMutation = useMutation({
     mutationFn: () => {
-      // Report 3 §3.6: if a file is attached, submit via multipart upload.
-      if (reportFile) {
+      // Report 3 §3.6 + E-X7: if files are attached, submit via multipart
+      // upload (one or many files of mixed formats).
+      if (reportFiles.length > 0) {
         return submitAssignmentReportFile(registrationId, {
           assignment: submittingFor!,
           report_text: reportText,
-          file: reportFile,
+          file: reportFiles[0],
+          files: reportFiles.slice(1),
         });
       }
       return submitAssignmentReport(registrationId, {
@@ -681,7 +683,7 @@ function AssignmentsPanel({
       toast.success("Report submitted. The trainer will review it.");
       setSubmittingFor(null);
       setReportText("");
-      setReportFile(null);
+      setReportFiles([]);
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -758,20 +760,29 @@ function AssignmentsPanel({
                     onChange={(e) => setReportText(e.target.value)}
                     placeholder="Write your report..."
                   />
-                  <Label htmlFor={`file-${a.id}`}>Or upload a file (PDF / PPT / Word)</Label>
+                  <Label htmlFor={`file-${a.id}`}>
+                    Or upload files (PDF / PPT / Word — you can attach several)
+                  </Label>
                   <input
                     id={`file-${a.id}`}
                     type="file"
+                    multiple
                     accept=".pdf,.doc,.docx,.ppt,.pptx"
-                    onChange={(e) => setReportFile(e.target.files?.[0] ?? null)}
+                    onChange={(e) => setReportFiles(Array.from(e.target.files ?? []))}
                     className="block w-full text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-700 hover:file:bg-primary-100"
                   />
+                  {reportFiles.length > 0 && (
+                    <p className="text-xs text-slate-500">
+                      {reportFiles.length} file{reportFiles.length !== 1 ? "s" : ""} selected:{" "}
+                      {reportFiles.map((f) => f.name).join(", ")}
+                    </p>
+                  )}
                   <div className="flex gap-2">
                     <Button
                       size="sm"
                       onClick={() => submitMutation.mutate()}
                       loading={submitMutation.isPending}
-                      disabled={!reportText && !reportFile}
+                      disabled={!reportText && reportFiles.length === 0}
                     >
                       Submit
                     </Button>
@@ -781,7 +792,7 @@ function AssignmentsPanel({
                       onClick={() => {
                         setSubmittingFor(null);
                         setReportText("");
-                        setReportFile(null);
+                        setReportFiles([]);
                       }}
                     >
                       Cancel

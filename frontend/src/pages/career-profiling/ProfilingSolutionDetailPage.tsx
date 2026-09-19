@@ -6,7 +6,7 @@
  * - Criteria: define criterion band codes per career/role
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
@@ -39,13 +39,16 @@ import {
   type ProfilingSolution,
   addSolutionAssessment,
   computeSolution,
+  createBand,
   createBandDefinition,
   createCriterion,
+  createMappingRule,
   createPolarMatchRule,
   createRankDefinition,
   deleteRankDefinition,
   downloadCriteriaTemplate,
   listAssessments,
+  listMappingRules,
   listMatchIndices,
   listPolarMatchRules,
   listRankDefinitions,
@@ -53,6 +56,7 @@ import {
   retrieveSolution,
   uploadCriteriaCsv,
 } from "@/api/careerProfiling";
+import { type AssessmentSection, listSections } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -123,6 +127,7 @@ export default function ProfilingSolutionDetailPage() {
             Assessments ({solution.selected_assessments?.length ?? 0})
           </TabsTrigger>
           <TabsTrigger value="bands">Bands</TabsTrigger>
+          <TabsTrigger value="mapping-rules">Mapping Rules</TabsTrigger>
           <TabsTrigger value="rank-chart">Rank Chart</TabsTrigger>
           {solution.has_polar_assessment && (
             <TabsTrigger value="polar-rules">Polar Match Rules</TabsTrigger>
@@ -208,6 +213,11 @@ export default function ProfilingSolutionDetailPage() {
         {/* Bands Tab */}
         <TabsContent value="bands">
           <BandsTab solutionId={sid} solution={solution} canManage={canManage} />
+        </TabsContent>
+
+        {/* Standard Mapping Rules Tab — SRS §4.1.2 (n×n grid) */}
+        <TabsContent value="mapping-rules">
+          <StandardMappingRulesTab solutionId={sid} canManage={canManage} />
         </TabsContent>
 
         {/* Criteria Tab */}
@@ -432,6 +442,10 @@ function BandsTab({
   const queryClient = useQueryClient();
   const toast = useToast();
   const [addOpen, setAddOpen] = useState(false);
+  // CP-2: which band definition we're adding a band row to.
+  const [addRowFor, setAddRowFor] = useState<{ bandDefId: number; nextNumber: number } | null>(
+    null,
+  );
 
   const createBandMutation = useMutation({
     mutationFn: (payload: { selected_assessment: number; section: number }) =>
@@ -442,6 +456,25 @@ function BandsTab({
       });
       setAddOpen(false);
       toast.success("Band definition created.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const createBandRowMutation = useMutation({
+    mutationFn: (payload: {
+      band_definition: number;
+      band_number: number;
+      range_min: number;
+      range_max: number;
+      band_code: string;
+      sub_variable_name?: string;
+    }) => createBand(solutionId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["career-profiling", "solutions", solutionId],
+      });
+      setAddRowFor(null);
+      toast.success("Band added.");
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -514,6 +547,18 @@ function BandsTab({
                 ) : (
                   <p className="text-xs text-slate-400">No bands defined yet.</p>
                 )}
+                {canManage && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() =>
+                      setAddRowFor({ bandDefId: bd.id, nextNumber: bd.bands.length + 1 })
+                    }
+                  >
+                    + Add band
+                  </Button>
+                )}
               </div>
             ))}
           </div>
@@ -530,7 +575,120 @@ function BandsTab({
           }
         />
       )}
+
+      {addRowFor && (
+        <CreateBandRowModal
+          bandDefId={addRowFor.bandDefId}
+          nextNumber={addRowFor.nextNumber}
+          loading={createBandRowMutation.isPending}
+          onClose={() => setAddRowFor(null)}
+          onSubmit={(payload) => createBandRowMutation.mutate(payload)}
+        />
+      )}
     </Card>
+  );
+}
+
+function CreateBandRowModal({
+  bandDefId,
+  nextNumber,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  bandDefId: number;
+  nextNumber: number;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (payload: {
+    band_definition: number;
+    band_number: number;
+    range_min: number;
+    range_max: number;
+    band_code: string;
+    sub_variable_name?: string;
+  }) => void;
+}) {
+  const [bandNumber, setBandNumber] = useState(String(nextNumber));
+  const [rangeMin, setRangeMin] = useState("");
+  const [rangeMax, setRangeMax] = useState("");
+  const [bandCode, setBandCode] = useState("");
+  const [subVar, setSubVar] = useState("");
+  const valid = bandNumber.trim() && rangeMin.trim() && rangeMax.trim() && bandCode.trim();
+  return (
+    <Modal open onClose={onClose} title="Add band" size="sm">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit({
+            band_definition: bandDefId,
+            band_number: Number(bandNumber),
+            range_min: Number(rangeMin),
+            range_max: Number(rangeMax),
+            band_code: bandCode.trim(),
+            ...(subVar.trim() ? { sub_variable_name: subVar.trim() } : {}),
+          });
+        }}
+        className="space-y-3"
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Band #</label>
+            <Input
+              type="number"
+              value={bandNumber}
+              onChange={(e) => setBandNumber(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Band code</label>
+            <Input
+              value={bandCode}
+              onChange={(e) => setBandCode(e.target.value)}
+              placeholder="e.g. A"
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Range min</label>
+            <Input
+              type="number"
+              value={rangeMin}
+              onChange={(e) => setRangeMin(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Range max</label>
+            <Input
+              type="number"
+              value={rangeMax}
+              onChange={(e) => setRangeMax(e.target.value)}
+              required
+            />
+          </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Sub-variable (optional)
+          </label>
+          <Input
+            value={subVar}
+            onChange={(e) => setSubVar(e.target.value)}
+            placeholder="For polar variables only"
+          />
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading} disabled={!valid}>
+            Add band
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -546,10 +704,27 @@ function CreateBandDefinitionModal({
   onSubmit: (selectedAssessmentId: number, sectionId: number) => void;
 }) {
   const [saId, setSaId] = useState<number | null>(null);
-
-  // We don't have section list in the solution object — need to fetch from assessment detail.
-  // For now, show a text input for section ID.
   const [sectionId, setSectionId] = useState("");
+
+  // CP-3: fetch the selected assessment's variables so the user picks from a
+  // list instead of typing a raw Section ID.
+  const assessmentId = selectedAssessments?.find((sa) => sa.id === saId)?.assessment ?? null;
+  const { data: sections } = useQuery({
+    queryKey: ["band-def-sections", assessmentId],
+    queryFn: () => (assessmentId ? listSections(assessmentId) : Promise.resolve([])),
+    enabled: Boolean(assessmentId),
+  });
+  const sectionOptions: { id: number; label: string }[] = [];
+  const walkSections = (list: AssessmentSection[], depth: number) => {
+    for (const s of list) {
+      sectionOptions.push({ id: s.id, label: `${"— ".repeat(depth)}${s.title} (L${s.level})` });
+      if (s.subsections?.length) walkSections(s.subsections, depth + 1);
+    }
+  };
+  walkSections(sections ?? [], 0);
+  useEffect(() => {
+    setSectionId("");
+  }, [saId]);
 
   return (
     <Modal open onClose={onClose} title="Define Band" size="sm">
@@ -581,18 +756,27 @@ function CreateBandDefinitionModal({
         </div>
         <div>
           <Label htmlFor="bd-section" required>
-            Variable (Section ID)
+            Variable
           </Label>
-          <Input
+          <select
             id="bd-section"
-            type="number"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm disabled:opacity-50"
             value={sectionId}
             onChange={(e) => setSectionId(e.target.value)}
-            placeholder="Section ID from the assessment"
+            disabled={!assessmentId}
             required
-          />
+          >
+            <option value="">
+              {assessmentId ? "Select a variable..." : "Choose an assessment first"}
+            </option>
+            {sectionOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
           <p className="mt-1 text-xs text-slate-400">
-            Enter the section ID of the variable you want to define bands for.
+            Pick the variable (section) to define bands for.
           </p>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
@@ -1483,6 +1667,156 @@ function RankChartCreateButton({
 // ---------------------------------------------------------------------------
 // Polar Match Rules Tab — SRS §4.2.2 (polar solutions only)
 // ---------------------------------------------------------------------------
+
+function StandardMappingRulesTab({
+  solutionId,
+  canManage,
+}: {
+  solutionId: number;
+  canManage: boolean;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [selectedBd, setSelectedBd] = useState<number | null>(null);
+
+  const { data: rules, isLoading } = useQuery({
+    queryKey: ["career-profiling", "solutions", solutionId, "mapping-rules"],
+    queryFn: () => listMappingRules(solutionId),
+  });
+  const { data: solution } = useQuery({
+    queryKey: ["career-profiling", "solutions", solutionId],
+    queryFn: () => retrieveSolution(solutionId),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: {
+      band_definition: number;
+      criterion_band_code: string;
+      user_band_code: string;
+      value: number;
+    }) => createMappingRule(solutionId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["career-profiling", "solutions", solutionId, "mapping-rules"],
+      });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  if (isLoading) return <Spinner />;
+
+  const bandDefs =
+    solution?.selected_assessments?.flatMap((sa) =>
+      sa.band_definitions.map((bd) => ({
+        id: bd.id,
+        label: `${sa.label} > ${bd.section_title}`,
+        bandCodes: bd.bands.map((b) => b.band_code),
+      })),
+    ) ?? [];
+  const activeBd = bandDefs.find((b) => b.id === selectedBd) ?? bandDefs[0];
+  const codes = activeBd?.bandCodes ?? [];
+  const valueFor = (crit: string, usr: string) =>
+    (rules ?? []).find(
+      (r) =>
+        r.band_definition === activeBd?.id &&
+        r.criterion_band_code === crit &&
+        r.user_band_code === usr,
+    )?.value;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Standard Mapping Rules (SRS §4.1.2)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-slate-600">
+          Assign the mapping value for each (criterion band, user band) combination of a standard
+          variable. Rows are the criterion band; columns are the candidate's band.
+        </p>
+        {bandDefs.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">
+            Define bands first — the mapping grid is built from a variable's bands.
+          </p>
+        ) : (
+          <>
+            <div>
+              <Label htmlFor="mr-bd">Variable</Label>
+              <select
+                id="mr-bd"
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                value={activeBd?.id ?? ""}
+                onChange={(e) => setSelectedBd(Number(e.target.value))}
+              >
+                {bandDefs.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {codes.length === 0 ? (
+              <p className="text-sm text-slate-500">This variable has no bands yet.</p>
+            ) : (
+              <div className="overflow-x-auto" key={activeBd?.id}>
+                <table className="border-collapse text-sm">
+                  <thead>
+                    <tr>
+                      <th className="border border-slate-200 bg-slate-50 p-2 text-xs text-slate-500">
+                        criterion \ user
+                      </th>
+                      {codes.map((uc) => (
+                        <th
+                          key={uc}
+                          className="border border-slate-200 bg-slate-50 p-2 text-xs font-medium"
+                        >
+                          {uc}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {codes.map((cc) => (
+                      <tr key={cc}>
+                        <th className="border border-slate-200 bg-slate-50 p-2 text-xs font-medium">
+                          {cc}
+                        </th>
+                        {codes.map((uc) => (
+                          <td key={uc} className="border border-slate-200 p-1">
+                            <input
+                              type="number"
+                              min={0}
+                              disabled={!canManage || !activeBd}
+                              defaultValue={valueFor(cc, uc) ?? ""}
+                              className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-xs"
+                              onBlur={(e) => {
+                                if (!activeBd) return;
+                                const raw = e.target.value.trim();
+                                if (raw === "") return;
+                                const value = Number(raw);
+                                if (Number.isNaN(value) || value < 0 || value === valueFor(cc, uc))
+                                  return;
+                                saveMutation.mutate({
+                                  band_definition: activeBd.id,
+                                  criterion_band_code: cc,
+                                  user_band_code: uc,
+                                  value,
+                                });
+                              }}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function PolarMatchRulesTab({ solutionId, canManage }: { solutionId: number; canManage: boolean }) {
   const toast = useToast();

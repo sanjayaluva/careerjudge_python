@@ -370,16 +370,27 @@ def test_add_lesson_to_course(admin_client, trainer_user):
     assert resp.data["data"]["title"] == "Lesson 1"
 
 
-def test_trainer_cannot_add_lesson(trainer_client, trainer_user):
-    """Per SRS §5: 'Course structure cannot be modified by trainer (Admin only)'."""
-    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
+def test_trainer_lesson_create_gated_like_other_structure(trainer_client, trainer_user):
+    """TRN-7 / §5: lesson creation is gated the same as topic/session/content —
+    a trainer may build a DRAFT course's structure, but a PUBLISHED course
+    requires admin approval (uniform gating)."""
+    draft = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
     resp = trainer_client.post(
-        f"/api/training/courses/{course.id}/lessons/",
+        f"/api/training/courses/{draft.id}/lessons/",
         {"title": "Lesson 1", "week_number": 1, "order": 1},
         format="json",
     )
-    assert resp.status_code == 403
-    assert resp.data["error"]["code"] == "forbidden"
+    assert resp.status_code == 201, resp.data
+
+    published = TrainingCourse.objects.create(
+        title="P", created_by=trainer_user, status="published"
+    )
+    resp2 = trainer_client.post(
+        f"/api/training/courses/{published.id}/lessons/",
+        {"title": "Lesson 2", "week_number": 1, "order": 1},
+        format="json",
+    )
+    assert resp2.status_code == 403
 
 
 def test_add_live_session_to_course(trainer_client, trainer_user):
@@ -939,6 +950,60 @@ def test_admin_decline_keeps_course_and_notifies(admin_client, trainer_client, t
 
 
 # ---------------------------------------------------------------------------
+# TRN-1 / Doc 7 §5 — nested structure edit/delete gated on published courses
+# ---------------------------------------------------------------------------
+
+
+def test_trainer_cannot_delete_published_lesson_directly(trainer_client, trainer_user):
+    """TRN-1: a trainer cannot DELETE a published course's lesson directly —
+    it must go through the request-update/approval flow (403)."""
+    from apps.training.models import CourseLesson
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = trainer_client.delete(f"/api/training/lessons/{lesson.id}/")
+    assert resp.status_code == 403
+    assert CourseLesson.objects.filter(id=lesson.id).exists()
+
+
+def test_trainer_cannot_patch_published_lesson_directly(trainer_client, trainer_user):
+    """TRN-1: a trainer cannot PATCH a published course's lesson directly (403)."""
+    from apps.training.models import CourseLesson
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = trainer_client.patch(
+        f"/api/training/lessons/{lesson.id}/", {"title": "hacked"}, format="json"
+    )
+    assert resp.status_code == 403
+    lesson.refresh_from_db()
+    assert lesson.title == "L1"
+
+
+def test_trainer_can_delete_draft_lesson(trainer_client, trainer_user):
+    """TRN-1: gating only applies once published — draft structure is freely
+    editable by the authoring trainer."""
+    from apps.training.models import CourseLesson
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = trainer_client.delete(f"/api/training/lessons/{lesson.id}/")
+    assert resp.status_code in (200, 204)
+    assert not CourseLesson.objects.filter(id=lesson.id).exists()
+
+
+def test_admin_can_delete_published_lesson_directly(admin_client, trainer_user):
+    """TRN-1: an admin bypasses the gate and may delete published structure."""
+    from apps.training.models import CourseLesson
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = admin_client.delete(f"/api/training/lessons/{lesson.id}/")
+    assert resp.status_code in (200, 204)
+    assert not CourseLesson.objects.filter(id=lesson.id).exists()
+
+
+# ---------------------------------------------------------------------------
 # Live Session Request (Report 3 §7.5/OS.4)
 # ---------------------------------------------------------------------------
 
@@ -1255,3 +1320,212 @@ def test_cj_admin_can_add_topic_to_published_course_directly(admin_client, train
         format="json",
     )
     assert resp.status_code == 201, resp.data
+
+
+def _course_with_assignment(trainer_user, deadline=None):
+    from apps.training.models import Assignment, CourseLesson, LessonTopic, TopicSession
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="T1", order=1)
+    session = TopicSession.objects.create(topic=topic, title="S1", order=1)
+    assignment = Assignment.objects.create(
+        session=session,
+        title="A1",
+        report_submission_enabled=True,
+        submission_deadline=deadline,
+    )
+    return course, assignment
+
+
+def test_past_deadline_blocks_submission(student_client, individual_user, trainer_user):
+    """E-X7 baseline: a past global deadline blocks submission."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    course, assignment = _course_with_assignment(
+        trainer_user, deadline=timezone.now() - timedelta(days=1)
+    )
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    resp = student_client.post(
+        f"/api/training/registrations/{reg.id}/assignment_reports/",
+        {"assignment": assignment.id, "report_text": "late"},
+        format="json",
+    )
+    assert resp.status_code == 403
+    assert resp.data["error"]["code"] == "deadline_passed"
+
+
+def test_deadline_override_allows_late_submission(student_client, individual_user, trainer_user):
+    """E-X7: a per-student override deadline in the future re-opens submission."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.training.models import AssignmentDeadlineOverride
+
+    course, assignment = _course_with_assignment(
+        trainer_user, deadline=timezone.now() - timedelta(days=1)
+    )
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    AssignmentDeadlineOverride.objects.create(
+        assignment=assignment,
+        student=individual_user,
+        new_deadline=timezone.now() + timedelta(days=3),
+    )
+    resp = student_client.post(
+        f"/api/training/registrations/{reg.id}/assignment_reports/",
+        {"assignment": assignment.id, "report_text": "on time now"},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+
+
+def test_trainer_sets_deadline_override(trainer_client, individual_user, trainer_user):
+    """E-X7: trainer sets an override via the endpoint."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.training.models import AssignmentDeadlineOverride
+
+    course, assignment = _course_with_assignment(trainer_user)
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    new_deadline = (timezone.now() + timedelta(days=5)).isoformat()
+    resp = trainer_client.post(
+        f"/api/training/registrations/{reg.id}/set-deadline-override/",
+        {"assignment_id": assignment.id, "new_deadline": new_deadline, "reason": "extra time"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    assert AssignmentDeadlineOverride.objects.filter(
+        assignment=assignment, student=individual_user
+    ).exists()
+
+
+def test_multiple_report_files_attached(student_client, individual_user, trainer_user):
+    """E-X7: multiple files attach to a report submission."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    course, assignment = _course_with_assignment(trainer_user)
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    f1 = SimpleUploadedFile("a.pdf", b"pdf-bytes", content_type="application/pdf")
+    f2 = SimpleUploadedFile("b.docx", b"doc-bytes")
+    resp = student_client.post(
+        f"/api/training/registrations/{reg.id}/assignment_reports/",
+        {"assignment": assignment.id, "report_text": "multi", "report_files": [f1, f2]},
+        format="multipart",
+    )
+    assert resp.status_code == 201, resp.data
+    assert len(resp.data["data"]["files"]) == 2
+
+
+def test_trainer_cannot_link_assessment_to_published_course(trainer_client, trainer_user):
+    """H11: linking an assessment to a published course (SRS §2.4) is gated."""
+    from apps.assessment.models import Assessment
+    from apps.training.models import CourseAssessment
+
+    course = TrainingCourse.objects.create(
+        title="Pub2", created_by=trainer_user, status="published"
+    )
+    assessment = Assessment.objects.create(title="A", status="published")
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/assessments/",
+        {"assessment": assessment.id, "title": "Quiz 1", "order": 1},
+        format="json",
+    )
+    assert resp.status_code == 403, resp.data
+    assert not CourseAssessment.objects.filter(course=course).exists()
+
+
+def test_trainer_can_link_assessment_to_draft_course(trainer_client, trainer_user):
+    """H11: draft courses stay freely editable (link an assessment)."""
+    from apps.assessment.models import Assessment
+    from apps.training.models import CourseAssessment
+
+    course = TrainingCourse.objects.create(title="Draft", created_by=trainer_user, status="draft")
+    assessment = Assessment.objects.create(title="A", status="published")
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/assessments/",
+        {"assessment": assessment.id, "title": "Quiz 1", "order": 1, "level": "end_of_course"},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    assert CourseAssessment.objects.filter(course=course).exists()
+
+
+def test_assessment_links_to_specific_session(trainer_client, trainer_user):
+    """Report 3 §4.3 / Report 4 Trainer Issue 9: an assessment links to a
+    SPECIFIC session, not just a level label."""
+    from apps.assessment.models import Assessment
+    from apps.training.models import CourseAssessment, CourseLesson, LessonTopic, TopicSession
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="T1", order=1)
+    session = TopicSession.objects.create(topic=topic, title="Session 2", order=2)
+    assessment = Assessment.objects.create(title="Quiz", status="published")
+
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/assessments/",
+        {
+            "assessment": assessment.id,
+            "title": "End of Session 2 Quiz",
+            "level": "end_of_session",
+            "session": session.id,
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    ca = CourseAssessment.objects.get(course=course)
+    assert ca.session_id == session.id
+    assert resp.data["data"]["session_title"] == "Session 2"
+
+
+def test_assessment_links_to_topic_and_lesson(trainer_client, trainer_user):
+    """Report 4 Trainer-9: End of Topic / End of Lesson target a specific
+    topic / lesson (not just a session)."""
+    from apps.assessment.models import Assessment
+    from apps.training.models import CourseLesson, LessonTopic
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
+    lesson = CourseLesson.objects.create(course=course, title="Lesson A", order=1)
+    topic = LessonTopic.objects.create(lesson=lesson, title="Topic A", order=1)
+    a1 = Assessment.objects.create(title="Q1", status="published")
+    a2 = Assessment.objects.create(title="Q2", status="published")
+
+    r1 = trainer_client.post(
+        f"/api/training/courses/{course.id}/assessments/",
+        {"assessment": a1.id, "title": "Topic quiz", "level": "end_of_topic", "topic": topic.id},
+        format="json",
+    )
+    assert r1.status_code == 201, r1.data
+    assert r1.data["data"]["topic_title"] == "Topic A"
+
+    r2 = trainer_client.post(
+        f"/api/training/courses/{course.id}/assessments/",
+        {
+            "assessment": a2.id,
+            "title": "Lesson quiz",
+            "level": "end_of_lesson",
+            "lesson": lesson.id,
+        },
+        format="json",
+    )
+    assert r2.status_code == 201, r2.data
+    assert r2.data["data"]["lesson_title"] == "Lesson A"
+
+
+def test_assessment_link_requires_matching_target(trainer_client, trainer_user):
+    """End of Topic without a topic is rejected."""
+    from apps.assessment.models import Assessment
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
+    a = Assessment.objects.create(title="Q", status="published")
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/assessments/",
+        {"assessment": a.id, "title": "x", "level": "end_of_topic"},
+        format="json",
+    )
+    assert resp.status_code == 400, resp.data

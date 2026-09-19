@@ -19,6 +19,7 @@ import {
   deleteTopic,
   deleteSession,
   deleteContent,
+  updateContent,
   deleteAssignment,
   updateLesson,
   updateTopic,
@@ -352,6 +353,17 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  // TRN-10 (§2.4.1.1): set a content's interlink sequence order.
+  const sequenceMutation = useMutation({
+    mutationFn: (v: { contentId: number; order: number | null }) =>
+      updateContent(v.contentId, { sequence_order: v.order }),
+    onSuccess: () => {
+      refresh();
+      toast.success("Sequence updated.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   const deleteAssignmentMutation = useMutation({
     mutationFn: (assignmentId: number) => deleteAssignment(assignmentId),
     onSuccess: () => {
@@ -432,6 +444,27 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
                     >
                       🎬 Timeliner
                     </Button>
+                  )}
+                  {canManage && (
+                    <label
+                      className="flex items-center gap-1 text-slate-400"
+                      title="Interlink sequence order (SRS §2.4.1.1) — blank uses the default order"
+                    >
+                      Seq
+                      <input
+                        type="number"
+                        min={0}
+                        defaultValue={c.sequence_order ?? ""}
+                        className="w-14 rounded border border-slate-200 px-1 py-0.5 text-xs"
+                        onBlur={(e) => {
+                          const raw = e.target.value.trim();
+                          const order = raw === "" ? null : Number(raw);
+                          if (order !== (c.sequence_order ?? null)) {
+                            sequenceMutation.mutate({ contentId: c.id, order });
+                          }
+                        }}
+                      />
+                    </label>
                   )}
                   {canManage && (
                     <DeleteButton onDelete={() => deleteContentMutation.mutate(c.id)} />

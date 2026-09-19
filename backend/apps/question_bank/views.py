@@ -1,6 +1,7 @@
 """Views for the question_bank module."""
 
 import csv
+import logging
 
 from django.db.models import Q
 from django.http import HttpResponse
@@ -28,6 +29,8 @@ from .serializers import (
     QuestionReviewSerializer,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class HasQuestionBankPermission(HasModulePermission):
     module = "question_bank"
@@ -39,6 +42,7 @@ class HasQuestionBankPermission(HasModulePermission):
         "partial_update": "change",
         "destroy": "delete",
         "tree": "view",
+        "bulk_import": "add",  # E-QB-4: bulk full-question template import
         "submit_for_review": "change",
         "validate_config": "view",
         "psychometric_analysis": "change",  # psychometrician-only: computes indices
@@ -58,6 +62,57 @@ def _is_qb_admin(user) -> bool:
     """cj_admin (or superuser) bypasses the deletion-request workflow."""
     role_name = user.role.name if user.role_id else None
     return bool(user.is_superuser or role_name == "cj_admin")
+
+
+def _domain_category_ids(root: Category) -> list[int]:
+    """All category ids in a domain: the root and every descendant."""
+    ids = [root.id]
+    frontier = [root.id]
+    while frontier:
+        children = list(
+            Category.objects.filter(parent_id__in=frontier).values_list("id", flat=True)
+        )
+        ids.extend(children)
+        frontier = children
+    return ids
+
+
+def _pick_domain_reviewer(question):
+    """Pick a Reviewer in the same domain as the question (E-X3).
+
+    'Domain' is the top-level category (tree root). A reviewer is considered
+    in-domain if they have authored a question anywhere in that domain's
+    category subtree. Preference goes to in-domain reviewers; if none exist we
+    fall back to any active reviewer. Among candidates the least-loaded (fewest
+    questions currently assigned and pending content review) is chosen. The
+    author is never assigned to review their own question. Returns a User or
+    None when no reviewer is available.
+    """
+    from apps.accounts.models import User
+
+    base = User.objects.filter(is_active=True, role__name="reviewer")
+    if question.category_id:
+        cat_ids = _domain_category_ids(question.category.domain_root)
+        in_domain_ids = (
+            Question.objects.filter(category_id__in=cat_ids, created_by__role__name="reviewer")
+            .values_list("created_by_id", flat=True)
+            .distinct()
+        )
+        candidates = base.filter(id__in=list(in_domain_ids))
+        if not candidates.exists():
+            candidates = base
+    else:
+        candidates = base
+    candidates = candidates.exclude(id=question.created_by_id)
+    reviewers = list(candidates)
+    if not reviewers:
+        return None
+    return min(
+        reviewers,
+        key=lambda r: Question.objects.filter(
+            assigned_reviewer=r, status="pending_content_review"
+        ).count(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +294,10 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         if mine == "true" and self.request.user.is_authenticated:
             qs = qs.filter(created_by=self.request.user)
 
+        # E-X3: a reviewer's routed queue — questions assigned to them.
+        if params.get("assigned") == "me" and self.request.user.is_authenticated:
+            qs = qs.filter(assigned_reviewer=self.request.user)
+
         # Report 3 §4.1/§4.2 + D1 §3.1: trainers and SMEs author questions but
         # must ALWAYS see ONLY their own questions (not the full CJ Question
         # Bank pool) — this is not opt-in via ?mine=true. Reviewers may only
@@ -276,6 +335,52 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
                 "data": QuestionDetailSerializer(serializer.instance).data,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], url_path="bulk-import")
+    def bulk_import(self, request):
+        """Bulk-import full questions from a template (E-QB-4).
+
+        Extends the single-question create (CJ_UC013) to a batch: the client
+        posts {"questions": [<full question payload>, ...]} and each item is
+        validated + created with the same serializer as a normal create. The
+        response reports how many were created and per-row errors, so a partial
+        template still imports its valid rows.
+
+        Body: {"questions": [ {question_type, question_title, ...}, ... ]}
+        """
+        items = request.data.get("questions")
+        if not isinstance(items, list) or not items:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "Provide a non-empty 'questions' list.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        created, errors = [], []
+        for idx, payload in enumerate(items):
+            serializer = QuestionCreateSerializer(data=payload, context={"request": request})
+            if serializer.is_valid():
+                serializer.save(created_by=request.user)
+                created.append(serializer.instance.id)
+            else:
+                errors.append({"index": idx, "errors": serializer.errors})
+
+        return Response(
+            {
+                "message": f"Imported {len(created)} of {len(items)} question(s).",
+                "data": {
+                    "created_count": len(created),
+                    "created_ids": created,
+                    "error_count": len(errors),
+                    "errors": errors,
+                },
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_400_BAD_REQUEST,
         )
 
     def update(self, request, *args, **kwargs):
@@ -401,11 +506,33 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
             )
 
         question.status = "pending_content_review"
-        question.save(update_fields=["status", "updated_at"])
+        # E-X3: route to a Reviewer in the same domain (category tree root).
+        reviewer = _pick_domain_reviewer(question)
+        question.assigned_reviewer = reviewer
+        question.save(update_fields=["status", "assigned_reviewer", "updated_at"])
+
+        if reviewer:
+            try:
+                from apps.notifications.models import notify_user
+
+                notify_user(
+                    reviewer,
+                    "Question assigned for review",
+                    f"'{question.question_title}' was routed to you for content review.",
+                    "info",
+                    f"/question-bank/{question.id}",
+                )
+            except Exception as e:  # pragma: no cover - notification is best-effort
+                logger.warning("Reviewer assignment notification failed: %s", e)
+
         return Response(
             {
                 "message": "Question submitted for content review.",
-                "data": {"id": question.id, "status": question.status},
+                "data": {
+                    "id": question.id,
+                    "status": question.status,
+                    "assigned_reviewer": reviewer.id if reviewer else None,
+                },
             },
             status=status.HTTP_200_OK,
         )

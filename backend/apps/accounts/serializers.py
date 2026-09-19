@@ -374,13 +374,17 @@ class UserWriteSerializer(serializers.ModelSerializer):
             # Invited user: mint an activation token and send the same
             # verification email self-registration uses, so they can
             # actually activate their account (D9 §2.2-2.3).
-            if not user.is_active:
-                token = create_email_verification_token(user)
-                try:
-                    send_verification_email(user, token)
-                except Exception:
-                    # Email send failure should not block admin user creation
-                    pass
+            # ADM-1: send on EVERY invited (no-password) creation, not only
+            # when created inactive — an admin creating an Active user would
+            # otherwise leave them with a random password and no way in.
+            # verify_email() both activates the account and lets them set a
+            # password, so the link works whether or not is_active is set.
+            token = create_email_verification_token(user)
+            try:
+                send_verification_email(user, token)
+            except Exception:
+                # Email send failure should not block admin user creation
+                pass
         profile, _profile_created = UserProfile.objects.get_or_create(user=user)
         if profile_data:
             _apply_profile_fields(profile, profile_data)

@@ -153,6 +153,28 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert amr.proposed_title == "Updated"
         assert amr.requester == corp_admin
 
+    def test_trainer_creates_and_sees_only_own_assessment(self):
+        """Doc 7 §2.4/§2.4.1 (signed): a trainer authors their own assessment
+        and sees only their own + published (never the whole CJ pool)."""
+        trainer = UserFactory.create(role=get_or_create_role("trainer", is_system=True))
+        grant_assessment_perms(trainer)
+        # Someone else's unpublished assessment must NOT be visible to the trainer.
+        Assessment.objects.create(title="Other draft", status="draft", created_by=self.user)
+
+        self.client.force_authenticate(user=trainer)
+        resp = self.client.post(
+            "/api/assessments/",
+            {"title": "Trainer Quiz", "assessment_type": "normal"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        assert resp.json()["data"]["created_by"] == trainer.id
+
+        lst = self.client.get("/api/assessments/")
+        titles = [a["title"] for a in lst.json()["data"]["results"]]
+        assert "Trainer Quiz" in titles
+        assert "Other draft" not in titles  # not the whole pool
+
     def test_update_published_assessment_without_reason_rejected(self):
         corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
         grant_assessment_perms(corp_admin)
@@ -609,6 +631,52 @@ class TestSectionCRUD(AssessmentViewTestBase):
         assert resp.status_code == status.HTTP_201_CREATED
         assert resp.json()["data"]["title"] == "Section 1"
 
+    def test_section_level_derived_from_parent_to_depth_4(self):
+        """ASM-4: the server derives level from the parent (parent.level + 1),
+        so Level 3 and 4 variables are creatable — even when the client sends a
+        wrong/hardcoded level. Doc 3 §3 allows up to four levels."""
+        parent_id = None
+        for expected_level in (1, 2, 3, 4):
+            resp = self.client.post(
+                f"/api/assessments/{self.assessment.id}/sections/",
+                # Deliberately send the wrong level (1) to prove it is ignored.
+                {"title": f"L{expected_level}", "parent": parent_id, "level": 1, "order": 1},
+                format="json",
+            )
+            assert resp.status_code == status.HTTP_201_CREATED, resp.data
+            assert resp.json()["data"]["level"] == expected_level, resp.data
+            parent_id = resp.json()["data"]["id"]
+
+    def test_section_fifth_level_rejected(self):
+        """ASM-8 Rule 1: at most 4 variable levels (Doc 3 §3)."""
+        parent_id = None
+        for _ in range(4):
+            resp = self.client.post(
+                f"/api/assessments/{self.assessment.id}/sections/",
+                {"title": "L", "parent": parent_id, "order": 1},
+                format="json",
+            )
+            assert resp.status_code == status.HTTP_201_CREATED, resp.data
+            parent_id = resp.json()["data"]["id"]
+        # A 5th level under the level-4 section must be rejected.
+        resp = self.client.post(
+            f"/api/assessments/{self.assessment.id}/sections/",
+            {"title": "L5", "parent": parent_id, "order": 1},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert resp.json()["error"]["code"] == "max_levels_exceeded"
+
+    def test_section_order_mode_roundtrips(self):
+        """ASM-5 (§5.1): a section's per-level order_mode is writable and returned."""
+        resp = self.client.post(
+            f"/api/assessments/{self.assessment.id}/sections/",
+            {"title": "Randomised", "order": 1, "order_mode": "RANDOM"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        assert resp.json()["data"]["order_mode"] == "RANDOM"
+
     def test_list_sections(self):
         AssessmentSection.objects.create(assessment=self.assessment, title="S1", level=1, order=1)
         AssessmentSection.objects.create(assessment=self.assessment, title="S2", level=1, order=2)
@@ -724,6 +792,41 @@ class TestQuestionAssignment(AssessmentViewTestBase):
         assert resp.json()["data"]["question"] == self.question.id
         # Should include question_detail
         assert "question_detail" in resp.json()["data"]
+
+    def test_question_assigned_only_once_per_assessment(self):
+        """Report 5 §3.4: a question can be assigned to an assessment only once,
+        even across different sections."""
+        section2 = AssessmentSection.objects.create(
+            assessment=self.assessment, title="S2", level=1, order=2
+        )
+        r1 = self.client.post(
+            f"/api/assessments/{self.assessment.id}/sections/{self.section.id}/questions/",
+            {"question": self.question.id, "order": 1},
+            format="json",
+        )
+        assert r1.status_code == status.HTTP_201_CREATED
+        # Same question, different section, same assessment → rejected.
+        r2 = self.client.post(
+            f"/api/assessments/{self.assessment.id}/sections/{section2.id}/questions/",
+            {"question": self.question.id, "order": 1},
+            format="json",
+        )
+        assert r2.status_code == status.HTTP_400_BAD_REQUEST
+        assert r2.json()["error"]["code"] == "question_already_assigned"
+
+    def test_cannot_assign_question_to_non_leaf_section(self):
+        """ASM-8 Rule 2: questions attach only at last-level (leaf) sections."""
+        child = AssessmentSection.objects.create(
+            assessment=self.assessment, parent=self.section, title="child", level=2, order=1
+        )
+        assert child  # self.section now has a subsection → not a leaf
+        resp = self.client.post(
+            f"/api/assessments/{self.assessment.id}/sections/{self.section.id}/questions/",
+            {"question": self.question.id, "order": 1},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert resp.json()["error"]["code"] == "not_leaf_section"
 
     def test_list_assigned_questions(self):
         AssessmentQuestion.objects.create(section=self.section, question=self.question, order=1)
@@ -872,6 +975,71 @@ class TestSessionFlow(AssessmentViewTestBase):
         assert session.question_attempts.count() == 2
         # And expose total_duration_seconds from assessment
         assert resp.json()["data"]["total_duration_seconds"] == 600
+
+    def test_unpublish_returns_to_draft(self):
+        """E-ASM-11: an author can pull a published assessment back to draft."""
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.post(f"/api/assessments/{self.assessment.id}/unpublish/")
+        assert resp.status_code == status.HTTP_200_OK, resp.content
+        self.assessment.refresh_from_db()
+        assert self.assessment.status == "draft"
+
+    def test_unpublish_blocked_with_active_session(self):
+        """E-ASM-11: can't return to draft while a candidate is mid-attempt."""
+        AssessmentSession.objects.create(
+            assessment=self.assessment, candidate=self.candidate, status="active"
+        )
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.post(f"/api/assessments/{self.assessment.id}/unpublish/")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert resp.json()["error"]["code"] == "sessions_in_progress"
+        self.assessment.refresh_from_db()
+        assert self.assessment.status == "published"
+
+    def test_unpublish_rejects_draft_assessment(self):
+        self.assessment.status = "draft"
+        self.assessment.save(update_fields=["status"])
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.post(f"/api/assessments/{self.assessment.id}/unpublish/")
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_priced_assessment_blocks_start_without_payment(self):
+        """PLT-3: a priced assessment returns 402 until the candidate pays."""
+        self.assessment.price = 25
+        self.assessment.save(update_fields=["price"])
+        self.client.force_authenticate(user=self.candidate)
+        resp = self.client.post(f"/api/assessments/{self.assessment.id}/start_session/")
+        assert resp.status_code == status.HTTP_402_PAYMENT_REQUIRED
+        assert resp.json()["error"]["code"] == "payment_required"
+        assert resp.json()["error"]["details"]["price"] == "25.00"
+        # No session was created.
+        assert not AssessmentSession.objects.filter(
+            assessment=self.assessment, candidate=self.candidate
+        ).exists()
+
+    def test_priced_assessment_starts_after_payment(self):
+        """PLT-3: once a completed payment exists, the session starts."""
+        from apps.payments.models import Payment
+
+        self.assessment.price = 25
+        self.assessment.save(update_fields=["price"])
+        Payment.objects.create(
+            user=self.candidate,
+            module="assessment",
+            item_id=self.assessment.id,
+            amount=25,
+            status="paid",
+        )
+        self.client.force_authenticate(user=self.candidate)
+        resp = self.client.post(f"/api/assessments/{self.assessment.id}/start_session/")
+        assert resp.status_code == status.HTTP_201_CREATED
+
+    def test_free_assessment_starts_without_payment(self):
+        """PLT-3: price 0 (default) means no gate."""
+        assert self.assessment.price == 0
+        self.client.force_authenticate(user=self.candidate)
+        resp = self.client.post(f"/api/assessments/{self.assessment.id}/start_session/")
+        assert resp.status_code == status.HTTP_201_CREATED
 
     def test_cannot_start_session_for_draft_assessment(self):
         """Individual user can't start a session on a draft assessment.

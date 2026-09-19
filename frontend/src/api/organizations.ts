@@ -10,6 +10,8 @@ export interface Organization {
   type: "corporate" | "corp_exclusive" | "channel_partner";
   status: "active" | "inactive" | "suspended";
   description: string;
+  manager_name: string;
+  tax_id: string;
   contact_email: string;
   contact_phone: string;
   website: string;
@@ -41,6 +43,7 @@ export interface Group {
   id: number;
   organization: number;
   name: string;
+  region_division: string;
   description: string;
   member_count: number;
   created_at: string;
@@ -57,8 +60,19 @@ export interface OrganizationMember {
     role: string | null;
   };
   group: number | null;
+  employee_id: string;
   is_admin: boolean;
   joined_at: string;
+}
+
+export interface OrganizationAssignment {
+  id: number;
+  organization: number;
+  item_type: "assessment" | "training_course" | "counseling";
+  item_id: number;
+  assigned_by: number | null;
+  assigned_by_name: string | null;
+  assigned_at: string;
 }
 
 export interface CreateOrganizationPayload {
@@ -66,6 +80,8 @@ export interface CreateOrganizationPayload {
   type: string;
   status?: string;
   description?: string;
+  manager_name?: string;
+  tax_id?: string;
   contact_email?: string;
   contact_phone?: string;
   website?: string;
@@ -123,7 +139,7 @@ export function listGroups(orgId: number): Promise<Group[]> {
 
 export function createGroup(
   orgId: number,
-  payload: { name: string; description?: string },
+  payload: { name: string; region_division?: string; description?: string },
 ): Promise<Group> {
   return apiPost<Group>(`${BASE}/${orgId}/groups/`, payload);
 }
@@ -139,7 +155,12 @@ export function listMembers(orgId: number): Promise<OrganizationMember[]> {
 
 export function addMember(
   orgId: number,
-  payload: { user_email: string; group_id?: number | null },
+  payload: {
+    user_email: string;
+    full_name?: string;
+    employee_id?: string;
+    group_id?: number | null;
+  },
 ): Promise<OrganizationMember> {
   return apiPost<OrganizationMember>(`${BASE}/${orgId}/members/`, payload);
 }
@@ -154,4 +175,99 @@ export function updateMember(
 
 export function removeMember(orgId: number, memberId: number): Promise<void> {
   return apiDelete(`${BASE}/${orgId}/members/${memberId}/`);
+}
+
+// Assignments — CJ Admin assigns published content to an organization so its
+// corporate individuals see only what was assigned (CJ_UC030, Doc 4).
+export function listAssignments(orgId: number): Promise<OrganizationAssignment[]> {
+  return apiGetPaged<OrganizationAssignment>(`${BASE}/${orgId}/assignments/`).then(
+    (r) => r.results,
+  );
+}
+
+export function createAssignment(
+  orgId: number,
+  payload: { item_type: "assessment" | "training_course" | "counseling"; item_id: number },
+): Promise<OrganizationAssignment> {
+  return apiPost<OrganizationAssignment>(`${BASE}/${orgId}/assignments/`, payload);
+}
+
+export function deleteAssignment(orgId: number, assignmentId: number): Promise<void> {
+  return apiDelete(`${BASE}/${orgId}/assignments/${assignmentId}/`);
+}
+
+// Schedules (CJ_UC053) — schedule an assessment for employees + notify.
+export interface AssessmentSchedule {
+  id: number;
+  organization: number;
+  group: number | null;
+  assessment: number;
+  assessment_title: string;
+  group_name: string | null;
+  scheduled_at: string;
+  created_by: number | null;
+  notified: boolean;
+  created_at: string;
+}
+
+export function listSchedules(orgId: number): Promise<AssessmentSchedule[]> {
+  return apiGetPaged<AssessmentSchedule>(`${BASE}/${orgId}/schedules/`).then((r) => r.results);
+}
+
+export function createSchedule(
+  orgId: number,
+  payload: { assessment: number; scheduled_at: string; group?: number | null },
+): Promise<AssessmentSchedule> {
+  return apiPost<AssessmentSchedule>(`${BASE}/${orgId}/schedules/`, payload);
+}
+
+export function deleteSchedule(orgId: number, scheduleId: number): Promise<void> {
+  return apiDelete(`${BASE}/${orgId}/schedules/${scheduleId}/`);
+}
+
+// Website (CJ_UC054/UC055) — a corporate's branded portal.
+export interface CorporateWebsite {
+  id: number;
+  organization: number;
+  slug: string;
+  company_name: string;
+  logo_url: string;
+  layout: "classic" | "modern" | "minimal";
+  primary_color: string;
+  admin_user: number | null;
+  admin_email: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  generated_credentials?: { email: string; temporary_password: string };
+}
+
+export function getWebsite(orgId: number): Promise<CorporateWebsite | null> {
+  return apiGet<CorporateWebsite | null>(`${BASE}/${orgId}/website/`);
+}
+
+export function createWebsite(
+  orgId: number,
+  payload: {
+    company_name: string;
+    layout?: string;
+    primary_color?: string;
+    logo_url?: string;
+    admin_email?: string;
+  },
+): Promise<CorporateWebsite> {
+  return apiPost<CorporateWebsite>(`${BASE}/${orgId}/website/`, payload);
+}
+
+export function updateWebsite(
+  orgId: number,
+  payload: Partial<{
+    company_name: string;
+    layout: string;
+    primary_color: string;
+    logo_url: string;
+    is_active: boolean;
+  }>,
+): Promise<CorporateWebsite> {
+  return apiPatch<CorporateWebsite>(`${BASE}/${orgId}/website/`, payload);
 }
