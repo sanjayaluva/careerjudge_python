@@ -425,6 +425,30 @@ export default function AssessmentDetailPage() {
                 </div>
               </dl>
 
+              {/* Report 7 §6: how display order + timer settings fit together —
+                  the client found the two-tab split (Overview vs Sections)
+                  confusing, so explain it right where the settings live. */}
+              <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+                <p className="font-semibold">How display order &amp; timers are configured</p>
+                <p className="mt-1 leading-relaxed">
+                  <strong>Assessment level</strong> (Overview → Edit Assessment): choose the overall
+                  display order — <em>Static</em> delivers sections and questions exactly in the
+                  assigned order; <em>Random</em> shuffles the whole question set.
+                </p>
+                <p className="mt-1 leading-relaxed">
+                  <strong>Section level</strong> (Sections tab → Edit a section): per-section
+                  question order — <em>Random</em> on a section shuffles its questions (and its
+                  child subsections) while sections above it stay in assigned order. Set Static
+                  everywhere for fully ordered delivery.
+                </p>
+                <p className="mt-1 leading-relaxed">
+                  <strong>Timers</strong> can be set at only ONE level (SRS §5.2): pick the level in
+                  Edit Assessment (Assessment / L1–L4 / Question), then enter durations only at that
+                  level — section timers on the Sections tab, question timers on the Questions tab.
+                  Other levels are locked.
+                </p>
+              </div>
+
               {a.instructions && (
                 <div className="mt-4">
                   <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -614,21 +638,27 @@ export default function AssessmentDetailPage() {
                 </p>
               ) : (
                 <div className="space-y-1">
-                  {a.sections.map((s) => (
-                    <SectionTreeRow
-                      key={s.id}
-                      section={s}
-                      depth={0}
-                      canManage={canEdit}
-                      onAddSubsection={(parentId) =>
-                        setSectionModal({ open: true, parent: parentId, editSection: null })
-                      }
-                      onEditSection={(section) =>
-                        setSectionModal({ open: true, parent: null, editSection: section })
-                      }
-                      onDeleteSection={(section) => setSectionToDelete(section)}
-                    />
-                  ))}
+                  {/* Report 7 §14: render ROOT sections only — each root's
+                      sub-sections render once via the recursive tree row.
+                      The API returns ALL sections flat, so rendering the flat
+                      list AND the nested tree duplicated every subsection. */}
+                  {a.sections
+                    .filter((s) => s.parent === null)
+                    .map((s) => (
+                      <SectionTreeRow
+                        key={s.id}
+                        section={s}
+                        depth={0}
+                        canManage={canEdit}
+                        onAddSubsection={(parentId) =>
+                          setSectionModal({ open: true, parent: parentId, editSection: null })
+                        }
+                        onEditSection={(section) =>
+                          setSectionModal({ open: true, parent: null, editSection: section })
+                        }
+                        onDeleteSection={(section) => setSectionToDelete(section)}
+                      />
+                    ))}
                 </div>
               )}
             </CardContent>
@@ -640,6 +670,7 @@ export default function AssessmentDetailPage() {
           <QuestionAssignmentTab
             assessmentId={aid}
             assessmentType={a.assessment_type}
+            timerLevel={a.timer_level}
             sections={a.sections}
             canManage={canEdit}
           />
@@ -669,6 +700,12 @@ export default function AssessmentDetailPage() {
         parentId={sectionModal.parent}
         editSection={sectionModal.editSection}
         loading={sectionCreateMutation.isPending || sectionUpdateMutation.isPending}
+        sectionLevel={
+          sectionModal.editSection
+            ? sectionModal.editSection.level
+            : (a.sections.find((s) => s.id === sectionModal.parent)?.level ?? 0) + 1
+        }
+        assessmentTimerLevel={a.timer_level}
         onClose={() => setSectionModal({ open: false, parent: null, editSection: null })}
         onSubmit={(payload) => {
           if (sectionModal.editSection) {
@@ -750,16 +787,23 @@ export default function AssessmentDetailPage() {
 function QuestionAssignmentTab({
   assessmentId,
   assessmentType,
+  timerLevel,
   sections,
   canManage,
 }: {
   assessmentId: number;
   assessmentType: "normal" | "psychometric";
+  /** Report 7 §13: per-question timers are set here when the assessment's
+   * timer level is 'question' (SRS §5.2: timer at only ONE level). */
+  timerLevel: string;
   sections: AssessmentSection[];
   canManage: boolean;
 }) {
+  // Report 7 §15: default to the first LEAF section (the flat list from the
+  // serializer is ordered level-first, so sections[0] was an L1 root with no
+  // directly-assigned questions and the assigned list showed 0).
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(
-    sections.length > 0 ? sections[0].id : null,
+    sections.find((s) => !s.subsections?.length)?.id ?? sections[0]?.id ?? null,
   );
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -771,6 +815,9 @@ function QuestionAssignmentTab({
   // Report 5 §3.2/§3.3: questions attach only at the LAST (leaf) section, and
   // the picker shows the full path chain — e.g. "Analytical ›› Assignment ›› L1".
   // Sections that have sub-sections are intermediate variables and are omitted.
+  // Report 7 §15: flatten from the ROOT sections only — the API returns ALL
+  // sections flat, so walking the flat list duplicated every leaf section
+  // in the picker.
   const flatSections: { id: number; label: string }[] = [];
   const flatten = (secs: AssessmentSection[], path: string[]) => {
     for (const s of secs) {
@@ -783,7 +830,10 @@ function QuestionAssignmentTab({
       }
     }
   };
-  flatten(sections, []);
+  flatten(
+    sections.filter((s) => s.parent === null),
+    [],
+  );
 
   // Load assigned questions for the selected section
   const { data: assignedQuestions, isLoading: assignedLoading } = useQuery({
@@ -857,6 +907,22 @@ function QuestionAssignmentTab({
       }),
     onSuccess: () => {
       toast.success("Score updated.");
+      void queryClient.invalidateQueries({
+        queryKey: ["assessment-section-questions", assessmentId, selectedSectionId],
+      });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  // Report 7 §13: per-question timer (only used when the assessment's
+  // timer level is 'question'). Entered in minutes, stored in seconds.
+  const questionTimerMutation = useMutation({
+    mutationFn: (v: { aqId: number; duration_seconds: number | null }) =>
+      updateAssignedQuestion(assessmentId, selectedSectionId!, v.aqId, {
+        duration_seconds: v.duration_seconds,
+      }),
+    onSuccess: () => {
+      toast.success("Question timer updated.");
       void queryClient.invalidateQueries({
         queryKey: ["assessment-section-questions", assessmentId, selectedSectionId],
       });
@@ -946,6 +1012,33 @@ function QuestionAssignmentTab({
                             const val = raw === "" ? null : Number(raw);
                             if (val !== (aq.score_override ?? null)) {
                               scoreMutation.mutate({ aqId: aq.id, score_override: val });
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                    {timerLevel === "question" && canManage && (
+                      <label
+                        className="flex items-center gap-1 text-slate-400"
+                        title="Per-question time limit — used when the assessment timer level is Question (SRS §5.2)"
+                      >
+                        Timer (min)
+                        <input
+                          type="number"
+                          min={0}
+                          defaultValue={
+                            aq.duration_seconds ? Math.round(aq.duration_seconds / 60) : ""
+                          }
+                          className="w-14 rounded border border-slate-200 px-1.5 py-0.5 text-xs"
+                          onBlur={(e) => {
+                            const raw = e.target.value.trim();
+                            const minutes = raw === "" ? null : Number(raw);
+                            const seconds = minutes == null || minutes <= 0 ? null : minutes * 60;
+                            if (seconds !== (aq.duration_seconds ?? null)) {
+                              questionTimerMutation.mutate({
+                                aqId: aq.id,
+                                duration_seconds: seconds,
+                              });
                             }
                           }}
                         />
@@ -1245,6 +1338,8 @@ function CreateSectionModal({
   parentId,
   editSection,
   loading,
+  sectionLevel = 1,
+  assessmentTimerLevel = "assessment",
   onClose,
   onSubmit,
 }: {
@@ -1253,6 +1348,11 @@ function CreateSectionModal({
   /** When set, the modal is in edit-mode (pre-populated with this section). */
   editSection: AssessmentSection | null;
   loading: boolean;
+  /** Report 7 §11: the (derived) level of the section being created/edited. */
+  sectionLevel?: number;
+  /** Report 7 §11: the assessment's timer level — durations are only
+   * accepted at that level (SRS §5.2: timer at only ONE level). */
+  assessmentTimerLevel?: string;
   onClose: () => void;
   onSubmit: (payload: {
     title: string;
@@ -1287,6 +1387,15 @@ function CreateSectionModal({
   }, [open, editSection]);
 
   const isEdit = editSection !== null;
+
+  // Report 7 §11 (SRS §5.2): a timer can be set at only ONE level — the
+  // section timer input is enabled only when this section's level matches
+  // the assessment's configured timer level.
+  const timerAllowedHere =
+    (assessmentTimerLevel === "level1" && sectionLevel === 1) ||
+    (assessmentTimerLevel === "level2" && sectionLevel === 2) ||
+    (assessmentTimerLevel === "level3" && sectionLevel === 3) ||
+    (assessmentTimerLevel === "level4" && sectionLevel === 4);
 
   return (
     <Modal
@@ -1351,10 +1460,12 @@ function CreateSectionModal({
               value={durationMin}
               onChange={(e) => setDurationMin(e.target.value)}
               placeholder="e.g. 15"
+              disabled={!timerAllowedHere}
             />
             <p className="mt-1 text-xs text-slate-500">
-              Per-section time limit (SRS §5.2). Used when the assessment timer level is a section
-              level.
+              {timerAllowedHere
+                ? "Per-section time limit (SRS §5.2). Used when the assessment timer level is a section level."
+                : `Disabled — this assessment's timer level is "${assessmentTimerLevel}" and a timer can be set at only ONE level. Switch the timer level (Edit Assessment) to match this section's level first.`}
             </p>
           </div>
           <div>

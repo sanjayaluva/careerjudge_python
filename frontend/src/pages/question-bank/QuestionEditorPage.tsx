@@ -48,6 +48,7 @@ import {
   RatingEditor,
   ForcedChoiceEditor,
 } from "./editors/PsychometricEditors";
+import { PsychometricStatementEditor } from "./editors/StatementEditor";
 
 const QB_KEY = ["question-bank", "questions"];
 
@@ -223,8 +224,18 @@ export default function QuestionEditorPage() {
     setAudioUrl(q.media_files.find((m) => m.media_type === "AUDIO")?.file ?? "");
     setVideoUrl(q.media_files.find((m) => m.media_type === "VIDEO")?.file ?? "");
 
+    // Report 7 §29: for Standard Rating Scale (7), the scale legends are
+    // stored as TEXT options labelled "Point N". They must load into
+    // scaleLabels ONLY — previously they were ALSO loaded into the regular
+    // options state, so every save submitted them TWICE (5 → 10 → 20 → 40 →
+    // 80 options, exactly the duplication the client measured).
+    const isRatingQuestion = q.question_type === "STANDARD_RATING_SCALE";
     const textOptions: OptionData[] = q.options
-      .filter((o) => ["TEXT", "IMAGE", "RANK", "FORCED_CHOICE"].includes(o.option_type))
+      .filter(
+        (o) =>
+          ["TEXT", "IMAGE", "RANK", "FORCED_CHOICE"].includes(o.option_type) &&
+          !(isRatingQuestion && (o.label ?? "").startsWith("Point ")),
+      )
       .map((o) => ({
         sub_question_index: o.sub_question_index,
         option_type: o.option_type,
@@ -395,10 +406,12 @@ export default function QuestionEditorPage() {
       setCellContent([]);
     }
     setIsMultipleAnswer(textOptions.filter((o) => o.is_correct).length > 1);
+    // Report 7 §30: load scale legends from the RAW options (not the
+    // filtered textOptions) — sorted by their "Point N" label numerically.
     setScaleLabels(
-      textOptions
-        .filter((o) => o.label?.startsWith("Point "))
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      q.options
+        .filter((o) => (o.label ?? "").startsWith("Point "))
+        .sort((a, b) => (a.label ?? "").localeCompare(b.label ?? "", "en", { numeric: true }))
         .map((o) => o.text_value ?? ""),
     );
     setHotspotAreas(
@@ -776,6 +789,10 @@ export default function QuestionEditorPage() {
   const isRankRate = questionType === "RANK_THEN_RATE";
   const isRating = questionType === "STANDARD_RATING_SCALE";
   const isForcedChoice = questionType.startsWith("FORCED_CHOICE_");
+  // Report 7 §35/§36: a Psychometric Statement (type 9) is bare text authored
+  // in the QB — the text fields below make the facility usable, which is
+  // what the groups tab draws from.
+  const isPsychometricStatement = questionType === "PSYCHOMETRIC_STATEMENT";
 
   const mcqData = {
     question_text_1: questionText1,
@@ -816,6 +833,7 @@ export default function QuestionEditorPage() {
 
   const matchData = {
     question_text_1: questionText1,
+    question_text_2: questionText2,
     scoring_type: "PARTIAL",
     pairs,
     dummyOptions,
@@ -862,6 +880,11 @@ export default function QuestionEditorPage() {
     question_text_2: questionText2,
     rating_scale_points: ratingScalePoints,
     options,
+  };
+  // Report 7 §35: the statement editor binds the statement text (Text 1).
+  const statementData = {
+    question_text_1: questionText1,
+    question_text_2: questionText2,
   };
 
   return (
@@ -1084,6 +1107,10 @@ export default function QuestionEditorPage() {
                 data={matchData}
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
+                  // Report 7 §28: sync question_text_2 — the Match editor
+                  // binds it but the parent state was never updated, so
+                  // Text 2 edits were silently dropped on save.
+                  setQuestionText2(d.question_text_2);
                   setPairs(d.pairs);
                   setDummyOptions(d.dummyOptions);
                 }}
@@ -1125,6 +1152,8 @@ export default function QuestionEditorPage() {
                 data={rankData}
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
+                  // Report 7 §28: sync question_text_2 (was dropped).
+                  setQuestionText2(d.question_text_2);
                   setOptions(d.options);
                 }}
               />
@@ -1134,6 +1163,8 @@ export default function QuestionEditorPage() {
                 data={rankRateData}
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
+                  // Report 7 §28: sync question_text_2 (was dropped).
+                  setQuestionText2(d.question_text_2);
                   setRatingScalePoints(d.rating_scale_points);
                   setOptions(d.options);
                 }}
@@ -1144,6 +1175,10 @@ export default function QuestionEditorPage() {
                 data={ratingData}
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
+                  // Report 7 §28: sync question_text_2 — this was the
+                  // client's exact complaint: QnText2 saves for some
+                  // question types but not others (Rating among them).
+                  setQuestionText2(d.question_text_2);
                   setRatingScalePoints(d.rating_scale_points);
                   setRatingDirection(d.rating_direction);
                   setScaleLabels(d.scaleLabels);
@@ -1156,8 +1191,19 @@ export default function QuestionEditorPage() {
                 data={forcedChoiceData}
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
+                  // Report 7 §28: sync question_text_2 (was dropped).
+                  setQuestionText2(d.question_text_2);
                   setRatingScalePoints(d.rating_scale_points);
                   setOptions(d.options);
+                }}
+              />
+            )}
+            {isPsychometricStatement && (
+              <PsychometricStatementEditor
+                data={statementData}
+                onChange={(d) => {
+                  setQuestionText1(d.question_text_1);
+                  setQuestionText2(d.question_text_2);
                 }}
               />
             )}

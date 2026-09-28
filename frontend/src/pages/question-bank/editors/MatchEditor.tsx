@@ -16,6 +16,7 @@ import {
 interface MatchEditorProps {
   data: {
     question_text_1: string;
+    question_text_2: string;
     scoring_type: string;
     pairs: MatchPairData[];
     dummyOptions: OptionData[];
@@ -88,6 +89,16 @@ export function MatchEditor({ data, onChange }: MatchEditorProps) {
           onChange={(html) => onChange({ ...data, question_text_1: html })}
           minHeight={80}
           placeholder="Instructions for matching…"
+        />
+      </div>
+      {/* Report 7 §28: bind question_text_2 so Match questions can save it. */}
+      <div>
+        <Label htmlFor="qtext2">Question text 2 (optional)</Label>
+        <WysiwygEditorLite
+          value={data.question_text_2}
+          onChange={(html) => onChange({ ...data, question_text_2: html })}
+          minHeight={60}
+          placeholder="Secondary text shown to the candidate…"
         />
       </div>
 

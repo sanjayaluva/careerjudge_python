@@ -293,7 +293,7 @@ export default function SessionResultsPage() {
 // ---------------------------------------------------------------------------
 
 function ScoringDebugView({ data }: { data: SessionDebugData }) {
-  const { session, sections, section_scores, attempts } = data;
+  const { session, sections, section_scores, attempts, questions_combined } = data;
 
   return (
     <div className="space-y-6">
@@ -347,6 +347,99 @@ function ScoringDebugView({ data }: { data: SessionDebugData }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Per-Question Combined Scores — Report 7 §22/§24-26 */}
+      {questions_combined && questions_combined.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Question Scores ({questions_combined.length} questions)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {questions_combined.map((qc, idx) => (
+                <div
+                  key={qc.question_id}
+                  className={`rounded-md border p-4 ${
+                    qc.score != null && qc.max_score != null && qc.score >= qc.max_score
+                      ? "border-green-200 bg-green-50/50"
+                      : qc.attempted > 0
+                        ? "border-slate-200"
+                        : "border-amber-200 bg-amber-50"
+                  }`}
+                >
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-bold text-slate-900">Q{idx + 1}.</span>
+                    <Badge variant="outline">{qc.question_type_label}</Badge>
+                    {qc.section_title && (
+                      <span className="text-xs text-slate-500">📁 {qc.section_title}</span>
+                    )}
+                    {qc.sub_question_count > 1 && (
+                      <Badge variant="default">
+                        {qc.sub_question_count} sub-questions ({qc.attempted} attempted)
+                      </Badge>
+                    )}
+                    <span className="ml-auto text-sm font-bold text-slate-900">
+                      {/* The client's "combined score / received score" pair —
+                          the SUM over all of this question's sub-answers. */}
+                      Received: {qc.score?.toFixed(2) ?? "—"} / Combined:{" "}
+                      {qc.max_score?.toFixed(2) ?? "—"}
+                    </span>
+                  </div>
+                  <p className="mb-2 text-sm font-medium text-slate-900">{qc.question_title}</p>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <p className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                        Candidate's Answer
+                      </p>
+                      <pre className="overflow-x-auto rounded-md bg-slate-900 p-2 text-xs text-green-400">
+                        {qc.raw_answer ? JSON.stringify(qc.raw_answer, null, 2) : "(no answer)"}
+                      </pre>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                        Correct Answer
+                      </p>
+                      <pre className="overflow-x-auto rounded-md bg-slate-100 p-2 text-xs text-slate-700">
+                        {qc.correct_answer
+                          ? JSON.stringify(qc.correct_answer, null, 2)
+                          : "(no correct answer configured)"}
+                      </pre>
+                    </div>
+                  </div>
+                  {qc.sub_question_count > 1 && (
+                    <div className="mt-2 overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-left text-slate-500">
+                            <th className="py-1 pr-4">Sub-question</th>
+                            <th className="py-1 pr-4">Status</th>
+                            <th className="py-1 pr-4">Score</th>
+                            <th className="py-1">Answer</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {qc.sub_attempts.map((sa) => (
+                            <tr key={sa.sub_question_index} className="border-b border-slate-100">
+                              <td className="py-1 pr-4">#{sa.sub_question_index + 1}</td>
+                              <td className="py-1 pr-4">{sa.status}</td>
+                              <td className="py-1 pr-4">
+                                {sa.score?.toFixed(2) ?? "—"} / {sa.max_score?.toFixed(2) ?? "—"}
+                              </td>
+                              <td className="py-1 text-slate-500">
+                                {sa.raw_answer ? JSON.stringify(sa.raw_answer) : "(no answer)"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Section Hierarchy */}
       <Card>

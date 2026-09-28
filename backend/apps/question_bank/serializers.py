@@ -219,8 +219,30 @@ class QuestionListSerializer(serializers.ModelSerializer):
 class QuestionDetailSerializer(serializers.ModelSerializer):
     """Full serializer with nested children for detail/create/update views."""
 
-    # Allow image to be a URL string or base64 data URL (read-only here; created via QuestionCreateSerializer)
-    image = serializers.CharField(read_only=True)
+    # Report 7 §37: image must be WRITABLE on update — a read-only field
+    # silently dropped every image upload made from the question editor's
+    # update flow ("after uploading image file, it does not get saved").
+    # Accepts a URL string, base64 data URL, or None (None → "" so the
+    # TextField never sees NULL).
+    image = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    # Write-only flag: set with image="" to explicitly clear an existing image.
+    clear_image = serializers.BooleanField(write_only=True, required=False)
+
+    def to_internal_value(self, data):
+        ret = super().to_internal_value(data)
+        if ret.get("image") is None:
+            ret["image"] = ""
+        return ret
+
+    def update(self, instance, validated_data):
+        # A blank/None image in the payload must not wipe an existing one —
+        # the editor sends ``image`` only when the author picked one. (To
+        # clear an image the editor sends an explicit empty string with
+        # ``clear_image: true``.)
+        clear = validated_data.pop("clear_image", False)
+        if validated_data.get("image", "") in ("", None) and not clear:
+            validated_data.pop("image", None)
+        return super().update(instance, validated_data)
 
     options = ResponseOptionSerializer(many=True, read_only=True)
     media_files = MediaFileSerializer(many=True, read_only=True)
@@ -252,6 +274,7 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
             "question_text_2",
             "worked_solution",
             "image",
+            "clear_image",
             "image_width",
             "image_height",
             "order",
