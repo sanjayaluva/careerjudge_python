@@ -126,7 +126,7 @@ class Question(models.Model):
         ("MCQ_AUDIO_MULTI", "1c: MCQ - Audio with Multiple Questions"),
         ("MCQ_VIDEO_MULTI", "1d: MCQ - Video with Multiple Questions"),
         ("MCQ_WORD_FLASH_MULTI", "1e: MCQ - Word Flash with Multiple Questions"),
-        ("MCQ_IMAGE_FLASH_MULTI", "1f: MCQ - Image Flash with Multiple Questions"),
+        ("MCQ_IMAGE_FLASH_MULTI", "1f: MCQ - Image Flash with Multiple Answers"),
         ("MCQ_PASSAGE_DISPLAY_MULTI", "1g: MCQ - Passage Display with Multiple Questions"),
         ("MCQ_IMAGE_DISPLAY_MULTI", "1h: MCQ - Image Display with Multiple Questions"),
         ("FITB_SINGLE", "2a: FITB - Single Field"),

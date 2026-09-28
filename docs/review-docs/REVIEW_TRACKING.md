@@ -4,7 +4,7 @@
 > and the resolution status. Serves as a permanent reference of work done
 > per client feedback.
 >
-> Last updated: 30 July 2026
+> Last updated: 28 September 2026
 
 ---
 
@@ -314,3 +314,51 @@ These will be analyzed and implemented when provided by the client.
 | 6 | Followup session notification | 🔄 Pending |
 | 7 | Followup session booking notification | 🔄 Pending |
 | 8 | Followup session payment reminder | 🔄 Pending |
+
+---
+
+### 10. System Testing & Review Feedback Report 7
+- **File:** `docs/review-docs/System_Testing_and_Review_Report_7_26-09-2026.pdf`
+- **Date received:** 26 September 2026
+- **Source:** Client testing team (44 issues across display order, resume,
+  timer config, scoring, question-bank editing, and player UX)
+- **Status:** ✅ All 44 items resolved — scope-verified, fixed, and regression-tested
+
+#### Scope verification (performed before any code change)
+Every issue traced to a signed basis:
+- SRS 03 §5.1 (order of delivery) → issues 1-8, 33, 34, 43
+- SRS 03 §5.2 (timer at only ONE level; assessment or variable/question level) → 11, 13, 21
+- 00_scoring_rules.json PARTIAL/BINARY per-item rules → 22, 24-27
+- Question-types spec ("option images may be large; layout must account for extra vertical space") → 16
+- PSY-A1 signed Approach-1 (statements authored in QB) → 35, 36
+- Feedback-driven refinements preserved per the FEEDBACK-R* policy → 6, 12, 14-17, 23, 38-41, 44
+- Freeze policy respected: additive only (new nullable/optional fields,
+  optional response fields, behavior fixes). No endpoint renames/removals.
+- Interpretation note: §27 supersedes Report 1 C-FE-1 multi-answer rule
+  (+1/-1 floor 0 → +1 correct / 0 incorrect per selection; max = number of
+  correct options) — consistent with §24-26 per-item semantics.
+
+#### Resolution summary
+
+| Group | Issues | Root cause → Fix |
+|---|---|---|
+| Static display order | 1, 2, 4, 5, 12, 33, 34 | `AssessmentSection.order` / `AssessmentQuestion.order` were never set on create (all 0) and delivery sorted flat by (level, order). New `apps/assessment/ordering.py` engine: DFS path sort in exact assigned order; order values auto-assigned on create; data migration 0009 backfills existing rows; deterministic ascending lists with pk tiebreaker. |
+| Random cascade | 7, 8 | Client-side whole-set shuffle replaced by the backend engine: assessment-level RANDOM shuffles the set; per-section RANDOM shuffles that section's questions + child subsections only (parents stay static). Seeded per session (stable across resume). |
+| Sidebar (TEST PROGRESS) | 3, 42, 43 | Rows now carry `section_title`, `section_path`, `section_level`, `static_order_index`; the sidebar renders section names with full root→leaf paths in STATIC order; buttons numbered per question (17, not 21); on-the-fly attempts route to the ASSIGNED section (was `sections.first()`). |
+| Resume flow | 9, 10, 18, 19 | All sub-question attempts seeded upfront (stable list); player dedupes rows to one display unit per question; answers/bookmarks/skips rehydrate from the server; resume lands on the first unattempted question; answered+bookmarked attempts keep their bookmark flag. |
+| Timer configuration | 11, 13, 21 | Single-level rule enforced server-side (400 `timer_level_conflict` on Assessment/Section/Question saves) + UI disables non-matching levels; per-question timer UI on the Questions tab (timer_level='question'); section timer auto-advance locks the expired section and resets for the next. |
+| Scoring | 22, 24, 25, 26, 27 | Multi-answer MCQ: +1 per correct selection, 0 per wrong, max = # correct (1/2, 3/3). Flash recall (2c/2d): scores against the FLASH ITEMS (display pool) ∪ manual correct answers, max = pool size, any order, no negative. Bookmarked-with-answer attempts still score. Debug/results show per-question COMBINED rows (sum over sub-questions). |
+| Player display | 16, 17, 38, 41 | Image options render at natural size (contain, no 48×48 crop); Match Group A + B + dummies all shuffled (deterministic per question); flash FITB answer fields = flash-item count; replay locks only after a presentation actually PLAYED (navigating away unplayed keeps Play active; options stay gated). |
+| Qn Bank editor | 28, 29, 30, 35, 36, 37 | question_text_2 sync fixed for Rating/Rank/RankRate/ForcedChoice/Match editors; rating legends load from raw options only (ends the 5→80 option duplication); legends render in the player; new Psychometric Statement editor (type 9 — statement text now authorable, ready for review, feeds psychometric groups); `image` writable on UPDATE (uploads persist; `clear_image` flag for explicit removal). |
+| Submit UX | 39, 40 | Pre-submit dialog lists bookmarked + skipped questions with Go Back / No — Submit, exactly per the client's example. |
+| Auth during assessment | 44 | Player keeps the JWT fresh with a lightweight 4-minute keepalive while a session is active (no idle logout mid-assessment). |
+| Type label | 23 | 1f renamed "Multiple Questions" → "Multiple Answers" (backend choice label; frontend label already matched). |
+
+#### Regression tests
+- `apps/assessment/tests/test_report7.py` — 25 tests (ordering, random cascade,
+  sidebar metadata, seeding, resume, timer hierarchy, assignment order,
+  timer context, all scoring rules, label rename)
+- `apps/question_bank/tests/test_report7.py` — 9 tests (QnText2 round-trip,
+  option sync without duplication, legend persistence, statement authoring,
+  image update round-trip)
+- Full suite: 272 backend tests + 56 frontend tests green; ruff/black/prettier/tsc clean.

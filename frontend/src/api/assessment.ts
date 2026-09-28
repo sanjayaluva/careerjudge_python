@@ -376,6 +376,16 @@ export interface SessionQuestion {
   question_duration_seconds: number | null;
   /** ASM-5 (§5.1): this question's section delivery order mode. */
   section_order_mode: "STATIC" | "RANDOM";
+  /**
+   * Report 7 §3/§42/§43: section display metadata for the TEST PROGRESS
+   * sidebar — the section's own title, the full root→leaf path, its level,
+   * and this row's position in the STATIC (configured) order so the sidebar
+   * shows the assigned structure even during RANDOM delivery.
+   */
+  section_title?: string | null;
+  section_path?: string | null;
+  section_level?: number | null;
+  static_order_index?: number | null;
   question_detail: {
     id: number;
     question_title: string;
@@ -577,6 +587,32 @@ export interface SessionDebugData {
     score_matches: boolean | null;
     answered_at: string | null;
     time_spent_seconds: number | null;
+  }[];
+  /**
+   * Report 7 §22/§24-26: per-question COMBINED rows — one row per question
+   * with the SUM of its sub-question attempt scores (a 1f with three 1-point
+   * sub-questions shows combined 3/3, matching the client's "combined score
+   * for three answers should be 3"). Sub-attempts included as breakdown.
+   */
+  questions_combined?: {
+    question_id: number;
+    question_title: string;
+    question_type: string;
+    question_type_label: string;
+    section_title: string | null;
+    sub_question_count: number;
+    attempted: number;
+    score: number;
+    max_score: number;
+    raw_answer: Record<string, unknown> | null;
+    correct_answer: Record<string, unknown> | null;
+    sub_attempts: {
+      sub_question_index: number;
+      status: string;
+      raw_answer: Record<string, unknown> | null;
+      score: number | null;
+      max_score: number | null;
+    }[];
   }[];
 }
 
