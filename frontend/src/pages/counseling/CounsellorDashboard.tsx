@@ -209,14 +209,25 @@ function SessionRow({
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  // Report 8 #48: a reason is required to cancel (Report 3 §1.16) — the
+  // button used to send none, so every counsellor cancel was rejected.
+  // #49: the counselee is then asked to book another timeslot.
   const cancelMut = useMutation({
-    mutationFn: () => cancelSession(session.id, "counsellor"),
+    mutationFn: (reason: string) => cancelSession(session.id, "counsellor", reason),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["counseling", "sessions"] });
-      toast.success("Session cancelled.");
+      toast.success("Session cancelled — the counselee has been asked to rebook.");
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
+
+  const askCancel = () => {
+    const reason = window.prompt(
+      "Reason for cancelling (required). The counselee will be asked to book another timeslot:",
+    );
+    if (reason && reason.trim()) cancelMut.mutate(reason.trim());
+    else if (reason !== null) toast.error("A reason is required to cancel.");
+  };
 
   const completeMut = useMutation({
     mutationFn: () => completeSession(session.id),
@@ -278,7 +289,7 @@ function SessionRow({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => cancelMut.mutate()}
+                onClick={askCancel}
                 loading={cancelMut.isPending}
                 className="text-danger-600"
               >
@@ -298,7 +309,7 @@ function SessionRow({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => cancelMut.mutate()}
+                onClick={askCancel}
                 loading={cancelMut.isPending}
                 className="text-danger-600"
               >

@@ -70,15 +70,24 @@ def _notify_on_cancellation(sender, instance, created, **kwargs):
     try:
         session = instance.session
         refund_label = instance.get_refund_tier_display()
-        notify_user(
-            session.counselee,
-            f"Session cancelled: {session.counsellor.full_name}",
-            f"Your session has been cancelled ({instance.get_cancelled_by_display()}). "
-            f"Refund: {refund_label}. You may book another timeslot with this or another "
-            f"counsellor.",
-            "warning",
-            "/counseling",
-        )
+        if instance.cancelled_by == "counsellor":
+            # Report 8 #49: the counsellor asks the counselee to rebook.
+            when = _fmt_dt(session.timeslot.start_time) if session.timeslot_id else ""
+            body = (
+                f"{session.counsellor.full_name} had to cancel your session on {when}"
+                f"{f' ({instance.reason})' if instance.reason else ''} and requests you to "
+                f"reschedule: please book another available timeslot with "
+                f"{session.counsellor.full_name}. Refund: {refund_label}."
+            )
+            title = f"Please reschedule your session: {session.counsellor.full_name}"
+        else:
+            body = (
+                f"Your session has been cancelled ({instance.get_cancelled_by_display()}). "
+                f"Refund: {refund_label}. You may book another timeslot with this or another "
+                f"counsellor."
+            )
+            title = f"Session cancelled: {session.counsellor.full_name}"
+        notify_user(session.counselee, title, body, "warning", "/counseling")
         notify_role(
             "helpdesk",
             f"Session cancelled: {session.counselee.email}",
@@ -98,11 +107,14 @@ def _notify_on_followup(sender, instance, created, **kwargs):
     try:
         session = instance.original_session
         proposed_str = _fmt_dt(instance.proposed_time)
+        name = session.counselee.full_name or session.counselee.email
+        # Report 8 #51: the client's wording for the follow-up request.
         notify_user(
             session.counselee,
-            f"Follow-up session proposed: {session.counsellor.full_name}",
-            f"Your counsellor proposed a follow-up on {proposed_str}. Please book and "
-            f"complete payment to confirm.",
+            f"Follow-up request from {session.counsellor.full_name}",
+            f"{name}, you have consented for a followup session with me. Please, book the "
+            f"session. If there is a delay in booking, you may lose the timeslot. "
+            f"Proposed time: {proposed_str}.",
             "session",
             "/counseling",
         )

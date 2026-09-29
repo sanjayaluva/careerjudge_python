@@ -1270,3 +1270,103 @@ def test_admin_tags_counsellor_with_multiple_categories(
 
     assert counselee_client.post(url, {"categories": ["career"]}, format="json").status_code == 403
     assert admin_client.post(url, {"categories": ["astrology"]}, format="json").status_code == 400
+
+
+def test_admin_overview_of_counsellor(
+    admin_client, counselee_client, counsellor_user, counselee_user
+):
+    """Report 8 #37/#56-#59: CJ Admin sees a counsellor's timeslots, bookings,
+    cancellations, summaries and feedback; others are refused."""
+    counsellor = _make_counsellor(counsellor_user)
+    ts = _make_timeslot(counsellor, status="booked")
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=ts,
+        topic="Career switch",
+        fee=100,
+        status="completed",
+    )
+    from apps.counseling.models import SessionSummary
+
+    SessionSummary.objects.create(
+        session=session,
+        client_details="c",
+        summary="s",
+        session_smoothness="yes",
+        smoothness_reason="ok",
+        followup_recommended=False,
+    )
+    _make_timeslot(counsellor, hours_from_now=72)
+    url = f"/api/counseling/counsellors/{counsellor.id}/admin-overview/"
+    data = admin_client.get(url).data["data"]
+    assert [s["topic"] for s in data["sessions"]] == ["Career switch"]
+    assert len(data["upcoming_timeslots"]) == 2
+    assert len(data["summaries"]) == 1 and data["summaries"][0]["counselee"]
+    assert counselee_client.get(url).status_code == 403
+
+
+def test_counsellor_cancel_asks_to_rebook_and_followup_uses_client_wording(
+    counsellor_client, counsellor_user, counselee_user
+):
+    """Report 8 #48/#49/#51."""
+    from apps.counseling.models import FollowupSession
+    from apps.notifications.models import Notification
+
+    counsellor = _make_counsellor(counsellor_user)
+    session = CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=_make_timeslot(counsellor, status="booked"),
+        topic="t",
+        fee=0,
+        status="confirmed",
+    )
+    resp = counsellor_client.post(
+        f"/api/counseling/sessions/{session.id}/cancel/",
+        {"cancelled_by": "counsellor", "reason": "Unwell"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    note = Notification.objects.filter(recipient=counselee_user).latest("id")
+    assert "reschedule" in note.title.lower() and "Unwell" in note.message
+
+    FollowupSession.objects.create(
+        original_session=session,
+        counsellor=counsellor,
+        proposed_time="2026-11-01T10:00:00Z",
+        status="proposed",
+    )
+    note = Notification.objects.filter(recipient=counselee_user).latest("id")
+    assert "you have consented for a followup session with me" in note.message
+
+
+def test_counsellor_profile_details_saved_and_listed(
+    counsellor_client, counselee_client, counsellor_user
+):
+    """Report 8 #42/#45: age + languages saved from the profile form (text
+    inputs) and shown with region/qualification on the counsellor list."""
+    counsellor = _make_counsellor(counsellor_user)
+    resp = counsellor_client.patch(
+        "/api/me/",
+        {
+            "profile": {
+                "age": "42",
+                "communicative_languages": "English, Malayalam",
+                "city": "Kottayam",
+                "highest_education": "MA Psychology",
+            }
+        },
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    listed = counselee_client.get("/api/counseling/counsellors/").data["data"]
+    row = next(c for c in listed["results"] if c["id"] == counsellor.id)
+    assert row["age"] == 42
+    assert row["languages"] == ["English", "Malayalam"]
+    assert row["region"] == "Kottayam"
+    assert row["professional_qualification"] == "MA Psychology"
+    assert (
+        counsellor_client.patch("/api/me/", {"profile": {"age": ""}}, format="json").status_code
+        == 200
+    )

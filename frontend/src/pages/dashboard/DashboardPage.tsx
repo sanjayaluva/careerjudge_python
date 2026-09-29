@@ -34,6 +34,7 @@ import {
   type RoleName,
 } from "@/lib/constants";
 import { useAuth } from "@/hooks/useAuth";
+import { UpcomingCounselingCard } from "./UpcomingCounselingCard";
 
 const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
@@ -74,6 +75,8 @@ export default function DashboardPage() {
           </AlertDescription>
         </Alert>
       )}
+
+      {userRole === "individual" && <UpcomingCounselingCard />}
 
       <PageCard>
         <CardHeader>

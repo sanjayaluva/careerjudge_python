@@ -51,10 +51,31 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
     )
     category_names = serializers.SerializerMethodField()
     upcoming_slot_count = serializers.SerializerMethodField()
+    # Report 8 #42/#43: details counselees need to choose a counsellor.
+    age = serializers.IntegerField(source="user.profile.age", read_only=True, default=None)
+    languages = serializers.JSONField(
+        source="user.profile.communicative_languages", read_only=True, default=list
+    )
+    region = serializers.CharField(source="user.profile.city", read_only=True, default="")
+    professional_qualification = serializers.CharField(
+        source="user.profile.highest_education", read_only=True, default=""
+    )
+    current_position = serializers.CharField(
+        source="user.profile.current_position", read_only=True, default=""
+    )
+    work_experience = serializers.CharField(
+        source="user.profile.work_experience", read_only=True, default=""
+    )
 
     class Meta:
         model = CounsellorProfile
         fields = [
+            "age",
+            "languages",
+            "region",
+            "professional_qualification",
+            "current_position",
+            "work_experience",
             "id",
             "user",
             "user_email",
@@ -129,9 +150,24 @@ class CounselingSessionSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True, default=None)
     timeslot_detail = TimeSlotSerializer(source="timeslot", read_only=True)
 
+    # Report 8 #49: who cancelled (and why) so the counselee can rebook when
+    # the counsellor cancelled.
+    cancelled_by = serializers.SerializerMethodField()
+    cancellation_reason = serializers.SerializerMethodField()
+
+    def get_cancelled_by(self, obj):
+        c = getattr(obj, "cancellation", None) if obj.status == "cancelled" else None
+        return c.cancelled_by if c else None
+
+    def get_cancellation_reason(self, obj):
+        c = getattr(obj, "cancellation", None) if obj.status == "cancelled" else None
+        return c.reason if c else ""
+
     class Meta:
         model = CounselingSession
         fields = [
+            "cancelled_by",
+            "cancellation_reason",
             "id",
             "counselee",
             "counselee_name",

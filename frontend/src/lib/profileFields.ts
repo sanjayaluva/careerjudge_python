@@ -196,6 +196,29 @@ export const CORPORATE_FIELDS: ProfileFieldConfig[] = [
   { name: "bio", label: "User Bio", type: "textarea", max_length: 1000 },
 ];
 
+// Counsellor profile (Report 8 #45/#46/#47, client change requests): shown
+// to counselees choosing a counsellor. Professional fields with the
+// qualification relabelled, plus age and communicative languages; the
+// passport-size photo is the profile picture (avatar upload).
+export const COUNSELLOR_FIELDS: ProfileFieldConfig[] = [
+  ...PROFESSIONAL_FIELDS.map((f) =>
+    f.name === "highest_education" ? { ...f, label: "Professional qualification" } : f,
+  ),
+  { name: "age", label: "Age", type: "text", max_length: 3 },
+  {
+    name: "communicative_languages",
+    label: "Communicative languages (comma-separated, e.g. English, Malayalam)",
+    type: "text",
+    max_length: 200,
+  },
+];
+
+/** Common fields, with role-specific labels (counsellors: City → Region). */
+export function getCommonFields(role: RoleName | null): ProfileFieldConfig[] {
+  if (role !== "counsellor") return COMMON_FIELDS;
+  return COMMON_FIELDS.map((f) => (f.name === "city" ? { ...f, label: "Region" } : f));
+}
+
 /** Returns the role-specific fields to show based on the user's role. */
 export function getRoleSpecificFields(role: RoleName | null): ProfileFieldConfig[] {
   switch (role) {
@@ -205,8 +228,9 @@ export function getRoleSpecificFields(role: RoleName | null): ProfileFieldConfig
     case "sme":
     case "reviewer":
     case "trainer":
-    case "counsellor":
       return PROFESSIONAL_FIELDS;
+    case "counsellor":
+      return COUNSELLOR_FIELDS;
     case "channel_partner":
       return CHANNEL_PARTNER_FIELDS;
     case "corp_admin":

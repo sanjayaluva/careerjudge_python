@@ -90,6 +90,9 @@ export interface UserProfile {
   mobile: string;
   avatar: string | null;
   bio: string;
+  /** Counsellors (Report 8 #45): age + languages sessions can be held in. */
+  age?: number | string | null;
+  communicative_languages?: string[] | string;
   /** Counsellors: rate per session + bookable flag. */
   hourly_rate?: number | string | null;
   is_available_for_counseling?: boolean;

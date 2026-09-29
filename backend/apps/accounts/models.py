@@ -392,6 +392,12 @@ class UserProfile(models.Model):
     country_of_origin = models.CharField(_("country of origin"), max_length=50, blank=True)
     state_province = models.CharField(_("state/province"), max_length=50, blank=True)
     city = models.CharField(_("city"), max_length=100, blank=True)
+    # Report 8 #45 (client change request): counsellor profile details shown
+    # to counselees — languages the counsellor can hold sessions in, and age.
+    communicative_languages = models.JSONField(
+        _("communicative languages"), default=list, blank=True
+    )
+    age = models.PositiveSmallIntegerField(_("age"), null=True, blank=True)
     postal_code = models.CharField(_("postal code"), max_length=20, blank=True)
     address_line1 = models.CharField(_("address line 1"), max_length=255, blank=True)
     address_line2 = models.CharField(_("address line 2"), max_length=255, blank=True)

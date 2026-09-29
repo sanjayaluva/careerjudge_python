@@ -70,6 +70,7 @@ class HasCounselingPermission(HasModulePermission):
         "destroy": "delete",
         "timeslots": "view",
         "set_categories": "change",
+        "admin_overview": "view",
         "confirm": "change",
         "cancel": "change",
         "complete": "change",
@@ -89,6 +90,10 @@ class HasCounselingPermission(HasModulePermission):
 # ---------------------------------------------------------------------------
 # Category ViewSet
 # ---------------------------------------------------------------------------
+
+
+def _person(session) -> str:
+    return session.counselee.full_name or session.counselee.email
 
 
 class CounselingCategoryViewSet(ActionSerializerMixin, ModelViewSet):
@@ -165,6 +170,71 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
         return Response(
             {"message": "Counsellor profile created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["get"], url_path="admin-overview")
+    def admin_overview(self, request, pk=None):
+        """CJ Admin's view of one counsellor (Report 8 #37/#56-#59; Doc 8 §2.3
+        feedback + §3.3 summaries are Admin-readable, §3.2 cancellations are
+        tracked per counsellor): upcoming timeslots, every booking with its
+        status, cancellation history, session summaries and counselee
+        feedback."""
+        role = request.user.role.name if request.user.role_id else None
+        if role != "cj_admin" and not request.user.is_superuser:
+            return Response(
+                {"error": {"code": "forbidden", "message": "CJ Admin only."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        counsellor = self.get_object()
+        now = timezone.now()
+        sessions = (
+            CounselingSession.objects.filter(counsellor=counsellor)
+            .select_related("counselee", "timeslot", "category")
+            .order_by("-timeslot__start_time", "-id")
+        )
+        cancellations = SessionCancellation.objects.filter(
+            session__counsellor=counsellor
+        ).select_related("session", "session__counselee")
+        summaries = SessionSummary.objects.filter(session__counsellor=counsellor).select_related(
+            "session", "session__counselee"
+        )
+        feedback = SessionFeedback.objects.filter(session__counsellor=counsellor).select_related(
+            "session", "session__counselee"
+        )
+        by_counsellor = sum(1 for c in cancellations if c.cancelled_by == "counsellor")
+        return Response(
+            {
+                "message": "OK",
+                "data": {
+                    "counsellor": CounsellorProfileSerializer(counsellor).data,
+                    "upcoming_timeslots": TimeSlotSerializer(
+                        counsellor.timeslots.filter(start_time__gte=now).order_by("start_time"),
+                        many=True,
+                    ).data,
+                    "sessions": CounselingSessionSerializer(sessions, many=True).data,
+                    "cancellations": [
+                        {
+                            "session": c.session_id,
+                            "counselee": c.session.counselee.full_name or c.session.counselee.email,
+                            "cancelled_by": c.cancelled_by,
+                            "reason": c.reason,
+                            "refund": c.get_refund_tier_display(),
+                            "cancelled_at": c.cancelled_at,
+                        }
+                        for c in cancellations
+                    ],
+                    "cancelled_by_counsellor_count": by_counsellor,
+                    "summaries": [
+                        {**SessionSummarySerializer(x).data, "counselee": _person(x.session)}
+                        for x in summaries
+                    ],
+                    "feedback": [
+                        {**SessionFeedbackSerializer(x).data, "counselee": _person(x.session)}
+                        for x in feedback
+                    ],
+                },
+            },
+            status=status.HTTP_200_OK,
         )
 
     @action(detail=True, methods=["post"], url_path="set-categories")
