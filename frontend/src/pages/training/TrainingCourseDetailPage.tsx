@@ -79,6 +79,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { LiveSessionConsentModal } from "./LiveSessionConsentModal";
 import { CourseStructureEditor } from "./CourseStructureEditor";
 import { CoursePlayer } from "./CoursePlayer";
+import { RegistrationFormModal, type RegistrationForm } from "./RegistrationFormModal";
 
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
   draft: "default",
@@ -132,10 +133,12 @@ export default function TrainingCourseDetailPage() {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  // Report 8 #13: Register opens the registration form first.
+  const [showRegForm, setShowRegForm] = useState(false);
   const registerMutation = useMutation({
-    mutationFn: async () => {
-      // Step 1: Register for the course
-      const reg = await registerForCourse(cid);
+    mutationFn: async (form: RegistrationForm) => {
+      // Step 1: Register for the course (with the registration form)
+      const reg = await registerForCourse(cid, undefined, form);
       // Step 2: Handle payment (free auto-pays, paid goes to Stripe)
       if (course && parseFloat(course.price) > 0) {
         const checkout = await createCheckout({
@@ -153,6 +156,7 @@ export default function TrainingCourseDetailPage() {
       return reg;
     },
     onSuccess: (data) => {
+      setShowRegForm(false);
       void queryClient.invalidateQueries({ queryKey: ["training", "my-courses"] });
       void queryClient.invalidateQueries({ queryKey: ["training", "courses"] });
       toast.success(
@@ -277,10 +281,7 @@ export default function TrainingCourseDetailPage() {
                   </Button>
                 )}
                 {!canManage && course.status === "published" && !myRegistration && (
-                  <Button
-                    onClick={() => registerMutation.mutate()}
-                    loading={registerMutation.isPending}
-                  >
+                  <Button onClick={() => setShowRegForm(true)} loading={registerMutation.isPending}>
                     {parseFloat(course.price) === 0
                       ? "Enroll for free"
                       : `Register for $${course.price}`}
@@ -510,6 +511,13 @@ export default function TrainingCourseDetailPage() {
           }}
         />
       )}
+      <RegistrationFormModal
+        open={showRegForm}
+        courseTitle={course.title}
+        submitting={registerMutation.isPending}
+        onClose={() => setShowRegForm(false)}
+        onSubmit={(form) => registerMutation.mutate(form)}
+      />
     </div>
   );
 }

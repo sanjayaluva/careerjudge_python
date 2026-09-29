@@ -26,6 +26,7 @@ import {
 import { COURSE_TYPES, listCourses, listMyCourses, registerForCourse } from "@/api/training";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
+import { RegistrationFormModal, type RegistrationForm } from "./RegistrationFormModal";
 
 const TRAINING_KEY = ["training", "courses"];
 
@@ -61,9 +62,13 @@ export default function TrainingPage() {
     queryFn: () => listMyCourses(),
   });
 
+  // Report 8 #13: Register opens the registration form first.
+  const [registerFor, setRegisterFor] = useState<{ id: number; title: string } | null>(null);
   const registerMutation = useMutation({
-    mutationFn: (courseId: number) => registerForCourse(courseId),
+    mutationFn: (v: { courseId: number; form: RegistrationForm }) =>
+      registerForCourse(v.courseId, undefined, v.form),
     onSuccess: (data) => {
+      setRegisterFor(null);
       void queryClient.invalidateQueries({ queryKey: ["training", "my-courses"] });
       void queryClient.invalidateQueries({ queryKey: TRAINING_KEY });
       // Report 3 §1.3: paid courses return a Stripe checkout URL — redirect.
@@ -169,8 +174,7 @@ export default function TrainingPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => registerMutation.mutate(c.id)}
-                            loading={registerMutation.isPending}
+                            onClick={() => setRegisterFor({ id: c.id, title: c.title })}
                           >
                             Register
                           </Button>
@@ -319,6 +323,15 @@ export default function TrainingPage() {
           </TabsContent>
         </Tabs>
       </PageCard>
+      <RegistrationFormModal
+        open={registerFor !== null}
+        courseTitle={registerFor?.title ?? ""}
+        submitting={registerMutation.isPending}
+        onClose={() => setRegisterFor(null)}
+        onSubmit={(form) =>
+          registerFor && registerMutation.mutate({ courseId: registerFor.id, form })
+        }
+      />
     </div>
   );
 }

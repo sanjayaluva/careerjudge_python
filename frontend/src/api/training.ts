@@ -478,10 +478,15 @@ export function listLiveSessionRequests(): Promise<LiveSessionRequestItem[]> {
 export function registerForCourse(
   courseId: number,
   extraAnswers?: Record<string, string>,
+  /** Report 8 #13: the registration form (mandatory profile details). */
+  form?: Record<string, string>,
 ): Promise<CourseRegistration & { checkout_url: string | null }> {
   return apiPost<CourseRegistration & { checkout_url: string | null }>(
     `${BASE}/courses/${courseId}/register/`,
-    extraAnswers ? { extra_answers: extraAnswers } : undefined,
+    {
+      ...(extraAnswers && { extra_answers: extraAnswers }),
+      ...(form && { form }),
+    },
   );
 }
 

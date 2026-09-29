@@ -66,6 +66,21 @@ from .serializers import (
     TrainingCourseSerializer,
 )
 
+# Report 8 #13: mandatory course-registration details (profile fields).
+REGISTRATION_FORM_FIELDS = (
+    "first_name",
+    "last_name",
+    "gender",
+    "mobile",
+    "state_province",
+    "city",
+    "occupation",
+    "highest_education",
+    "work_experience",  # "0" when none
+    "institution_name",
+    "place_of_institution",
+)
+
 
 def _course_completion(reg, progress_records) -> tuple[float, int, int]:
     """(percentage, completed, total) for a registration.
@@ -533,13 +548,38 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Build the registration-form snapshot: profile fields + any extra
-        # answers the candidate provided in the request body (Report 3 §1.1).
-        profile = getattr(request.user, "profile", None)
+        # Doc 7 §3/§4/§6: the student fills a registration form before paying
+        # (Report 8 #13: registering happened instantly with no form). The
+        # form's fields are mandatory here even where sign-up left them
+        # optional; answers are saved to the profile (prefilled next time)
+        # and snapshotted on the registration (Report 3 §1.1).
+        from apps.accounts.models import UserProfile
+
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        submitted = request.data.get("form") or {}
+        for field in REGISTRATION_FORM_FIELDS:
+            if field in submitted:
+                setattr(profile, field, str(submitted[field] or "").strip())
+        missing = [
+            f for f in REGISTRATION_FORM_FIELDS if not str(getattr(profile, f, "") or "").strip()
+        ]
+        if missing:
+            return Response(
+                {
+                    "error": {
+                        "code": "registration_form_incomplete",
+                        "message": "Please complete the registration form.",
+                        "details": {"missing": missing},
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if submitted:
+            profile.save(update_fields=list(REGISTRATION_FORM_FIELDS))
         registration_form = {
             "full_name": request.user.full_name,
             "email": request.user.email,
-            "phone": getattr(profile, "phone", "") if profile else "",
+            **{f: getattr(profile, f) for f in REGISTRATION_FORM_FIELDS},
             "extra_answers": request.data.get("extra_answers", {}),
         }
 

@@ -55,12 +55,39 @@ def trainer_user(db, roles):
     return UserFactory(role=role, email="trainer@test.com")
 
 
+REGISTRATION_FORM = {
+    "first_name": "Asha",
+    "last_name": "Menon",
+    "gender": "female",
+    "mobile": "9800000000",
+    "state_province": "Kerala",
+    "city": "Kottayam",
+    "occupation": "Student",
+    "highest_education": "B.Sc",
+    "work_experience": "0",
+    "institution_name": "CMS College",
+    "place_of_institution": "Kottayam",
+}
+
+
+def _complete_profile(user):
+    from apps.accounts.models import UserProfile
+
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    for k, v in REGISTRATION_FORM.items():
+        setattr(profile, k, v)
+    profile.save()
+
+
 @pytest.fixture
 def individual_user(db, roles):
     role = roles["individual"]
     for action in ("view", "add", "change"):
         ModuleRight.objects.get_or_create(role=role, module="training", action=action)
-    return UserFactory(role=role, email="student@test.com")
+    user = UserFactory(role=role, email="student@test.com")
+    # Report 8 #13: registering needs the mandatory registration-form details.
+    _complete_profile(user)
+    return user
 
 
 @pytest.fixture
@@ -248,6 +275,27 @@ def test_registration_captures_registration_form_snapshot(
     assert reg.registration_form["email"] == individual_user.email
     assert reg.registration_form["full_name"] == individual_user.full_name
     assert reg.registration_form["extra_answers"]["goal"] == "career switch"
+
+
+def test_registration_requires_the_registration_form(student_client, individual_user, trainer_user):
+    """Report 8 #13 / Doc 7 §6: mandatory details are required to register;
+    the submitted form is saved to the profile and snapshotted."""
+    from apps.accounts.models import UserProfile
+
+    UserProfile.objects.filter(user=individual_user).update(city="", work_experience="")
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    url = f"/api/training/courses/{course.id}/register/"
+    resp = student_client.post(url, {}, format="json")
+    assert resp.status_code == 400
+    assert set(resp.data["error"]["details"]["missing"]) == {"city", "work_experience"}
+    assert not CourseRegistration.objects.filter(course=course).exists()
+
+    form = {**REGISTRATION_FORM, "city": "Kochi", "work_experience": "0"}
+    resp = student_client.post(url, {"form": form}, format="json")
+    assert resp.status_code == 201, resp.data
+    reg = CourseRegistration.objects.get(course=course, student=individual_user)
+    assert reg.registration_form["city"] == "Kochi"
+    assert UserProfile.objects.get(user=individual_user).city == "Kochi"
 
 
 def test_registration_creates_payment_record(student_client, individual_user, trainer_user):
