@@ -307,16 +307,18 @@ def _score_binary(
     """Score MCQ questions.
 
     Single-answer (1 correct option): correct → 1, incorrect → 0.
+    Multi-answer (2+ correct options): each correct selected = +1, each
+    incorrect selected = -1, minimum score = 0.
 
-    Multi-answer (2+ correct options) — Report 7 §22/§27 semantics
-    (supersedes the earlier +1/-1 floor-0 rule from Report 1 C-FE-1):
-      - each CORRECT selected option → +1
-      - each INCORRECT selected option → 0 (no deduction)
-      - max score = number of correct options
-    So selecting 1 correct + 1 wrong out of 2 correct scores 1/2, and
-    selecting all 3 correct of 3 scores 3/3 — matching the client's
-    expected "1/2 (one is correct and one is incorrect)" and "combined
-    score for three answers should be 3".
+    Per SRS feedback report: 'each correct answer option selected by the
+    test taker should receive a score of 1 and each incorrect answer
+    option selected a score of -1. If the number of wrong answers
+    selected is more than the number of correct answers selected, then
+    the score is fixed at zero. The total score cannot be a negative
+    value.'
+
+    Max score = number of correct options (so multi-answer questions
+    can score higher than 1).
 
     ``sub_question_index`` filters to only this sub-question's options
     (for multi-sub-question pooled types 1c-1h).
@@ -338,9 +340,11 @@ def _score_binary(
         score = 1.0 if selected_set == correct_ids else 0.0
         return score, 1.0
 
-    # Multi-answer: +1 per correct selection, 0 per incorrect selection.
+    # Multi-answer: +1 per correct selected, -1 per incorrect selected, min 0
     correct_selected = selected_set & correct_ids
-    score = float(len(correct_selected))
+    incorrect_selected = selected_set - correct_ids
+    raw_score = len(correct_selected) - len(incorrect_selected)
+    score = max(0.0, float(raw_score))
     max_score = float(len(correct_options))
 
     return score, max_score
@@ -417,49 +421,6 @@ def _score_partial(
     """
     opts_qs = question.options.filter(sub_question_index=sub_question_index)
     options = list(opts_qs.all().order_by("order"))
-
-    # ── Flash recall types (2c/2d) — Report 7 §25/§26 ──
-    # Each correctly recalled flash item earns +1. The accepted answers are
-    # the UNION of (a) the FLASH ITEMS in the display pool and (b) the
-    # manually authored correct_answers on the field options. Max = number
-    # of flash items in the display pool. Recall order does not matter; no
-    # negative marking. Handled BEFORE the options guard — a recall
-    # question may have no field options at all (the flash items are the key).
-    if question.question_type in ("FITB_IMAGE_FLASH_MULTI", "FITB_WORD_FLASH_MULTI"):
-        from apps.question_bank.models import FlashItem
-
-        pool = list(FlashItem.objects.filter(question=question, is_in_display_pool=True))
-        if not pool:
-            # No display pool flagged — fall back to all flash items.
-            pool = list(question.flash_items.all())
-        max_score = float(max(len(pool), 1))
-        answers = raw_answer.get("answers", [])
-        if not answers:
-            return 0.0, max_score
-        all_correct = set()
-        for fi in pool:
-            label = (fi.text_value or "").strip()
-            if label:
-                all_correct.add(label.lower() if not question.case_sensitive else label)
-        for opt in options:
-            for ca in opt.correct_answers.all():
-                val = ca.answer_text.strip()
-                if not question.case_sensitive:
-                    val = val.lower()
-                all_correct.add(val)
-        matched_correct = set()
-        score = 0.0
-        for ans in answers:
-            candidate = (ans or "").strip()
-            if not candidate:
-                continue
-            if not question.case_sensitive:
-                candidate = candidate.lower()
-            if candidate in all_correct and candidate not in matched_correct:
-                score += 1.0
-                matched_correct.add(candidate)
-        return score, max_score
-
     if not options:
         return 0.0, 0.0
 
@@ -472,8 +433,37 @@ def _score_partial(
     # For FITB multi-field: raw_answer = {"answers": ["ans1", "ans2", ...]}
     answers = raw_answer.get("answers", [])
     if answers:
-        # (Flash recall types 2c/2d were handled above — before the options
-        # guard — so only the positional multi-field path remains here.)
+        # For FITB Flash (image/word) types: candidate can enter answers in
+        # ANY order. Each correctly entered answer gets +1 (SRS feedback §11).
+        # Match each candidate answer against the UNION of all options'
+        # correct_answers, with each correct answer counted at most once.
+        is_flash_fitb = question.question_type in (
+            "FITB_IMAGE_FLASH_MULTI",
+            "FITB_WORD_FLASH_MULTI",
+        )
+        if is_flash_fitb:
+            # Build the set of all correct answers across all options
+            all_correct = set()
+            for opt in options:
+                for ca in opt.correct_answers.all():
+                    val = ca.answer_text.strip()
+                    if not question.case_sensitive:
+                        val = val.lower()
+                    all_correct.add(val)
+            max_score = float(len(all_correct))
+            matched_correct = set()
+            score = 0.0
+            for ans in answers:
+                candidate = (ans or "").strip()
+                if not candidate:
+                    continue
+                if not question.case_sensitive:
+                    candidate = candidate.lower()
+                if candidate in all_correct and candidate not in matched_correct:
+                    score += 1.0
+                    matched_correct.add(candidate)
+            return score, max_score
+
         # Standard FITB multi-field: positional match (answer[i] ↔ option[i])
         score = 0.0
         for i, opt in enumerate(options):
@@ -961,11 +951,7 @@ def calculate_session_scores(session):
         override_key = (attempt.question_id, attempt.sub_question_index)
         override_max = override_map.get(override_key)
 
-        # Report 7 §24: an attempt that carries a saved answer scores it —
-        # even when the candidate also bookmarked the question afterwards
-        # (bookmarking never discards an entered answer). Skipped attempts
-        # have no raw_answer and score 0.
-        if not attempt.raw_answer:
+        if attempt.status != "attempted" or not attempt.raw_answer:
             attempt.score = 0.0
             attempt.max_score = (
                 override_max
@@ -997,7 +983,7 @@ def calculate_session_scores(session):
         # Non-psychometric types aggregate the whole attempt into one section.
         by_section = score_question_by_section(
             attempt.question,
-            attempt.raw_answer if attempt.raw_answer else None,
+            attempt.raw_answer if attempt.status == "attempted" else None,
             attempt.sub_question_index,
         )
         if by_section:

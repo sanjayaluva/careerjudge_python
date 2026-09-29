@@ -395,10 +395,7 @@ class QuestionAttempt(models.Model):
     )
 
     class Meta:
-        # Report 7: deterministic creation order (the delivery order is
-        # computed explicitly by the session questions endpoint using the
-        # section-hierarchy path + assigned order — see SessionViewSet).
-        ordering = ["id"]
+        ordering = ["section__order", "question__created_at"]
         verbose_name = _("question attempt")
         verbose_name_plural = _("question attempts")
         unique_together = [("session", "question", "sub_question_index")]

@@ -32,7 +32,6 @@ Sessions (candidate-facing):
   POST   /api/assessments/sessions/<id>/suspend/        — suspend session
 """
 
-from django.db import models
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, status
@@ -281,59 +280,6 @@ def _is_assessment_admin(user) -> bool:
     return bool(user.is_superuser or (user.role and user.role.name == "cj_admin"))
 
 
-def _timer_level_label(timer_level: str) -> str:
-    return dict(Assessment.TIMER_LEVEL_CHOICES).get(timer_level, timer_level)
-
-
-def _validate_timer_hierarchy(assessment, timer_level=None) -> list[str]:
-    """SRS 03 §5.2 signed rule (Report 7 §11): 'Timer can be set at only
-    ONE of the levels.' Return a list of violation messages — empty when
-    the assessment's timer configuration is consistent:
-
-      - timer_level='assessment': total_duration_seconds on the assessment
-        itself; NO section may carry duration_seconds.
-      - timer_level='levelN': only sections at level N may carry
-        duration_seconds; the assessment-level duration is ignored.
-      - timer_level='question': only AssessmentQuestion.duration_seconds.
-
-    The client's example: L2 timers 4+5 min while L1 also had 7 min — the
-    combined L1 value should have been the SUM of its children (9), which
-    only a single consistent level can express.
-
-    ``timer_level`` overrides the stored value (used to validate a
-    would-be update before it is applied).
-    """
-    issues = []
-    timer_level = timer_level or assessment.timer_level
-
-    if timer_level == "assessment":
-        for s in assessment.sections.filter(duration_seconds__isnull=False):
-            issues.append(
-                f"Section '{s.title}' (L{s.level}) has a {s.duration_seconds}s timer, "
-                "but this assessment's timer level is Assessment (L0). "
-                "A timer can be set at only ONE level — clear the section timers "
-                "or switch the timer level."
-            )
-    elif timer_level in ("level1", "level2", "level3", "level4"):
-        level_num = int(timer_level[-1])
-        for s in assessment.sections.filter(duration_seconds__isnull=False):
-            if s.level != level_num:
-                issues.append(
-                    f"Section '{s.title}' (L{s.level}) has a {s.duration_seconds}s timer, "
-                    f"but this assessment's timer level is {_timer_level_label(timer_level)}. "
-                    "A timer can be set at only ONE level — move the timer to a "
-                    "section at the configured level or switch the timer level."
-                )
-    elif timer_level == "question":
-        for s in assessment.sections.filter(duration_seconds__isnull=False):
-            issues.append(
-                f"Section '{s.title}' (L{s.level}) has a {s.duration_seconds}s timer, "
-                "but this assessment's timer level is Question. "
-                "A timer can be set at only ONE level — clear the section timers."
-            )
-    return issues
-
-
 class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
     """CRUD for assessments.
 
@@ -497,26 +443,7 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
             )
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-
-        # Report 7 §11 (SRS §5.2): a timer can be set at only ONE level —
-        # validate the WOULD-BE state before saving so a rejected change
-        # leaves the assessment untouched.
-        would_be_timer_level = serializer.validated_data.get("timer_level", instance.timer_level)
-        timer_issues = _validate_timer_hierarchy(instance, would_be_timer_level)
-        if timer_issues:
-            return Response(
-                {
-                    "error": {
-                        "code": "timer_level_conflict",
-                        "message": " ".join(timer_issues),
-                        "details": {"violations": timer_issues},
-                    }
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         serializer.save()
-
         return Response(
             {"message": "Assessment updated.", "data": AssessmentSerializer(instance).data},
             status=status.HTTP_200_OK,
@@ -934,9 +861,7 @@ class AssessmentSectionViewSet(ModelViewSet):
 
     def get_queryset(self):
         aid = self.kwargs.get("assessment_id")
-        # Report 7 §12: first-to-last (ascending) order, with pk as the
-        # deterministic tiebreaker so listings never come out arbitrary.
-        return AssessmentSection.objects.filter(assessment_id=aid).order_by("order", "id")
+        return AssessmentSection.objects.filter(assessment_id=aid)
 
     def perform_create(self, serializer):
         aid = self.kwargs.get("assessment_id")
@@ -947,17 +872,7 @@ class AssessmentSectionViewSet(ModelViewSet):
         # timer resolution. Doc 3 §3 allows up to four variable levels.
         parent = serializer.validated_data.get("parent")
         level = parent.level + 1 if parent else 1
-        # Report 7 §12/§1-2: the section's position is its creation order
-        # among its siblings. Sections previously ALL got order=0 (model
-        # default), which made every ordering by "order" meaningless and
-        # produced the jumbled/reversed listings the client reported.
-        next_order = (
-            AssessmentSection.objects.filter(assessment=assessment, parent=parent).aggregate(
-                models.Max("order")
-            )["order__max"]
-            or 0
-        ) + 1
-        serializer.save(assessment=assessment, level=level, order=next_order)
+        serializer.save(assessment=assessment, level=level)
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -985,34 +900,6 @@ class AssessmentSectionViewSet(ModelViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        # Report 7 §11 (SRS §5.2): reject a section timer at a level that
-        # does not match the assessment's configured timer level — a timer
-        # can be set at only ONE level.
-        aid = self.kwargs.get("assessment_id")
-        assessment = get_object_or_404(Assessment, id=aid)
-        duration = serializer.validated_data.get("duration_seconds")
-        if duration:
-            timer_level = assessment.timer_level
-            allowed = timer_level in ("level1", "level2", "level3", "level4") and (
-                derived_level == int(timer_level[-1])
-            )
-            if not allowed:
-                return Response(
-                    {
-                        "error": {
-                            "code": "timer_level_conflict",
-                            "message": (
-                                f"This assessment's timer level is "
-                                f"{_timer_level_label(timer_level)}. A timer can be "
-                                "set at only ONE level — durations are accepted "
-                                f"only on level-{timer_level} sections here."
-                            ),
-                        }
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
         self.perform_create(serializer)
         return Response(
             {
@@ -1028,33 +915,6 @@ class AssessmentSectionViewSet(ModelViewSet):
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-
-        # Report 7 §11 (SRS §5.2): a timer can be set at only ONE level —
-        # reject setting a duration on a section whose level does not match
-        # the assessment's timer level.
-        duration = serializer.validated_data.get("duration_seconds")
-        if duration:
-            assessment = instance.assessment
-            timer_level = assessment.timer_level
-            allowed = timer_level in ("level1", "level2", "level3", "level4") and (
-                instance.level == int(timer_level[-1])
-            )
-            if not allowed:
-                return Response(
-                    {
-                        "error": {
-                            "code": "timer_level_conflict",
-                            "message": (
-                                f"This assessment's timer level is "
-                                f"{_timer_level_label(timer_level)}. A timer can be "
-                                "set at only ONE level — durations are accepted "
-                                f"only on level-{timer_level} sections here."
-                            ),
-                        }
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
         serializer.save()
         return Response(
             {
@@ -1095,23 +955,12 @@ class AssessmentQuestionViewSet(ModelViewSet):
 
     def get_queryset(self):
         sid = self.kwargs.get("section_id")
-        # Report 7 §34: exact assignment order (ascending), pk tiebreaker.
-        return AssessmentQuestion.objects.filter(section_id=sid).order_by("order", "id")
+        return AssessmentQuestion.objects.filter(section_id=sid)
 
     def perform_create(self, serializer):
         sid = self.kwargs.get("section_id")
         section = get_object_or_404(AssessmentSection, id=sid)
-        # Report 7 §34/§1-2: assigned questions keep their assignment order.
-        # Every AssessmentQuestion previously got order=0 (model default),
-        # so "order by order" was meaningless and the delivered order came
-        # out jumbled/reversed relative to how the author assigned them.
-        next_order = (
-            AssessmentQuestion.objects.filter(section=section).aggregate(models.Max("order"))[
-                "order__max"
-            ]
-            or 0
-        ) + 1
-        serializer.save(section=section, order=next_order)
+        serializer.save(section=section)
 
     def create(self, request, *args, **kwargs):
         """Assign a question to a section.
@@ -1230,26 +1079,6 @@ class AssessmentQuestionViewSet(ModelViewSet):
         if question_cat == "psychometric":
             _ensure_section_tags_have_sections(assessment, section, question)
 
-        # Report 7 §11 (SRS §5.2): question-level timers are only accepted
-        # when the assessment's timer level is 'question' — a timer can be
-        # set at only ONE level.
-        if request.data.get("duration_seconds") and assessment.timer_level != "question":
-            return Response(
-                {
-                    "error": {
-                        "code": "timer_level_conflict",
-                        "message": (
-                            f"This assessment's timer level is "
-                            f"{_timer_level_label(assessment.timer_level)}. "
-                            "A timer can be set at only ONE level — per-question "
-                            "timers require the assessment timer level to be "
-                            "set to Question level."
-                        ),
-                    }
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -1314,47 +1143,19 @@ class SessionViewSet(ModelViewSet):
         'No questions found for this session' in the player while the
         assessment clearly had questions assigned. If this session has no
         attempts but the assessment does, seed them here on the fly.
-
-        Report 7 changes:
-        - ALL sub-question attempts are seeded upfront (one row per
-          sub-question), so the delivered list is stable across resume
-          and the summary counts never grow mid-session (§5/§10/§19).
-        - The delivery order is computed by the ordering engine
-          (apps/assessment/ordering.py) implementing SRS §5.1: exact
-          assigned static order, per-level RANDOM cascade seeded per
-          session (§1/§2/§4/§7/§8/§33/§34).
-        - Every row carries section_title / section_path / section_level
-          plus static_order_index so the player's TEST PROGRESS sidebar
-          can show the real section names in static order (§3/§42/§43).
         """
         session = self.get_object()
         if not session.question_attempts.exists():
             _seed_session_attempts(session)
 
         assessment = session.assessment
-
-        # ── Report 7 §10/§19: ensure every sub-question has its attempt row
-        # (including ones the candidate never reached), so counts are stable
-        # and max_score is correct at submit time.
-        for aq in AssessmentQuestion.objects.filter(section__assessment=assessment).select_related(
-            "question"
-        ):
-            question = aq.question
-            n_subs = getattr(question, "sub_question_count", 1) or 1
-            if n_subs > 1:
-                for sqi in range(n_subs):
-                    QuestionAttempt.objects.get_or_create(
-                        session=session,
-                        question=question,
-                        sub_question_index=sqi,
-                        defaults={"section": aq.section, "status": "not_attempted"},
-                    )
-
         attempts = list(session.question_attempts.select_related("question", "section").all())
 
-        # ── Per-level timer context for the player ──
-        sections_all = list(assessment.sections.all())
-        sections_by_id = {s.id: s for s in sections_all}
+        # ── Per-level timer + display-order context for the player ──
+        # Build the section hierarchy so we can resolve, per question, the
+        # governing timer section (the ancestor at the configured timer level)
+        # and each assigned question's own duration (question-level timer).
+        sections_by_id = {s.id: s for s in assessment.sections.all()}
         timer_level = assessment.timer_level
         timer_level_num = (
             int(timer_level[-1])
@@ -1385,30 +1186,32 @@ class SessionViewSet(ModelViewSet):
             (aq.section_id, aq.question_id, aq.sub_question_index): aq.duration_seconds
             for aq in AssessmentQuestion.objects.filter(section__assessment=assessment)
         }
+        # (section_id, question_id, sub_question_index) -> assigned display order
+        aq_order = {
+            (aq.section_id, aq.question_id, aq.sub_question_index): aq.order
+            for aq in AssessmentQuestion.objects.filter(section__assessment=assessment)
+        }
 
-        # ── Delivery order (Report 7 §1-8/§33/§34) ──
-        from .ordering import compute_delivery_order, section_display_path
+        # ── Honor the configured per-level display order (SRS §5.1) ──
+        # Order the delivered attempts by section hierarchy (level, order) and
+        # then by each question's assigned order within its section. RANDOM
+        # display order is applied client-side over this delivered set.
+        def _sort_key(att):
+            sec = att.section
+            key = (att.section_id, att.question_id, att.sub_question_index)
+            return (
+                sec.level if sec is not None else 0,
+                sec.order if sec is not None else 0,
+                aq_order.get(key, 0),
+                att.id,
+            )
 
-        ordered = compute_delivery_order(assessment, attempts, session.id)
-
-        # Sidebar metadata per section: display title + full path (§3/§42).
-        section_meta = {}
-        for s in sections_all:
-            section_meta[s.id] = {
-                "title": s.title,
-                "path": section_display_path(s, sections_all),
-                "level": s.level,
-            }
+        attempts.sort(key=_sort_key)
 
         serializer = QuestionAttemptSerializer(
-            [att for _, att in ordered],
+            attempts,
             many=True,
-            context={
-                "section_timer_map": section_timer_map,
-                "aq_durations": aq_durations,
-                "section_meta": section_meta,
-                "static_order_map": {id(att): static_index for static_index, att in ordered},
-            },
+            context={"section_timer_map": section_timer_map, "aq_durations": aq_durations},
         )
         data = list(serializer.data)
 
@@ -1496,44 +1299,28 @@ class SessionViewSet(ModelViewSet):
         bookmark = request.data.get("bookmark", False)
 
         # For multi-sub-question questions, the player sends sub_question_index
-        # 0..N-1. The questions endpoint seeds ALL sub-question rows up front,
-        # so the attempt normally exists already. Keep the get_or_create as a
-        # self-heal for legacy sessions — but derive the section from the
-        # question's ASSIGNMENT (Report 7 §42/§18): the previous fallback to
-        # assessment.sections.first() mis-routed attempts into the first
-        # section, which corrupted the sidebar grouping and the section
-        # score roll-up.
-        aq = AssessmentQuestion.objects.filter(
-            section__assessment=session.assessment, question_id=question_id
-        ).first()
-        correct_section = aq.section if aq is not None else None
-        if correct_section is None:
-            # Question not assigned (defensive) — fall back to the first leaf.
-            correct_section = (
-                session.assessment.sections.filter(subsections=None).first()
-                or session.assessment.sections.first()
-            )
+        # 0..N-1. Since these are stored as a single AssessmentQuestion (not
+        # auto-expanded), only sub_question_index=0 has a QuestionAttempt
+        # pre-created. For sub-questions 1..N-1, we create the attempt
+        # on-the-fly (get_or_create) so the answer can be saved.
         attempt, _created = QuestionAttempt.objects.get_or_create(
             session=session,
             question_id=question_id,
             sub_question_index=sub_question_index,
             defaults={
-                "section": correct_section,
+                "section": (
+                    session.assessment.sections.first()
+                    if session.assessment.sections.exists()
+                    else None
+                ),
                 "status": "not_attempted",
             },
         )
 
         if raw_answer is not None:
             attempt.raw_answer = raw_answer
+            attempt.status = "attempted"
             attempt.answered_at = timezone.now()
-            # Report 7 §39/§18: answering a BOOKMARKED question keeps the
-            # bookmark flag (status stays 'bookmarked'; the raw_answer is
-            # present so scoring and answered-counts still see the answer —
-            # scoring scores any attempt that carries a raw_answer). Without
-            # this, a resume lost the bookmark flag for answered questions
-            # and the pre-submit bookmark warning under-counted them.
-            if attempt.status != "bookmarked":
-                attempt.status = "attempted"
         elif bookmark:
             attempt.status = "bookmarked"
         else:
@@ -1929,49 +1716,6 @@ class SessionViewSet(ModelViewSet):
                 }
             )
 
-        # ── Report 7 §22/§24-26: per-question COMBINED rows ──
-        # The client reads results per question: a multi-sub-question
-        # question (e.g. 1f) or a multi-field question shows ONE row whose
-        # score/max is the SUM over its sub-question attempts. Sub-attempts
-        # are included as a breakdown list.
-        combined_debug = []
-        by_q: dict[int, list[dict]] = {}
-        for a in attempts_debug:
-            by_q.setdefault(a["question_id"], []).append(a)
-        for qid, subs in by_q.items():
-            combined_raw = sum(s["score"] or 0.0 for s in subs)
-            combined_max = sum(s["max_score"] or 0.0 for s in subs)
-            attempted_subs = [s for s in subs if s["status"] == "attempted" or s["raw_answer"]]
-            combined_debug.append(
-                {
-                    "question_id": qid,
-                    "question_title": subs[0]["question_title"],
-                    "question_type": subs[0]["question_type"],
-                    "question_type_label": subs[0]["question_type_label"],
-                    "section_title": subs[0]["section_title"],
-                    "sub_question_count": len(subs),
-                    "attempted": len(attempted_subs),
-                    "score": combined_raw,
-                    "max_score": combined_max,
-                    "raw_answer": (
-                        subs[0]["raw_answer"]
-                        if len(subs) == 1
-                        else {str(s["sub_question_index"]): s["raw_answer"] for s in subs}
-                    ),
-                    "correct_answer": subs[0]["correct_answer"],
-                    "sub_attempts": [
-                        {
-                            "sub_question_index": s["sub_question_index"],
-                            "status": s["status"],
-                            "raw_answer": s["raw_answer"],
-                            "score": s["score"],
-                            "max_score": s["max_score"],
-                        }
-                        for s in subs
-                    ],
-                }
-            )
-
         # ── Build section scores with hierarchy ──
 
         section_scores = {ss.section_id: ss for ss in session.section_scores.all()}
@@ -2020,7 +1764,6 @@ class SessionViewSet(ModelViewSet):
                     "sections": sections_debug,
                     "section_scores": scores_debug,
                     "attempts": attempts_debug,
-                    "questions_combined": combined_debug,
                 },
             },
             status=status.HTTP_200_OK,

@@ -41,11 +41,12 @@ export default function SessionPlayerPage() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [questionTimeLeft, setQuestionTimeLeft] = useState<number | null>(null);
   const [sectionTimeLeft, setSectionTimeLeft] = useState<number | null>(null);
-  // Report 7 §21: sections whose allotted time expired — their questions are
-  // locked (no going back) and the player auto-advances to the next section.
-  const [expiredSectionIds, setExpiredSectionIds] = useState<Set<number>>(new Set());
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Tracks question IDs the candidate has already viewed (visited + navigated
+  // away from). Used to lock flash/passage/image replay on revisit
+  // (SRS feedback Common Issue 5).
+  const [viewedQuestions, setViewedQuestions] = useState<Set<number>>(new Set());
   // Tracks question IDs where the timed presentation (flash/passage/image)
   // has finished. Used to gate Question Text 2 + answer options until the
   // presentation is over (SRS feedback Common Issue 4).
@@ -60,25 +61,6 @@ export default function SessionPlayerPage() {
     queryFn: () => retrieveSession(sid),
     enabled: !Number.isNaN(sid),
   });
-
-  // ── Report 7 §44: keep the auth token fresh while an assessment is in
-  // progress. The 60-minute access token only refreshes on API calls; a
-  // candidate thinking (or reading a long passage) for over an hour would
-  // otherwise hit a stale-token 401 on their next answer save and get
-  // logged out mid-assessment. A lightweight session GET every 4 minutes
-  // rides the interceptor's proactive refresh, so the token never goes
-  // stale while the player is open. (If a refresh still fails, the 401
-  // handler shows the login page with the session preserved server-side.)
-  useEffect(() => {
-    if (!session || session.status !== "active") return;
-    const keepalive = setInterval(
-      () => {
-        void retrieveSession(sid).catch(() => {});
-      },
-      4 * 60 * 1000,
-    );
-    return () => clearInterval(keepalive);
-  }, [session, sid]);
 
   // Initialize the timer once we know the assessment duration.
   // total_duration_seconds is exposed on the session serializer for the player.
@@ -123,90 +105,53 @@ export default function SessionPlayerPage() {
     enabled: !Number.isNaN(sid),
   });
 
-  // ── Report 7 §9/§10/§19/§20: one display unit per QUESTION ──
-  // The backend delivers one attempt row per sub-question. Collapse rows
-  // into a single display unit per question (the unit's internal
-  // sub-question navigation handles the parts) so the question list never
-  // grows mid-session and multi-sub-question questions never appear twice.
-  // Delivery order comes from the backend ordering engine (SRS §5.1:
-  // static DFS order or per-level RANDOM cascade, seeded per session) —
-  // the player no longer shuffles client-side.
+  // Apply random display order if the assessment requests it.
+  // The shuffle is stable per session (seeded by session ID) so the candidate
+  // sees the same order on refresh, but different from the authoring order.
   const questions = (() => {
     if (!rawQuestions || rawQuestions.length === 0) return rawQuestions;
-    const byUnit = new Map<number, SessionQuestion>();
-    for (const row of rawQuestions) {
-      const key = row.group_id != null ? -row.group_id : row.question;
-      const existing = byUnit.get(key);
-      if (existing == null) {
-        byUnit.set(key, { ...row });
-      } else if (row.status === "attempted" && existing.status !== "attempted") {
-        // Keep the most informative status on the merged unit.
-        existing.status = "attempted";
+
+    // Deterministic shuffle seeded per session, so the order is stable across
+    // refreshes (not cryptographically secure — display ordering only).
+    const shuffleSeeded = <T,>(arr: T[], seedBase: number): T[] => {
+      const a = [...arr];
+      let seed = seedBase;
+      for (let i = a.length - 1; i > 0; i--) {
+        seed = (seed * 9301 + 49297) % 233280;
+        const j = Math.floor((seed / 233280) * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
       }
-    }
-    return Array.from(byUnit.values());
-  })();
-
-  // ── Report 7 §43: the sidebar always shows the STATIC (configured)
-  // order — sort the display units by their static_order_index (psychometric
-  // groups, which have none, go last in their delivered order).
-  const staticQuestions = (() => {
-    if (!questions || questions.length === 0) return questions;
-    return [...questions].sort(
-      (a, b) => (a.static_order_index ?? 1e9) - (b.static_order_index ?? 1e9),
-    );
-  })();
-
-  // ── Report 7 §18/§19: rehydrate saved answers, bookmarks and skips from
-  // the server attempts so a resumed session shows the candidate's earlier
-  // work — the submit dialog and summary counts then reflect reality
-  // instead of only this sitting's local state.
-  const hydratedRef = useRef(false);
-  useEffect(() => {
-    if (!rawQuestions || rawQuestions.length === 0 || hydratedRef.current) return;
-    hydratedRef.current = true;
-
-    const restoredAnswers: Record<string, Record<string, unknown>> = {};
-    const restoredBookmarked = new Set<string>();
-    const restoredSkipped = new Set<string>();
-    for (const row of rawQuestions) {
-      const key = `${row.question}_${row.sub_question_index}`;
-      if (row.raw_answer) restoredAnswers[key] = row.raw_answer;
-      if (row.status === "bookmarked") restoredBookmarked.add(key);
-      if (row.status === "skipped") restoredSkipped.add(key);
-    }
-    if (Object.keys(restoredAnswers).length > 0) {
-      setAnswers((prev) => ({ ...restoredAnswers, ...prev }));
-    }
-    if (restoredBookmarked.size > 0)
-      setBookmarked((prev) => new Set([...prev, ...restoredBookmarked]));
-    if (restoredSkipped.size > 0) setSkipped((prev) => new Set([...prev, ...restoredSkipped]));
-  }, [rawQuestions]);
-
-  // ── Report 7 §9: on resume, land on the FIRST question that still needs
-  // an answer (not back at the top of the list). Runs exactly once, after
-  // rehydration.
-  const repositionedRef = useRef(false);
-  useEffect(() => {
-    if (!questions || questions.length === 0) return;
-    if (repositionedRef.current || !hydratedRef.current) return;
-    repositionedRef.current = true;
-
-    const unitFullyAnswered = (u: SessionQuestion): boolean => {
-      const n = u.question_detail.sub_question_count ?? 1;
-      if (u.group_id != null) return u.status === "attempted";
-      for (let i = 0; i < n; i++) {
-        const row = rawQuestions?.find(
-          (r) => r.question === u.question && r.sub_question_index === i,
-        );
-        if (!row?.raw_answer) return false;
-      }
-      return true;
+      return a;
     };
-    const firstOpen = questions.findIndex((u) => !unitFullyAnswered(u));
-    if (firstOpen > 0) setCurrentIndex(firstOpen);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questions, rawQuestions]);
+
+    // Assessment-level RANDOM shuffles the whole set (existing behaviour).
+    if (session?.display_order === "RANDOM") {
+      return shuffleSeeded(rawQuestions, sid);
+    }
+
+    // ASM-5 (§5.1): otherwise apply per-section order — shuffle questions within
+    // sections whose order_mode is RANDOM, keeping the delivered order elsewhere.
+    // Delivered questions are already grouped by section (backend sorts by
+    // level/order), so shuffle each consecutive same-section run in place.
+    if (!rawQuestions.some((q) => q.section_order_mode === "RANDOM")) {
+      return rawQuestions;
+    }
+    const result: typeof rawQuestions = [];
+    let i = 0;
+    while (i < rawQuestions.length) {
+      const sec = rawQuestions[i].section;
+      let j = i;
+      while (j < rawQuestions.length && rawQuestions[j].section === sec) j++;
+      const group = rawQuestions.slice(i, j);
+      if (group[0]?.section_order_mode === "RANDOM") {
+        result.push(...shuffleSeeded(group, sid + (sec ?? 0)));
+      } else {
+        result.push(...group);
+      }
+      i = j;
+    }
+    return result;
+  })();
 
   // PSY-A1: a psychometric group is delivered with a negative synthetic
   // question id (``-group_id``). Route its answer to the group endpoint; every
@@ -317,10 +262,6 @@ export default function SessionPlayerPage() {
 
   // Section-level timer countdown. On expiry, advance past the expiring
   // section (locking it) or submit if it was the last section.
-  // Report 7 §21: the expired section is recorded in expiredSectionIds so
-  // its questions lock (sidebar + Previous), the candidate moves on to the
-  // next section, and the timer resets for the next governing section
-  // (the effect below re-runs on the section change).
   useEffect(() => {
     if (sectionTimeLeft === null || sectionTimeLeft <= 0) return;
     const expiringSectionId = currentTimerSectionId;
@@ -328,9 +269,6 @@ export default function SessionPlayerPage() {
       setSectionTimeLeft((t) => {
         if (t === null || t <= 1) {
           clearInterval(sTimer);
-          if (expiringSectionId != null) {
-            setExpiredSectionIds((prev) => new Set(prev).add(expiringSectionId));
-          }
           // Find the last delivered question in the expiring section and jump
           // to the one after it (the next section). Order-independent of the
           // candidate's current position within the section.
@@ -342,7 +280,6 @@ export default function SessionPlayerPage() {
             const nextIdx = lastIdx + 1;
             if (nextIdx > 0 && nextIdx < questions.length) {
               setCurrentIndex(nextIdx);
-              setActiveSubQ(0);
             } else {
               submitMutation.mutate();
             }
@@ -391,40 +328,15 @@ export default function SessionPlayerPage() {
   const qd = q.question_detail;
   const answerKey = `${q.question}_${activeSubQ}`;
   const isLast = currentIndex === questions.length - 1;
-
-  // ── Report 7 §5/§18/§19: question-level summary counts ──
-  // A question counts as ONE unit (the client assigned 17 questions, so the
-  // summary must show 17 — not 21 sub-question rows). A unit is "answered"
-  // when every one of its sub-questions carries an answer.
-  const unitAnswered = (u: (typeof questions)[number]): boolean => {
-    const n = u.question_detail.sub_question_count ?? 1;
-    if (u.group_id != null) {
-      return u.status === "attempted" && Boolean(u.raw_answer);
-    }
-    for (let i = 0; i < n; i++) {
-      if (!answers[`${u.question}_${i}`]) return false;
-    }
-    return true;
-  };
-  const unitBookmarked = (u: (typeof questions)[number]): boolean => {
-    const n = u.question_detail.sub_question_count ?? 1;
-    for (let i = 0; i < n; i++) {
-      if (bookmarked.has(`${u.question}_${i}`)) return true;
-    }
-    return false;
-  };
-  const unitSkipped = (u: (typeof questions)[number]): boolean => {
-    const n = u.question_detail.sub_question_count ?? 1;
-    if (unitAnswered(u)) return false;
-    for (let i = 0; i < n; i++) {
-      if (skipped.has(`${u.question}_${i}`)) return true;
-    }
-    return false;
-  };
-  const totalQuestions = questions.length;
-  const answeredCount = questions.filter(unitAnswered).length;
-  const bookmarkedCount = questions.filter(unitBookmarked).length;
-  const skippedCount = questions.filter(unitSkipped).length;
+  const answeredCount = Object.keys(answers).length;
+  const bookmarkedCount = bookmarked.size;
+  const skippedCount = skipped.size;
+  // Total question count: for multi-sub-question questions, each sub-question
+  // counts as one. So a question with sub_question_count=3 counts as 3.
+  const totalQuestions = questions.reduce(
+    (sum, sq) => sum + (sq.question_detail.sub_question_count ?? 1),
+    0,
+  );
   const remainingCount = Math.max(0, totalQuestions - answeredCount);
 
   // Determine whether this question has a timed presentation that should
@@ -479,13 +391,8 @@ export default function SessionPlayerPage() {
   // on sub-question 0 AND only until the media presentation ends.
   // Retest fix: Question Text2 is also gated for presentation-first types —
   // it must appear only AFTER the presentation ends.
-  // Report 7 §41: the presentation gates the options until it has actually
-  // PLAYED to completion (presentationDone). Navigating away without playing
-  // leaves the presentation pending — on return the play button is active
-  // again (per the client's requirement) and the options stay gated until
-  // the candidate watches it. Replay after a completed play stays locked
-  // (SRS feedback C-FE-3/C-FE-5).
-  const presentationActive = hasTimedPresentation && !presentationDone.has(qd.id);
+  const presentationActive =
+    hasTimedPresentation && !presentationDone.has(qd.id) && !viewedQuestions.has(qd.id);
 
   // Per-sub-question text: from sub_question_texts[activeSubQ].
   const subQuestionText = qd.sub_question_texts?.[activeSubQ] ?? "";
@@ -578,6 +485,10 @@ export default function SessionPlayerPage() {
         sub_question_index: activeSubQ,
       });
     }
+    // Mark current question as viewed (locks replay on revisit)
+    if (q?.question) {
+      setViewedQuestions((prev) => new Set(prev).add(q.question));
+    }
     // If this is a multi-sub-question question and we're not on the last
     // sub-question, advance to the next sub-question within this question.
     // Requirement 3: sub-questions must be delivered in order 1,2,3.
@@ -598,6 +509,7 @@ export default function SessionPlayerPage() {
             sub_question_index: 0,
           });
         }
+        setViewedQuestions((prev) => new Set(prev).add(gq.question));
       }
       if (!groupIsLast) setCurrentIndex(continuousTail[continuousTail.length - 1] + 1);
       return;
@@ -621,34 +533,13 @@ export default function SessionPlayerPage() {
       setActiveSubQ((s) => s - 1);
       return;
     }
-    // Otherwise, go to the previous question in the assessment. Report 7
-    // §20: this is the IMMEDIATELY previous question in delivery order —
-    // the deduped unit list guarantees it (no duplicate rows scattered
-    // through the array). §21: questions in an expired (timed-out) section
-    // stay locked.
+    // Otherwise, go to the previous question in the assessment.
     if (currentIndex > 0) {
-      const target = groupStartOf(currentIndex - 1);
-      const targetSection = questions[target]?.timer_section_id;
-      if (targetSection != null && expiredSectionIds.has(targetSection)) {
-        // Walk further back to the first non-expired question.
-        let idx = target;
-        while (idx > 0) {
-          const sec = questions[idx]?.timer_section_id;
-          if (sec == null || !expiredSectionIds.has(sec)) break;
-          idx = groupStartOf(idx - 1);
-        }
-        if (
-          idx >= 0 &&
-          (questions[idx]?.timer_section_id == null ||
-            !expiredSectionIds.has(questions[idx].timer_section_id ?? -1))
-        ) {
-          setCurrentIndex(idx);
-          setActiveSubQ(0);
-        }
-        return;
+      // Mark current question as viewed (locks replay on revisit)
+      if (q?.question) {
+        setViewedQuestions((prev) => new Set(prev).add(q.question));
       }
-      setCurrentIndex(target);
-      setActiveSubQ(0);
+      setCurrentIndex((i) => groupStartOf(i - 1));
     }
   };
 
@@ -683,6 +574,10 @@ export default function SessionPlayerPage() {
       question_id: q.question,
       sub_question_index: activeSubQ,
     });
+    // Mark current question as viewed (locks replay on revisit), same as Next/Prev.
+    if (q?.question) {
+      setViewedQuestions((prev) => new Set(prev).add(q.question));
+    }
     // Advance the same way Next does: next sub-question, then next question.
     if (subQuestionCount > 1 && activeSubQ < subQuestionCount - 1) {
       setActiveSubQ((s) => s + 1);
@@ -720,32 +615,16 @@ export default function SessionPlayerPage() {
     submitMutation.mutate();
   };
 
-  // ── Report 7 §3/§42/§43: sidebar groups from the STATIC (configured)
-  // order with real section names. Each group = a leaf section (by id),
-  // labelled with the full root→leaf path so 3 sections with 2 subsections
-  // each display as 6 correctly-named groups — never a flat jumble.
-  // Buttons are numbered 1..N by static question order and jump to that
-  // question's DELIVERED index, so the sidebar stays in the assigned order
-  // even while delivery is randomized (§43).
-  const staticPosMap = new Map<number, number>();
-  (staticQuestions ?? []).forEach((u, i) => staticPosMap.set(u.group_id ?? u.question, i + 1));
-  const sections = new Map<
-    number | null,
-    { unit: (typeof questions)[number]; staticPos: number }[]
-  >();
-  (staticQuestions ?? []).forEach((u) => {
-    const secId = u.section;
-    if (!sections.has(secId)) sections.set(secId, []);
-    sections.get(secId)!.push({
-      unit: u,
-      staticPos: staticPosMap.get(u.group_id ?? u.question) ?? 0,
-    });
+  // Group questions by section for the sidebar navigation tree.
+  // Within each section, sub-questions from the same parent question are
+  // grouped together (for multi-question types 1c-1h, 2c-2d).
+  const sections = new Map<number | null, { questionIndex: number }[]>();
+  questions.forEach((q, i) => {
+    const sid = q.section;
+    if (!sections.has(sid)) sections.set(sid, []);
+    sections.get(sid)!.push({ questionIndex: i });
   });
-  const sectionEntries = Array.from(sections.entries()).sort((a, b) => {
-    const aIdx = a[1][0]?.staticPos ?? 1e9;
-    const bIdx = b[1][0]?.staticPos ?? 1e9;
-    return aIdx - bIdx;
-  });
+  const sectionEntries = Array.from(sections.entries());
 
   return (
     <div className="flex h-screen flex-col bg-slate-50">
@@ -856,33 +735,24 @@ export default function SessionPlayerPage() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Test Progress
             </p>
-            {sectionEntries.map(([sid, items]) => (
+            {sectionEntries.map(([sid, items], secIdx) => (
               <div key={sid ?? "no-section"} className="mb-3">
-                {/* Report 7 §3/§42: real section/subsection names with the
-                    full configured path (static order, §43). */}
-                <p
-                  className="mb-1 text-xs font-medium text-slate-700"
-                  title={items[0]?.unit.section_path ?? undefined}
-                >
-                  {items[0]?.unit.section_path || items[0]?.unit.section_title || "Questions"}
+                <p className="mb-1 text-xs font-medium text-slate-700">
+                  {sid !== null ? `Section ${secIdx + 1}` : "Questions"}
                 </p>
                 <div className="flex flex-wrap gap-1">
-                  {items.map(({ unit, staticPos }) => {
-                    // The unit's index in the DELIVERED order — jumping goes
-                    // there, so randomized delivery still works while the
-                    // sidebar listing stays static (§43).
-                    const i = questions.indexOf(unit);
-                    const isAnswered = unitAnswered(unit);
-                    const isBookmarked = unitBookmarked(unit);
-                    const isSkipped = unitSkipped(unit);
+                  {items.map(({ questionIndex: i }) => {
+                    const aKey = `${questions[i].question}_${questions[i].sub_question_index}`;
+                    const isAnswered = Boolean(answers[aKey]);
+                    const isBookmarked = bookmarked.has(aKey);
+                    const isSkipped = skipped.has(aKey);
                     // QT-3: highlight the whole continuous-rating group as active.
                     const isCurrent = i >= currentIndex && i <= groupLastIndex;
                     const jumpAllowed = canJumpTo(i);
-                    const sectionExpired = expiredSectionIds.has(unit.timer_section_id ?? -1);
-                    const isDisabled = presentationActive || !jumpAllowed || sectionExpired;
+                    const isDisabled = presentationActive || !jumpAllowed;
                     return (
                       <button
-                        key={staticPos}
+                        key={i}
                         onClick={() => {
                           if (isDisabled) return;
                           // Save current answer before jumping to a different question
@@ -894,16 +764,13 @@ export default function SessionPlayerPage() {
                             });
                           }
                           setCurrentIndex(groupStartOf(i));
-                          setActiveSubQ(0);
                         }}
                         title={
-                          sectionExpired
-                            ? "This section's time has expired"
-                            : presentationActive
-                              ? "Wait for the presentation to finish before navigating"
-                              : !jumpAllowed
-                                ? "Backward navigation is not allowed this far back for this assessment"
-                                : `Question ${staticPos}`
+                          presentationActive
+                            ? "Wait for the presentation to finish before navigating"
+                            : !jumpAllowed
+                              ? "Backward navigation is not allowed this far back for this assessment"
+                              : `Question ${i + 1}`
                         }
                         className={`h-7 w-7 rounded-md text-xs font-medium transition-colors ${
                           isCurrent
@@ -917,7 +784,7 @@ export default function SessionPlayerPage() {
                                   : "bg-slate-100 text-slate-500 hover:bg-slate-200"
                         } ${isDisabled ? "cursor-not-allowed opacity-50" : ""}`}
                       >
-                        {staticPos}
+                        {i + 1}
                       </button>
                     );
                   })}
@@ -979,7 +846,7 @@ export default function SessionPlayerPage() {
                       displayCount={qd.flash_display_count ?? qd.flash_items.length}
                       order={qd.flash_order}
                       replayMode={qd.replay_mode ?? "not_permitted"}
-                      hasBeenViewed={presentationDone.has(qd.id)}
+                      hasBeenViewed={viewedQuestions.has(qd.id)}
                       onPresentationEnd={() =>
                         setPresentationDone((prev) => new Set(prev).add(qd.id))
                       }
@@ -995,7 +862,7 @@ export default function SessionPlayerPage() {
                       displayDurationSeconds={qd.display_duration_seconds ?? null}
                       displayMode={qd.display_mode ?? "timed"}
                       replayMode={qd.replay_mode ?? "not_permitted"}
-                      hasBeenViewed={presentationDone.has(qd.id)}
+                      hasBeenViewed={viewedQuestions.has(qd.id)}
                       onPresentationEnd={() =>
                         setPresentationDone((prev) => new Set(prev).add(qd.id))
                       }
@@ -1015,7 +882,7 @@ export default function SessionPlayerPage() {
                       imageUrl={qd.image}
                       durationSeconds={qd.display_duration_seconds ?? 30}
                       replayMode={qd.replay_mode ?? "not_permitted"}
-                      hasBeenViewed={presentationDone.has(qd.id)}
+                      hasBeenViewed={viewedQuestions.has(qd.id)}
                       onPresentationEnd={() =>
                         setPresentationDone((prev) => new Set(prev).add(qd.id))
                       }
@@ -1039,7 +906,7 @@ export default function SessionPlayerPage() {
                         key={`audio-${media.id}`}
                         fileUrl={media.file}
                         replayMode={qd.replay_mode ?? "not_permitted"}
-                        hasBeenViewed={presentationDone.has(qd.id)}
+                        hasBeenViewed={viewedQuestions.has(qd.id)}
                         onPresentationEnd={() =>
                           setPresentationDone((prev) => new Set(prev).add(qd.id))
                         }
@@ -1054,7 +921,7 @@ export default function SessionPlayerPage() {
                         key={`video-${media.id}`}
                         fileUrl={media.file}
                         replayMode={qd.replay_mode ?? "not_permitted"}
-                        hasBeenViewed={presentationDone.has(qd.id)}
+                        hasBeenViewed={viewedQuestions.has(qd.id)}
                         onPresentationEnd={() =>
                           setPresentationDone((prev) => new Set(prev).add(qd.id))
                         }
@@ -1176,8 +1043,7 @@ export default function SessionPlayerPage() {
       <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white px-6 py-3">
         {/* Retest G2: Previous must stay ACTIVE even during timed
             presentations (the presentation is already in flight); on
-            revisit the media replay stays blocked because the completed
-            presentation is recorded in presentationDone (Report 7 §41). */}
+            revisit the media replay stays blocked via viewedQuestions. */}
         <Button
           variant="outline"
           onClick={handlePrev}
@@ -1246,68 +1112,29 @@ export default function SessionPlayerPage() {
         </div>
       </div>
 
-      {/* Submit confirmation modal — replaces the blocking confirm() dialog.
-          Report 7 §39/§40: bookmarked and skipped questions are surfaced
-          before submission with a Go Back option, per the client's example:
-          "You have bookmarked 5 Questions — Do you want to go back and
-          attempt?  [Go Back] [No Submit]". */}
+      {/* Submit confirmation modal — replaces the blocking confirm() dialog */}
       <Modal
         open={showSubmitConfirm}
         onClose={() => setShowSubmitConfirm(false)}
         title="Submit Assessment?"
         size="sm"
       >
-        <div className="space-y-3">
-          <p className="text-sm text-slate-700">
-            You have answered <strong>{answeredCount}</strong> of <strong>{totalQuestions}</strong>{" "}
-            questions.
-          </p>
-
-          {bookmarkedCount > 0 && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="text-sm font-medium text-amber-800">
-                You have bookmarked {bookmarkedCount} Question{bookmarkedCount === 1 ? "" : "s"}
-              </p>
-              <p className="mt-0.5 text-xs text-amber-700">Do you want to go back and attempt?</p>
-            </div>
+        <p className="text-sm text-slate-700">
+          You have answered <strong>{answeredCount}</strong> of <strong>{totalQuestions}</strong>{" "}
+          questions.
+          {answeredCount < totalQuestions && (
+            <span className="mt-2 block text-amber-600">
+              ⚠ {remainingCount} question(s) are unanswered and will score 0. Are you sure you want
+              to submit?
+            </span>
           )}
-
-          {skippedCount > 0 && (
-            <div className="rounded-md border border-orange-200 bg-orange-50 p-3">
-              <p className="text-sm font-medium text-orange-800">
-                You have skipped {skippedCount} Question{skippedCount === 1 ? "" : "s"}
-              </p>
-              <p className="mt-0.5 text-xs text-orange-700">Do you want to go back and attempt?</p>
-            </div>
-          )}
-
-          {remainingCount > 0 && (
-            <p className="text-xs text-amber-600">
-              ⚠ {remainingCount} unanswered question(s) will score 0.
-            </p>
-          )}
-        </div>
+        </p>
         <div className="mt-4 flex justify-end gap-2">
-          {/* Go Back: close the dialog and jump to the first bookmarked or
-              skipped question so the candidate can attempt it. */}
-          <Button
-            variant="outline"
-            onClick={() => {
-              setShowSubmitConfirm(false);
-              const target = questions.find(unitBookmarked) ?? questions.find(unitSkipped);
-              if (target) {
-                const idx = questions.indexOf(target);
-                if (idx >= 0) {
-                  setCurrentIndex(idx);
-                  setActiveSubQ(0);
-                }
-              }
-            }}
-          >
-            Go Back
+          <Button variant="outline" onClick={() => setShowSubmitConfirm(false)}>
+            Cancel
           </Button>
           <Button variant="danger" loading={submitMutation.isPending} onClick={performSubmit}>
-            No — Submit
+            Submit Assessment
           </Button>
         </div>
       </Modal>
@@ -1391,66 +1218,45 @@ function AnswerInput({
       <div className={`grid ${layoutCols} gap-2`}>
         {subOptions
           .filter((o) => o.option_type === "TEXT" || o.option_type === "IMAGE")
-          .map((opt) => {
-            const hasImage = Boolean(opt.image_file);
-            const hasText = Boolean(opt.text_value);
-            return (
-              <label
-                key={opt.id}
-                className={`cursor-pointer rounded-md border px-3 py-2 text-sm transition-colors ${
-                  selectedIds.includes(opt.id)
-                    ? "border-primary-500 bg-primary-50"
-                    : "border-slate-200 hover:bg-slate-50"
-                } ${hasImage ? "flex flex-col items-center gap-2" : "flex items-center gap-2"}`}
-              >
-                <div className={hasImage ? "flex items-center gap-2 self-start" : ""}>
-                  <input
-                    type={isMulti ? "checkbox" : "radio"}
-                    name={`q-${question.id}`}
-                    checked={selectedIds.includes(opt.id)}
-                    onChange={() => handleSelect(opt.id)}
-                    className="h-4 w-4 shrink-0"
-                  />
-                  {/* Hide '(image)' text for image-only options per SRS feedback Issue 2 (1b) */}
-                  {hasText && <span>{opt.text_value}</span>}
-                </div>
-                {/* Report 7 §16: image options display at their natural size
-                    (constrained to a reasonable box, never cropped) — the
-                    spec notes "option images may be large; layout must
-                    account for extra vertical space". The previous fixed
-                    48×48 object-cover crop displayed images incomplete. */}
-                {opt.image_file && (
-                  <img
-                    src={opt.image_file}
-                    alt={opt.text_value || "option image"}
-                    className={
-                      hasText
-                        ? "max-h-16 w-auto max-w-full rounded object-contain"
-                        : "h-auto max-h-72 w-auto max-w-full rounded object-contain"
-                    }
-                  />
-                )}
-              </label>
-            );
-          })}
+          .map((opt) => (
+            <label
+              key={opt.id}
+              className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                selectedIds.includes(opt.id)
+                  ? "border-primary-500 bg-primary-50"
+                  : "border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <input
+                type={isMulti ? "checkbox" : "radio"}
+                name={`q-${question.id}`}
+                checked={selectedIds.includes(opt.id)}
+                onChange={() => handleSelect(opt.id)}
+                className="h-4 w-4 shrink-0"
+              />
+              {opt.image_file && (
+                <img src={opt.image_file} alt="" className="h-12 w-12 rounded object-cover" />
+              )}
+              {/* Hide '(image)' text for image-only options per SRS feedback Issue 2 (1b) */}
+              {opt.text_value && <span>{opt.text_value}</span>}
+            </label>
+          ))}
       </div>
     );
   }
 
   // FITB types — text inputs
   // Per SRS feedback Issue 6: do NOT show "Field N" labels (unnecessary detail).
-  // Report 7 §38: for flash recall types (2c/2d) the answer-entry fields are
-  // as many as the number of FLASH ITEMS — 10 flash words/images means 10
-  // entry fields. Extra fields can still be added (never removed below the
-  // flash count) and entries are scored in any order.
+  // Per SRS feedback Issue 11: For FITB Flash Image/Word, allow candidate to add
+  // up to N answer fields where N = number of flash items.
   if (qType.startsWith("FITB_")) {
     const answers: string[] = (currentAnswer?.answers as string[]) || [];
     const isFlashFitb = qType === "FITB_IMAGE_FLASH_MULTI" || qType === "FITB_WORD_FLASH_MULTI";
     const fields = qd.options.filter((o) => o.option_type === "TEXT");
-    const flashPool = (qd.flash_items ?? []).filter((f) => f.is_in_display_pool);
-    const flashCount = flashPool.length > 0 ? flashPool.length : (qd.flash_items ?? []).length;
-    const maxFields = isFlashFitb ? Math.max(flashCount, 1) : fields.length;
-    const visibleFields = isFlashFitb ? Math.max(answers.length, maxFields) : fields.length;
+    const maxFields = isFlashFitb
+      ? Math.max(fields.length, qd.flash_items?.length || 0)
+      : fields.length;
+    const visibleFields = isFlashFitb ? Math.max(answers.length, fields.length, 1) : fields.length;
 
     return (
       <div className="space-y-2">
@@ -1468,7 +1274,7 @@ function AnswerInput({
             placeholder="Type your answer..."
           />
         ))}
-        {isFlashFitb && visibleFields < maxFields + 5 && (
+        {isFlashFitb && visibleFields < maxFields && (
           <Button
             variant="outline"
             size="sm"
@@ -1479,52 +1285,35 @@ function AnswerInput({
         )}
         {isFlashFitb && (
           <p className="text-xs text-slate-500">
-            Enter each item you remember from the flash presentation ({maxFields} item
-            {maxFields === 1 ? "" : "s"} were shown). Each correct answer gets +1 point (any order).
+            Enter each item you remember from the flash presentation. Each correct answer gets +1
+            point (any order).
           </p>
         )}
       </div>
     );
   }
 
-  // Rating — scale circles with their legend labels
-  // Report 7 §32: the option legends authored on the question ("Not at all
-  // True", "Very True", …) must appear while taking the assessment. They are
-  // stored as TEXT options with label "Point N" (text_value = the legend).
+  // Rating — scale circles
   if (qType === "STANDARD_RATING_SCALE") {
     const rating: number = (currentAnswer?.rating as number) || 0;
     const points = qd.rating_scale_points || 5;
-    const legendOptions = qd.options
-      .filter((o) => o.option_type === "TEXT" && (o.label ?? "").startsWith("Point "))
-      .sort((a, b) => (a.label ?? "").localeCompare(b.label ?? "", "en", { numeric: true }));
-    const legendFor = (p: number) =>
-      legendOptions.find((o) => (o.label ?? "") === `Point ${p}`)?.text_value ?? "";
 
     return (
-      <div className="flex items-start gap-3">
-        {[...Array(points)].map((_, p) => {
-          const legend = legendFor(p + 1);
-          return (
-            <div key={p} className="flex w-14 flex-col items-center gap-1">
-              <button
-                type="button"
-                onClick={() => onChange({ rating: p + 1 })}
-                className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-medium ${
-                  rating === p + 1
-                    ? "border-primary-600 bg-primary-100 text-primary-700"
-                    : "border-slate-300 text-slate-500 hover:border-primary-300"
-                }`}
-              >
-                {p + 1}
-              </button>
-              {legend && (
-                <span className="text-center text-[10px] leading-tight text-slate-500">
-                  {legend}
-                </span>
-              )}
-            </div>
-          );
-        })}
+      <div className="flex items-center gap-3">
+        {[...Array(points)].map((_, p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange({ rating: p + 1 })}
+            className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-medium ${
+              rating === p + 1
+                ? "border-primary-600 bg-primary-100 text-primary-700"
+                : "border-slate-300 text-slate-500 hover:border-primary-300"
+            }`}
+          >
+            {p + 1}
+          </button>
+        ))}
       </div>
     );
   }
@@ -1915,16 +1704,16 @@ function AnswerInput({
     const groupB = qd.options.filter((o) => o.option_type === "MATCH_B");
     const dummyB = qd.options.filter((o) => o.option_type === "MATCH_DUMMY");
 
-    // Report 7 §17: ALL Group options — Group A and Group B including
-    // dummies — display in RANDOM order (previously only Group B was
-    // shuffled and Group A kept its creation order, which leaked the
-    // author's pairing structure). Deterministic per question so the
-    // order is stable while the candidate works (no mid-answer reshuffle).
+    // Combine real Group B + dummy options, then shuffle deterministically
+    // per question (so refreshes don't reshuffle). Use question id as seed.
     const allGroupB = [...groupB, ...dummyB];
     const seed = qd.id || 0;
-    const pseudoRank = (id: number) => ((id * 9301 + seed * 49297) % 233280) / 233280;
-    const shuffledGroupA = [...groupA].sort((a, b) => pseudoRank(a.id) - pseudoRank(b.id));
-    const shuffledGroupB = [...allGroupB].sort((a, b) => pseudoRank(a.id) - pseudoRank(b.id));
+    const shuffledGroupB = [...allGroupB].sort((a, b) => {
+      // Simple deterministic pseudo-random based on option id + question seed
+      const ha = ((a.id * 9301 + seed * 49297) % 233280) / 233280;
+      const hb = ((b.id * 9301 + seed * 49297) % 233280) / 233280;
+      return ha - hb;
+    });
 
     const handleMatch = (bId: number) => {
       if (selectedA === null) return;
@@ -1949,7 +1738,7 @@ function AnswerInput({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Group A</p>
-            {shuffledGroupA.map((opt) => {
+            {groupA.map((opt) => {
               const matchedB = getMatchedB(opt.id);
               const matchedBOpt = shuffledGroupB.find((b) => b.id === matchedB);
               const isSelected = selectedA === opt.id;

@@ -227,13 +227,6 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
     # ASM-5 (§5.1): the section's per-level delivery order mode, so the player
     # can randomise questions within RANDOM sections.
     section_order_mode = serializers.SerializerMethodField()
-    # Report 7 §3/§42/§43: section names + hierarchy for the TEST PROGRESS
-    # sidebar, and the row's position in the STATIC (configured) order so the
-    # sidebar shows the assigned structure even during RANDOM delivery.
-    section_title = serializers.SerializerMethodField()
-    section_path = serializers.SerializerMethodField()
-    section_level = serializers.SerializerMethodField()
-    static_order_index = serializers.SerializerMethodField()
 
     class Meta:
         model = QuestionAttempt
@@ -253,10 +246,6 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
             "timer_section_id",
             "question_duration_seconds",
             "section_order_mode",
-            "section_title",
-            "section_path",
-            "section_level",
-            "static_order_index",
             "question_detail",
         ]
         read_only_fields = ["id", "score", "max_score", "answered_at", "question_detail"]
@@ -277,27 +266,6 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
     def get_question_duration_seconds(self, obj):
         durations = self.context.get("aq_durations") or {}
         return durations.get((obj.section_id, obj.question_id, obj.sub_question_index))
-
-    def _section_meta(self, obj):
-        meta = self.context.get("section_meta") or {}
-        return meta.get(obj.section_id, {})
-
-    def get_section_title(self, obj):
-        return self._section_meta(obj).get("title") or (
-            obj.section.title if obj.section_id else None
-        )
-
-    def get_section_path(self, obj):
-        return self._section_meta(obj).get("path")
-
-    def get_section_level(self, obj):
-        return self._section_meta(obj).get("level") or (
-            obj.section.level if obj.section_id else None
-        )
-
-    def get_static_order_index(self, obj):
-        static_map = self.context.get("static_order_map") or {}
-        return static_map.get(id(obj))
 
 
 class SectionScoreSerializer(serializers.ModelSerializer):
