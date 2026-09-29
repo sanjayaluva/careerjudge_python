@@ -633,3 +633,47 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// 9: Psychometric Statement — a bare statement authored in the Question Bank
+// and grouped into Rank / Forced-Choice sets at assessment configuration
+// (PSY-A1, Doc 1 §3.1.6). Report 7 #35: this type had no text field, so it
+// could never be saved ("Question text is required").
+// ---------------------------------------------------------------------------
+
+interface StatementEditorProps {
+  data: { question_text_1: string; question_text_2: string };
+  onChange: (data: StatementEditorProps["data"]) => void;
+}
+
+export function StatementEditor({ data, onChange }: StatementEditorProps) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label htmlFor="stmt-text" required>
+          Statement
+        </Label>
+        <WysiwygEditorLite
+          value={data.question_text_1}
+          onChange={(html) => onChange({ ...data, question_text_1: html })}
+          minHeight={80}
+          placeholder="e.g. I enjoy solving complex problems."
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          Statements are grouped into Simple Ranking, Rank-then-Rate or Forced-Choice sets on the
+          assessment&apos;s Psychometric Groups tab; each statement scores to the section chosen
+          there.
+        </p>
+      </div>
+      <div>
+        <Label htmlFor="stmt-text2">Additional text (optional)</Label>
+        <WysiwygEditorLite
+          value={data.question_text_2}
+          onChange={(html) => onChange({ ...data, question_text_2: html })}
+          minHeight={60}
+          placeholder="Optional clarification shown with the statement…"
+        />
+      </div>
+    </div>
+  );
+}

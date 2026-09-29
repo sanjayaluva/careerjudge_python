@@ -46,6 +46,7 @@ import {
   RankEditor,
   RankRateEditor,
   RatingEditor,
+  StatementEditor,
   ForcedChoiceEditor,
 } from "./editors/PsychometricEditors";
 
@@ -779,6 +780,7 @@ export default function QuestionEditorPage() {
   const isRank = questionType === "RANK_SIMPLE";
   const isRankRate = questionType === "RANK_THEN_RATE";
   const isRating = questionType === "STANDARD_RATING_SCALE";
+  const isStatement = questionType === "PSYCHOMETRIC_STATEMENT";
   const isForcedChoice = questionType.startsWith("FORCED_CHOICE_");
 
   const mcqData = {
@@ -1157,6 +1159,15 @@ export default function QuestionEditorPage() {
                   setRatingScalePoints(d.rating_scale_points);
                   setRatingDirection(d.rating_direction);
                   setScaleLabels(d.scaleLabels);
+                }}
+              />
+            )}
+            {isStatement && (
+              <StatementEditor
+                data={{ question_text_1: questionText1, question_text_2: questionText2 }}
+                onChange={(d) => {
+                  setQuestionText1(d.question_text_1);
+                  setQuestionText2(d.question_text_2);
                 }}
               />
             )}
