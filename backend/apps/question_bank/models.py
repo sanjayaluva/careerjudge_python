@@ -101,6 +101,17 @@ PSYCHOMETRIC_QUESTION_TYPES: frozenset[str] = frozenset(
 )
 
 
+# Question types whose scoring mode is fixed by the signed spec
+# (00_question_types_spec / 00_scoring_rules) — not an author choice.
+TYPE_FIXED_SCORING = {
+    "FITB_SINGLE": "BINARY_FUZZY",
+    "FITB_MULTI_FIELD": "PARTIAL",
+    "FITB_WORD_FLASH_MULTI": "PARTIAL",
+    "FITB_IMAGE_FLASH_MULTI": "PARTIAL",
+    "MATCH_FOLLOWING": "PARTIAL",
+}
+
+
 class Question(models.Model):
     """A question in the question bank. Supports 21 question types.
 
@@ -126,7 +137,7 @@ class Question(models.Model):
         ("MCQ_AUDIO_MULTI", "1c: MCQ - Audio with Multiple Questions"),
         ("MCQ_VIDEO_MULTI", "1d: MCQ - Video with Multiple Questions"),
         ("MCQ_WORD_FLASH_MULTI", "1e: MCQ - Word Flash with Multiple Questions"),
-        ("MCQ_IMAGE_FLASH_MULTI", "1f: MCQ - Image Flash with Multiple Questions"),
+        ("MCQ_IMAGE_FLASH_MULTI", "1f: MCQ - Image Flash with Multiple Answers"),
         ("MCQ_PASSAGE_DISPLAY_MULTI", "1g: MCQ - Passage Display with Multiple Questions"),
         ("MCQ_IMAGE_DISPLAY_MULTI", "1h: MCQ - Image Display with Multiple Questions"),
         ("FITB_SINGLE", "2a: FITB - Single Field"),
@@ -486,6 +497,17 @@ class Question(models.Model):
         ordering = ["-created_at"]
         verbose_name = _("question")
         verbose_name_plural = _("questions")
+
+    def save(self, *args, **kwargs):
+        # Report 7 #24: a 2b saved as "Binary" scored text answers as option
+        # ids (always 0). Types with a signed scoring mode always use it.
+        fixed = TYPE_FIXED_SCORING.get(self.question_type)
+        if fixed:
+            self.scoring_type = fixed
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None and "question_type" in update_fields:
+                kwargs["update_fields"] = {*update_fields, "scoring_type"}
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.question_type}: {self.question_text_1[:60]}..."

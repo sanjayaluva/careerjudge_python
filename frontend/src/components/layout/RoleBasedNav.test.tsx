@@ -48,12 +48,13 @@ describe("<RoleBasedNav />", () => {
     setUser("cj_admin");
     renderNav();
 
-    // cj_admin sees every nav item (16 total: dashboard, profile, users,
+    // cj_admin sees every nav item (17 total: dashboard, profile, users,
     // roles, organizations, question_bank, assessments, career_profiling,
-    // reports, training, counseling, cms, tasks, invoicing, plus the two
-    // universal capabilities Contact Admin + Messages).
+    // reports, training, counseling, cms, tasks, invoicing, payments, plus
+    // the two universal capabilities Contact Admin + Messages).
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(16);
+    expect(links).toHaveLength(17);
+    expect(screen.getByText("Payments")).toBeInTheDocument();
     expect(screen.getByText("Contact Admin")).toBeInTheDocument();
     expect(screen.getByText("Messages")).toBeInTheDocument();
     expect(screen.getByText("CMS")).toBeInTheDocument();

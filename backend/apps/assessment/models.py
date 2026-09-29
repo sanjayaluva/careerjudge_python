@@ -247,7 +247,9 @@ class AssessmentSection(models.Model):
     )
 
     class Meta:
-        ordering = ["level", "order"]
+        # `id` breaks ties so equal `order` values list in creation order
+        # (Report 7 #12: sections listed last-to-first).
+        ordering = ["level", "order", "id"]
         verbose_name = _("assessment section")
         verbose_name_plural = _("assessment sections")
 
@@ -288,7 +290,7 @@ class AssessmentQuestion(models.Model):
     )
 
     class Meta:
-        ordering = ["order"]
+        ordering = ["order", "id"]
         verbose_name = _("assessment question")
         verbose_name_plural = _("assessment questions")
         unique_together = [("section", "question", "sub_question_index")]
@@ -536,6 +538,11 @@ class PsychometricGroup(models.Model):
         _("rating scale points"), null=True, blank=True
     )
     order = models.PositiveIntegerField(_("order"), default=0)
+    # Report 8 #60: the instructions shown with the group, authored on the
+    # Psychometric Groups screen (statements are bare — PSY-A1).
+    question_title = models.CharField(_("question title"), max_length=255, blank=True, default="")
+    question_text_1 = models.TextField(_("question text 1"), blank=True, default="")
+    question_text_2 = models.TextField(_("question text 2"), blank=True, default="")
 
     class Meta:
         ordering = ["order", "group_number"]

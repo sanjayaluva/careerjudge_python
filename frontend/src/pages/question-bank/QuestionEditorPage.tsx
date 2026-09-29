@@ -46,6 +46,7 @@ import {
   RankEditor,
   RankRateEditor,
   RatingEditor,
+  StatementEditor,
   ForcedChoiceEditor,
 } from "./editors/PsychometricEditors";
 
@@ -752,7 +753,11 @@ export default function QuestionEditorPage() {
 
     mutation.mutate({
       payload,
-      opts: options,
+      // A rating question's only options are its scale legends, rebuilt from
+      // scaleLabels below. Re-sending the loaded legend options as well added
+      // a fresh copy on every update (Report 7 #29: 5 -> 80 options) and the
+      // stale copies hid legend edits on reload (Report 7 #30).
+      opts: isRating ? [] : options,
       prs: pairs,
       dummies: dummyOptions.length > 0 ? dummyOptions : undefined,
       img: imageUrl || undefined,
@@ -775,6 +780,7 @@ export default function QuestionEditorPage() {
   const isRank = questionType === "RANK_SIMPLE";
   const isRankRate = questionType === "RANK_THEN_RATE";
   const isRating = questionType === "STANDARD_RATING_SCALE";
+  const isStatement = questionType === "PSYCHOMETRIC_STATEMENT";
   const isForcedChoice = questionType.startsWith("FORCED_CHOICE_");
 
   const mcqData = {
@@ -1125,6 +1131,8 @@ export default function QuestionEditorPage() {
                 data={rankData}
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
+                  // Report 7 #28: Question Text 2 was dropped here.
+                  setQuestionText2(d.question_text_2);
                   setOptions(d.options);
                 }}
               />
@@ -1134,6 +1142,8 @@ export default function QuestionEditorPage() {
                 data={rankRateData}
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
+                  // Report 7 #28: Question Text 2 was dropped here.
+                  setQuestionText2(d.question_text_2);
                   setRatingScalePoints(d.rating_scale_points);
                   setOptions(d.options);
                 }}
@@ -1144,9 +1154,20 @@ export default function QuestionEditorPage() {
                 data={ratingData}
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
+                  // Report 7 #28: Question Text 2 was dropped here.
+                  setQuestionText2(d.question_text_2);
                   setRatingScalePoints(d.rating_scale_points);
                   setRatingDirection(d.rating_direction);
                   setScaleLabels(d.scaleLabels);
+                }}
+              />
+            )}
+            {isStatement && (
+              <StatementEditor
+                data={{ question_text_1: questionText1, question_text_2: questionText2 }}
+                onChange={(d) => {
+                  setQuestionText1(d.question_text_1);
+                  setQuestionText2(d.question_text_2);
                 }}
               />
             )}
@@ -1156,6 +1177,8 @@ export default function QuestionEditorPage() {
                 data={forcedChoiceData}
                 onChange={(d) => {
                   setQuestionText1(d.question_text_1);
+                  // Report 7 #28: Question Text 2 was dropped here.
+                  setQuestionText2(d.question_text_2);
                   setRatingScalePoints(d.rating_scale_points);
                   setOptions(d.options);
                 }}

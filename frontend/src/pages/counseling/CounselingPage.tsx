@@ -33,6 +33,8 @@ import {
 } from "@/components/ui";
 import {
   COUNSELING_CATEGORIES,
+  setCounsellorCategories,
+  getCounsellorAdminOverview,
   cancelSession,
   createCounsellorProfile,
   getCounselingSettings,
@@ -49,7 +51,8 @@ import {
   type CounselingSession,
   type SessionFeedback,
 } from "@/api/counseling";
-import { extractApiError, apiPatch } from "@/api/client";
+import { extractApiError } from "@/api/client";
+import { updateMe } from "@/api/me";
 import { useAuth } from "@/hooks/useAuth";
 import { CounsellorDashboard } from "./CounsellorDashboard";
 import { JoinSessionButton } from "./JoinSession";
@@ -65,6 +68,11 @@ export default function CounselingPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [bookingCounsellor, setBookingCounsellor] = useState<CounsellorProfile | null>(null);
+  // Report 8 #39: CJ Admin tags counsellors with their counselling categories.
+  const isAdmin = user?.role === "cj_admin";
+  const [taggingCounsellor, setTaggingCounsellor] = useState<CounsellorProfile | null>(null);
+  const [detailsCounsellor, setDetailsCounsellor] = useState<CounsellorProfile | null>(null);
+  const canBook = !isAdmin && !isCounsellor;
 
   const { data, isLoading } = useQuery({
     queryKey: ["counseling", "counsellors", debouncedSearch, categoryFilter],
@@ -160,40 +168,62 @@ export default function CounselingPage() {
             ) : counsellors.length === 0 ? (
               <p className="py-8 text-center text-sm text-slate-500">No counsellors available.</p>
             ) : (
+              // Report 8 #43 (client change request): the list shows what a
+              // counselee needs to choose; the name opens full details (#42).
               <Table className="mt-4">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Categories</TableHead>
-                    <TableHead>Rate</TableHead>
-                    <TableHead>Available Slots</TableHead>
+                    <TableHead>Counsellor</TableHead>
+                    <TableHead>Expertise</TableHead>
+                    <TableHead>Languages</TableHead>
+                    <TableHead>Region</TableHead>
+                    <TableHead>Fee (INR)</TableHead>
+                    <TableHead>Available slots</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {counsellors.map((c) => (
                     <TableRow key={c.id}>
-                      <TableCell className="font-medium text-slate-900">
-                        <Link
-                          to={`/counseling/${c.id}`}
-                          className="text-primary-600 hover:underline"
+                      <TableCell>
+                        <button
+                          type="button"
+                          className="flex items-center gap-3 text-left"
+                          onClick={() => setDetailsCounsellor(c)}
                         >
-                          {c.full_name}
-                        </Link>
+                          <CounsellorPhoto counsellor={c} size="sm" />
+                          <span className="font-medium text-primary-600 hover:underline">
+                            {c.full_name}
+                          </span>
+                        </button>
                       </TableCell>
-                      <TableCell className="text-slate-500">
-                        {c.category_names.join(", ") || "—"}
+                      <TableCell className="text-slate-600">
+                        {c.category_names.length ? c.category_names.join(", ") : "—"}
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            className="ml-2 text-xs text-primary-600 hover:underline"
+                            onClick={() => setTaggingCounsellor(c)}
+                          >
+                            Edit
+                          </button>
+                        )}
                       </TableCell>
-                      <TableCell className="text-slate-500">₹{c.hourly_rate}/Session</TableCell>
+                      <TableCell className="text-slate-600">{languagesOf(c) || "—"}</TableCell>
+                      <TableCell className="text-slate-600">{c.region || "—"}</TableCell>
+                      <TableCell className="text-slate-600">₹{c.hourly_rate}</TableCell>
                       <TableCell>
                         <Badge variant={c.upcoming_slot_count > 0 ? "success" : "default"}>
                           {c.upcoming_slot_count} slot{c.upcoming_slot_count !== 1 ? "s" : ""}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button size="sm" onClick={() => setBookingCounsellor(c)}>
-                          Book
-                        </Button>
+                        {/* Report 8 #38: booking is for individual users only. */}
+                        {canBook && (
+                          <Button size="sm" onClick={() => setBookingCounsellor(c)}>
+                            Book
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -262,6 +292,28 @@ export default function CounselingPage() {
                       </TableCell>
                       <TableCell>
                         <SessionActionsForCounselee session={s} />
+                        {/* Report 8 #49: the counsellor cancelled and asks the
+                            counselee to reschedule. */}
+                        {s.status === "cancelled" && s.cancelled_by === "counsellor" && (
+                          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                            {s.counsellor_name} cancelled
+                            {s.cancellation_reason ? ` (${s.cancellation_reason})` : ""} and asks
+                            you to book another timeslot.
+                            {counsellors.some((c) => c.id === s.counsellor) && (
+                              <Button
+                                size="sm"
+                                className="mt-1 block"
+                                onClick={() =>
+                                  setBookingCounsellor(
+                                    counsellors.find((c) => c.id === s.counsellor) ?? null,
+                                  )
+                                }
+                              >
+                                Book another timeslot
+                              </Button>
+                            )}
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -272,6 +324,24 @@ export default function CounselingPage() {
         </Tabs>
       </PageCard>
 
+      {detailsCounsellor && (
+        <CounsellorDetailsModal
+          counsellor={detailsCounsellor}
+          isAdmin={isAdmin}
+          canBook={canBook}
+          onBook={() => {
+            setBookingCounsellor(detailsCounsellor);
+            setDetailsCounsellor(null);
+          }}
+          onClose={() => setDetailsCounsellor(null)}
+        />
+      )}
+      {taggingCounsellor && (
+        <CategoryTagModal
+          counsellor={taggingCounsellor}
+          onClose={() => setTaggingCounsellor(null)}
+        />
+      )}
       {bookingCounsellor && (
         <BookingModal counsellor={bookingCounsellor} onClose={() => setBookingCounsellor(null)} />
       )}
@@ -563,10 +633,14 @@ function CounsellorDashboardWrapper() {
   const createMut = useMutation({
     mutationFn: async () => {
       // Step 1: Update UserProfile with counsellor-specific fields
-      await apiPatch("/me/profile/", {
-        bio,
-        hourly_rate: parseFloat(hourlyRate),
-        is_available_for_counseling: true,
+      // The profile lives under /api/me/ (nested `profile`); the old
+      // /me/profile/ URL doesn't exist, so profile creation failed here.
+      await updateMe({
+        profile: {
+          bio,
+          hourly_rate: parseFloat(hourlyRate),
+          is_available_for_counseling: true,
+        },
       });
       // Step 2: Create CounsellorProfile (lightweight — just links user + categories)
       return createCounsellorProfile({
@@ -1015,4 +1089,279 @@ function FollowupCountdown({ target }: { target: string }) {
   const mins = Math.floor((diff % 3_600_000) / 60_000);
   const parts = [days ? `${days}d` : "", hours ? `${hours}h` : "", `${mins}m`].filter(Boolean);
   return <span className="text-xs font-medium text-amber-800">in {parts.join(" ")}</span>;
+}
+
+// ---------------------------------------------------------------------------
+// CategoryTagModal — CJ Admin tags a counsellor with categories (Report 8 #39)
+// ---------------------------------------------------------------------------
+
+function CategoryTagModal({
+  counsellor,
+  onClose,
+}: {
+  counsellor: CounsellorProfile;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState<string[]>(
+    COUNSELING_CATEGORIES.filter((c) => counsellor.category_names.includes(c.label)).map(
+      (c) => c.value,
+    ),
+  );
+  const save = useMutation({
+    mutationFn: () => setCounsellorCategories(counsellor.id, selected),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["counseling", "counsellors"] });
+      toast.success("Categories updated.");
+      onClose();
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+  return (
+    <Modal open onClose={onClose} title={`Categories — ${counsellor.full_name}`} size="sm">
+      <div className="space-y-2">
+        {COUNSELING_CATEGORIES.map((c) => (
+          <label key={c.value} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={selected.includes(c.value)}
+              onChange={(e) =>
+                setSelected((prev) =>
+                  e.target.checked ? [...prev, c.value] : prev.filter((v) => v !== c.value),
+                )
+              }
+            />
+            {c.label}
+          </label>
+        ))}
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button loading={save.isPending} onClick={() => save.mutate()}>
+          Save
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Counsellor details (Report 8 #42/#44) + CJ Admin overview (#37/#56-#59)
+// ---------------------------------------------------------------------------
+
+function languagesOf(c: CounsellorProfile): string {
+  if (Array.isArray(c.languages)) return c.languages.join(", ");
+  return c.languages || c.language || "";
+}
+
+function CounsellorPhoto({
+  counsellor,
+  size,
+}: {
+  counsellor: CounsellorProfile;
+  size: "sm" | "lg";
+}) {
+  const cls = size === "sm" ? "h-10 w-10 text-sm" : "h-32 w-24 text-2xl";
+  return counsellor.avatar ? (
+    <img
+      src={counsellor.avatar}
+      alt={counsellor.full_name}
+      className={`${cls} shrink-0 rounded-md border border-slate-200 object-cover`}
+    />
+  ) : (
+    <span
+      className={`${cls} flex shrink-0 items-center justify-center rounded-md bg-slate-100 font-semibold text-slate-500`}
+    >
+      {counsellor.full_name
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()}
+    </span>
+  );
+}
+
+const GENDER_LABELS: Record<string, string> = {
+  male: "Male",
+  female: "Female",
+  other: "Other",
+  prefer_not_to_say: "Prefer not to say",
+};
+
+function CounsellorDetailsModal({
+  counsellor: c,
+  isAdmin,
+  canBook,
+  onBook,
+  onClose,
+}: {
+  counsellor: CounsellorProfile;
+  isAdmin: boolean;
+  canBook: boolean;
+  onBook: () => void;
+  onClose: () => void;
+}) {
+  const details: [string, string | number | null | undefined][] = [
+    ["Age", c.age],
+    ["Gender", GENDER_LABELS[c.gender] ?? c.gender],
+    ["Professional qualification", c.professional_qualification],
+    ["Current position", c.current_position],
+    ["Work experience", c.work_experience ? `${c.work_experience} years` : ""],
+    ["Communicative languages", languagesOf(c)],
+    ["Region", c.region],
+    ["Expertise", c.category_names.join(", ")],
+    ["Fee", `₹${c.hourly_rate} per session`],
+  ];
+  return (
+    <Modal open onClose={onClose} title={c.full_name} size={isAdmin ? "xl" : "lg"}>
+      <div className="space-y-4">
+        <div className="flex gap-4">
+          <CounsellorPhoto counsellor={c} size="lg" />
+          <dl className="grid flex-1 grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+            {details.map(([k, v]) => (
+              <div key={k}>
+                <dt className="text-xs text-slate-500">{k}</dt>
+                <dd className="text-slate-900">{v || "—"}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+        {c.bio && (
+          <div>
+            <p className="text-xs text-slate-500">About</p>
+            <p className="whitespace-pre-line text-sm text-slate-700">{c.bio}</p>
+          </div>
+        )}
+        {canBook && (
+          <div className="flex justify-end">
+            <Button onClick={onBook}>Book a session</Button>
+          </div>
+        )}
+        {isAdmin && <CounsellorAdminPanel counsellorId={c.id} />}
+      </div>
+    </Modal>
+  );
+}
+
+function CounsellorAdminPanel({ counsellorId }: { counsellorId: number }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["counseling", "admin-overview", counsellorId],
+    queryFn: () => getCounsellorAdminOverview(counsellorId),
+  });
+  if (isLoading || !data) return <Spinner />;
+  const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : "—");
+  const section = "mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500";
+  return (
+    <div className="border-t border-slate-200 pt-2 text-sm">
+      <p className={section}>Upcoming timeslots ({data.upcoming_timeslots.length})</p>
+      <div className="flex flex-wrap gap-1">
+        {data.upcoming_timeslots.length === 0 && <span className="text-slate-400">None</span>}
+        {data.upcoming_timeslots.map((t) => (
+          <Badge key={t.id} variant={t.status === "available" ? "success" : "outline"}>
+            {when(t.start_time)} · {t.status}
+          </Badge>
+        ))}
+      </div>
+
+      <p className={section}>Bookings / session history ({data.sessions.length})</p>
+      <div className="max-h-48 overflow-y-auto">
+        {data.sessions.length === 0 && <span className="text-slate-400">None</span>}
+        {data.sessions.map((s) => (
+          <div key={s.id} className="flex justify-between border-b border-slate-50 py-1">
+            <span>
+              {s.counselee_name ?? s.counselee_email} — {s.topic}
+            </span>
+            <span className="text-slate-500">
+              {when(s.timeslot_detail?.start_time)} · {s.status} · {s.payment_status}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <p className={section}>
+        Cancellation history ({data.cancellations.length}; by counsellor:{" "}
+        {data.cancelled_by_counsellor_count})
+      </p>
+      {data.cancellations.length === 0 && <span className="text-slate-400">None</span>}
+      {data.cancellations.map((c) => (
+        <div key={c.session} className="text-slate-700">
+          {when(c.cancelled_at)} — {c.counselee} · by {c.cancelled_by} · {c.reason || "no reason"} ·{" "}
+          {c.refund}
+        </div>
+      ))}
+
+      <p className={section}>Session summaries ({data.summaries.length})</p>
+      {data.summaries.length === 0 && <span className="text-slate-400">None</span>}
+      {data.summaries.map((x) => (
+        <details key={x.id} className="rounded border border-slate-100 p-2">
+          <summary className="cursor-pointer">
+            {x.counselee} — {when(x.created_at)}
+          </summary>
+          <dl className="mt-1 space-y-1 text-xs text-slate-700">
+            <div>
+              <dt className="font-medium">Client details &amp; problem</dt>
+              <dd className="whitespace-pre-line">{x.client_details}</dd>
+            </div>
+            <div>
+              <dt className="font-medium">Summary</dt>
+              <dd className="whitespace-pre-line">{x.summary}</dd>
+            </div>
+            {x.provisional_diagnosis && (
+              <div>
+                <dt className="font-medium">Provisional diagnosis</dt>
+                <dd>{x.provisional_diagnosis}</dd>
+              </div>
+            )}
+            {x.case_prognosis && (
+              <div>
+                <dt className="font-medium">Case prognosis</dt>
+                <dd>{x.case_prognosis}</dd>
+              </div>
+            )}
+            <div>
+              <dt className="font-medium">Went smoothly?</dt>
+              <dd>
+                {x.session_smoothness || "—"} {x.smoothness_reason && `— ${x.smoothness_reason}`}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">Follow-up needed</dt>
+              <dd>{x.followup_recommended ? "Yes" : "No"}</dd>
+            </div>
+          </dl>
+        </details>
+      ))}
+
+      <p className={section}>Counselee feedback ({data.feedback.length})</p>
+      {data.feedback.length === 0 && <span className="text-slate-400">None</span>}
+      {data.feedback.map((f) => (
+        <details key={f.id} className="rounded border border-slate-100 p-2">
+          <summary className="cursor-pointer">
+            {f.counselee} — rated {f.rating}/10
+          </summary>
+          <dl className="mt-1 grid grid-cols-2 gap-1 text-xs text-slate-700">
+            <dt>Useful?</dt>
+            <dd>{f.session_usefulness.replace(/_/g, " ") || "—"}</dd>
+            <dt>Friendly &amp; empathetic?</dt>
+            <dd>{f.counsellor_empathy.replace(/_/g, " ") || "—"}</dd>
+            <dt>Session ended</dt>
+            <dd>{f.session_ending.replace(/_/g, " ") || "—"}</dd>
+            <dt>Would choose again?</dt>
+            <dd>{f.would_rechoose || "—"}</dd>
+          </dl>
+          {[f.usefulness_text, f.rechoose_text, f.improvement_suggestions]
+            .filter(Boolean)
+            .map((t, i) => (
+              <p key={i} className="mt-1 text-xs italic text-slate-600">
+                “{t}”
+              </p>
+            ))}
+        </details>
+      ))}
+    </div>
+  );
 }

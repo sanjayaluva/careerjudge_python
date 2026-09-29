@@ -35,8 +35,37 @@ export interface CounsellorProfile {
   is_available: boolean;
   cancellation_count: number;
   upcoming_slot_count: number;
+  /** Report 8 #42/#43: details shown to counselees choosing a counsellor. */
+  age?: number | null;
+  languages?: string[] | string;
+  region?: string;
+  professional_qualification?: string;
+  current_position?: string;
+  work_experience?: string;
   created_at: string;
   updated_at: string;
+}
+
+/** CJ Admin overview of one counsellor (Report 8 #37/#56-#59). */
+export interface CounsellorAdminOverview {
+  counsellor: CounsellorProfile;
+  upcoming_timeslots: TimeSlot[];
+  sessions: CounselingSession[];
+  cancellations: {
+    session: number;
+    counselee: string;
+    cancelled_by: string;
+    reason: string;
+    refund: string;
+    cancelled_at: string;
+  }[];
+  cancelled_by_counsellor_count: number;
+  summaries: (SessionSummary & { counselee: string })[];
+  feedback: (Omit<SessionFeedback, "counselee"> & { counselee: string })[];
+}
+
+export function getCounsellorAdminOverview(id: number): Promise<CounsellorAdminOverview> {
+  return apiGet<CounsellorAdminOverview>(`${BASE}/counsellors/${id}/admin-overview/`);
 }
 
 export interface TimeSlot {
@@ -51,6 +80,9 @@ export interface TimeSlot {
 
 export interface CounselingSession {
   id: number;
+  /** Report 8 #49: set when cancelled — "counsellor" means rebook is asked. */
+  cancelled_by?: string | null;
+  cancellation_reason?: string;
   counselee: number;
   counselee_name: string | null;
   counselee_email: string;
@@ -161,6 +193,16 @@ export interface FollowupSession {
 // ---------------------------------------------------------------------------
 // Category API
 // ---------------------------------------------------------------------------
+
+/** CJ Admin: set a counsellor's categories (Doc 8 keys, e.g. "career"). */
+export function setCounsellorCategories(
+  counsellorId: number,
+  categories: string[],
+): Promise<CounsellorProfile> {
+  return apiPost<CounsellorProfile>(`${BASE}/counsellors/${counsellorId}/set-categories/`, {
+    categories,
+  });
+}
 
 export function listCategories(): Promise<CounselingCategory[]> {
   return apiGetPaged<CounselingCategory>(`${BASE}/categories/`).then((r) => r.results);

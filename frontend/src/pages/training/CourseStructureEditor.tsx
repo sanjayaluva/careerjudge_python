@@ -30,6 +30,7 @@ import {
 } from "@/api/training";
 import { extractApiError } from "@/api/client";
 import { TimelinerEditor } from "./TimelinerEditor";
+import { EditTextContentButton, TextContentField } from "./TextContentEditor";
 
 // Hook: refresh all course data after a mutation
 function useRefreshCourse() {
@@ -324,6 +325,7 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
     id: number;
     url: string;
     title: string;
+    kind: "video" | "audio";
   } | null>(null);
 
   const deleteMutation = useMutation({
@@ -434,17 +436,28 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
                   {c.interactive_questions?.length > 0 && (
                     <span className="text-amber-600">({c.interactive_questions.length} Q)</span>
                   )}
-                  {canManage && c.content_format === "video" && c.content_url && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setTimelinerContent({ id: c.id, url: c.content_url, title: c.title })
-                      }
-                    >
-                      🎬 Timeliner
-                    </Button>
+                  {canManage && c.content_format === "text" && (
+                    <EditTextContentButton content={c} />
                   )}
+                  {canManage &&
+                    (c.content_format === "video" || c.content_format === "audio") &&
+                    (c.media_file || c.content_url) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setTimelinerContent({
+                            id: c.id,
+                            // Uploaded file takes priority, as in the player (D7).
+                            url: c.media_file || c.content_url,
+                            title: c.title,
+                            kind: c.content_format === "audio" ? "audio" : "video",
+                          })
+                        }
+                      >
+                        🎬 Timeliner
+                      </Button>
+                    )}
                   {canManage && (
                     <label
                       className="flex items-center gap-1 text-slate-400"
@@ -504,6 +517,7 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
           contentId={timelinerContent.id}
           contentUrl={timelinerContent.url}
           title={timelinerContent.title}
+          kind={timelinerContent.kind}
           onClose={() => setTimelinerContent(null)}
         />
       )}
@@ -761,13 +775,8 @@ function AddContentForm({ sessionId, onDone }: { sessionId: number; onDone: () =
       )}
       {format === "text" && (
         <>
-          <textarea
-            value={textContent}
-            onChange={(e) => setTextContent(e.target.value)}
-            placeholder="Text content"
-            rows={3}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-          />
+          {/* Report 8 #8/#9/#17: format long text in a pop-up editor */}
+          <TextContentField value={textContent} onChange={setTextContent} />
           <div>
             <Label htmlFor="content-embed-media">Embed an image/media file in this text (D7)</Label>
             <input

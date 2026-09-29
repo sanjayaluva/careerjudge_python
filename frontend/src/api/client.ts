@@ -154,6 +154,13 @@ async function ensureFreshAccessToken(): Promise<string | null> {
 
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
+    // File uploads: the instance-wide JSON Content-Type makes axios serialise
+    // a FormData body to JSON, silently dropping every File (backend then
+    // rejects with "The submitted data was not a file"). Clear it so the
+    // browser sends multipart/form-data with the correct boundary.
+    if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+      config.headers.setContentType(false);
+    }
     // Skip proactive refresh for auth endpoints (login, refresh, signup)
     if (!config.url?.includes("/auth/")) {
       const freshToken = await ensureFreshAccessToken();
@@ -368,15 +375,14 @@ export async function apiGetPaged<T>(
   url: string,
   config?: AxiosRequestConfig,
 ): Promise<{ count: number; next: string | null; previous: string | null; results: T[] }> {
-  const res = await apiClient.get<
-    ApiSuccessEnvelope<{
-      count: number;
-      next: string | null;
-      previous: string | null;
-      results: T[];
-    }>
-  >(url, config);
-  return res.data.data;
+  type Page = { count: number; next: string | null; previous: string | null; results: T[] };
+  const res = await apiClient.get<ApiSuccessEnvelope<Page> | Page>(url, config);
+  // Most list endpoints wrap the page in the {message, data} envelope, but a
+  // default DRF list (and paginated @actions such as tasks/my_tasks) returns
+  // the bare page. Unwrapping `data` blindly yielded `undefined`, so those
+  // screens silently rendered as empty (Report 8 #41: counsellor sessions).
+  const body = res.data;
+  return "results" in body ? body : body.data;
 }
 
 /** POST — returns the unwrapped `data`. */

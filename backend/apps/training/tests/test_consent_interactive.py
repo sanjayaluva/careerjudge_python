@@ -183,6 +183,25 @@ def test_notify_students_sends_notifications(trainer_client, trainer_user, stude
     assert notif.exists()
 
 
+def test_trainer_can_notify_on_course_created_by_admin(trainer_client, student_user):
+    """Report 8 #32: a trainer running a course CJ Admin created got 'Only the
+    trainer or admin can notify students'."""
+    from apps.accounts.models import Role, User
+
+    admin_role, _ = Role.objects.get_or_create(name="cj_admin", defaults={"is_system": True})
+    admin = User.objects.create_user(
+        email="cjadmin@t.com", password="pw", is_active=True, role=admin_role
+    )
+    course = TrainingCourse.objects.create(title="C", created_by=admin, status="published")
+    CourseRegistration.objects.create(course=course, student=student_user, payment_status="paid")
+    live = LiveSession.objects.create(
+        course=course, title="Q&A", mode="online", scheduled_at="2026-08-01T10:00:00Z"
+    )
+    resp = trainer_client.post(f"/api/training/live-sessions/{live.id}/notify_students/")
+    assert resp.status_code == 200, resp.data
+    assert resp.data["data"]["notified_count"] == 1
+
+
 def test_student_cannot_notify_students(student_client, trainer_user):
     course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
     live = LiveSession.objects.create(
@@ -303,3 +322,111 @@ def test_interactive_questions_nested_in_content(trainer_client, trainer_user):
     contents = lessons[0]["topics"][0]["sessions"][0]["contents"]
     assert len(contents[0]["interactive_questions"]) == 1
     assert contents[0]["interactive_questions"][0]["question_text"] == "Q1"
+
+
+def test_meeting_link_withheld_until_registered_and_paid(
+    student_client, trainer_client, student_user, trainer_user
+):
+    """Report 8 #36 / Doc 7 §6: an unpaid user must not get the Join link."""
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    live = LiveSession.objects.create(
+        course=course,
+        title="Q&A",
+        mode="online",
+        scheduled_at="2026-08-01T10:00:00Z",
+        meeting_url="https://zoom.us/j/123",
+    )
+
+    def link(client):
+        data = client.get(f"/api/training/courses/{course.id}/").data["data"]
+        (s,) = (x for x in data["live_sessions"] if x["id"] == live.id)
+        return s["meeting_url"], s["join_locked"]
+
+    assert link(student_client) == ("", True)  # not registered
+    reg = CourseRegistration.objects.create(
+        course=course, student=student_user, payment_status="pending"
+    )
+    assert link(student_client) == ("", True)  # registered, unpaid
+    reg.payment_status = "paid"
+    reg.save()
+    assert link(student_client) == ("https://zoom.us/j/123", False)
+    assert link(trainer_client) == ("https://zoom.us/j/123", False)
+
+
+def test_trainer_sees_and_reviews_reports_on_admin_created_course(trainer_client, student_user):
+    """Report 8 #25-#27: submitted assignment reports were invisible to a
+    trainer who hadn't created the course (403 -> empty Reports modal)."""
+    from apps.accounts.models import Role, User
+    from apps.training.models import (
+        Assignment,
+        AssignmentReport,
+        CourseLesson,
+        LessonTopic,
+        TopicSession,
+    )
+
+    admin_role, _ = Role.objects.get_or_create(name="cj_admin", defaults={"is_system": True})
+    admin = User.objects.create_user(
+        email="cja@t.com", password="pw", is_active=True, role=admin_role
+    )
+    course = TrainingCourse.objects.create(title="C", created_by=admin, status="published")
+    session = TopicSession.objects.create(
+        topic=LessonTopic.objects.create(
+            lesson=CourseLesson.objects.create(course=course, title="L"), title="T"
+        ),
+        title="S",
+    )
+    assignment = Assignment.objects.create(
+        session=session, title="Introduce yourself", report_submission_enabled=True
+    )
+    reg = CourseRegistration.objects.create(
+        course=course, student=student_user, payment_status="paid"
+    )
+    report = AssignmentReport.objects.create(
+        assignment=assignment, student=student_user, report_text="Ich heisse..."
+    )
+
+    resp = trainer_client.get(f"/api/training/registrations/{reg.id}/assignment_reports/")
+    assert resp.status_code == 200, resp.data
+    assert [r["id"] for r in resp.data["data"]] == [report.id]
+
+    resp = trainer_client.post(
+        f"/api/training/registrations/{reg.id}/review-report/",
+        {"report_id": report.id, "trainer_score": 8, "trainer_feedback": "Gut gemacht"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    report.refresh_from_db()
+    assert report.status == "reviewed"
+    assert report.trainer_feedback == "Gut gemacht"
+
+
+def test_student_requests_reschedule_and_trainer_resolves(
+    student_client, trainer_client, student_user, trainer_user
+):
+    """Report 8 #33: a registered student asks for a live session to be
+    rescheduled; the trainer sees it, reschedules, and it resolves."""
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    CourseRegistration.objects.create(course=course, student=student_user, payment_status="paid")
+    live = LiveSession.objects.create(
+        course=course, title="Q&A", mode="online", scheduled_at="2026-10-01T10:00:00Z"
+    )
+    resp = student_client.post(
+        "/api/training/live-session-requests/",
+        {"course": course.id, "live_session": live.id, "note": "Exam that day"},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    req_id = resp.data["data"]["id"]
+    listed = trainer_client.get(f"/api/training/live-session-requests/?course={course.id}")
+    assert [r["live_session_title"] for r in listed.data["data"]] == ["Q&A"]
+
+    resp = trainer_client.post(
+        f"/api/training/live-sessions/{live.id}/reschedule/",
+        {"scheduled_at": "2026-10-03T10:00:00Z", "reason": "Student request"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    from apps.training.models import LiveSessionRequest
+
+    assert LiveSessionRequest.objects.get(id=req_id).status == "scheduled"

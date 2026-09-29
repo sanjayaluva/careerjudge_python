@@ -55,6 +55,11 @@ import {
   notifyLiveSessionStudents,
   listLiveSessionConsents,
   listAssignmentReports,
+  getProgressSummary,
+  updateProgress,
+  requestLiveSession,
+  listLiveSessionRequests,
+  declineLiveSessionRequest,
   reviewAssignmentReport,
   setDeadlineOverride,
   listMessages,
@@ -79,6 +84,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { LiveSessionConsentModal } from "./LiveSessionConsentModal";
 import { CourseStructureEditor } from "./CourseStructureEditor";
 import { CoursePlayer } from "./CoursePlayer";
+import { RegistrationFormModal, type RegistrationForm } from "./RegistrationFormModal";
 
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
   draft: "default",
@@ -132,10 +138,12 @@ export default function TrainingCourseDetailPage() {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  // Report 8 #13: Register opens the registration form first.
+  const [showRegForm, setShowRegForm] = useState(false);
   const registerMutation = useMutation({
-    mutationFn: async () => {
-      // Step 1: Register for the course
-      const reg = await registerForCourse(cid);
+    mutationFn: async (form: RegistrationForm) => {
+      // Step 1: Register for the course (with the registration form)
+      const reg = await registerForCourse(cid, undefined, form);
       // Step 2: Handle payment (free auto-pays, paid goes to Stripe)
       if (course && parseFloat(course.price) > 0) {
         const checkout = await createCheckout({
@@ -153,6 +161,7 @@ export default function TrainingCourseDetailPage() {
       return reg;
     },
     onSuccess: (data) => {
+      setShowRegForm(false);
       void queryClient.invalidateQueries({ queryKey: ["training", "my-courses"] });
       void queryClient.invalidateQueries({ queryKey: ["training", "courses"] });
       toast.success(
@@ -205,8 +214,12 @@ export default function TrainingCourseDetailPage() {
       <Tabs defaultValue={myRegistration ? "learn" : "overview"}>
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          {!canManage && <TabsTrigger value="learn">📖 Learn</TabsTrigger>}
+          {/* Report 8 #14: Structure before the player, renamed "Run the Course";
+              #1/#11: CJ Admin and trainers can run the course too. */}
           <TabsTrigger value="structure">Structure ({course.lessons.length} lessons)</TabsTrigger>
+          {course.status === "published" && (
+            <TabsTrigger value="learn">▶ Run the Course</TabsTrigger>
+          )}
           <TabsTrigger value="live-sessions">
             Live Sessions ({course.live_sessions.length})
           </TabsTrigger>
@@ -276,16 +289,18 @@ export default function TrainingCourseDetailPage() {
                     Publish course
                   </Button>
                 )}
-                {!canManage && course.status === "published" && !myRegistration && (
-                  <Button
-                    onClick={() => registerMutation.mutate()}
-                    loading={registerMutation.isPending}
-                  >
-                    {parseFloat(course.price) === 0
-                      ? "Enroll for free"
-                      : `Register for $${course.price}`}
-                  </Button>
-                )}
+                {(!canManage || user?.role === "cj_admin") &&
+                  course.status === "published" &&
+                  !myRegistration && (
+                    <Button
+                      onClick={() => setShowRegForm(true)}
+                      loading={registerMutation.isPending}
+                    >
+                      {parseFloat(course.price) === 0
+                        ? "Enroll for free"
+                        : `Register for $${course.price}`}
+                    </Button>
+                  )}
                 {!canManage && myRegistration && (
                   <Badge variant={myRegistration.payment_status === "paid" ? "success" : "warning"}>
                     {myRegistration.payment_status === "paid" ? "✓ Enrolled" : "Payment pending"}
@@ -296,10 +311,10 @@ export default function TrainingCourseDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* === LEARN TAB (students only — course delivery player) === */}
-        {!canManage && (
+        {/* === RUN THE COURSE TAB (course delivery player) === */}
+        {course.status === "published" && (
           <TabsContent value="learn">
-            <CoursePlayer course={course} />
+            <CoursePlayer course={course} onRegister={() => setShowRegForm(true)} />
           </TabsContent>
         )}
 
@@ -383,12 +398,27 @@ export default function TrainingCourseDetailPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {s.mode === "online" && s.meeting_url ? (
+                          {s.mode === "online" && s.join_locked ? (
+                            <span className="text-xs text-slate-500">
+                              Register &amp; complete payment to join
+                            </span>
+                          ) : s.mode === "online" && s.meeting_url ? (
                             <a
                               href={s.meeting_url}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-primary-600 hover:underline"
+                              onClick={() => {
+                                // Report 8 #10: joining records attendance
+                                // (counts toward completion when mandatory).
+                                if (myRegistration) {
+                                  void updateProgress(myRegistration.id, {
+                                    content_type: "live_session",
+                                    content_id: s.id,
+                                    is_completed: true,
+                                  }).catch(() => {});
+                                }
+                              }}
                             >
                               Join ↗
                             </a>
@@ -396,6 +426,11 @@ export default function TrainingCourseDetailPage() {
                             <span className="text-slate-500">{s.venue}</span>
                           ) : (
                             "—"
+                          )}
+                          {/* Report 8 #33: registered students can ask the
+                              trainer to reschedule this session. */}
+                          {!canManage && myRegistration && s.status === "scheduled" && (
+                            <RequestRescheduleButton courseId={cid} session={s} />
                           )}
                         </TableCell>
                         {canManage && (
@@ -420,7 +455,22 @@ export default function TrainingCourseDetailPage() {
                   </TableBody>
                 </Table>
               )}
-              {canManage && <AddLiveSessionForm courseId={cid} />}
+              {canManage && <RescheduleRequestsPanel courseId={cid} />}
+              {canManage && (
+                <AddLiveSessionForm
+                  courseId={cid}
+                  contents={course.lessons.flatMap((l) =>
+                    l.topics.flatMap((t) =>
+                      t.sessions.flatMap((ss) =>
+                        ss.contents.map((c) => ({
+                          id: c.id,
+                          label: `${l.title} → ${t.title} → ${c.title}`,
+                        })),
+                      ),
+                    ),
+                  )}
+                />
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -506,6 +556,13 @@ export default function TrainingCourseDetailPage() {
           }}
         />
       )}
+      <RegistrationFormModal
+        open={showRegForm}
+        courseTitle={course.title}
+        submitting={registerMutation.isPending}
+        onClose={() => setShowRegForm(false)}
+        onSubmit={(form) => registerMutation.mutate(form)}
+      />
     </div>
   );
 }
@@ -618,6 +675,11 @@ function ReportsReviewModal({
     queryKey: ["training", "assignment-reports", registrationId],
     queryFn: () => listAssignmentReports(registrationId),
   });
+  // Report 8 #31: the candidate's results on this course's assessments.
+  const { data: summary } = useQuery({
+    queryKey: ["training", "progress-summary", registrationId],
+    queryFn: () => getProgressSummary(registrationId),
+  });
   const reviewMut = useMutation({
     mutationFn: (v: { reportId: number; score: number; feedback: string }) =>
       reviewAssignmentReport(registrationId, {
@@ -668,6 +730,37 @@ function ReportsReviewModal({
               overrideLoading={overrideMut.isPending}
             />
           ))}
+        </div>
+      )}
+      {summary && summary.assessment_scores.length > 0 && (
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Assessment results
+          </p>
+          <div className="space-y-1">
+            {summary.assessment_scores.map((sc) => (
+              <div
+                key={sc.course_assessment_id}
+                className="flex items-center justify-between text-sm text-slate-700"
+              >
+                <span>
+                  {sc.title}{" "}
+                  <span className="text-xs text-slate-400">{sc.level.replace(/_/g, " ")}</span>
+                </span>
+                {sc.status === "completed" ? (
+                  <Badge variant="success">
+                    {sc.total_score ?? "—"}/{sc.max_score ?? "—"} ({sc.percentage ?? 0}%)
+                  </Badge>
+                ) : (
+                  <Badge variant="outline">not attempted</Badge>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Course completion: {summary.completion_percentage}% · status{" "}
+            {summary.completion_status.replace(/_/g, " ")}
+          </p>
         </div>
       )}
     </Modal>
@@ -851,7 +944,15 @@ function MessagesModal({
 // Add Live Session Form (SRS §2.5)
 // ---------------------------------------------------------------------------
 
-function AddLiveSessionForm({ courseId }: { courseId: number }) {
+function AddLiveSessionForm({
+  courseId,
+  contents,
+}: {
+  courseId: number;
+  /** Course contents in order, for the sequence-point picker (R8-24). */
+  contents: { id: number; label: string }[];
+}) {
+  const [afterContent, setAfterContent] = useState("");
   const toast = useToast();
   const queryClient = useQueryClient();
   const [show, setShow] = useState(false);
@@ -898,6 +999,7 @@ function AddLiveSessionForm({ courseId }: { courseId: number }) {
         scheduled_at: new Date(scheduledAt).toISOString(),
         duration_minutes: Number(duration),
         description,
+        after_content: afterContent ? Number(afterContent) : null,
       });
     },
     onSuccess: () => {
@@ -1002,6 +1104,28 @@ function AddLiveSessionForm({ courseId }: { courseId: number }) {
           onChange={(e) => setVenue(e.target.value)}
           placeholder="Venue address"
         />
+      )}
+      {contents.length > 0 && (
+        <div>
+          <Label htmlFor="ls-after">Place in the course sequence (optional)</Label>
+          <select
+            id="ls-after"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            value={afterContent}
+            onChange={(e) => setAfterContent(e.target.value)}
+          >
+            <option value="">Not linked to a content</option>
+            {contents.map((c) => (
+              <option key={c.id} value={c.id}>
+                After: {c.label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            Students see this session (with Join) in Run the Course after the chosen content — e.g.
+            the last content of a topic or lesson. Mark it mandatory on the Completion tab.
+          </p>
+        </div>
       )}
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -1420,6 +1544,22 @@ function CompletionParametersTab({ course }: { course: TrainingCourse }) {
       }
     }
   }
+  // Doc 7 §2.6: assessments count too; Report 8 #10: and live sessions
+  // (a live session is completed when the student joins it).
+  for (const ca of course.assessments) {
+    allItems.push({
+      content_type: "assessment",
+      content_id: ca.id,
+      label: `${ca.title} (assessment · ${ca.level.replace(/_/g, " ")})`,
+    });
+  }
+  for (const ls of course.live_sessions) {
+    allItems.push({
+      content_type: "live_session",
+      content_id: ls.id,
+      label: `${ls.title} (live session · ${new Date(ls.scheduled_at).toLocaleString()})`,
+    });
+  }
 
   const { data: existing } = useQuery({
     queryKey: ["training", "completion-parameters", cid],
@@ -1723,6 +1863,154 @@ function RescheduleLiveSessionButton({
           Cancel
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Report 8 #33 — live-session reschedule requests
+// ---------------------------------------------------------------------------
+
+function RequestRescheduleButton({
+  courseId,
+  session,
+}: {
+  courseId: number;
+  session: { id: number; title: string };
+}) {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [times, setTimes] = useState<string[]>([""]);
+  const [note, setNote] = useState("");
+  const send = useMutation({
+    mutationFn: () =>
+      requestLiveSession(courseId, {
+        live_session: session.id,
+        preferred_times: times.filter(Boolean),
+        note,
+      }),
+    onSuccess: () => {
+      toast.success("Reschedule request sent to the trainer.");
+      setOpen(false);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+  return (
+    <>
+      <button
+        type="button"
+        className="ml-2 text-xs text-primary-600 hover:underline"
+        onClick={() => setOpen(true)}
+      >
+        Request reschedule
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} title={`Reschedule “${session.title}”`}>
+        <div className="space-y-3">
+          <div>
+            <Label>Preferred date &amp; time (optional)</Label>
+            {times.map((t, i) => (
+              <Input
+                key={i}
+                type="datetime-local"
+                className="mt-1"
+                value={t}
+                onChange={(e) =>
+                  setTimes((prev) => prev.map((v, j) => (j === i ? e.target.value : v)))
+                }
+              />
+            ))}
+            {times.length < 3 && (
+              <button
+                type="button"
+                className="mt-1 text-xs text-primary-600 hover:underline"
+                onClick={() => setTimes((prev) => [...prev, ""])}
+              >
+                + another option
+              </button>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="resched-note" required>
+              Reason
+            </Label>
+            <textarea
+              id="resched-note"
+              rows={3}
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button loading={send.isPending} disabled={!note.trim()} onClick={() => send.mutate()}>
+              Send request
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+function RescheduleRequestsPanel({ courseId }: { courseId: number }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["training", "live-session-requests", courseId],
+    queryFn: () => listLiveSessionRequests(courseId),
+  });
+  const decline = useMutation({
+    mutationFn: (id: number) => declineLiveSessionRequest(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["training", "live-session-requests", courseId],
+      });
+      toast.success("Request declined; the student has been notified.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+  const pending = (data ?? []).filter((r) => r.status === "pending");
+  if (pending.length === 0) return null;
+  return (
+    <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3">
+      <p className="text-sm font-medium text-amber-900">
+        Requests from students ({pending.length})
+      </p>
+      <p className="text-xs text-amber-800">
+        Use Reschedule on the session to move it — the request is then marked done and the student
+        is notified.
+      </p>
+      <ul className="mt-2 space-y-2">
+        {pending.map((r) => (
+          <li key={r.id} className="rounded bg-white p-2 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span>
+                <strong>{r.student_name ?? "Student"}</strong>{" "}
+                {r.live_session_title
+                  ? `asks to reschedule “${r.live_session_title}”`
+                  : "requests a live session"}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                loading={decline.isPending}
+                onClick={() => decline.mutate(r.id)}
+              >
+                Decline
+              </Button>
+            </div>
+            {r.note && <p className="mt-1 text-xs text-slate-600">“{r.note}”</p>}
+            {r.preferred_times.length > 0 && (
+              <p className="mt-1 text-xs text-slate-500">
+                Preferred: {r.preferred_times.map((t) => new Date(t).toLocaleString()).join(" · ")}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

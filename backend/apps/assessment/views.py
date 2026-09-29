@@ -102,6 +102,31 @@ def _seed_session_attempts(session) -> None:
         )
 
 
+def _require_timer_level(assessment, level: str, duration) -> None:
+    """Doc 3 §5.2: "Timer can be set at only ONE of the levels". Reject a
+    duration on a section/question that is not at the assessment's configured
+    timer level (Report 7 #11 — timers could be set at every level at once)."""
+    if duration and assessment.timer_level != level:
+        from rest_framework.exceptions import ValidationError
+
+        raise ValidationError(
+            {
+                "duration_seconds": [
+                    "A timer can be set at only one level (Doc 3 §5.2). This assessment's "
+                    f"timer level is '{assessment.get_timer_level_display()}'; change it "
+                    "first to time this level."
+                ]
+            }
+        )
+
+
+def _next_order(siblings) -> int:
+    """1 + the highest `order` among ``siblings`` (1 for the first)."""
+    from django.db.models import Max
+
+    return (siblings.aggregate(m=Max("order"))["m"] or 0) + 1
+
+
 _GROUP_TYPE_TO_QTYPE = {
     "rank_simple": ("RANK_SIMPLE", "RANK"),
     "rank_then_rate": ("RANK_THEN_RATE", "RANK"),
@@ -171,11 +196,12 @@ def _serialize_group_for_player(group, response) -> dict:
         "section_order_mode": "STATIC",
         "question_detail": {
             "id": -group.id,
-            "question_title": title,
+            "question_title": group.question_title or title,
             "question_type": qtype,
             "question_type_label": title,
-            "question_text_1": title,
-            "question_text_2": "",
+            # Report 8 #60: the group's authored instructions, when set.
+            "question_text_1": group.question_text_1 or group.question_title or title,
+            "question_text_2": group.question_text_2,
             "image": None,
             "scoring_type": "",
             "scoring_type_label": "",
@@ -336,13 +362,10 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
             )
             if not is_manager:
                 if role_name == "trainer":
-                    # Report 3 §4.2: trainers can author assessments using the
-                    # CJ Question Bank but see only their OWN assessments
-                    # (plus published ones they can take). They must NOT see
-                    # the entire assessment pool.
-                    from django.db.models import Q
-
-                    qs = qs.filter(Q(status="published") | Q(created_by=self.request.user))
+                    # Report 3 §4.2 / Report 8 #30: trainers author their own
+                    # course assessments and see ONLY those — not the rest of
+                    # the CJ assessment pool (published or not).
+                    qs = qs.filter(created_by=self.request.user)
                 else:
                     qs = qs.filter(status="published")
 
@@ -872,7 +895,18 @@ class AssessmentSectionViewSet(ModelViewSet):
         # timer resolution. Doc 3 §3 allows up to four variable levels.
         parent = serializer.validated_data.get("parent")
         level = parent.level + 1 if parent else 1
-        serializer.save(assessment=assessment, level=level)
+        _require_timer_level(
+            assessment, f"level{level}", serializer.validated_data.get("duration_seconds")
+        )
+        extra = {}
+        if "order" not in self.request.data:
+            # New sections go after their siblings, so the configured order is
+            # the creation order (every section used to be order=0, leaving
+            # the DB to return ties in any order — Report 7 #1/#12).
+            extra["order"] = _next_order(
+                AssessmentSection.objects.filter(assessment=assessment, parent=parent)
+            )
+        serializer.save(assessment=assessment, level=level, **extra)
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -915,6 +949,12 @@ class AssessmentSectionViewSet(ModelViewSet):
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
+        if "duration_seconds" in serializer.validated_data:
+            _require_timer_level(
+                instance.assessment,
+                f"level{instance.level}",
+                serializer.validated_data["duration_seconds"],
+            )
         serializer.save()
         return Response(
             {
@@ -957,10 +997,24 @@ class AssessmentQuestionViewSet(ModelViewSet):
         sid = self.kwargs.get("section_id")
         return AssessmentQuestion.objects.filter(section_id=sid)
 
+    def perform_update(self, serializer):
+        if "duration_seconds" in serializer.validated_data:
+            _require_timer_level(
+                serializer.instance.section.assessment,
+                "question",
+                serializer.validated_data["duration_seconds"],
+            )
+        serializer.save()
+
     def perform_create(self, serializer):
         sid = self.kwargs.get("section_id")
         section = get_object_or_404(AssessmentSection, id=sid)
-        serializer.save(section=section)
+        extra = {}
+        if "order" not in self.request.data:
+            # Assigned order = assignment sequence (Report 7 #4/#34: questions
+            # were all order=0 and came back reversed).
+            extra["order"] = _next_order(AssessmentQuestion.objects.filter(section=section))
+        serializer.save(section=section, **extra)
 
     def create(self, request, *args, **kwargs):
         """Assign a question to a section.
@@ -1192,26 +1246,37 @@ class SessionViewSet(ModelViewSet):
             for aq in AssessmentQuestion.objects.filter(section__assessment=assessment)
         }
 
-        # ── Honor the configured per-level display order (SRS §5.1) ──
-        # Order the delivered attempts by section hierarchy (level, order) and
-        # then by each question's assigned order within its section. RANDOM
-        # display order is applied client-side over this delivered set.
-        def _sort_key(att):
-            sec = att.section
-            key = (att.section_id, att.question_id, att.sub_question_index)
-            return (
-                sec.level if sec is not None else 0,
-                sec.order if sec is not None else 0,
-                aq_order.get(key, 0),
-                att.id,
-            )
+        # ── Delivery set + order (Doc 3 §5.1) — see apps/assessment/delivery.py ──
+        # One entry per assigned question (sub-question rows are answer storage,
+        # attached as `sub_answers`), in configured tree order with per-section
+        # randomisation applied server-side and seeded by the session.
+        from .delivery import (
+            anchor_attempts,
+            order_for_delivery,
+            section_paths,
+            sub_answers_by_question,
+        )
 
-        attempts.sort(key=_sort_key)
+        sub_answers = sub_answers_by_question(attempts)
+        anchors = anchor_attempts(attempts, set(aq_order))
+        delivered = order_for_delivery(session, anchors, sections_by_id, aq_order)
+        static_index = {
+            a.id: i
+            for i, a in enumerate(
+                order_for_delivery(session, anchors, sections_by_id, aq_order, static=True)
+            )
+        }
 
         serializer = QuestionAttemptSerializer(
-            attempts,
+            delivered,
             many=True,
-            context={"section_timer_map": section_timer_map, "aq_durations": aq_durations},
+            context={
+                "section_timer_map": section_timer_map,
+                "aq_durations": aq_durations,
+                "section_paths": section_paths(sections_by_id),
+                "sub_answers": sub_answers,
+                "static_index": static_index,
+            },
         )
         data = list(serializer.data)
 
@@ -1268,7 +1333,9 @@ class SessionViewSet(ModelViewSet):
             )
 
         # ── Server-side timer enforcement ──
-        duration = session.assessment.total_duration_seconds
+        # The effective budget for the single configured timer level (the
+        # assessment duration, or the sum of the section/question timers).
+        duration = session.assessment.aggregate_duration_seconds()
         if duration and duration > 0:
             elapsed = (timezone.now() - session.started_at).total_seconds()
             if elapsed > duration + 30:  # 30s grace period for network latency
@@ -1303,15 +1370,22 @@ class SessionViewSet(ModelViewSet):
         # auto-expanded), only sub_question_index=0 has a QuestionAttempt
         # pre-created. For sub-questions 1..N-1, we create the attempt
         # on-the-fly (get_or_create) so the answer can be saved.
+        # A sub-question row belongs to the same section as its question's
+        # delivered (anchor) row. It used to take sections.first() — an
+        # arbitrary section — which put phantom entries in the sidebar
+        # (Report 7 #42) and routed sub-question scores to the wrong section.
+        anchor = (
+            QuestionAttempt.objects.filter(session=session, question_id=question_id)
+            .order_by("sub_question_index", "id")
+            .first()
+        )
         attempt, _created = QuestionAttempt.objects.get_or_create(
             session=session,
             question_id=question_id,
             sub_question_index=sub_question_index,
             defaults={
                 "section": (
-                    session.assessment.sections.first()
-                    if session.assessment.sections.exists()
-                    else None
+                    anchor.section if anchor is not None else session.assessment.sections.first()
                 ),
                 "status": "not_attempted",
             },
@@ -1568,6 +1642,16 @@ class SessionViewSet(ModelViewSet):
                         "is_multi": len(correct_opts) > 1,
                         "correct_option_ids": [o.id for o in correct_opts],
                         "correct_option_texts": [o.text_value for o in correct_opts],
+                    }
+                elif q.question_type in ("FITB_WORD_FLASH_MULTI", "FITB_IMAGE_FLASH_MULTI"):
+                    # Recall (2c/2d): any flashed item, any order, +1 each.
+                    from .scoring import recall_items
+
+                    items, to_recall = recall_items(q)
+                    correct_answer = {
+                        "type": "FITB_RECALL",
+                        "items_to_recall": to_recall,
+                        "accepted_items": [sorted(sp) for sp in items],
                     }
                 elif q.question_type.startswith("FITB_"):
                     correct_answer = {

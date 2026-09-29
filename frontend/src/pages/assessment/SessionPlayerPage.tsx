@@ -23,6 +23,7 @@ import {
 } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
 import { canNavigateBackToSection, sectionDeliveryOrder } from "./navigationRules";
+import { seededShuffle } from "./seededShuffle";
 
 export default function SessionPlayerPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -51,10 +52,34 @@ export default function SessionPlayerPage() {
   // has finished. Used to gate Question Text 2 + answer options until the
   // presentation is over (SRS feedback Common Issue 4).
   const [presentationDone, setPresentationDone] = useState<Set<number>>(new Set());
+  // Question ids whose media presentation has actually STARTED. Replay is
+  // locked only for these: leaving a question before pressing Play must not
+  // lock its media (Report 7 #41 — spec: play once, replay blocked after play).
+  const [startedMedia, setStartedMedia] = useState<Set<number>>(new Set());
+  // Timer sections whose section-level time has expired: they disappear
+  // (Doc 3 §5.2) — no navigating back into them (Report 7 #21).
+  const [expiredTimerSections, setExpiredTimerSections] = useState<Set<number>>(new Set());
+  const [hydrated, setHydrated] = useState(false);
   // In-question sub-question navigation. For multi-sub-question questions
   // (sub_question_count > 1), this tracks which sub-question the candidate
   // is currently on (0-indexed). Resets when the question changes.
   const [activeSubQ, setActiveSubQ] = useState(0);
+
+  // Report 7 #44: no automatic logout while an assessment is in progress.
+  // A candidate can sit on one question with no requests going out, letting
+  // the access token lapse; a light authenticated ping every 4 minutes lets
+  // the API client refresh the token before it expires, keeping the login
+  // alive for the whole test.
+  useEffect(() => {
+    if (Number.isNaN(sid)) return;
+    const keepAlive = window.setInterval(
+      () => {
+        void retrieveSession(sid).catch(() => {});
+      },
+      4 * 60 * 1000,
+    );
+    return () => window.clearInterval(keepAlive);
+  }, [sid]);
 
   const { data: session, isLoading: sessionLoading } = useQuery({
     queryKey: ["assessment-session", sid],
@@ -67,7 +92,14 @@ export default function SessionPlayerPage() {
   useEffect(() => {
     if (!session || session.status !== "active") return;
     if (timeLeft !== null) return; // already initialised
-    if (session.total_duration_seconds && session.total_duration_seconds > 0) {
+    // Doc 3 §5.2: one timer level only — the overall countdown applies when
+    // the timer is at assessment level; section/question timers run below.
+    const assessmentLevelTimer = (session.timer_level ?? "assessment") === "assessment";
+    if (
+      assessmentLevelTimer &&
+      session.total_duration_seconds &&
+      session.total_duration_seconds > 0
+    ) {
       // For an in-progress session we approximate remaining time from started_at.
       // (Server-side enforcement is the source of truth; this is purely UX.)
       const elapsed = Math.floor((Date.now() - new Date(session.started_at).getTime()) / 1000);
@@ -103,55 +135,58 @@ export default function SessionPlayerPage() {
     queryKey: ["assessment-session-questions", sid],
     queryFn: () => getSessionQuestions(sid),
     enabled: !Number.isNaN(sid),
+    // The delivered set/order is fixed for the session — a background
+    // refetch must never move the candidate's position.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 
-  // Apply random display order if the assessment requests it.
-  // The shuffle is stable per session (seeded by session ID) so the candidate
-  // sees the same order on refresh, but different from the authoring order.
-  const questions = (() => {
-    if (!rawQuestions || rawQuestions.length === 0) return rawQuestions;
-
-    // Deterministic shuffle seeded per session, so the order is stable across
-    // refreshes (not cryptographically secure — display ordering only).
-    const shuffleSeeded = <T,>(arr: T[], seedBase: number): T[] => {
-      const a = [...arr];
-      let seed = seedBase;
-      for (let i = a.length - 1; i > 0; i--) {
-        seed = (seed * 9301 + 49297) % 233280;
-        const j = Math.floor((seed / 233280) * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-      }
-      return a;
-    };
-
-    // Assessment-level RANDOM shuffles the whole set (existing behaviour).
-    if (session?.display_order === "RANDOM") {
-      return shuffleSeeded(rawQuestions, sid);
+  // Resume (Report 7 #9/#10/#18/#19): restore saved answers, bookmarks and
+  // skips from the server, lock media that was already presented, and start
+  // at the first question that still has an unanswered sub-question
+  // (QT spec: "On resume, test starts from the suspended question").
+  useEffect(() => {
+    if (hydrated || !rawQuestions) return;
+    const restored: Record<string, Record<string, unknown>> = {};
+    const marks = new Set<string>();
+    const skips = new Set<string>();
+    const presented = new Set<number>();
+    rawQuestions.forEach((sq) => {
+      Object.entries(sq.sub_answers ?? {}).forEach(([idx, st]) => {
+        const key = `${sq.question}_${idx}`;
+        if (st.status === "attempted" && st.raw_answer) {
+          restored[key] = st.raw_answer;
+          presented.add(sq.question);
+        } else if (st.status === "bookmarked") {
+          marks.add(key);
+        } else if (st.status === "skipped") {
+          skips.add(key);
+          presented.add(sq.question);
+        }
+      });
+    });
+    setAnswers(restored);
+    setBookmarked(marks);
+    setSkipped(skips);
+    setStartedMedia(presented);
+    setViewedQuestions(presented);
+    if (Object.keys(restored).length > 0) {
+      const resumeAt = rawQuestions.findIndex((sq) => {
+        const n = sq.question_detail.sub_question_count ?? 1;
+        for (let i = 0; i < n; i++) if (!restored[`${sq.question}_${i}`]) return true;
+        return false;
+      });
+      if (resumeAt > 0) setCurrentIndex(resumeAt);
     }
+    setHydrated(true);
+  }, [rawQuestions, hydrated]);
 
-    // ASM-5 (§5.1): otherwise apply per-section order — shuffle questions within
-    // sections whose order_mode is RANDOM, keeping the delivered order elsewhere.
-    // Delivered questions are already grouped by section (backend sorts by
-    // level/order), so shuffle each consecutive same-section run in place.
-    if (!rawQuestions.some((q) => q.section_order_mode === "RANDOM")) {
-      return rawQuestions;
-    }
-    const result: typeof rawQuestions = [];
-    let i = 0;
-    while (i < rawQuestions.length) {
-      const sec = rawQuestions[i].section;
-      let j = i;
-      while (j < rawQuestions.length && rawQuestions[j].section === sec) j++;
-      const group = rawQuestions.slice(i, j);
-      if (group[0]?.section_order_mode === "RANDOM") {
-        result.push(...shuffleSeeded(group, sid + (sec ?? 0)));
-      } else {
-        result.push(...group);
-      }
-      i = j;
-    }
-    return result;
-  })();
+  // Delivery order (static tree order, per-section and assessment-level
+  // randomisation) is computed server-side and stable per session — see
+  // backend apps/assessment/delivery.py. Shuffling again here re-ordered the
+  // list whenever it changed, so Previous jumped to a random question
+  // (Report 7 #20).
+  const questions = rawQuestions;
 
   // PSY-A1: a psychometric group is delivered with a negative synthetic
   // question id (``-group_id``). Route its answer to the group endpoint; every
@@ -272,6 +307,9 @@ export default function SessionPlayerPage() {
           // Find the last delivered question in the expiring section and jump
           // to the one after it (the next section). Order-independent of the
           // candidate's current position within the section.
+          if (expiringSectionId != null) {
+            setExpiredTimerSections((prev) => new Set(prev).add(expiringSectionId));
+          }
           if (questions) {
             let lastIdx = -1;
             questions.forEach((qq, i) => {
@@ -326,6 +364,10 @@ export default function SessionPlayerPage() {
 
   const q = questions[currentIndex];
   const qd = q.question_detail;
+  // Replay is locked only once the media was actually started and the
+  // candidate has moved away from it.
+  const mediaLocked = (id: number) => startedMedia.has(id) && viewedQuestions.has(id);
+  const markMediaStarted = (id: number) => setStartedMedia((prev) => new Set(prev).add(id));
   const answerKey = `${q.question}_${activeSubQ}`;
   const isLast = currentIndex === questions.length - 1;
   const answeredCount = Object.keys(answers).length;
@@ -392,7 +434,7 @@ export default function SessionPlayerPage() {
   // Retest fix: Question Text2 is also gated for presentation-first types —
   // it must appear only AFTER the presentation ends.
   const presentationActive =
-    hasTimedPresentation && !presentationDone.has(qd.id) && !viewedQuestions.has(qd.id);
+    hasTimedPresentation && !presentationDone.has(qd.id) && !mediaLocked(qd.id);
 
   // Per-sub-question text: from sub_question_texts[activeSubQ].
   const subQuestionText = qd.sub_question_texts?.[activeSubQ] ?? "";
@@ -406,8 +448,13 @@ export default function SessionPlayerPage() {
   // Section delivery order — needed by PREV_SECTION to tell "the section
   // immediately before this one" apart from any section further back.
   const questionSectionOrder = sectionDeliveryOrder(questions.map((sq) => sq.section));
+  const isExpired = (index: number) => {
+    const ts = questions[index]?.timer_section_id;
+    return ts != null && expiredTimerSections.has(ts);
+  };
   const canGoBack = () => {
     if (currentIndex === 0) return true;
+    if (isExpired(currentIndex - 1)) return false;
     const targetSection = questions[currentIndex - 1].section;
     return canNavigateBackToSection(navRule, questionSectionOrder, q.section, targetSection);
   };
@@ -415,6 +462,7 @@ export default function SessionPlayerPage() {
   // backward by more than one question/section in a single click, unlike
   // the Previous button above).
   const canJumpTo = (targetIndex: number) => {
+    if (isExpired(targetIndex)) return false;
     if (targetIndex >= currentIndex) return true; // forward jumps are unrestricted
     return canNavigateBackToSection(
       navRule,
@@ -554,7 +602,7 @@ export default function SessionPlayerPage() {
     answerMutation.mutate({
       question_id: q.question,
       bookmark: true,
-      sub_question_index: q.sub_question_index,
+      sub_question_index: activeSubQ,
     });
   };
 
@@ -618,13 +666,30 @@ export default function SessionPlayerPage() {
   // Group questions by section for the sidebar navigation tree.
   // Within each section, sub-questions from the same parent question are
   // grouped together (for multi-question types 1c-1h, 2c-2d).
-  const sections = new Map<number | null, { questionIndex: number }[]>();
-  questions.forEach((q, i) => {
-    const sid = q.section;
+  // Report 7 #43: the sidebar lists sections and questions in the ASSIGNED
+  // (static) order and numbering even when delivery is random; each button
+  // still jumps to wherever that question sits in the delivered sequence.
+  const staticOrder = questions
+    .map((q, i) => ({ questionIndex: i, rank: q.static_index ?? i }))
+    .sort((a, b) => a.rank - b.rank);
+  const sections = new Map<number | null, { questionIndex: number; label: number }[]>();
+  staticOrder.forEach(({ questionIndex }, pos) => {
+    const sid = questions[questionIndex].section;
     if (!sections.has(sid)) sections.set(sid, []);
-    sections.get(sid)!.push({ questionIndex: i });
+    sections.get(sid)!.push({ questionIndex, label: pos + 1 });
   });
   const sectionEntries = Array.from(sections.entries());
+
+  // Report 7 #39/#40: before submitting, point the candidate back to any
+  // bookmarked or skipped questions.
+  const indexOfKey = (key: string) =>
+    questions.findIndex((sq) => String(sq.question) === key.split("_")[0]);
+  const firstBookmarked = Math.min(...[...bookmarked].map(indexOfKey).filter((i) => i >= 0));
+  const firstSkipped = Math.min(...[...skipped].map(indexOfKey).filter((i) => i >= 0));
+  const goBackTo = (index: number) => {
+    setShowSubmitConfirm(false);
+    if (Number.isFinite(index)) setCurrentIndex(groupStartOf(index));
+  };
 
   return (
     <div className="flex h-screen flex-col bg-slate-50">
@@ -738,12 +803,21 @@ export default function SessionPlayerPage() {
             {sectionEntries.map(([sid, items], secIdx) => (
               <div key={sid ?? "no-section"} className="mb-3">
                 <p className="mb-1 text-xs font-medium text-slate-700">
-                  {sid !== null ? `Section ${secIdx + 1}` : "Questions"}
+                  {sid === null
+                    ? "Questions"
+                    : questions[items[0].questionIndex].section_path?.join(" › ") ||
+                      `Section ${secIdx + 1}`}
                 </p>
                 <div className="flex flex-wrap gap-1">
-                  {items.map(({ questionIndex: i }) => {
+                  {items.map(({ questionIndex: i, label }) => {
                     const aKey = `${questions[i].question}_${questions[i].sub_question_index}`;
-                    const isAnswered = Boolean(answers[aKey]);
+                    // A multi-sub-question item is answered once every
+                    // sub-question is.
+                    const subCount = questions[i].question_detail.sub_question_count ?? 1;
+                    const isAnswered = Array.from(
+                      { length: subCount },
+                      (_, k) => answers[`${questions[i].question}_${k}`],
+                    ).every(Boolean);
                     const isBookmarked = bookmarked.has(aKey);
                     const isSkipped = skipped.has(aKey);
                     // QT-3: highlight the whole continuous-rating group as active.
@@ -768,9 +842,11 @@ export default function SessionPlayerPage() {
                         title={
                           presentationActive
                             ? "Wait for the presentation to finish before navigating"
-                            : !jumpAllowed
-                              ? "Backward navigation is not allowed this far back for this assessment"
-                              : `Question ${i + 1}`
+                            : isExpired(i)
+                              ? "Time for this section is over"
+                              : !jumpAllowed
+                                ? "Backward navigation is not allowed this far back for this assessment"
+                                : `Question ${label}`
                         }
                         className={`h-7 w-7 rounded-md text-xs font-medium transition-colors ${
                           isCurrent
@@ -784,7 +860,7 @@ export default function SessionPlayerPage() {
                                   : "bg-slate-100 text-slate-500 hover:bg-slate-200"
                         } ${isDisabled ? "cursor-not-allowed opacity-50" : ""}`}
                       >
-                        {i + 1}
+                        {label}
                       </button>
                     );
                   })}
@@ -846,7 +922,8 @@ export default function SessionPlayerPage() {
                       displayCount={qd.flash_display_count ?? qd.flash_items.length}
                       order={qd.flash_order}
                       replayMode={qd.replay_mode ?? "not_permitted"}
-                      hasBeenViewed={viewedQuestions.has(qd.id)}
+                      hasBeenViewed={mediaLocked(qd.id)}
+                      onPresentationStart={() => markMediaStarted(qd.id)}
                       onPresentationEnd={() =>
                         setPresentationDone((prev) => new Set(prev).add(qd.id))
                       }
@@ -862,7 +939,8 @@ export default function SessionPlayerPage() {
                       displayDurationSeconds={qd.display_duration_seconds ?? null}
                       displayMode={qd.display_mode ?? "timed"}
                       replayMode={qd.replay_mode ?? "not_permitted"}
-                      hasBeenViewed={viewedQuestions.has(qd.id)}
+                      hasBeenViewed={mediaLocked(qd.id)}
+                      onPresentationStart={() => markMediaStarted(qd.id)}
                       onPresentationEnd={() =>
                         setPresentationDone((prev) => new Set(prev).add(qd.id))
                       }
@@ -882,7 +960,8 @@ export default function SessionPlayerPage() {
                       imageUrl={qd.image}
                       durationSeconds={qd.display_duration_seconds ?? 30}
                       replayMode={qd.replay_mode ?? "not_permitted"}
-                      hasBeenViewed={viewedQuestions.has(qd.id)}
+                      hasBeenViewed={mediaLocked(qd.id)}
+                      onPresentationStart={() => markMediaStarted(qd.id)}
                       onPresentationEnd={() =>
                         setPresentationDone((prev) => new Set(prev).add(qd.id))
                       }
@@ -906,7 +985,8 @@ export default function SessionPlayerPage() {
                         key={`audio-${media.id}`}
                         fileUrl={media.file}
                         replayMode={qd.replay_mode ?? "not_permitted"}
-                        hasBeenViewed={viewedQuestions.has(qd.id)}
+                        hasBeenViewed={mediaLocked(qd.id)}
+                        onPresentationStart={() => markMediaStarted(qd.id)}
                         onPresentationEnd={() =>
                           setPresentationDone((prev) => new Set(prev).add(qd.id))
                         }
@@ -921,7 +1001,8 @@ export default function SessionPlayerPage() {
                         key={`video-${media.id}`}
                         fileUrl={media.file}
                         replayMode={qd.replay_mode ?? "not_permitted"}
-                        hasBeenViewed={viewedQuestions.has(qd.id)}
+                        hasBeenViewed={mediaLocked(qd.id)}
+                        onPresentationStart={() => markMediaStarted(qd.id)}
                         onPresentationEnd={() =>
                           setPresentationDone((prev) => new Set(prev).add(qd.id))
                         }
@@ -1006,14 +1087,24 @@ export default function SessionPlayerPage() {
                   {continuousTail.map((gi) => {
                     const gq = questions[gi];
                     const gKey = `${gq.question}_0`;
+                    const gText1 = gq.question_detail.question_text_1 || "";
+                    // Report 7 #31: each item shows its statement (Text 2); the
+                    // shared instruction (Text 1) is shown once, not per item.
+                    const sameInstruction = gText1.trim() === (qd.question_text_1 || "").trim();
                     return (
                       <div key={gq.id}>
-                        <div
-                          className="prose prose-sm mb-3 max-w-none text-base font-medium text-slate-900 [&_p]:my-1"
-                          dangerouslySetInnerHTML={{
-                            __html: gq.question_detail.question_text_1 || "",
-                          }}
-                        />
+                        {!sameInstruction && (
+                          <div
+                            className="prose prose-sm mb-3 max-w-none text-base font-medium text-slate-900 [&_p]:my-1"
+                            dangerouslySetInnerHTML={{ __html: gText1 }}
+                          />
+                        )}
+                        {gq.question_detail.question_text_2 && (
+                          <div
+                            className="prose prose-sm mb-3 max-w-none text-sm text-slate-700 [&_p]:my-1"
+                            dangerouslySetInnerHTML={{ __html: gq.question_detail.question_text_2 }}
+                          />
+                        )}
                         <AnswerInput
                           question={gq}
                           currentAnswer={answers[gKey]}
@@ -1124,17 +1215,38 @@ export default function SessionPlayerPage() {
           questions.
           {answeredCount < totalQuestions && (
             <span className="mt-2 block text-amber-600">
-              ⚠ {remainingCount} question(s) are unanswered and will score 0. Are you sure you want
-              to submit?
+              ⚠ {remainingCount} question(s) are unanswered and will score 0.
             </span>
           )}
         </p>
+        {bookmarkedCount > 0 && (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <span>
+              You have bookmarked <strong>{bookmarkedCount}</strong> question
+              {bookmarkedCount === 1 ? "" : "s"}. Do you want to go back and attempt?
+            </span>
+            <Button size="sm" variant="outline" onClick={() => goBackTo(firstBookmarked)}>
+              Go back
+            </Button>
+          </div>
+        )}
+        {skippedCount > 0 && (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800">
+            <span>
+              You have skipped <strong>{skippedCount}</strong> question
+              {skippedCount === 1 ? "" : "s"}. Do you want to go back and attempt?
+            </span>
+            <Button size="sm" variant="outline" onClick={() => goBackTo(firstSkipped)}>
+              Go back
+            </Button>
+          </div>
+        )}
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="outline" onClick={() => setShowSubmitConfirm(false)}>
             Cancel
           </Button>
           <Button variant="danger" loading={submitMutation.isPending} onClick={performSubmit}>
-            Submit Assessment
+            {bookmarkedCount > 0 || skippedCount > 0 ? "No, submit" : "Submit Assessment"}
           </Button>
         </div>
       </Modal>
@@ -1234,8 +1346,14 @@ function AnswerInput({
                 onChange={() => handleSelect(opt.id)}
                 className="h-4 w-4 shrink-0"
               />
+              {/* QT spec 1b: option images may be large — show them whole
+                  (Report 7 #16: a 48px cover crop cut them off). */}
               {opt.image_file && (
-                <img src={opt.image_file} alt="" className="h-12 w-12 rounded object-cover" />
+                <img
+                  src={opt.image_file}
+                  alt=""
+                  className="h-auto max-h-72 w-auto max-w-full rounded object-contain"
+                />
               )}
               {/* Hide '(image)' text for image-only options per SRS feedback Issue 2 (1b) */}
               {opt.text_value && <span>{opt.text_value}</span>}
@@ -1253,14 +1371,18 @@ function AnswerInput({
     const answers: string[] = (currentAnswer?.answers as string[]) || [];
     const isFlashFitb = qType === "FITB_IMAGE_FLASH_MULTI" || qType === "FITB_WORD_FLASH_MULTI";
     const fields = qd.options.filter((o) => o.option_type === "TEXT");
-    const maxFields = isFlashFitb
-      ? Math.max(fields.length, qd.flash_items?.length || 0)
-      : fields.length;
-    const visibleFields = isFlashFitb ? Math.max(answers.length, fields.length, 1) : fields.length;
+    // Recall (2c/2d): one entry box per item flashed (Report 7 #38) — the
+    // display count, else the whole display pool; scored +1 per item.
+    const pool = (qd.flash_items ?? []).filter((f) => f.is_in_display_pool);
+    const poolSize = pool.length || qd.flash_items?.length || 0;
+    const recallCount = qd.flash_display_count
+      ? Math.min(qd.flash_display_count, poolSize || qd.flash_display_count)
+      : poolSize;
+    const boxCount = isFlashFitb ? Math.max(recallCount, 1) : fields.length;
 
     return (
       <div className="space-y-2">
-        {Array.from({ length: isFlashFitb ? visibleFields : fields.length }).map((_, i) => (
+        {Array.from({ length: boxCount }).map((_, i) => (
           <input
             key={i}
             type="text"
@@ -1274,15 +1396,6 @@ function AnswerInput({
             placeholder="Type your answer..."
           />
         ))}
-        {isFlashFitb && visibleFields < maxFields && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onChange({ answers: [...answers, ""] })}
-          >
-            + Add answer field ({visibleFields} / {maxFields})
-          </Button>
-        )}
         {isFlashFitb && (
           <p className="text-xs text-slate-500">
             Enter each item you remember from the flash presentation. Each correct answer gets +1
@@ -1297,22 +1410,37 @@ function AnswerInput({
   if (qType === "STANDARD_RATING_SCALE") {
     const rating: number = (currentAnswer?.rating as number) || 0;
     const points = qd.rating_scale_points || 5;
+    // Scale legends (QT spec type 7: descriptive column headers) are stored as
+    // "Point n" options. Older saves duplicated them, so keep the latest per
+    // point (Report 7 #32: legends were not shown).
+    const legends: Record<number, string> = {};
+    [...qd.options]
+      .filter((o) => /^Point \d+$/.test(o.label ?? ""))
+      .sort((a, b) => a.id - b.id)
+      .forEach((o) => {
+        legends[Number((o.label ?? "").slice(6))] = o.text_value ?? "";
+      });
 
     return (
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         {[...Array(points)].map((_, p) => (
-          <button
-            key={p}
-            type="button"
-            onClick={() => onChange({ rating: p + 1 })}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-medium ${
-              rating === p + 1
-                ? "border-primary-600 bg-primary-100 text-primary-700"
-                : "border-slate-300 text-slate-500 hover:border-primary-300"
-            }`}
-          >
-            {p + 1}
-          </button>
+          <div key={p} className="flex w-20 flex-col items-center gap-1 text-center">
+            <button
+              type="button"
+              onClick={() => onChange({ rating: p + 1 })}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-medium ${
+                rating === p + 1
+                  ? "border-primary-600 bg-primary-100 text-primary-700"
+                  : "border-slate-300 text-slate-500 hover:border-primary-300"
+              }`}
+              aria-label={legends[p + 1] || `Point ${p + 1}`}
+            >
+              {p + 1}
+            </button>
+            {legends[p + 1] && (
+              <span className="text-[11px] leading-tight text-slate-500">{legends[p + 1]}</span>
+            )}
+          </div>
         ))}
       </div>
     );
@@ -1704,16 +1832,13 @@ function AnswerInput({
     const groupB = qd.options.filter((o) => o.option_type === "MATCH_B");
     const dummyB = qd.options.filter((o) => o.option_type === "MATCH_DUMMY");
 
-    // Combine real Group B + dummy options, then shuffle deterministically
-    // per question (so refreshes don't reshuffle). Use question id as seed.
+    // Report 7 #17: Group A and Group B (incl. dummy options) are shown in
+    // random order, stable per question so refreshes don't reshuffle. The old
+    // sort-by-hash of consecutive ids kept roughly the creation order.
     const allGroupB = [...groupB, ...dummyB];
     const seed = qd.id || 0;
-    const shuffledGroupB = [...allGroupB].sort((a, b) => {
-      // Simple deterministic pseudo-random based on option id + question seed
-      const ha = ((a.id * 9301 + seed * 49297) % 233280) / 233280;
-      const hb = ((b.id * 9301 + seed * 49297) % 233280) / 233280;
-      return ha - hb;
-    });
+    const shuffledGroupA = seededShuffle(groupA, seed * 2 + 1);
+    const shuffledGroupB = seededShuffle(allGroupB, seed * 2 + 2);
 
     const handleMatch = (bId: number) => {
       if (selectedA === null) return;
@@ -1738,7 +1863,7 @@ function AnswerInput({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Group A</p>
-            {groupA.map((opt) => {
+            {shuffledGroupA.map((opt) => {
               const matchedB = getMatchedB(opt.id);
               const matchedBOpt = shuffledGroupB.find((b) => b.id === matchedB);
               const isSelected = selectedA === opt.id;
@@ -1891,6 +2016,7 @@ function FlashSimulation({
   replayMode = "not_permitted",
   hasBeenViewed = false,
   onPresentationEnd,
+  onPresentationStart,
 }: {
   items: FlashItemLike[];
   intervalMs: number;
@@ -1899,6 +2025,8 @@ function FlashSimulation({
   replayMode?: "permitted" | "not_permitted";
   hasBeenViewed?: boolean;
   onPresentationEnd?: () => void;
+  /** Fired when playback/display begins (arms the replay lock). */
+  onPresentationStart?: () => void;
 }) {
   // Use only items flagged for the display pool (default to all if none flagged)
   const pool = items.filter((i) => i.is_in_display_pool);
@@ -1928,6 +2056,7 @@ function FlashSimulation({
 
   const play = () => {
     if (sequence.length === 0 || replayLocked) return;
+    onPresentationStart?.();
     setPlaying(true);
     setCurrentIndex(0);
 
@@ -2049,6 +2178,7 @@ function PassageDisplay({
   replayMode = "not_permitted",
   hasBeenViewed = false,
   onPresentationEnd,
+  onPresentationStart,
 }: {
   title: string;
   body: string;
@@ -2057,6 +2187,8 @@ function PassageDisplay({
   replayMode?: "permitted" | "not_permitted";
   hasBeenViewed?: boolean;
   onPresentationEnd?: () => void;
+  /** Fired when playback/display begins (arms the replay lock). */
+  onPresentationStart?: () => void;
 }) {
   // For 'timed' mode: passage starts hidden until user clicks 'Start Passage Presentation'
   // For 'unlimited' mode: passage is always visible
@@ -2092,6 +2224,7 @@ function PassageDisplay({
   }, [secondsLeft]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startPresentation = () => {
+    onPresentationStart?.();
     setPresentationStarted(true);
     setVisible(true);
     if (displayMode === "timed" && displayDurationSeconds) {
@@ -2289,12 +2422,15 @@ function ImageDisplayTimed({
   replayMode = "not_permitted",
   hasBeenViewed = false,
   onPresentationEnd,
+  onPresentationStart,
 }: {
   imageUrl: string;
   durationSeconds: number;
   replayMode?: "permitted" | "not_permitted";
   hasBeenViewed?: boolean;
   onPresentationEnd?: () => void;
+  /** Fired when playback/display begins (arms the replay lock). */
+  onPresentationStart?: () => void;
 }) {
   const [visible, setVisible] = useState(false);
   const [started, setStarted] = useState(false);
@@ -2319,6 +2455,7 @@ function ImageDisplayTimed({
   }, [secondsLeft]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const start = () => {
+    onPresentationStart?.();
     setStarted(true);
     setVisible(true);
     setSecondsLeft(durationSeconds);
@@ -2410,11 +2547,14 @@ function AudioPlayerControlled({
   replayMode,
   hasBeenViewed,
   onPresentationEnd,
+  onPresentationStart,
 }: {
   fileUrl: string;
   replayMode: "permitted" | "not_permitted";
   hasBeenViewed: boolean;
   onPresentationEnd?: () => void;
+  /** Fired when playback/display begins (arms the replay lock). */
+  onPresentationStart?: () => void;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [hasPlayed, setHasPlayed] = useState(false);
@@ -2430,6 +2570,7 @@ function AudioPlayerControlled({
 
   const startPlayback = () => {
     if (audioRef.current) {
+      onPresentationStart?.();
       audioRef.current.play();
       setIsPlaying(true);
     }
@@ -2552,11 +2693,14 @@ function VideoPlayerControlled({
   replayMode,
   hasBeenViewed,
   onPresentationEnd,
+  onPresentationStart,
 }: {
   fileUrl: string;
   replayMode: "permitted" | "not_permitted";
   hasBeenViewed: boolean;
   onPresentationEnd?: () => void;
+  /** Fired when playback/display begins (arms the replay lock). */
+  onPresentationStart?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [hasPlayed, setHasPlayed] = useState(false);
@@ -2572,6 +2716,7 @@ function VideoPlayerControlled({
 
   const startPlayback = () => {
     if (videoRef.current) {
+      onPresentationStart?.();
       videoRef.current.play();
       setIsPlaying(true);
     }

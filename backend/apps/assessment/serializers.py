@@ -36,7 +36,7 @@ class AssessmentSectionSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "assessment"]
 
     def get_subsections(self, obj):
-        children = obj.subsections.all().order_by("order")
+        children = obj.subsections.all().order_by("order", "id")
         return AssessmentSectionSerializer(children, many=True).data
 
 
@@ -59,12 +59,19 @@ class AssessmentQuestionSerializer(serializers.ModelSerializer):
 
 
 class AssessmentSerializer(serializers.ModelSerializer):
-    sections = AssessmentSectionSerializer(many=True, read_only=True)
+    # Top-level sections only — each nests its own subsections. Serialising
+    # every section flat *and* nested listed each subsection twice in the
+    # Sections tab and the "Select section" picker (Report 7 #14/#15).
+    sections = serializers.SerializerMethodField()
     assessment_type_label = serializers.CharField(
         source="get_assessment_type_display", read_only=True
     )
     section_count = serializers.IntegerField(source="sections.count", read_only=True)
     session_count = serializers.IntegerField(source="sessions.count", read_only=True)
+
+    def get_sections(self, obj):
+        roots = obj.sections.filter(parent__isnull=True).order_by("order", "id")
+        return AssessmentSectionSerializer(roots, many=True).data
 
     def get_question_count(self, obj):
         """Count total questions assigned across ALL sections (including
@@ -227,6 +234,14 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
     # ASM-5 (§5.1): the section's per-level delivery order mode, so the player
     # can randomise questions within RANDOM sections.
     section_order_mode = serializers.SerializerMethodField()
+    # Sidebar labels: section titles root → leaf (Report 7 #3/#42).
+    section_path = serializers.SerializerMethodField()
+    # Every sub-question's saved state for this question, keyed by
+    # sub_question_index, so a resumed session restores answers (Report 7 #9).
+    sub_answers = serializers.SerializerMethodField()
+    # Position in the assigned (static) order — the sidebar lists questions in
+    # this order even when delivery is random (Report 7 #43).
+    static_index = serializers.SerializerMethodField()
 
     class Meta:
         model = QuestionAttempt
@@ -246,6 +261,9 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
             "timer_section_id",
             "question_duration_seconds",
             "section_order_mode",
+            "section_path",
+            "sub_answers",
+            "static_index",
             "question_detail",
         ]
         read_only_fields = ["id", "score", "max_score", "answered_at", "question_detail"]
@@ -253,6 +271,20 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
     def _timer_section(self, obj):
         section_map = self.context.get("section_timer_map") or {}
         return section_map.get(obj.section_id, (None, None))
+
+    def get_static_index(self, obj):
+        return (self.context.get("static_index") or {}).get(obj.id)
+
+    def get_section_path(self, obj):
+        return (self.context.get("section_paths") or {}).get(obj.section_id, [])
+
+    def get_sub_answers(self, obj):
+        subs = (self.context.get("sub_answers") or {}).get(obj.question_id)
+        if subs is None:
+            return {
+                str(obj.sub_question_index): {"status": obj.status, "raw_answer": obj.raw_answer}
+            }
+        return {str(k): v for k, v in subs.items()}
 
     def get_section_order_mode(self, obj):
         return obj.section.order_mode if obj.section_id else "STATIC"
@@ -361,9 +393,22 @@ class PsychometricGroupSerializer(serializers.ModelSerializer):
             "group_number",
             "rating_scale_points",
             "order",
+            "question_title",
+            "question_text_1",
+            "question_text_2",
             "items",
         ]
         read_only_fields = ["id", "assessment"]
+
+    def validate_question_text_1(self, value):
+        from core.rich_html import sanitize_rich_html
+
+        return sanitize_rich_html(value)
+
+    def validate_question_text_2(self, value):
+        from core.rich_html import sanitize_rich_html
+
+        return sanitize_rich_html(value)
 
     def validate(self, attrs):
 

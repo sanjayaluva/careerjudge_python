@@ -54,6 +54,13 @@ class InteractiveQuestionSerializer(serializers.ModelSerializer):
 class SessionContentSerializer(serializers.ModelSerializer):
     interactive_questions = InteractiveQuestionSerializer(many=True, read_only=True)
 
+    def validate_text_content(self, value):
+        # Report 8 #8/#9: rich text from the editor is sanitised before it is
+        # shown to students.
+        from core.rich_html import sanitize_rich_html
+
+        return sanitize_rich_html(value)
+
     class Meta:
         model = SessionContent
         fields = [
@@ -170,7 +177,38 @@ class CourseAssessmentSerializer(serializers.ModelSerializer):
         return attrs
 
 
+def _can_join_live_sessions(user, course, cache: dict) -> bool:
+    """Doc 7 §6: course access (incl. live-session links) follows registration
+    + payment. Staff who run the course always see the link."""
+    if not user or not user.is_authenticated:
+        return False
+    role = user.role.name if user.role_id else None
+    if role in ("cj_admin", "trainer", "helpdesk") or course.created_by_id == user.id:
+        return True
+    key = ("paid", course.id)
+    if key not in cache:
+        cache[key] = CourseRegistration.objects.filter(
+            course=course, student=user, payment_status="paid"
+        ).exists()
+    return cache[key]
+
+
 class LiveSessionSerializer(serializers.ModelSerializer):
+    # True when the viewer may not join yet (not registered/paid) — the
+    # meeting link is withheld (Report 8 #36: unpaid users could join).
+    join_locked = serializers.SerializerMethodField()
+
+    def get_join_locked(self, obj):
+        request = self.context.get("request")
+        cache = self.context.setdefault("_join_cache", {})
+        return bool(request) and not _can_join_live_sessions(request.user, obj.course, cache)
+
+    def to_representation(self, obj):
+        data = super().to_representation(obj)
+        if data.get("join_locked"):
+            data["meeting_url"] = ""
+        return data
+
     class Meta:
         model = LiveSession
         fields = [
@@ -181,6 +219,7 @@ class LiveSessionSerializer(serializers.ModelSerializer):
             "mode",
             "schedule_mode",
             "depends_on",
+            "after_content",
             "meeting_url",
             "venue",
             "scheduled_at",
@@ -189,6 +228,7 @@ class LiveSessionSerializer(serializers.ModelSerializer):
             "rescheduled_from",
             "reschedule_reason",
             "created_at",
+            "join_locked",
         ]
         read_only_fields = ["id", "created_at", "course", "rescheduled_from"]
 
@@ -485,6 +525,9 @@ class LiveSessionRequestSerializer(serializers.ModelSerializer):
 
     course_title = serializers.CharField(source="course.title", read_only=True)
     student_name = serializers.CharField(source="student.full_name", read_only=True, default=None)
+    live_session_title = serializers.CharField(
+        source="live_session.title", read_only=True, default=None
+    )
 
     class Meta:
         model = LiveSessionRequest
@@ -494,6 +537,8 @@ class LiveSessionRequestSerializer(serializers.ModelSerializer):
             "course_title",
             "student",
             "student_name",
+            "live_session",
+            "live_session_title",
             "preferred_times",
             "note",
             "status",

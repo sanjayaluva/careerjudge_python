@@ -187,6 +187,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "country_of_origin",
             "state_province",
             "city",
+            "communicative_languages",
+            "age",
             "postal_code",
             "address_line1",
             "address_line2",
@@ -217,6 +219,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
             # Corporate fields
             "manager_name",
             "tan_number",
+            # Counsellor self-setup (CounselingPage "Create my profile"):
+            # rate per session + availability, shown on the counsellor list.
+            "hourly_rate",
+            "is_available_for_counseling",
         ]
         read_only_fields = ["avatar"]  # avatar handled via separate upload endpoint
 
@@ -234,6 +240,17 @@ def _apply_profile_fields(profile: UserProfile, profile_data: dict) -> None:
         if attr in valid_fields and attr not in ("id", "user"):
             if value == "" and UserProfile._meta.get_field(attr).null:
                 value = None
+            # Report 8 #45: the profile form sends text — languages arrive
+            # comma-separated and age as a string.
+            if attr == "communicative_languages" and isinstance(value, str):
+                value = [part.strip() for part in value.split(",") if part.strip()]
+            if attr == "age" and value is not None:
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    continue
+                if not 16 <= value <= 100:
+                    continue
             setattr(profile, attr, value)
 
 

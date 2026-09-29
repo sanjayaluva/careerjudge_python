@@ -17,6 +17,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   Alert,
@@ -46,10 +47,15 @@ import {
   type TrainingCourse,
 } from "@/api/training";
 import { extractApiError } from "@/api/client";
+import { startSession } from "@/api/assessment";
 import { InteractiveVideoPlayer } from "./InteractiveVideoPlayer";
+import { isHtml } from "./TextContentEditor";
+import { RichText } from "@/components/ui/RichText";
 
 // Flatten all content into a sequential list for navigation
 interface FlatContent {
+  lessonId: number;
+  topicId: number;
   lessonTitle: string;
   topicTitle: string;
   sessionTitle: string;
@@ -57,7 +63,14 @@ interface FlatContent {
   session: TopicSession;
 }
 
-export function CoursePlayer({ course }: { course: TrainingCourse }) {
+export function CoursePlayer({
+  course,
+  onRegister,
+}: {
+  course: TrainingCourse;
+  /** Opens the registration form (so "Run the Course" isn't a dead end). */
+  onRegister?: () => void;
+}) {
   const toast = useToast();
 
   // Get the student's registration for this course
@@ -86,6 +99,8 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
         for (const session of topic.sessions) {
           for (const content of session.contents) {
             items.push({
+              lessonId: lesson.id,
+              topicId: topic.id,
               lessonTitle: lesson.title,
               topicTitle: topic.title,
               sessionTitle: session.title,
@@ -101,6 +116,9 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
 
   // Current content index (for sequential navigation)
   const [currentIdx, setCurrentIdx] = useState(0);
+  // Report 8 #23: once the last content is completed, show the final
+  // results instead of leaving "Mark as completed & Continue" on screen.
+  const [finished, setFinished] = useState(false);
   // D7: resume from the last-accessed content once, when the progress
   // summary and course content are both loaded — the backend already
   // computes `last_content` (progress_summary's resume point); the player
@@ -108,10 +126,13 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
   const [hasResumed, setHasResumed] = useState(false);
   const [resumedFrom, setResumedFrom] = useState(false);
   useEffect(() => {
-    if (hasResumed || !progressSummary?.last_content || flatContent.length === 0) return;
-    const { content_type, content_id } = progressSummary.last_content;
-    if (content_type === "session_content") {
-      const idx = flatContent.findIndex((item) => item.content.id === content_id);
+    // Decide once, on the first summary load. Waiting for a `last_content`
+    // meant a fresh start resumed right after the first "Mark as completed",
+    // yanking the student back to the item they had just finished.
+    if (hasResumed || !progressSummary || flatContent.length === 0) return;
+    const last = progressSummary.last_content;
+    if (last?.content_type === "session_content") {
+      const idx = flatContent.findIndex((item) => item.content.id === last.content_id);
       if (idx >= 0) {
         setCurrentIdx(idx);
         setResumedFrom(true);
@@ -151,6 +172,11 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
       <Alert variant="warning">
         <AlertDescription>
           You need to register for this course before you can start learning.
+          {onRegister && (
+            <Button size="sm" className="ml-3" onClick={onRegister}>
+              Register now
+            </Button>
+          )}
         </AlertDescription>
       </Alert>
     );
@@ -203,77 +229,102 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Content area (2/3) */}
         <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg">{current.content.title}</CardTitle>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {current.lessonTitle} → {current.topicTitle} → {current.sessionTitle}
-                  </p>
+          {finished ? (
+            <CourseFinishedPanel
+              course={course}
+              summary={progressSummary}
+              onReview={() => {
+                setFinished(false);
+                setCurrentIdx(0);
+              }}
+            />
+          ) : (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg">{current.content.title}</CardTitle>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {current.lessonTitle} → {current.topicTitle} → {current.sessionTitle}
+                    </p>
+                  </div>
+                  <Badge variant="outline">
+                    {currentIdx + 1} / {flatContent.length}
+                  </Badge>
                 </div>
-                <Badge variant="outline">
-                  {currentIdx + 1} / {flatContent.length}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <ContentPlayer
-                content={current.content}
-                registrationId={registration.id}
-                onComplete={() => {
-                  // Move to next content
-                  if (currentIdx < flatContent.length - 1) {
-                    setCurrentIdx(currentIdx + 1);
-                  } else {
-                    toast.success("🎉 You've completed all course content!");
-                  }
-                }}
-              />
+              </CardHeader>
+              <CardContent>
+                <ContentPlayer
+                  content={current.content}
+                  registrationId={registration.id}
+                  onComplete={() => {
+                    // Move to next content
+                    if (currentIdx < flatContent.length - 1) {
+                      setCurrentIdx(currentIdx + 1);
+                    } else {
+                      toast.success("🎉 You've completed all course content!");
+                      setFinished(true);
+                    }
+                  }}
+                />
 
-              {/* Navigation */}
-              <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setCurrentIdx(Math.max(0, currentIdx - 1))}
-                  disabled={currentIdx === 0}
-                >
-                  ← Previous
-                </Button>
-                <span className="text-sm text-slate-500">
-                  Content {currentIdx + 1} of {flatContent.length}
-                </span>
-                <Button
-                  onClick={() => setCurrentIdx(Math.min(flatContent.length - 1, currentIdx + 1))}
-                  disabled={
-                    currentIdx === flatContent.length - 1 ||
-                    (contentSequencingEnabled && !currentCompleted)
-                  }
-                  title={
-                    contentSequencingEnabled && !currentCompleted
-                      ? "Complete this content to unlock the next (sequential mode)"
-                      : undefined
-                  }
-                >
-                  Next →
-                </Button>
-              </div>
-              {contentSequencingEnabled && !currentCompleted && (
-                <p className="mt-2 text-xs text-amber-600">
-                  Sequential mode: mark this content as completed to unlock the next.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                {/* Navigation */}
+                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setCurrentIdx(Math.max(0, currentIdx - 1))}
+                    disabled={currentIdx === 0}
+                  >
+                    ← Previous
+                  </Button>
+                  <span className="text-sm text-slate-500">
+                    Content {currentIdx + 1} of {flatContent.length}
+                  </span>
+                  <Button
+                    onClick={() => setCurrentIdx(Math.min(flatContent.length - 1, currentIdx + 1))}
+                    disabled={
+                      currentIdx === flatContent.length - 1 ||
+                      (contentSequencingEnabled && !currentCompleted)
+                    }
+                    title={
+                      contentSequencingEnabled && !currentCompleted
+                        ? "Complete this content to unlock the next (sequential mode)"
+                        : undefined
+                    }
+                  >
+                    Next →
+                  </Button>
+                </div>
+                {contentSequencingEnabled && !currentCompleted && (
+                  <p className="mt-2 text-xs text-amber-600">
+                    Sequential mode: mark this content as completed to unlock the next.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Assignments for current session */}
           {current.session.assignments.length > 0 && (
             <AssignmentsPanel session={current.session} registrationId={registration.id} />
           )}
 
-          {/* Assessments for current session */}
-          {course.assessments.filter((a) => a.session === current.session.id).length > 0 && (
-            <AssessmentsPanel course={course} sessionId={current.session.id} />
+          {/* Report 8 #24: live sessions placed after this content */}
+          {!finished && (
+            <LiveSessionsAt
+              sessions={course.live_sessions.filter(
+                (ls) => ls.after_content === current.content.id,
+              )}
+              registrationId={registration.id}
+            />
+          )}
+
+          {/* Assessments due at this point in the sequence (Doc 7 §2.4) */}
+          {!finished && (
+            <AssessmentsPanel
+              assessments={assessmentsDueAt(course, flatContent, currentIdx)}
+              summary={progressSummary}
+            />
           )}
         </div>
 
@@ -440,9 +491,12 @@ function ContentPlayer({
   if (content.content_format === "audio" && mediaSrc) {
     return (
       <div className="space-y-3">
-        <audio controls className="w-full" src={mediaSrc} onEnded={markComplete}>
-          Your browser does not support audio playback.
-        </audio>
+        <InteractiveVideoPlayer
+          kind="audio"
+          contentUrl={mediaSrc}
+          questions={content.interactive_questions as InteractiveQuestion[]}
+          onEnded={markComplete}
+        />
         <Button onClick={markComplete} loading={trackProgress.isPending}>
           ✓ Mark as completed
         </Button>
@@ -453,9 +507,19 @@ function ContentPlayer({
   if (content.content_format === "text") {
     return (
       <div className="space-y-3">
-        <div className="prose max-w-none rounded-md border border-slate-100 bg-slate-50 p-4 text-sm">
-          {content.text_content || content.content_url || "No text content available."}
-        </div>
+        {/* Report 8 #16: keep the trainer's paragraphs and line breaks — a
+            3000-word essay rendered as one unbroken paragraph. */}
+        {isHtml(content.text_content) ? (
+          // Formatted text from the editor (sanitised server-side).
+          <RichText
+            html={content.text_content}
+            className="rounded-md border border-slate-100 bg-slate-50 p-4 leading-relaxed"
+          />
+        ) : (
+          <div className="prose max-w-none whitespace-pre-line rounded-md border border-slate-100 bg-slate-50 p-4 text-sm leading-relaxed">
+            {content.text_content || content.content_url || "No text content available."}
+          </div>
+        )}
         {/* D7: minimal media embedding — an uploaded media file attached to
             text content is shown inline alongside the text. */}
         {content.media_file && (
@@ -615,22 +679,54 @@ function ProgressDashboard({ summary, loading }: { summary?: ProgressSummary; lo
                 </div>
               ))}
               {summary.assignment_report_scores.map((s) => (
-                <div
-                  key={`report-${s.assignment_id}`}
-                  className="flex items-center justify-between text-xs text-slate-600"
-                >
-                  <span>{s.assignment_title} (report)</span>
-                  <span>
-                    {s.trainer_score != null ? (
-                      <Badge variant="success">{s.trainer_score}/10</Badge>
-                    ) : (
-                      <Badge variant="outline">{s.status}</Badge>
-                    )}
-                  </span>
+                <div key={`report-${s.assignment_id}`} className="text-xs text-slate-600">
+                  <div className="flex items-center justify-between">
+                    <span>{s.assignment_title} (report)</span>
+                    <span>
+                      {s.trainer_score != null ? (
+                        <Badge variant="success">{s.trainer_score}/10</Badge>
+                      ) : (
+                        <Badge variant="outline">{s.status}</Badge>
+                      )}
+                    </span>
+                  </div>
+                  {/* Report 8 #28: show the trainer's feedback to the trainee. */}
+                  {s.trainer_feedback && (
+                    <p className="mt-1 whitespace-pre-line rounded bg-slate-50 px-2 py-1 text-slate-700">
+                      <span className="font-medium">Trainer feedback:</span> {s.trainer_feedback}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
           </div>
+        )}
+        {summary.requirements && summary.requirements.length > 0 && (
+          <details className="mt-4 border-t border-slate-100 pt-3">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Completion requirements ({summary.requirements.filter((r) => r.completed).length}/
+              {summary.requirements.length})
+            </summary>
+            <p className="mt-1 text-xs text-slate-500">
+              {summary.requirements_are_mandatory_params
+                ? "Your trainer has marked these items as mandatory to complete the course."
+                : "Complete every content item to complete the course."}
+            </p>
+            <ul className="mt-2 space-y-1">
+              {summary.requirements.map((r) => (
+                <li
+                  key={`${r.content_type}-${r.content_id}`}
+                  className="flex items-center gap-2 text-xs text-slate-700"
+                >
+                  <span className={r.completed ? "text-green-600" : "text-slate-400"}>
+                    {r.completed ? "✓" : "○"}
+                  </span>
+                  {r.title}
+                  <span className="text-slate-400">({r.content_type.replace(/_/g, " ")})</span>
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </CardContent>
     </Card>
@@ -715,11 +811,19 @@ function AssignmentsPanel({
                 </div>
                 <div>
                   {existingReport ? (
-                    <Badge variant={existingReport.status === "reviewed" ? "success" : "warning"}>
-                      {existingReport.status}
-                      {existingReport.trainer_score != null &&
-                        ` (${existingReport.trainer_score}/10)`}
-                    </Badge>
+                    <div className="text-right">
+                      <Badge variant={existingReport.status === "reviewed" ? "success" : "warning"}>
+                        {existingReport.status}
+                        {existingReport.trainer_score != null &&
+                          ` (${existingReport.trainer_score}/10)`}
+                      </Badge>
+                      {existingReport.trainer_feedback && (
+                        <p className="mt-1 max-w-xs whitespace-pre-line text-left text-xs text-slate-600">
+                          <span className="font-medium">Trainer feedback:</span>{" "}
+                          {existingReport.trainer_feedback}
+                        </p>
+                      )}
+                    </div>
                   ) : a.report_submission_enabled ? (
                     <Button size="sm" variant="outline" onClick={() => setSubmittingFor(a.id)}>
                       Submit report
@@ -819,10 +923,62 @@ function AssignmentsPanel({
 // Assessments Panel — launch assessments at session/topic/lesson level
 // ---------------------------------------------------------------------------
 
-function AssessmentsPanel({ course, sessionId }: { course: TrainingCourse; sessionId: number }) {
-  const sessionAssessments = course.assessments.filter((a) => a.session === sessionId);
+/**
+ * Course assessments whose sequence point is the current content (Doc 7 §2.4
+ * levels; Report 8 #18/#19). Session-level ones show with their session; end
+ * of topic / lesson / course ones on the last content of that topic / lesson /
+ * course. Before, only session-linked assessments were ever offered, so an
+ * "end of topic" assessment could never be taken.
+ */
+function assessmentsDueAt(
+  course: TrainingCourse,
+  flat: FlatContent[],
+  idx: number,
+): TrainingCourse["assessments"] {
+  const cur = flat[idx];
+  if (!cur) return [];
+  const next = flat[idx + 1];
+  const lastOfTopic = !next || next.topicId !== cur.topicId;
+  const lastOfLesson = !next || next.lessonId !== cur.lessonId;
+  const lastOfCourse = !next;
+  return course.assessments.filter((a) => {
+    if (a.session != null) return a.session === cur.session.id;
+    if (a.level === "end_of_topic" || (a.topic != null && a.lesson == null)) {
+      return a.topic === cur.topicId && lastOfTopic;
+    }
+    if (a.level === "end_of_lesson" || a.lesson != null) {
+      return a.lesson === cur.lessonId && lastOfLesson;
+    }
+    return lastOfCourse; // end of course / unplaced
+  });
+}
 
-  if (sessionAssessments.length === 0) return null;
+function AssessmentsPanel({
+  assessments,
+  summary,
+}: {
+  assessments: TrainingCourse["assessments"];
+  summary?: ProgressSummary;
+}) {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [starting, setStarting] = useState<number | null>(null);
+
+  if (assessments.length === 0) return null;
+
+  // Start or resume the candidate's session and open the real player. The old
+  // button opened /assessment/<id>/session/new, a route that doesn't exist.
+  const take = async (assessmentId: number) => {
+    setStarting(assessmentId);
+    try {
+      const session = await startSession(assessmentId);
+      navigate(`/assessments/sessions/${session.id}`);
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally {
+      setStarting(null);
+    }
+  };
 
   return (
     <Card className="mt-4">
@@ -830,24 +986,169 @@ function AssessmentsPanel({ course, sessionId }: { course: TrainingCourse; sessi
         <CardTitle className="text-sm">Assessments</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {sessionAssessments.map((a) => (
+        {assessments.map((a) => {
+          const result = summary?.assessment_scores.find((s) => s.course_assessment_id === a.id);
+          return (
+            <div
+              key={a.id}
+              className="flex items-center justify-between rounded-md border border-slate-100 p-3"
+            >
+              <div>
+                <div className="text-sm font-medium text-slate-900">{a.title}</div>
+                <div className="text-xs text-slate-500">
+                  {a.level.replace(/_/g, " ")}
+                  {a.is_scored && " · scored"}
+                </div>
+              </div>
+              {result?.status === "completed" && result.session_id ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate(`/assessments/sessions/${result.session_id}/results`)}
+                >
+                  View result{result.percentage != null ? ` (${result.percentage}%)` : ""}
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  loading={starting === a.assessment}
+                  onClick={() => void take(a.assessment)}
+                >
+                  Take assessment
+                </Button>
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Report 8 #23: final results once every content item is completed. */
+function CourseFinishedPanel({
+  course,
+  summary,
+  onReview,
+}: {
+  course: TrainingCourse;
+  summary?: ProgressSummary;
+  onReview: () => void;
+}) {
+  const pending = course.assessments.filter((a) => {
+    const r = summary?.assessment_scores.find((s) => s.course_assessment_id === a.id);
+    return r?.status !== "completed";
+  });
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">🎉 Course completed</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-slate-600">
+          You have completed all the content of <strong>{course.title}</strong>.
+        </p>
+        {summary && (
+          <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            <div>
+              <dt className="text-xs text-slate-500">Completion</dt>
+              <dd className="font-semibold">{summary.completion_percentage}%</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Items completed</dt>
+              <dd className="font-semibold">
+                {summary.completed_count} / {summary.total_count}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Time spent</dt>
+              <dd className="font-semibold">
+                {Math.floor(summary.total_time_spent_seconds / 3600)}h{" "}
+                {Math.floor((summary.total_time_spent_seconds % 3600) / 60)}m
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Avg. assessment score</dt>
+              <dd className="font-semibold">
+                {summary.average_assessment_percentage != null
+                  ? `${summary.average_assessment_percentage}%`
+                  : "—"}
+              </dd>
+            </div>
+          </dl>
+        )}
+        {summary && summary.assignment_report_scores.length > 0 && (
+          <div>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Assignments
+            </p>
+            <ul className="space-y-1 text-sm">
+              {summary.assignment_report_scores.map((r) => (
+                <li key={r.assignment_id} className="flex justify-between">
+                  <span>{r.assignment_title}</span>
+                  <span className="text-slate-500">
+                    {r.trainer_score != null ? `${r.trainer_score}/10` : r.status}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <AssessmentsPanel assessments={pending} summary={summary} />
+        <Button variant="outline" onClick={onReview}>
+          Review course content
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Report 8 #24: live sessions linked to a sequence point; joining records
+ * attendance (Report 8 #10 — counts toward completion when mandatory). */
+function LiveSessionsAt({
+  sessions,
+  registrationId,
+}: {
+  sessions: TrainingCourse["live_sessions"];
+  registrationId: number;
+}) {
+  if (sessions.length === 0) return null;
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle className="text-sm">Live session</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {sessions.map((ls) => (
           <div
-            key={a.id}
+            key={ls.id}
             className="flex items-center justify-between rounded-md border border-slate-100 p-3"
           >
             <div>
-              <div className="text-sm font-medium text-slate-900">{a.title}</div>
+              <div className="text-sm font-medium text-slate-900">{ls.title}</div>
               <div className="text-xs text-slate-500">
-                {a.level.replace(/_/g, " ")}
-                {a.is_scored && " · scored"}
+                {new Date(ls.scheduled_at).toLocaleString()} · {ls.duration_minutes} min ·{" "}
+                {ls.mode === "online" ? "online" : ls.venue || "classroom"}
               </div>
             </div>
-            <Button
-              size="sm"
-              onClick={() => window.open(`/assessment/${a.assessment}/session/new`, "_blank")}
-            >
-              Take assessment
-            </Button>
+            {ls.mode === "online" && ls.meeting_url && !ls.join_locked ? (
+              <a
+                href={ls.meeting_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() =>
+                  void updateProgress(registrationId, {
+                    content_type: "live_session",
+                    content_id: ls.id,
+                    is_completed: true,
+                  }).catch(() => {})
+                }
+              >
+                <Button size="sm">Join ↗</Button>
+              </a>
+            ) : (
+              <Badge variant="outline">{ls.status}</Badge>
+            )}
           </div>
         ))}
       </CardContent>

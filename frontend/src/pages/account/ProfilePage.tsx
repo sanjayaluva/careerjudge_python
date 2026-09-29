@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -26,7 +26,11 @@ import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthStore } from "@/stores/auth";
 import { ROLE_LABELS } from "@/lib/constants";
-import { COMMON_FIELDS, getRoleSpecificFields, type ProfileFieldConfig } from "@/lib/profileFields";
+import {
+  getCommonFields,
+  getRoleSpecificFields,
+  type ProfileFieldConfig,
+} from "@/lib/profileFields";
 import type { UpdateMePayload } from "@/api/types";
 
 // ---------------------------------------------------------------------------
@@ -80,6 +84,9 @@ export default function ProfilePage() {
   });
 
   const roleFields = getRoleSpecificFields(me?.role ?? null);
+  // Memoised per role: a new array each render would re-run the reset effect
+  // below and wipe what the user is typing.
+  const COMMON_FIELDS = useMemo(() => getCommonFields(me?.role ?? null), [me?.role]);
   const profileSchema = buildProfileSchema([...COMMON_FIELDS, ...roleFields]);
   const profileForm = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
@@ -98,10 +105,11 @@ export default function ProfilePage() {
     const defaults: Record<string, string> = {};
     for (const f of [...COMMON_FIELDS, ...roleFields]) {
       const val = p?.[f.name];
-      defaults[f.name] = val === null || val === undefined ? "" : String(val);
+      defaults[f.name] =
+        val === null || val === undefined ? "" : Array.isArray(val) ? val.join(", ") : String(val);
     }
     profileForm.reset(defaults);
-  }, [me, roleFields, basicForm, profileForm]);
+  }, [me, roleFields, COMMON_FIELDS, basicForm, profileForm]);
 
   const onBasicSubmit = async (values: BasicValues) => {
     setServerError(null);

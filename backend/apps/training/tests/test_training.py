@@ -55,12 +55,39 @@ def trainer_user(db, roles):
     return UserFactory(role=role, email="trainer@test.com")
 
 
+REGISTRATION_FORM = {
+    "first_name": "Asha",
+    "last_name": "Menon",
+    "gender": "female",
+    "mobile": "9800000000",
+    "state_province": "Kerala",
+    "city": "Kottayam",
+    "occupation": "Student",
+    "highest_education": "B.Sc",
+    "work_experience": "0",
+    "institution_name": "CMS College",
+    "place_of_institution": "Kottayam",
+}
+
+
+def _complete_profile(user):
+    from apps.accounts.models import UserProfile
+
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    for k, v in REGISTRATION_FORM.items():
+        setattr(profile, k, v)
+    profile.save()
+
+
 @pytest.fixture
 def individual_user(db, roles):
     role = roles["individual"]
     for action in ("view", "add", "change"):
         ModuleRight.objects.get_or_create(role=role, module="training", action=action)
-    return UserFactory(role=role, email="student@test.com")
+    user = UserFactory(role=role, email="student@test.com")
+    # Report 8 #13: registering needs the mandatory registration-form details.
+    _complete_profile(user)
+    return user
 
 
 @pytest.fixture
@@ -143,16 +170,22 @@ def test_trainer_can_create_course(trainer_client, trainer_user):
     assert course.status == "draft"
 
 
-def test_non_admin_cannot_delete_course(trainer_client, trainer_user):
-    """Per SRS §5: 'Deleting a course is the right of Admin only'."""
-    course = TrainingCourse.objects.create(
-        title="Test Course", created_by=trainer_user, status="draft"
+def test_trainer_delete_rules(trainer_client, trainer_user, cj_admin_user):
+    """SRS §5 (Admin deletes courses) as changed by client request Report 8
+    #35: a trainer may delete their OWN DRAFT course only."""
+    published = TrainingCourse.objects.create(
+        title="Live", created_by=trainer_user, status="published"
     )
-    resp = trainer_client.delete(f"/api/training/courses/{course.id}/")
-    assert resp.status_code == 403
-    assert resp.data["error"]["code"] == "forbidden"
-    # Course still exists
-    assert TrainingCourse.objects.filter(id=course.id).exists()
+    others = TrainingCourse.objects.create(title="Other", created_by=cj_admin_user, status="draft")
+    own_draft = TrainingCourse.objects.create(title="Mine", created_by=trainer_user, status="draft")
+    for course in (published, others):
+        resp = trainer_client.delete(f"/api/training/courses/{course.id}/")
+        assert resp.status_code == 403
+        assert resp.data["error"]["code"] == "forbidden"
+        assert TrainingCourse.objects.filter(id=course.id).exists()
+    resp = trainer_client.delete(f"/api/training/courses/{own_draft.id}/")
+    assert resp.status_code in (200, 204)
+    assert not TrainingCourse.objects.filter(id=own_draft.id).exists()
 
 
 def test_admin_can_delete_course(admin_client, trainer_user):
@@ -248,6 +281,27 @@ def test_registration_captures_registration_form_snapshot(
     assert reg.registration_form["email"] == individual_user.email
     assert reg.registration_form["full_name"] == individual_user.full_name
     assert reg.registration_form["extra_answers"]["goal"] == "career switch"
+
+
+def test_registration_requires_the_registration_form(student_client, individual_user, trainer_user):
+    """Report 8 #13 / Doc 7 §6: mandatory details are required to register;
+    the submitted form is saved to the profile and snapshotted."""
+    from apps.accounts.models import UserProfile
+
+    UserProfile.objects.filter(user=individual_user).update(city="", work_experience="")
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    url = f"/api/training/courses/{course.id}/register/"
+    resp = student_client.post(url, {}, format="json")
+    assert resp.status_code == 400
+    assert set(resp.data["error"]["details"]["missing"]) == {"city", "work_experience"}
+    assert not CourseRegistration.objects.filter(course=course).exists()
+
+    form = {**REGISTRATION_FORM, "city": "Kochi", "work_experience": "0"}
+    resp = student_client.post(url, {"form": form}, format="json")
+    assert resp.status_code == 201, resp.data
+    reg = CourseRegistration.objects.get(course=course, student=individual_user)
+    assert reg.registration_form["city"] == "Kochi"
+    assert UserProfile.objects.get(user=individual_user).city == "Kochi"
 
 
 def test_registration_creates_payment_record(student_client, individual_user, trainer_user):
@@ -743,41 +797,37 @@ def test_list_messages(student_client, individual_user, trainer_user):
 # ---------------------------------------------------------------------------
 
 
-def test_progress_summary_aggregates_completion(student_client, individual_user, trainer_user):
-    """SRS §6: 'Course Completion Status, Time Tracker, Option to resume'."""
-    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
-    reg = CourseRegistration.objects.create(course=course, student=individual_user)
-    from apps.training.models import CourseProgress
+def _course_with_contents(trainer_user, n):
+    from apps.training.models import CourseLesson, LessonTopic, SessionContent, TopicSession
 
-    # 2 of 4 contents completed -> 50%
-    CourseProgress.objects.create(
-        registration=reg,
-        content_type="session_content",
-        content_id=1,
-        is_completed=True,
-        time_spent_seconds=60,
-    )
-    CourseProgress.objects.create(
-        registration=reg,
-        content_type="session_content",
-        content_id=2,
-        is_completed=True,
-        time_spent_seconds=120,
-    )
-    CourseProgress.objects.create(
-        registration=reg,
-        content_type="assignment",
-        content_id=3,
-        is_completed=False,
-        time_spent_seconds=30,
-    )
-    CourseProgress.objects.create(
-        registration=reg,
-        content_type="assignment",
-        content_id=4,
-        is_completed=False,
-        time_spent_seconds=0,
-    )
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L")
+    topic = LessonTopic.objects.create(lesson=lesson, title="T")
+    session = TopicSession.objects.create(topic=topic, title="S")
+    contents = [
+        SessionContent.objects.create(
+            session=session, title=f"c{i}", content_format="text", order=i
+        )
+        for i in range(n)
+    ]
+    return course, contents
+
+
+def test_progress_summary_aggregates_completion(student_client, individual_user, trainer_user):
+    """SRS §6: 'Course Completion Status, Time Tracker, Option to resume'.
+    Completion is measured against the course's contents — not just the items
+    the student happened to open (Report 8 #15: 2 opened + done read 100%)."""
+    course, contents = _course_with_contents(trainer_user, 4)
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+
+    for c, secs in ((contents[0], 60), (contents[1], 120)):
+        CourseProgress.objects.create(
+            registration=reg,
+            content_type="session_content",
+            content_id=c.id,
+            is_completed=True,
+            time_spent_seconds=secs,
+        )
 
     resp = student_client.get(f"/api/training/registrations/{reg.id}/progress_summary/")
     assert resp.status_code == 200
@@ -785,8 +835,27 @@ def test_progress_summary_aggregates_completion(student_client, individual_user,
     assert data["completion_percentage"] == 50.0
     assert data["completed_count"] == 2
     assert data["total_count"] == 4
-    assert data["total_time_spent_seconds"] == 210  # 60+120+30+0
+    assert data["total_time_spent_seconds"] == 180
     assert data["last_content"] is not None  # resume point
+
+
+def test_progress_moves_status_to_in_progress_then_completed(
+    student_client, individual_user, trainer_user
+):
+    """Report 8 #15/#23: status follows progress (was stuck at 'not started')."""
+    course, contents = _course_with_contents(trainer_user, 2)
+    reg = CourseRegistration.objects.create(
+        course=course, student=individual_user, payment_status="paid"
+    )
+    url = f"/api/training/registrations/{reg.id}/progress/"
+    body = {"content_type": "session_content", "is_completed": True}
+    student_client.post(url, {**body, "content_id": contents[0].id}, format="json")
+    reg.refresh_from_db()
+    assert reg.completion_status == "in_progress"
+    student_client.post(url, {**body, "content_id": contents[1].id}, format="json")
+    reg.refresh_from_db()
+    assert reg.completion_status == "completed"
+    assert reg.completed_at is not None
 
 
 def test_progress_summary_scheduled_course_has_time_left(
@@ -1529,3 +1598,40 @@ def test_assessment_link_requires_matching_target(trainer_client, trainer_user):
         format="json",
     )
     assert resp.status_code == 400, resp.data
+
+
+def test_completion_counts_assessments_and_attended_live_sessions(
+    student_client, individual_user, trainer_user
+):
+    """Doc 7 §2.6 + Report 8 #10: mandatory items can include course
+    assessments (done when completed) and live sessions (done when joined)."""
+    from apps.assessment.models import Assessment, AssessmentSession
+    from apps.training.models import CourseAssessment, CourseCompletionParameter, LiveSession
+
+    course, contents = _course_with_contents(trainer_user, 1)
+    reg = CourseRegistration.objects.create(
+        course=course, student=individual_user, payment_status="paid"
+    )
+    a = Assessment.objects.create(title="Quiz", status="published")
+    ca = CourseAssessment.objects.create(course=course, assessment=a, title="Quiz")
+    live = LiveSession.objects.create(
+        course=course, title="Q&A", scheduled_at="2026-10-01T10:00:00Z", after_content=contents[0]
+    )
+    for ctype, cid in (("assessment", ca.id), ("live_session", live.id)):
+        CourseCompletionParameter.objects.create(
+            course=course, content_type=ctype, content_id=cid, is_mandatory=True
+        )
+    url = f"/api/training/registrations/{reg.id}/progress_summary/"
+    assert student_client.get(url).data["data"]["completion_percentage"] == 0.0
+
+    AssessmentSession.objects.create(assessment=a, candidate=individual_user, status="completed")
+    student_client.post(
+        f"/api/training/registrations/{reg.id}/progress/",
+        {"content_type": "live_session", "content_id": live.id, "is_completed": True},
+        format="json",
+    )
+    data = student_client.get(url).data["data"]
+    assert data["completion_percentage"] == 100.0
+    assert {r["title"] for r in data["requirements"] if r["completed"]} == {"Quiz", "Q&A"}
+    reg.refresh_from_db()
+    assert reg.completion_status == "completed"
