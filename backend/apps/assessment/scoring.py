@@ -17,7 +17,87 @@ and returns (score, max_score).
 
 from typing import Any
 
-from apps.question_bank.models import Question
+from apps.question_bank.models import TYPE_FIXED_SCORING, Question
+
+# Signed per-type scoring (00_question_types_spec / 00_scoring_rules) comes
+# from TYPE_FIXED_SCORING whatever `scoring_type` was stored: a 2b saved as
+# "Binary" sent text answers through the option-id matcher and always scored
+# 0 (Report 7 #24).
+RECALL_TYPES = {"FITB_WORD_FLASH_MULTI", "FITB_IMAGE_FLASH_MULTI"}
+
+
+def effective_scoring_type(question: Question) -> str:
+    """The scoring mode the signed spec fixes for this question type."""
+    return TYPE_FIXED_SCORING.get(question.question_type, question.scoring_type)
+
+
+def recall_items(question: Question) -> tuple[list[set[str]], int]:
+    """Scoreable items for a recall question (2c word / 2d image flash).
+
+    Scoring spec ``score_recall(recalled_items, flashed_items)``: each flashed
+    item is one item. Its accepted spellings are the flashed word (2c) plus
+    the answers in its aligned answer field (the image's name for 2d, or
+    alternate spellings). Returns ``(accepted spellings per item, number of
+    items to recall)`` — the latter is the flash display count (how many
+    items are actually flashed), else the whole display pool.
+    """
+
+    def norm(text: str) -> str:
+        return text.strip() if question.case_sensitive else text.strip().lower()
+
+    flash = list(question.flash_items.all().order_by("order", "id"))
+    in_pool = [f.is_in_display_pool for f in flash]
+    if not any(in_pool):
+        in_pool = [True] * len(flash)
+    fields = list(question.options.filter(sub_question_index=0).order_by("order", "id"))
+
+    def field_answers(i: int) -> set[str]:
+        if i >= len(fields):
+            return set()
+        return {
+            norm(ca.answer_text) for ca in fields[i].correct_answers.all() if ca.answer_text.strip()
+        }
+
+    items = []
+    for i, item in enumerate(flash):
+        if not in_pool[i]:
+            continue
+        spellings = field_answers(i)
+        if item.text_value.strip():
+            spellings.add(norm(item.text_value))
+        if spellings:
+            items.append(spellings)
+    # Answer fields beyond the flash list (legacy: answers typed without items).
+    for i in range(len(flash), len(fields)):
+        if extra := field_answers(i):
+            items.append(extra)
+
+    pool_size = sum(in_pool)
+    if not flash:
+        to_recall = len(items)
+    elif question.flash_display_count:
+        to_recall = min(question.flash_display_count, pool_size)
+    else:
+        to_recall = pool_size
+    return items, to_recall
+
+
+def _score_recall(question: Question, answers: list) -> tuple[float, float]:
+    """+1 per distinct flashed item recalled, any order, no negative marking
+    (Report 7 #25/#26: 10 correct recalls scored 1 instead of 10)."""
+    items, to_recall = recall_items(question)
+    matched: set[int] = set()
+    for ans in answers:
+        candidate = (ans or "").strip()
+        if not candidate:
+            continue
+        if not question.case_sensitive:
+            candidate = candidate.lower()
+        for idx, spellings in enumerate(items):
+            if idx not in matched and candidate in spellings:
+                matched.add(idx)
+                break
+    return float(min(len(matched), to_recall)), float(to_recall)
 
 
 def score_question(
@@ -53,7 +133,10 @@ def score_question(
     if question.question_type == "FITB_SINGLE":
         return _score_binary_fuzzy(question, raw_answer, sub_question_index)
 
-    scorer = SCORERS.get(question.scoring_type)
+    if question.question_type in RECALL_TYPES:
+        return _score_recall(question, raw_answer.get("answers", []))
+
+    scorer = SCORERS.get(effective_scoring_type(question))
     if not scorer:
         # Default to binary
         scorer = _score_binary
@@ -249,8 +332,10 @@ def _get_max_score(question: Question, sub_question_index: int = 0) -> float:
     When ``sub_question_index`` is provided, only counts options belonging
     to that sub-question.
     """
+    if question.question_type in RECALL_TYPES:
+        return float(recall_items(question)[1])
     opts_qs = question.options.filter(sub_question_index=sub_question_index)
-    st = question.scoring_type
+    st = effective_scoring_type(question)
     if st in ("BINARY", "BINARY_FUZZY"):
         return 1.0
     elif st == "PARTIAL":
@@ -433,37 +518,6 @@ def _score_partial(
     # For FITB multi-field: raw_answer = {"answers": ["ans1", "ans2", ...]}
     answers = raw_answer.get("answers", [])
     if answers:
-        # For FITB Flash (image/word) types: candidate can enter answers in
-        # ANY order. Each correctly entered answer gets +1 (SRS feedback §11).
-        # Match each candidate answer against the UNION of all options'
-        # correct_answers, with each correct answer counted at most once.
-        is_flash_fitb = question.question_type in (
-            "FITB_IMAGE_FLASH_MULTI",
-            "FITB_WORD_FLASH_MULTI",
-        )
-        if is_flash_fitb:
-            # Build the set of all correct answers across all options
-            all_correct = set()
-            for opt in options:
-                for ca in opt.correct_answers.all():
-                    val = ca.answer_text.strip()
-                    if not question.case_sensitive:
-                        val = val.lower()
-                    all_correct.add(val)
-            max_score = float(len(all_correct))
-            matched_correct = set()
-            score = 0.0
-            for ans in answers:
-                candidate = (ans or "").strip()
-                if not candidate:
-                    continue
-                if not question.case_sensitive:
-                    candidate = candidate.lower()
-                if candidate in all_correct and candidate not in matched_correct:
-                    score += 1.0
-                    matched_correct.add(candidate)
-            return score, max_score
-
         # Standard FITB multi-field: positional match (answer[i] ↔ option[i])
         score = 0.0
         for i, opt in enumerate(options):

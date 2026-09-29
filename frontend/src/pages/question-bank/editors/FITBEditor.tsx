@@ -3,6 +3,8 @@
  * Handles: single/multiple fields, correct answers (up to 5 per field),
  * fuzzy match config, flash items + flash config for 2c/2d
  */
+import { useEffect } from "react";
+
 import { Input, Label, RichText, WysiwygEditorLite } from "@/components/ui";
 import { SCORING_TYPES } from "@/api/questionBank";
 import {
@@ -37,7 +39,15 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
   const isImageFlashType = questionType === "FITB_IMAGE_FLASH_MULTI";
   const isFlashType = isWordFlashType || isImageFlashType;
   const flashItemType: "TEXT" | "IMAGE" = isImageFlashType ? "IMAGE" : "TEXT";
-  const isFuzzy = data.scoring_type === "BINARY_FUZZY";
+  // The signed spec fixes the scoring mode for every FITB type (00_scoring_rules):
+  // 2a = binary with list/percentage match, 2b/2c/2d = partial credit. The
+  // server enforces it too (Report 7 #24: a 2b saved as Binary scored 0).
+  const fixedScoring = questionType === "FITB_SINGLE" ? "BINARY_FUZZY" : "PARTIAL";
+  const isFuzzy = fixedScoring === "BINARY_FUZZY";
+  useEffect(() => {
+    if (data.scoring_type !== fixedScoring) onChange({ ...data, scoring_type: fixedScoring });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fixedScoring, data.scoring_type]);
 
   const updateOption = (index: number, option: OptionData) => {
     const newOptions = [...data.options];
@@ -118,19 +128,17 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
       {/* Scoring config */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="sm:col-span-3">
-          <Label htmlFor="stype">Scoring type</Label>
-          <select
-            id="stype"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={data.scoring_type}
-            onChange={(e) => onChange({ ...data, scoring_type: e.target.value })}
-          >
-            <option value="BINARY">Binary (exact match)</option>
-            <option value="BINARY_FUZZY">Binary with Fuzzy Match</option>
-            <option value="PARTIAL">Partial Credit (multi-field)</option>
-          </select>
+          <Label>Scoring type</Label>
+          <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            {isFuzzy
+              ? "Binary with list / percentage match"
+              : isFlashType
+                ? "Partial credit — +1 for each flashed item recalled, in any order"
+                : "Partial credit — +1 for each correct field"}
+            <span className="ml-1 text-xs text-slate-500">(fixed for this question type)</span>
+          </p>
           {(() => {
-            const selected = SCORING_TYPES.find((s) => s.value === data.scoring_type);
+            const selected = SCORING_TYPES.find((s) => s.value === fixedScoring);
             return selected?.description ? (
               <p className="mt-2 text-xs leading-relaxed text-slate-600">
                 <span className="font-medium text-slate-700">How it works: </span>
@@ -168,7 +176,15 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
       {/* Answer fields */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <Label>{isMultiField ? "Answer Fields (one per blank)" : "Correct Answer(s)"}</Label>
+          <Label>
+            {isImageFlashType
+              ? "Image names (one field per flash image)"
+              : isWordFlashType
+                ? "Alternate spellings (optional, one field per flash word)"
+                : isMultiField
+                  ? "Answer Fields (one per blank)"
+                  : "Correct Answer(s)"}
+          </Label>
           <span className="text-xs text-slate-500">Up to 5 correct answers per field</span>
         </div>
         {data.options.map((opt, i) => (
@@ -180,7 +196,15 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
             onRemove={removeOption}
             showCorrect={false}
             correctAnswerMode
-            label={isMultiField ? `Field ${i + 1}` : "Answer"}
+            label={
+              isImageFlashType
+                ? `Image ${i + 1} name`
+                : isWordFlashType
+                  ? `Word ${i + 1}: ${data.flashItems[i]?.text_value || "—"}`
+                  : isMultiField
+                    ? `Field ${i + 1}`
+                    : "Answer"
+            }
           />
         ))}
         {isMultiField && <AddOptionButton onClick={addOption} label="Add field" />}

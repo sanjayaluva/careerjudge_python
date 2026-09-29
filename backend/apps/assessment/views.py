@@ -1642,6 +1642,16 @@ class SessionViewSet(ModelViewSet):
                         "correct_option_ids": [o.id for o in correct_opts],
                         "correct_option_texts": [o.text_value for o in correct_opts],
                     }
+                elif q.question_type in ("FITB_WORD_FLASH_MULTI", "FITB_IMAGE_FLASH_MULTI"):
+                    # Recall (2c/2d): any flashed item, any order, +1 each.
+                    from .scoring import recall_items
+
+                    items, to_recall = recall_items(q)
+                    correct_answer = {
+                        "type": "FITB_RECALL",
+                        "items_to_recall": to_recall,
+                        "accepted_items": [sorted(sp) for sp in items],
+                    }
                 elif q.question_type.startswith("FITB_"):
                     correct_answer = {
                         "type": "FITB",

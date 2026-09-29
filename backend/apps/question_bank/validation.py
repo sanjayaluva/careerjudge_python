@@ -86,21 +86,40 @@ def validate_question_config(question: Question) -> list[str]:
 
     # --- FITB types (2a-2d) ---
     elif qtype.startswith("FITB_"):
-        options = list(q.options.all())
-        if len(options) < 1:
-            errors.append("FITB requires at least 1 field (option).")
-        for o in options:
-            if not o.correct_answers.exists():
-                errors.append(
-                    f"Field '{o.text_value or f'Field {o.order}'}' has no correct answers defined."
-                )
-                break
+        # Recall types (2c/2d) are answered by the flashed items themselves;
+        # their answer fields are optional alternate spellings (2c) or the
+        # image names checked below (2d).
+        if qtype not in ("FITB_WORD_FLASH_MULTI", "FITB_IMAGE_FLASH_MULTI"):
+            options = list(q.options.all())
+            if len(options) < 1:
+                errors.append("FITB requires at least 1 field (option).")
+            for o in options:
+                if not o.correct_answers.exists():
+                    errors.append(
+                        f"Field '{o.text_value or f'Field {o.order}'}' has no correct answers "
+                        "defined."
+                    )
+                    break
         # Flash types need flash items
         if qtype in ("FITB_WORD_FLASH_MULTI", "FITB_IMAGE_FLASH_MULTI"):
             if not q.flash_items.exists():
                 errors.append("Flash FITB requires at least 1 flash item.")
             if not q.flash_interval_ms or q.flash_interval_ms < 100:
                 errors.append("Flash interval must be at least 100ms.")
+        # 2d recall is scored by each image's name (Report 7 #26/#38): every
+        # flash image needs an accepted name in its aligned answer field.
+        if qtype == "FITB_IMAGE_FLASH_MULTI":
+            fields = list(q.options.filter(sub_question_index=0).order_by("order", "id"))
+            for i, item in enumerate(q.flash_items.all().order_by("order", "id")):
+                named = bool(item.text_value.strip()) or (
+                    i < len(fields) and fields[i].correct_answers.exists()
+                )
+                if not named:
+                    errors.append(
+                        f"Flash image #{i + 1} has no accepted name — enter it in "
+                        f"answer field {i + 1}."
+                    )
+                    break
 
     # --- Match (3) ---
     elif qtype == "MATCH_FOLLOWING":

@@ -1300,14 +1300,18 @@ function AnswerInput({
     const answers: string[] = (currentAnswer?.answers as string[]) || [];
     const isFlashFitb = qType === "FITB_IMAGE_FLASH_MULTI" || qType === "FITB_WORD_FLASH_MULTI";
     const fields = qd.options.filter((o) => o.option_type === "TEXT");
-    const maxFields = isFlashFitb
-      ? Math.max(fields.length, qd.flash_items?.length || 0)
-      : fields.length;
-    const visibleFields = isFlashFitb ? Math.max(answers.length, fields.length, 1) : fields.length;
+    // Recall (2c/2d): one entry box per item flashed (Report 7 #38) — the
+    // display count, else the whole display pool; scored +1 per item.
+    const pool = (qd.flash_items ?? []).filter((f) => f.is_in_display_pool);
+    const poolSize = pool.length || qd.flash_items?.length || 0;
+    const recallCount = qd.flash_display_count
+      ? Math.min(qd.flash_display_count, poolSize || qd.flash_display_count)
+      : poolSize;
+    const boxCount = isFlashFitb ? Math.max(recallCount, 1) : fields.length;
 
     return (
       <div className="space-y-2">
-        {Array.from({ length: isFlashFitb ? visibleFields : fields.length }).map((_, i) => (
+        {Array.from({ length: boxCount }).map((_, i) => (
           <input
             key={i}
             type="text"
@@ -1321,15 +1325,6 @@ function AnswerInput({
             placeholder="Type your answer..."
           />
         ))}
-        {isFlashFitb && visibleFields < maxFields && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onChange({ answers: [...answers, ""] })}
-          >
-            + Add answer field ({visibleFields} / {maxFields})
-          </Button>
-        )}
         {isFlashFitb && (
           <p className="text-xs text-slate-500">
             Enter each item you remember from the flash presentation. Each correct answer gets +1
