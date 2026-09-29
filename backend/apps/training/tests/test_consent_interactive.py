@@ -399,3 +399,34 @@ def test_trainer_sees_and_reviews_reports_on_admin_created_course(trainer_client
     report.refresh_from_db()
     assert report.status == "reviewed"
     assert report.trainer_feedback == "Gut gemacht"
+
+
+def test_student_requests_reschedule_and_trainer_resolves(
+    student_client, trainer_client, student_user, trainer_user
+):
+    """Report 8 #33: a registered student asks for a live session to be
+    rescheduled; the trainer sees it, reschedules, and it resolves."""
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    CourseRegistration.objects.create(course=course, student=student_user, payment_status="paid")
+    live = LiveSession.objects.create(
+        course=course, title="Q&A", mode="online", scheduled_at="2026-10-01T10:00:00Z"
+    )
+    resp = student_client.post(
+        "/api/training/live-session-requests/",
+        {"course": course.id, "live_session": live.id, "note": "Exam that day"},
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    req_id = resp.data["data"]["id"]
+    listed = trainer_client.get(f"/api/training/live-session-requests/?course={course.id}")
+    assert [r["live_session_title"] for r in listed.data["data"]] == ["Q&A"]
+
+    resp = trainer_client.post(
+        f"/api/training/live-sessions/{live.id}/reschedule/",
+        {"scheduled_at": "2026-10-03T10:00:00Z", "reason": "Student request"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    from apps.training.models import LiveSessionRequest
+
+    assert LiveSessionRequest.objects.get(id=req_id).status == "scheduled"

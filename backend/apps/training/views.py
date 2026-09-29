@@ -27,6 +27,7 @@ from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
 
 from .models import (
+    Assignment,
     AssignmentDeadlineOverride,
     AssignmentReport,
     AssignmentReportFile,
@@ -82,6 +83,25 @@ REGISTRATION_FORM_FIELDS = (
 )
 
 
+def _done_keys(reg, progress_records) -> set:
+    """(content_type, id) the student has completed: progress records
+    (contents, assignments, attended live sessions — marked when the student
+    joins) plus course assessments with a completed session (Doc 7 §2.6
+    counts assessments; Report 8 #10 adds live sessions)."""
+    from apps.assessment.models import AssessmentSession
+
+    done = {(p.content_type, p.content_id) for p in progress_records if p.is_completed}
+    completed_assessments = set(
+        AssessmentSession.objects.filter(candidate=reg.student, status="completed").values_list(
+            "assessment_id", flat=True
+        )
+    )
+    for ca in reg.course.assessments.all():
+        if ca.assessment_id in completed_assessments:
+            done.add(("assessment", ca.id))
+    return done
+
+
 def _course_completion(reg, progress_records) -> tuple[float, int, int]:
     """(percentage, completed, total) for a registration.
 
@@ -90,7 +110,7 @@ def _course_completion(reg, progress_records) -> tuple[float, int, int]:
     session content of the course. It used to be completed ÷ items *opened*,
     so finishing the few items opened read as 100% (Report 8 #15).
     """
-    done = {(p.content_type, p.content_id) for p in progress_records if p.is_completed}
+    done = _done_keys(reg, progress_records)
     mandatory = [
         (mp.content_type, mp.content_id)
         for mp in reg.course.completion_parameters.filter(is_mandatory=True)
@@ -108,6 +128,44 @@ def _course_completion(reg, progress_records) -> tuple[float, int, int]:
     completed = sum(1 for key in required if key in done)
     pct = round(completed / total * 100, 1) if total else 0.0
     return pct, completed, total
+
+
+def _completion_requirements(reg, progress_records) -> list[dict]:
+    """What the learner must complete, with titles and a done flag (Report
+    8 #20: learners could not see the completion conditions). The trainer's
+    mandatory parameters when set, otherwise every session content."""
+    done = _done_keys(reg, progress_records)
+    params = list(reg.course.completion_parameters.filter(is_mandatory=True))
+    if params:
+        keys = [(p.content_type, p.content_id) for p in params]
+    else:
+        keys = [
+            ("session_content", cid)
+            for cid in SessionContent.objects.filter(
+                session__topic__lesson__course=reg.course
+            ).values_list("id", flat=True)
+        ]
+    models = {
+        "session_content": SessionContent,
+        "assignment": Assignment,
+        "assessment": CourseAssessment,
+        "live_session": LiveSession,
+    }
+    titles = {}
+    for ctype, model in models.items():
+        ids = [cid for t, cid in keys if t == ctype]
+        if ids:
+            for obj in model.objects.filter(id__in=ids):
+                titles[(ctype, obj.id)] = obj.title
+    return [
+        {
+            "content_type": ctype,
+            "content_id": cid,
+            "title": titles.get((ctype, cid), f"{ctype} #{cid}"),
+            "completed": (ctype, cid) in done,
+        }
+        for ctype, cid in keys
+    ]
 
 
 def _sync_completion_status(reg) -> None:
@@ -345,15 +403,27 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         )
 
     def destroy(self, request, *args, **kwargs):
-        """Per SRS §5: 'Deleting a course is the right of Admin only'."""
+        """Per SRS §5: 'Deleting a course is the right of Admin only' — CJ
+        Admin deletes draft or published courses (Report 8 #34). Client
+        change request Report 8 #35: a trainer may delete their OWN course
+        while it is still a draft."""
         user_role_name = request.user.role.name if request.user.role_id else None
         is_admin = user_role_name == "cj_admin"
-        if not is_admin:
+        course = self.get_object()
+        own_draft = (
+            user_role_name == "trainer"
+            and course.created_by_id == request.user.id
+            and course.status == "draft"
+        )
+        if not (is_admin or own_draft):
             return Response(
                 {
                     "error": {
                         "code": "forbidden",
-                        "message": "Only CJ Admin can delete a training course (SRS §5).",
+                        "message": (
+                            "Only CJ Admin can delete a training course; trainers can "
+                            "delete their own draft courses."
+                        ),
                     }
                 },
                 status=status.HTTP_403_FORBIDDEN,
@@ -895,6 +965,8 @@ class CourseRegistrationViewSet(ModelViewSet):
             }
         """
         reg = self.get_object()
+        # Assessments complete outside the progress endpoint — re-sync here.
+        _sync_completion_status(reg)
         progress_records = list(reg.progress_records.all())
         total_time_spent = sum(p.time_spent_seconds for p in progress_records)
         last_accessed = max(
@@ -977,6 +1049,8 @@ class CourseRegistrationViewSet(ModelViewSet):
                 "assignment_title": ar.assignment.title,
                 "status": ar.status,
                 "trainer_score": ar.trainer_score,
+                # Report 8 #28: the trainee sees the trainer's feedback too.
+                "trainer_feedback": ar.trainer_feedback,
             }
             for ar in AssignmentReport.objects.filter(
                 assignment__session__topic__lesson__course=reg.course, student=reg.student
@@ -1006,6 +1080,8 @@ class CourseRegistrationViewSet(ModelViewSet):
                         round(sum(percentages) / len(percentages), 1) if percentages else None
                     ),
                     "assignment_report_scores": assignment_report_scores,
+                    "requirements": _completion_requirements(reg, progress_records),
+                    "requirements_are_mandatory_params": bool(mandatory_total_count),
                 },
             },
             status=status.HTTP_200_OK,
@@ -1736,8 +1812,16 @@ class LiveSessionViewSet(ModelViewSet):
                 "session",
                 f"/training/{live_session.course_id}?live_session={live_session.id}",
             )
+        # Report 8 #33: rescheduling answers any pending reschedule requests.
+        for lsr in live_session.reschedule_requests.filter(status="pending"):
+            lsr.status = "scheduled"
+            lsr.scheduled_session = live_session
+            lsr.save(update_fields=["status", "scheduled_session"])
         return Response(
-            {"message": "Session rescheduled.", "data": LiveSessionSerializer(live_session).data},
+            {
+                "message": "Session rescheduled.",
+                "data": LiveSessionSerializer(live_session, context={"request": request}).data,
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -1991,9 +2075,10 @@ class LiveSessionRequestViewSet(ModelViewSet):
         user = self.request.user
         user_role_name = user.role.name if user.role_id else None
         if user_role_name in ("cj_admin", "trainer") or user.is_superuser:
-            # Trainers see requests for their own courses
-            if user_role_name == "trainer":
-                return qs.filter(course__created_by=user)
+            # Staff who run courses see the requests (same rule as
+            # _can_run_course); ?course=<id> narrows to one course.
+            if course_id := self.request.query_params.get("course"):
+                qs = qs.filter(course_id=course_id)
             return qs
         # Candidates see their own requests
         return qs.filter(student=user)
@@ -2019,9 +2104,19 @@ class LiveSessionRequestViewSet(ModelViewSet):
                 {"error": {"code": "validation_error", "message": "course is required."}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        live_session_id = request.data.get("live_session")
+        if (
+            live_session_id
+            and not LiveSession.objects.filter(id=live_session_id, course_id=course_id).exists()
+        ):
+            return Response(
+                {"error": {"code": "validation_error", "message": "Unknown live session."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         lsr = LiveSessionRequest.objects.create(
             course_id=course_id,
             student=request.user,
+            live_session_id=live_session_id or None,
             preferred_times=request.data.get("preferred_times", []),
             note=request.data.get("note", ""),
         )
@@ -2031,11 +2126,16 @@ class LiveSessionRequestViewSet(ModelViewSet):
 
             course = lsr.course
             if course.created_by:
+                who = request.user.full_name or request.user.email
+                what = (
+                    f"asked to reschedule '{lsr.live_session.title}'"
+                    if lsr.live_session_id
+                    else "requested a live session"
+                )
                 notify_user(
                     course.created_by,
                     f"Live-session request: {course.title}",
-                    f"{request.user.full_name or request.user.email} requested a live session. "
-                    f"Note: {lsr.note}",
+                    f"{who} {what}. Note: {lsr.note}",
                     "session",
                     f"/training/{course.id}",
                 )
@@ -2044,4 +2144,30 @@ class LiveSessionRequestViewSet(ModelViewSet):
         return Response(
             {"message": "Request sent to trainer.", "data": LiveSessionRequestSerializer(lsr).data},
             status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["post"])
+    def decline(self, request, pk=None):
+        """Trainer/admin declines a request and the student is notified."""
+        lsr = self.get_object()
+        if not _can_run_course(request.user, lsr.course):
+            return Response(
+                {"error": {"code": "forbidden", "message": "Not authorized."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        lsr.status = "declined"
+        lsr.save(update_fields=["status"])
+        from apps.notifications.models import notify_user
+
+        reason = (request.data.get("reason") or "").strip()
+        notify_user(
+            lsr.student,
+            f"Live-session request declined: {lsr.course.title}",
+            reason or "Your trainer could not accommodate this request.",
+            "warning",
+            f"/training/{lsr.course_id}",
+        )
+        return Response(
+            {"message": "Request declined.", "data": LiveSessionRequestSerializer(lsr).data},
+            status=status.HTTP_200_OK,
         )

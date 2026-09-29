@@ -1,7 +1,8 @@
 /**
  * WYSIWYG Editor — TipTap-based rich text editor for CMS pages + banners.
  *
- * Features: bold, italic, headings, lists, links, images, text alignment.
+ * Features: bold, italic, underline, text colour, font size, headings, lists,
+ * links, images, text alignment (colour/size/underline: Report 8 #9).
  * Outputs clean HTML.
  */
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -9,6 +10,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import TextAlign from "@tiptap/extension-text-align";
+import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { useEffect } from "react";
 
 interface WysiwygEditorProps {
@@ -27,6 +29,9 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
       }),
       Image.configure({ inline: false }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
+      TextStyle,
+      Color,
+      FontSize,
     ],
     content: value,
     onUpdate: ({ editor }) => {
@@ -75,6 +80,40 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
         >
           I
         </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+          className={`${btnClass} underline ${editor.isActive("underline") ? activeClass : ""}`}
+          title="Underline"
+        >
+          U
+        </button>
+        <label className={`${btnClass} flex cursor-pointer items-center gap-1`} title="Text colour">
+          <span style={{ color: editor.getAttributes("textStyle").color ?? undefined }}>A</span>
+          <input
+            type="color"
+            className="h-4 w-4 cursor-pointer border-0 bg-transparent p-0"
+            value={editor.getAttributes("textStyle").color ?? "#000000"}
+            onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
+          />
+        </label>
+        <select
+          className="h-7 rounded border border-slate-200 bg-white px-1 text-xs"
+          title="Font size"
+          value={editor.getAttributes("textStyle").fontSize ?? ""}
+          onChange={(e) =>
+            e.target.value
+              ? editor.chain().focus().setFontSize(e.target.value).run()
+              : editor.chain().focus().unsetFontSize().run()
+          }
+        >
+          <option value="">Size</option>
+          {["12px", "14px", "16px", "18px", "22px", "28px"].map((sz) => (
+            <option key={sz} value={sz}>
+              {sz.replace("px", "")}
+            </option>
+          ))}
+        </select>
         <div className="mx-1 h-5 w-px bg-slate-200" />
         <button
           type="button"

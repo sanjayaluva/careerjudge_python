@@ -49,6 +49,8 @@ import {
 import { extractApiError } from "@/api/client";
 import { startSession } from "@/api/assessment";
 import { InteractiveVideoPlayer } from "./InteractiveVideoPlayer";
+import { isHtml } from "./TextContentEditor";
+import { RichText } from "@/components/ui/RichText";
 
 // Flatten all content into a sequential list for navigation
 interface FlatContent {
@@ -61,7 +63,14 @@ interface FlatContent {
   session: TopicSession;
 }
 
-export function CoursePlayer({ course }: { course: TrainingCourse }) {
+export function CoursePlayer({
+  course,
+  onRegister,
+}: {
+  course: TrainingCourse;
+  /** Opens the registration form (so "Run the Course" isn't a dead end). */
+  onRegister?: () => void;
+}) {
   const toast = useToast();
 
   // Get the student's registration for this course
@@ -163,6 +172,11 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
       <Alert variant="warning">
         <AlertDescription>
           You need to register for this course before you can start learning.
+          {onRegister && (
+            <Button size="sm" className="ml-3" onClick={onRegister}>
+              Register now
+            </Button>
+          )}
         </AlertDescription>
       </Alert>
     );
@@ -293,6 +307,16 @@ export function CoursePlayer({ course }: { course: TrainingCourse }) {
           {/* Assignments for current session */}
           {current.session.assignments.length > 0 && (
             <AssignmentsPanel session={current.session} registrationId={registration.id} />
+          )}
+
+          {/* Report 8 #24: live sessions placed after this content */}
+          {!finished && (
+            <LiveSessionsAt
+              sessions={course.live_sessions.filter(
+                (ls) => ls.after_content === current.content.id,
+              )}
+              registrationId={registration.id}
+            />
           )}
 
           {/* Assessments due at this point in the sequence (Doc 7 §2.4) */}
@@ -485,9 +509,17 @@ function ContentPlayer({
       <div className="space-y-3">
         {/* Report 8 #16: keep the trainer's paragraphs and line breaks — a
             3000-word essay rendered as one unbroken paragraph. */}
-        <div className="prose max-w-none whitespace-pre-line rounded-md border border-slate-100 bg-slate-50 p-4 text-sm leading-relaxed">
-          {content.text_content || content.content_url || "No text content available."}
-        </div>
+        {isHtml(content.text_content) ? (
+          // Formatted text from the editor (sanitised server-side).
+          <RichText
+            html={content.text_content}
+            className="rounded-md border border-slate-100 bg-slate-50 p-4 leading-relaxed"
+          />
+        ) : (
+          <div className="prose max-w-none whitespace-pre-line rounded-md border border-slate-100 bg-slate-50 p-4 text-sm leading-relaxed">
+            {content.text_content || content.content_url || "No text content available."}
+          </div>
+        )}
         {/* D7: minimal media embedding — an uploaded media file attached to
             text content is shown inline alongside the text. */}
         {content.media_file && (
@@ -647,22 +679,54 @@ function ProgressDashboard({ summary, loading }: { summary?: ProgressSummary; lo
                 </div>
               ))}
               {summary.assignment_report_scores.map((s) => (
-                <div
-                  key={`report-${s.assignment_id}`}
-                  className="flex items-center justify-between text-xs text-slate-600"
-                >
-                  <span>{s.assignment_title} (report)</span>
-                  <span>
-                    {s.trainer_score != null ? (
-                      <Badge variant="success">{s.trainer_score}/10</Badge>
-                    ) : (
-                      <Badge variant="outline">{s.status}</Badge>
-                    )}
-                  </span>
+                <div key={`report-${s.assignment_id}`} className="text-xs text-slate-600">
+                  <div className="flex items-center justify-between">
+                    <span>{s.assignment_title} (report)</span>
+                    <span>
+                      {s.trainer_score != null ? (
+                        <Badge variant="success">{s.trainer_score}/10</Badge>
+                      ) : (
+                        <Badge variant="outline">{s.status}</Badge>
+                      )}
+                    </span>
+                  </div>
+                  {/* Report 8 #28: show the trainer's feedback to the trainee. */}
+                  {s.trainer_feedback && (
+                    <p className="mt-1 whitespace-pre-line rounded bg-slate-50 px-2 py-1 text-slate-700">
+                      <span className="font-medium">Trainer feedback:</span> {s.trainer_feedback}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
           </div>
+        )}
+        {summary.requirements && summary.requirements.length > 0 && (
+          <details className="mt-4 border-t border-slate-100 pt-3">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Completion requirements ({summary.requirements.filter((r) => r.completed).length}/
+              {summary.requirements.length})
+            </summary>
+            <p className="mt-1 text-xs text-slate-500">
+              {summary.requirements_are_mandatory_params
+                ? "Your trainer has marked these items as mandatory to complete the course."
+                : "Complete every content item to complete the course."}
+            </p>
+            <ul className="mt-2 space-y-1">
+              {summary.requirements.map((r) => (
+                <li
+                  key={`${r.content_type}-${r.content_id}`}
+                  className="flex items-center gap-2 text-xs text-slate-700"
+                >
+                  <span className={r.completed ? "text-green-600" : "text-slate-400"}>
+                    {r.completed ? "✓" : "○"}
+                  </span>
+                  {r.title}
+                  <span className="text-slate-400">({r.content_type.replace(/_/g, " ")})</span>
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </CardContent>
     </Card>
@@ -747,11 +811,19 @@ function AssignmentsPanel({
                 </div>
                 <div>
                   {existingReport ? (
-                    <Badge variant={existingReport.status === "reviewed" ? "success" : "warning"}>
-                      {existingReport.status}
-                      {existingReport.trainer_score != null &&
-                        ` (${existingReport.trainer_score}/10)`}
-                    </Badge>
+                    <div className="text-right">
+                      <Badge variant={existingReport.status === "reviewed" ? "success" : "warning"}>
+                        {existingReport.status}
+                        {existingReport.trainer_score != null &&
+                          ` (${existingReport.trainer_score}/10)`}
+                      </Badge>
+                      {existingReport.trainer_feedback && (
+                        <p className="mt-1 max-w-xs whitespace-pre-line text-left text-xs text-slate-600">
+                          <span className="font-medium">Trainer feedback:</span>{" "}
+                          {existingReport.trainer_feedback}
+                        </p>
+                      )}
+                    </div>
                   ) : a.report_submission_enabled ? (
                     <Button size="sm" variant="outline" onClick={() => setSubmittingFor(a.id)}>
                       Submit report
@@ -1026,6 +1098,59 @@ function CourseFinishedPanel({
         <Button variant="outline" onClick={onReview}>
           Review course content
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Report 8 #24: live sessions linked to a sequence point; joining records
+ * attendance (Report 8 #10 — counts toward completion when mandatory). */
+function LiveSessionsAt({
+  sessions,
+  registrationId,
+}: {
+  sessions: TrainingCourse["live_sessions"];
+  registrationId: number;
+}) {
+  if (sessions.length === 0) return null;
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle className="text-sm">Live session</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {sessions.map((ls) => (
+          <div
+            key={ls.id}
+            className="flex items-center justify-between rounded-md border border-slate-100 p-3"
+          >
+            <div>
+              <div className="text-sm font-medium text-slate-900">{ls.title}</div>
+              <div className="text-xs text-slate-500">
+                {new Date(ls.scheduled_at).toLocaleString()} · {ls.duration_minutes} min ·{" "}
+                {ls.mode === "online" ? "online" : ls.venue || "classroom"}
+              </div>
+            </div>
+            {ls.mode === "online" && ls.meeting_url && !ls.join_locked ? (
+              <a
+                href={ls.meeting_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() =>
+                  void updateProgress(registrationId, {
+                    content_type: "live_session",
+                    content_id: ls.id,
+                    is_completed: true,
+                  }).catch(() => {})
+                }
+              >
+                <Button size="sm">Join ↗</Button>
+              </a>
+            ) : (
+              <Badge variant="outline">{ls.status}</Badge>
+            )}
+          </div>
+        ))}
       </CardContent>
     </Card>
   );

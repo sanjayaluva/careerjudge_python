@@ -170,16 +170,22 @@ def test_trainer_can_create_course(trainer_client, trainer_user):
     assert course.status == "draft"
 
 
-def test_non_admin_cannot_delete_course(trainer_client, trainer_user):
-    """Per SRS §5: 'Deleting a course is the right of Admin only'."""
-    course = TrainingCourse.objects.create(
-        title="Test Course", created_by=trainer_user, status="draft"
+def test_trainer_delete_rules(trainer_client, trainer_user, cj_admin_user):
+    """SRS §5 (Admin deletes courses) as changed by client request Report 8
+    #35: a trainer may delete their OWN DRAFT course only."""
+    published = TrainingCourse.objects.create(
+        title="Live", created_by=trainer_user, status="published"
     )
-    resp = trainer_client.delete(f"/api/training/courses/{course.id}/")
-    assert resp.status_code == 403
-    assert resp.data["error"]["code"] == "forbidden"
-    # Course still exists
-    assert TrainingCourse.objects.filter(id=course.id).exists()
+    others = TrainingCourse.objects.create(title="Other", created_by=cj_admin_user, status="draft")
+    own_draft = TrainingCourse.objects.create(title="Mine", created_by=trainer_user, status="draft")
+    for course in (published, others):
+        resp = trainer_client.delete(f"/api/training/courses/{course.id}/")
+        assert resp.status_code == 403
+        assert resp.data["error"]["code"] == "forbidden"
+        assert TrainingCourse.objects.filter(id=course.id).exists()
+    resp = trainer_client.delete(f"/api/training/courses/{own_draft.id}/")
+    assert resp.status_code in (200, 204)
+    assert not TrainingCourse.objects.filter(id=own_draft.id).exists()
 
 
 def test_admin_can_delete_course(admin_client, trainer_user):
@@ -1592,3 +1598,40 @@ def test_assessment_link_requires_matching_target(trainer_client, trainer_user):
         format="json",
     )
     assert resp.status_code == 400, resp.data
+
+
+def test_completion_counts_assessments_and_attended_live_sessions(
+    student_client, individual_user, trainer_user
+):
+    """Doc 7 §2.6 + Report 8 #10: mandatory items can include course
+    assessments (done when completed) and live sessions (done when joined)."""
+    from apps.assessment.models import Assessment, AssessmentSession
+    from apps.training.models import CourseAssessment, CourseCompletionParameter, LiveSession
+
+    course, contents = _course_with_contents(trainer_user, 1)
+    reg = CourseRegistration.objects.create(
+        course=course, student=individual_user, payment_status="paid"
+    )
+    a = Assessment.objects.create(title="Quiz", status="published")
+    ca = CourseAssessment.objects.create(course=course, assessment=a, title="Quiz")
+    live = LiveSession.objects.create(
+        course=course, title="Q&A", scheduled_at="2026-10-01T10:00:00Z", after_content=contents[0]
+    )
+    for ctype, cid in (("assessment", ca.id), ("live_session", live.id)):
+        CourseCompletionParameter.objects.create(
+            course=course, content_type=ctype, content_id=cid, is_mandatory=True
+        )
+    url = f"/api/training/registrations/{reg.id}/progress_summary/"
+    assert student_client.get(url).data["data"]["completion_percentage"] == 0.0
+
+    AssessmentSession.objects.create(assessment=a, candidate=individual_user, status="completed")
+    student_client.post(
+        f"/api/training/registrations/{reg.id}/progress/",
+        {"content_type": "live_session", "content_id": live.id, "is_completed": True},
+        format="json",
+    )
+    data = student_client.get(url).data["data"]
+    assert data["completion_percentage"] == 100.0
+    assert {r["title"] for r in data["requirements"] if r["completed"]} == {"Quiz", "Q&A"}
+    reg.refresh_from_db()
+    assert reg.completion_status == "completed"

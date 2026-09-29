@@ -104,6 +104,8 @@ export interface CourseAssessment {
 export interface LiveSession {
   id: number;
   course: number;
+  /** Report 8 #24: shown in the player after this content (sequence point). */
+  after_content?: number | null;
   title: string;
   description: string;
   mode: "online" | "offline";
@@ -212,6 +214,8 @@ export interface AssignmentReportScoreSummary {
   assignment_title: string;
   status: string;
   trainer_score: number | null;
+  /** Report 8 #28: trainer's written feedback on the report. */
+  trainer_feedback?: string;
 }
 
 export interface ProgressSummary {
@@ -235,6 +239,14 @@ export interface ProgressSummary {
   assessment_scores: AssessmentScoreSummary[];
   average_assessment_percentage: number | null;
   assignment_report_scores: AssignmentReportScoreSummary[];
+  /** Report 8 #20: what must be completed, with titles + done flags. */
+  requirements?: {
+    content_type: string;
+    content_id: number;
+    title: string;
+    completed: boolean;
+  }[];
+  requirements_are_mandatory_params?: boolean;
 }
 
 export interface CourseMessage {
@@ -453,6 +465,9 @@ export interface LiveSessionRequestItem {
   course_title: string;
   student: number;
   student_name: string | null;
+  /** Report 8 #33: the session to reschedule (null = request a new one). */
+  live_session: number | null;
+  live_session_title: string | null;
   preferred_times: string[];
   note: string;
   status: "pending" | "scheduled" | "declined";
@@ -461,7 +476,7 @@ export interface LiveSessionRequestItem {
 
 export function requestLiveSession(
   courseId: number,
-  payload: { preferred_times?: string[]; note?: string },
+  payload: { preferred_times?: string[]; note?: string; live_session?: number },
 ): Promise<LiveSessionRequestItem> {
   return apiPost<LiveSessionRequestItem>(`${BASE}/live-session-requests/`, {
     course: courseId,
@@ -469,8 +484,18 @@ export function requestLiveSession(
   });
 }
 
-export function listLiveSessionRequests(): Promise<LiveSessionRequestItem[]> {
-  return apiGet<LiveSessionRequestItem[]>(`${BASE}/live-session-requests/`).then((r) =>
+export function declineLiveSessionRequest(
+  requestId: number,
+  reason?: string,
+): Promise<LiveSessionRequestItem> {
+  return apiPost<LiveSessionRequestItem>(`${BASE}/live-session-requests/${requestId}/decline/`, {
+    reason,
+  });
+}
+
+export function listLiveSessionRequests(courseId?: number): Promise<LiveSessionRequestItem[]> {
+  const q = courseId ? `?course=${courseId}` : "";
+  return apiGet<LiveSessionRequestItem[]>(`${BASE}/live-session-requests/${q}`).then((r) =>
     Array.isArray(r) ? r : ((r as unknown as { results?: LiveSessionRequestItem[] }).results ?? []),
   );
 }
@@ -694,6 +719,7 @@ export function addLiveSession(
     scheduled_at: string;
     duration_minutes?: number;
     description?: string;
+    after_content?: number | null;
   },
 ): Promise<LiveSession> {
   return apiPost<LiveSession>(`${BASE}/courses/${courseId}/live_sessions/`, payload);

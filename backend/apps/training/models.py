@@ -408,6 +408,16 @@ class LiveSession(models.Model):
         blank=True,
         related_name="dependent_sessions",
     )
+    # Report 8 #24 (client change request): the point in the content sequence
+    # where this live session sits — the player shows it (with Join) after
+    # this content, e.g. the last content of a topic or lesson.
+    after_content = models.ForeignKey(
+        "SessionContent",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="live_sessions_after",
+    )
     # Report 3 section 7.4: reschedule audit trail on the session itself.
     rescheduled_from = models.DateTimeField(_("rescheduled from"), null=True, blank=True)
     reschedule_reason = models.TextField(_("reschedule reason"), blank=True, default="")
@@ -932,6 +942,15 @@ class LiveSessionRequest(models.Model):
     )
     preferred_times = models.JSONField(_("preferred times"), default=list, blank=True)
     note = models.TextField(_("note"), blank=True, default="")
+    # Report 8 #33: when set, this is a request to RESCHEDULE that session
+    # (otherwise a request for a new live session).
+    live_session = models.ForeignKey(
+        LiveSession,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="reschedule_requests",
+    )
     status = models.CharField(_("status"), max_length=10, choices=STATUS_CHOICES, default="pending")
     scheduled_session = models.ForeignKey(
         LiveSession,

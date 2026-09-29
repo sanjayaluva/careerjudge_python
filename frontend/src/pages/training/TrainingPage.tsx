@@ -21,9 +21,16 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  Modal,
   useToast,
 } from "@/components/ui";
-import { COURSE_TYPES, listCourses, listMyCourses, registerForCourse } from "@/api/training";
+import {
+  COURSE_TYPES,
+  deleteCourse,
+  listCourses,
+  listMyCourses,
+  registerForCourse,
+} from "@/api/training";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { RegistrationFormModal, type RegistrationForm } from "./RegistrationFormModal";
@@ -37,6 +44,21 @@ export default function TrainingPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const canManage = ["cj_admin", "trainer"].includes(user?.role ?? "");
+  const [deleting, setDeleting] = useState<{
+    id: number;
+    title: string;
+    status: string;
+    registration_count: number;
+  } | null>(null);
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteCourse(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: TRAINING_KEY });
+      toast.success("Course deleted.");
+      setDeleting(null);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: [...TRAINING_KEY, debouncedSearch, "published"],
@@ -243,11 +265,26 @@ export default function TrainingPage() {
                           {new Date(c.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          <Link to={`/training/${c.id}/edit`}>
-                            <Button size="sm" variant="outline">
-                              Edit
-                            </Button>
-                          </Link>
+                          <div className="flex gap-1">
+                            <Link to={`/training/${c.id}/edit`}>
+                              <Button size="sm" variant="outline">
+                                Edit
+                              </Button>
+                            </Link>
+                            {/* R8-34: CJ Admin deletes any course; R8-35: a
+                                trainer deletes their own draft. */}
+                            {(user?.role === "cj_admin" ||
+                              (c.status === "draft" && c.created_by === user?.id)) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-danger-600"
+                                onClick={() => setDeleting(c)}
+                              >
+                                Delete
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -323,6 +360,34 @@ export default function TrainingPage() {
           </TabsContent>
         </Tabs>
       </PageCard>
+      <Modal
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title="Delete course"
+        size="sm"
+      >
+        <p className="text-sm text-slate-700">
+          Delete <strong>{deleting?.title}</strong>? This removes its structure, content and
+          registrations and cannot be undone.
+          {deleting && deleting.registration_count > 0 && (
+            <span className="mt-2 block text-amber-700">
+              ⚠ {deleting.registration_count} student(s) are registered.
+            </span>
+          )}
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setDeleting(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            loading={deleteMutation.isPending}
+            onClick={() => deleting && deleteMutation.mutate(deleting.id)}
+          >
+            Delete course
+          </Button>
+        </div>
+      </Modal>
       <RegistrationFormModal
         open={registerFor !== null}
         courseTitle={registerFor?.title ?? ""}

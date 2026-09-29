@@ -54,6 +54,13 @@ class InteractiveQuestionSerializer(serializers.ModelSerializer):
 class SessionContentSerializer(serializers.ModelSerializer):
     interactive_questions = InteractiveQuestionSerializer(many=True, read_only=True)
 
+    def validate_text_content(self, value):
+        # Report 8 #8/#9: rich text from the editor is sanitised before it is
+        # shown to students.
+        from core.rich_html import sanitize_rich_html
+
+        return sanitize_rich_html(value)
+
     class Meta:
         model = SessionContent
         fields = [
@@ -212,6 +219,7 @@ class LiveSessionSerializer(serializers.ModelSerializer):
             "mode",
             "schedule_mode",
             "depends_on",
+            "after_content",
             "meeting_url",
             "venue",
             "scheduled_at",
@@ -517,6 +525,9 @@ class LiveSessionRequestSerializer(serializers.ModelSerializer):
 
     course_title = serializers.CharField(source="course.title", read_only=True)
     student_name = serializers.CharField(source="student.full_name", read_only=True, default=None)
+    live_session_title = serializers.CharField(
+        source="live_session.title", read_only=True, default=None
+    )
 
     class Meta:
         model = LiveSessionRequest
@@ -526,6 +537,8 @@ class LiveSessionRequestSerializer(serializers.ModelSerializer):
             "course_title",
             "student",
             "student_name",
+            "live_session",
+            "live_session_title",
             "preferred_times",
             "note",
             "status",
