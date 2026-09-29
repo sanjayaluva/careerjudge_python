@@ -743,41 +743,37 @@ def test_list_messages(student_client, individual_user, trainer_user):
 # ---------------------------------------------------------------------------
 
 
-def test_progress_summary_aggregates_completion(student_client, individual_user, trainer_user):
-    """SRS §6: 'Course Completion Status, Time Tracker, Option to resume'."""
-    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
-    reg = CourseRegistration.objects.create(course=course, student=individual_user)
-    from apps.training.models import CourseProgress
+def _course_with_contents(trainer_user, n):
+    from apps.training.models import CourseLesson, LessonTopic, SessionContent, TopicSession
 
-    # 2 of 4 contents completed -> 50%
-    CourseProgress.objects.create(
-        registration=reg,
-        content_type="session_content",
-        content_id=1,
-        is_completed=True,
-        time_spent_seconds=60,
-    )
-    CourseProgress.objects.create(
-        registration=reg,
-        content_type="session_content",
-        content_id=2,
-        is_completed=True,
-        time_spent_seconds=120,
-    )
-    CourseProgress.objects.create(
-        registration=reg,
-        content_type="assignment",
-        content_id=3,
-        is_completed=False,
-        time_spent_seconds=30,
-    )
-    CourseProgress.objects.create(
-        registration=reg,
-        content_type="assignment",
-        content_id=4,
-        is_completed=False,
-        time_spent_seconds=0,
-    )
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    lesson = CourseLesson.objects.create(course=course, title="L")
+    topic = LessonTopic.objects.create(lesson=lesson, title="T")
+    session = TopicSession.objects.create(topic=topic, title="S")
+    contents = [
+        SessionContent.objects.create(
+            session=session, title=f"c{i}", content_format="text", order=i
+        )
+        for i in range(n)
+    ]
+    return course, contents
+
+
+def test_progress_summary_aggregates_completion(student_client, individual_user, trainer_user):
+    """SRS §6: 'Course Completion Status, Time Tracker, Option to resume'.
+    Completion is measured against the course's contents — not just the items
+    the student happened to open (Report 8 #15: 2 opened + done read 100%)."""
+    course, contents = _course_with_contents(trainer_user, 4)
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+
+    for c, secs in ((contents[0], 60), (contents[1], 120)):
+        CourseProgress.objects.create(
+            registration=reg,
+            content_type="session_content",
+            content_id=c.id,
+            is_completed=True,
+            time_spent_seconds=secs,
+        )
 
     resp = student_client.get(f"/api/training/registrations/{reg.id}/progress_summary/")
     assert resp.status_code == 200
@@ -785,8 +781,27 @@ def test_progress_summary_aggregates_completion(student_client, individual_user,
     assert data["completion_percentage"] == 50.0
     assert data["completed_count"] == 2
     assert data["total_count"] == 4
-    assert data["total_time_spent_seconds"] == 210  # 60+120+30+0
+    assert data["total_time_spent_seconds"] == 180
     assert data["last_content"] is not None  # resume point
+
+
+def test_progress_moves_status_to_in_progress_then_completed(
+    student_client, individual_user, trainer_user
+):
+    """Report 8 #15/#23: status follows progress (was stuck at 'not started')."""
+    course, contents = _course_with_contents(trainer_user, 2)
+    reg = CourseRegistration.objects.create(
+        course=course, student=individual_user, payment_status="paid"
+    )
+    url = f"/api/training/registrations/{reg.id}/progress/"
+    body = {"content_type": "session_content", "is_completed": True}
+    student_client.post(url, {**body, "content_id": contents[0].id}, format="json")
+    reg.refresh_from_db()
+    assert reg.completion_status == "in_progress"
+    student_client.post(url, {**body, "content_id": contents[1].id}, format="json")
+    reg.refresh_from_db()
+    assert reg.completion_status == "completed"
+    assert reg.completed_at is not None
 
 
 def test_progress_summary_scheduled_course_has_time_left(

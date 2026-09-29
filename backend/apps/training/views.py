@@ -67,6 +67,53 @@ from .serializers import (
 )
 
 
+def _course_completion(reg, progress_records) -> tuple[float, int, int]:
+    """(percentage, completed, total) for a registration.
+
+    Doc 7 §2.6 / Report 3 §6: when the trainer set mandatory completion
+    parameters, completion is measured against those; otherwise against every
+    session content of the course. It used to be completed ÷ items *opened*,
+    so finishing the few items opened read as 100% (Report 8 #15).
+    """
+    done = {(p.content_type, p.content_id) for p in progress_records if p.is_completed}
+    mandatory = [
+        (mp.content_type, mp.content_id)
+        for mp in reg.course.completion_parameters.filter(is_mandatory=True)
+    ]
+    if mandatory:
+        required = mandatory
+    else:
+        required = [
+            ("session_content", cid)
+            for cid in SessionContent.objects.filter(
+                session__topic__lesson__course=reg.course
+            ).values_list("id", flat=True)
+        ]
+    total = len(required)
+    completed = sum(1 for key in required if key in done)
+    pct = round(completed / total * 100, 1) if total else 0.0
+    return pct, completed, total
+
+
+def _sync_completion_status(reg) -> None:
+    """Keep the registration's status in step with progress (Report 8 #15:
+    100% complete but still 'Not started')."""
+    from django.utils import timezone
+
+    records = list(reg.progress_records.all())
+    pct, _done, total = _course_completion(reg, records)
+    fields = []
+    if total and pct >= 100 and reg.completion_status != "completed":
+        reg.completion_status = "completed"
+        reg.completed_at = timezone.now()
+        fields += ["completion_status", "completed_at"]
+    elif records and reg.completion_status == "not_started":
+        reg.completion_status = "in_progress"
+        fields.append("completion_status")
+    if fields:
+        reg.save(update_fields=fields)
+
+
 def _can_run_course(user, course) -> bool:
     """Who may run a course's live sessions (consents, notify, reschedule —
     Doc 7 §5 scheduler): CJ Admin, the course's creator, or a Trainer.
@@ -781,6 +828,7 @@ class CourseRegistrationViewSet(ModelViewSet):
                 "last_accessed_at": timezone.now(),
             },
         )
+        _sync_completion_status(reg)
         return Response(
             {"message": "Progress updated.", "data": CourseProgressSerializer(progress).data},
             status=status.HTTP_200_OK,
@@ -809,7 +857,6 @@ class CourseRegistrationViewSet(ModelViewSet):
         """
         reg = self.get_object()
         progress_records = list(reg.progress_records.all())
-        completed = [p for p in progress_records if p.is_completed]
         total_time_spent = sum(p.time_spent_seconds for p in progress_records)
         last_accessed = max(
             (p.last_accessed_at for p in progress_records if p.last_accessed_at),
@@ -841,35 +888,11 @@ class CourseRegistrationViewSet(ModelViewSet):
                 time_left = max(0, total_time_allowed - int(elapsed))
                 is_expired = time_left == 0
 
-        completion_pct = (
-            round((len(completed) / len(progress_records)) * 100, 1) if progress_records else 0.0
-        )
-
-        # Report 3 §6: completion against MANDATORY parameters. If the trainer
-        # has marked any contents mandatory, compute what fraction of those
-        # mandatory contents the student has completed (this is the figure that
-        # determines true course completion). Falls back to completion_pct when
-        # no mandatory params are set.
-        mandatory_params = list(reg.course.completion_parameters.filter(is_mandatory=True))
-        mandatory_completion_pct = None
-        mandatory_completed_count = None
-        mandatory_total_count = None
-        if mandatory_params:
-            completed_keys = {
-                (p.content_type, p.content_id) for p in progress_records if p.is_completed
-            }
-            mandatory_total_count = len(mandatory_params)
-            mandatory_completed_count = sum(
-                1 for mp in mandatory_params if (mp.content_type, mp.content_id) in completed_keys
-            )
-            mandatory_completion_pct = (
-                round((mandatory_completed_count / mandatory_total_count) * 100, 1)
-                if mandatory_total_count
-                else 0.0
-            )
-            # Override completion_pct with the mandatory figure when set — this
-            # is what 'course completion' actually means per SRS §2.6.
-            completion_pct = mandatory_completion_pct
+        completion_pct, done_count, required_count = _course_completion(reg, progress_records)
+        mandatory_total_count = reg.course.completion_parameters.filter(is_mandatory=True).count()
+        mandatory_completion_pct = completion_pct if mandatory_total_count else None
+        mandatory_completed_count = done_count if mandatory_total_count else None
+        mandatory_total_count = mandatory_total_count or None
 
         # Dossier gap D7: roll assessment + report scores into the progress
         # summary (SRS §6: "Course Completion Status, Time Tracker, Score
@@ -926,8 +949,8 @@ class CourseRegistrationViewSet(ModelViewSet):
                 "message": "OK",
                 "data": {
                     "completion_percentage": completion_pct,
-                    "completed_count": len(completed),
-                    "total_count": len(progress_records),
+                    "completed_count": done_count,
+                    "total_count": required_count,
                     "mandatory_completion_percentage": mandatory_completion_pct,
                     "mandatory_completed_count": mandatory_completed_count,
                     "mandatory_total_count": mandatory_total_count,
