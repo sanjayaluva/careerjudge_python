@@ -205,6 +205,7 @@ export default function SessionPlayerPage() {
     };
     const firstOpen = questions.findIndex((u) => !unitFullyAnswered(u));
     if (firstOpen > 0) setCurrentIndex(firstOpen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions, rawQuestions]);
 
   // PSY-A1: a psychometric group is delivered with a negative synthetic
