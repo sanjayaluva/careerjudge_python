@@ -205,3 +205,14 @@ def test_timer_can_be_set_at_only_one_level(built, admin_client):
     a.timer_level = "question"
     a.save()
     assert admin_client.patch(url, {"duration_seconds": 30}, format="json").status_code == 200
+
+
+def test_static_index_gives_assigned_order_under_random_delivery(built):
+    """Report 7 #43: sidebar keeps the assigned order when delivery is random."""
+    a, _leaves, _qs = built
+    a.display_order = "RANDOM"
+    a.save()
+    session, client = _session(a)
+    units = client.get(f"/api/assessments/sessions/{session.id}/questions/").data["data"]
+    by_static = sorted(units, key=lambda u: u["static_index"])
+    assert [u["question_detail"]["question_title"] for u in by_static] == STATIC

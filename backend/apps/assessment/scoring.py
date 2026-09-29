@@ -429,6 +429,11 @@ def _score_binary(
     correct_selected = selected_set & correct_ids
     incorrect_selected = selected_set - correct_ids
     raw_score = len(correct_selected) - len(incorrect_selected)
+    if question.question_type == "MCQ_TEXT_IMAGE_IMG_OPTIONS":
+        # Report 7 #27 (client change request): 1b image options earn +1 per
+        # correct selection with no penalty for wrong ones (1 right + 1
+        # wrong = 1/2). Other multi-answer MCQs keep C-FE-1 (+1/-1, floor 0).
+        raw_score = len(correct_selected)
     score = max(0.0, float(raw_score))
     max_score = float(len(correct_options))
 

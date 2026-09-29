@@ -204,3 +204,20 @@ def test_rescore_sessions_command_updates_stale_results():
     s.refresh_from_db()
     assert (s.total_score, s.max_score) == (3, 3)
     assert "1 changed" in out.getvalue()
+
+
+def test_1b_multi_answer_no_penalty_for_wrong_selection():
+    """Report 7 #27 (CR): 1b with one correct + one wrong selection = 1/2."""
+    q = Question.objects.create(
+        question_type="MCQ_TEXT_IMAGE_IMG_OPTIONS", question_title="1b", question_text_1="q"
+    )
+    ids = [
+        ResponseOption.objects.create(question=q, label=f"O{i}", is_correct=i < 2, order=i).id
+        for i in range(4)
+    ]
+    assert score_question(q, {"selected_option_ids": [ids[0], ids[2]]}) == (1.0, 2.0)
+    assert score_question(q, {"selected_option_ids": [ids[0], ids[1]]}) == (2.0, 2.0)
+    # 1a keeps C-FE-1 (+1/-1, floor 0).
+    q.question_type = "MCQ_TEXT_IMAGE"
+    q.save()
+    assert score_question(q, {"selected_option_ids": [ids[0], ids[2]]}) == (0.0, 2.0)

@@ -78,8 +78,13 @@ def section_paths(sections_by_id):
     return paths
 
 
-def order_for_delivery(session, anchors, sections_by_id, aq_order):
-    """Return ``anchors`` in delivery order for ``session``."""
+def order_for_delivery(session, anchors, sections_by_id, aq_order, static=False):
+    """Return ``anchors`` in delivery order for ``session``.
+
+    ``static=True`` ignores every RANDOM setting and returns the configured
+    (assigned) order — used for the sidebar, which lists sections and
+    questions in assigned order even when delivery is random (Report 7 #43).
+    """
     rng = random.Random(session.id)
 
     children = defaultdict(list)
@@ -106,7 +111,7 @@ def order_for_delivery(session, anchors, sections_by_id, aq_order):
     ordered = []
 
     def walk(section, randomise):
-        randomise = randomise or section.order_mode == "RANDOM"
+        randomise = not static and (randomise or section.order_mode == "RANDOM")
         questions = list(by_section.get(section.id, []))
         kids = list(children.get(section.id, []))
         if randomise:
@@ -120,6 +125,6 @@ def order_for_delivery(session, anchors, sections_by_id, aq_order):
         walk(root, False)
     ordered.extend(sorted(orphans, key=lambda a: a.id))
 
-    if getattr(session.assessment, "display_order", "STATIC") == "RANDOM":
+    if not static and getattr(session.assessment, "display_order", "STATIC") == "RANDOM":
         rng.shuffle(ordered)
     return ordered

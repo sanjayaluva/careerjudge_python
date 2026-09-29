@@ -635,6 +635,7 @@ export default function AssessmentDetailPage() {
               )}
             </CardContent>
           </Card>
+          {a.sections.length > 0 && <DeliveryOrderCard assessment={a} canEdit={canEdit} />}
         </TabsContent>
 
         {/* === QUESTIONS TAB === */}
@@ -1429,21 +1430,6 @@ function CreateSectionModal({
               Randomly deliver this many questions from the pool (SRS §4.1.1). Blank = deliver all.
             </p>
           </div>
-          <div>
-            <Label htmlFor="sec-order">Question order</Label>
-            <select
-              id="sec-order"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={orderMode}
-              onChange={(e) => setOrderMode(e.target.value as "STATIC" | "RANDOM")}
-            >
-              <option value="STATIC">Static (as configured)</option>
-              <option value="RANDOM">Random</option>
-            </select>
-            <p className="mt-1 text-xs text-slate-500">
-              Delivery order of this section's questions (SRS §5.1).
-            </p>
-          </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" onClick={onClose}>
@@ -1607,7 +1593,7 @@ function EditAssessmentModal({
   const [duration, setDuration] = useState("");
   const [navigationRule, setNavigationRule] = useState("FREE");
   const [attemptRule, setAttemptRule] = useState("SINGLE_SESSION");
-  const [displayOrder, setDisplayOrder] = useState<"STATIC" | "RANDOM">("STATIC");
+  const [displayOrder, setDisplayOrder] = useState<"STATIC" | "RANDOM">("STATIC"); // set on the Sections tab (DeliveryOrderCard)
   const [timerLevel, setTimerLevel] = useState("assessment");
   const [price, setPrice] = useState("0");
 
@@ -1753,18 +1739,6 @@ function EditAssessmentModal({
                   {r.label}
                 </option>
               ))}
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="edit-display-order">Display order</Label>
-            <select
-              id="edit-display-order"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={displayOrder}
-              onChange={(e) => setDisplayOrder(e.target.value as "STATIC" | "RANDOM")}
-            >
-              <option value="STATIC">Static (as configured)</option>
-              <option value="RANDOM">Random</option>
             </select>
           </div>
           <div>
@@ -2207,4 +2181,130 @@ function findSection(secs: AssessmentSection[], id: number | null): AssessmentSe
     if (hit) return hit;
   }
   return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// DeliveryOrderCard — Doc 3 §5.1 "Set Order of Delivery", on one screen.
+// Report 7 #6: the order used to be split between Overview › Edit (whole
+// assessment) and each section's editor, with no explanation of how the two
+// combine.
+// ---------------------------------------------------------------------------
+
+function DeliveryOrderCard({
+  assessment,
+  canEdit,
+}: {
+  assessment: AssessmentDetail;
+  canEdit: boolean;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const refresh = () =>
+    void queryClient.invalidateQueries({ queryKey: ["assessments", assessment.id] });
+  const setAssessmentOrder = useMutation({
+    mutationFn: (v: "STATIC" | "RANDOM") => updateAssessment(assessment.id, { display_order: v }),
+    onSuccess: refresh,
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+  const setSectionOrder = useMutation({
+    mutationFn: (v: { id: number; mode: "STATIC" | "RANDOM" }) =>
+      updateSection(assessment.id, v.id, { order_mode: v.mode }),
+    onSuccess: refresh,
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+  const wholeRandom = assessment.display_order === "RANDOM";
+
+  const Toggle = ({
+    value,
+    disabled,
+    onChange,
+  }: {
+    value: "STATIC" | "RANDOM";
+    disabled: boolean;
+    onChange: (v: "STATIC" | "RANDOM") => void;
+  }) => (
+    <div className="inline-flex rounded-md border border-slate-200 p-0.5 text-xs">
+      {(["STATIC", "RANDOM"] as const).map((v) => (
+        <button
+          key={v}
+          type="button"
+          disabled={disabled}
+          onClick={() => v !== value && onChange(v)}
+          className={`rounded px-2 py-1 ${
+            value === v ? "bg-primary-600 text-white" : "text-slate-600 hover:bg-slate-100"
+          } disabled:cursor-not-allowed disabled:opacity-60`}
+        >
+          {v === "STATIC" ? "Static" : "Random"}
+        </button>
+      ))}
+    </div>
+  );
+
+  const rows: JSX.Element[] = [];
+  const walk = (secs: AssessmentSection[], depth: number, inheritedRandom: boolean) => {
+    for (const sec of secs) {
+      const mode = (sec.order_mode ?? "STATIC") as "STATIC" | "RANDOM";
+      const effectiveRandom = wholeRandom || inheritedRandom || mode === "RANDOM";
+      rows.push(
+        <div
+          key={sec.id}
+          className="flex items-center justify-between py-1.5"
+          style={{ paddingLeft: `${depth * 1.25}rem` }}
+        >
+          <span className="text-sm text-slate-800">
+            <Badge variant="outline" className="mr-2">
+              L{sec.level}
+            </Badge>
+            {sec.title}
+            {(wholeRandom || inheritedRandom) && (
+              <span className="ml-2 text-xs text-slate-400">random (set above)</span>
+            )}
+          </span>
+          <Toggle
+            value={mode}
+            disabled={!canEdit || wholeRandom || inheritedRandom || setSectionOrder.isPending}
+            onChange={(v) => setSectionOrder.mutate({ id: sec.id, mode: v })}
+          />
+        </div>,
+      );
+      walk(sec.subsections ?? [], depth + 1, effectiveRandom && !wholeRandom);
+    }
+  };
+  walk(assessment.sections, 0, false);
+
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>Order of delivery</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">
+          <p className="font-medium text-slate-700">How the order works (Doc 3 §5.1)</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            <li>
+              <strong>Static</strong> delivers sections, sub-sections and questions exactly in the
+              order they are listed and assigned.
+            </li>
+            <li>
+              <strong>Random on a section</strong> shuffles everything below it (its sub-sections
+              and their questions). The sections above it keep their order.
+            </li>
+            <li>
+              <strong>Random for the whole assessment</strong> shuffles every question.
+            </li>
+            <li>The order is fixed per candidate, so resuming or going back never reshuffles.</li>
+          </ul>
+        </div>
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <span className="text-sm font-medium text-slate-900">Whole assessment</span>
+          <Toggle
+            value={wholeRandom ? "RANDOM" : "STATIC"}
+            disabled={!canEdit || setAssessmentOrder.isPending}
+            onChange={(v) => setAssessmentOrder.mutate(v)}
+          />
+        </div>
+        <div className="divide-y divide-slate-50">{rows}</div>
+      </CardContent>
+    </Card>
+  );
 }

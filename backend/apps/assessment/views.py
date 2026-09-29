@@ -1257,12 +1257,14 @@ class SessionViewSet(ModelViewSet):
         )
 
         sub_answers = sub_answers_by_question(attempts)
-        delivered = order_for_delivery(
-            session,
-            anchor_attempts(attempts, set(aq_order)),
-            sections_by_id,
-            aq_order,
-        )
+        anchors = anchor_attempts(attempts, set(aq_order))
+        delivered = order_for_delivery(session, anchors, sections_by_id, aq_order)
+        static_index = {
+            a.id: i
+            for i, a in enumerate(
+                order_for_delivery(session, anchors, sections_by_id, aq_order, static=True)
+            )
+        }
 
         serializer = QuestionAttemptSerializer(
             delivered,
@@ -1272,6 +1274,7 @@ class SessionViewSet(ModelViewSet):
                 "aq_durations": aq_durations,
                 "section_paths": section_paths(sections_by_id),
                 "sub_answers": sub_answers,
+                "static_index": static_index,
             },
         )
         data = list(serializer.data)

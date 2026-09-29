@@ -239,6 +239,9 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
     # Every sub-question's saved state for this question, keyed by
     # sub_question_index, so a resumed session restores answers (Report 7 #9).
     sub_answers = serializers.SerializerMethodField()
+    # Position in the assigned (static) order — the sidebar lists questions in
+    # this order even when delivery is random (Report 7 #43).
+    static_index = serializers.SerializerMethodField()
 
     class Meta:
         model = QuestionAttempt
@@ -260,6 +263,7 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
             "section_order_mode",
             "section_path",
             "sub_answers",
+            "static_index",
             "question_detail",
         ]
         read_only_fields = ["id", "score", "max_score", "answered_at", "question_detail"]
@@ -267,6 +271,9 @@ class QuestionAttemptSerializer(serializers.ModelSerializer):
     def _timer_section(self, obj):
         section_map = self.context.get("section_timer_map") or {}
         return section_map.get(obj.section_id, (None, None))
+
+    def get_static_index(self, obj):
+        return (self.context.get("static_index") or {}).get(obj.id)
 
     def get_section_path(self, obj):
         return (self.context.get("section_paths") or {}).get(obj.section_id, [])

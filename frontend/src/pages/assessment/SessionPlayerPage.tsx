@@ -65,6 +65,22 @@ export default function SessionPlayerPage() {
   // is currently on (0-indexed). Resets when the question changes.
   const [activeSubQ, setActiveSubQ] = useState(0);
 
+  // Report 7 #44: no automatic logout while an assessment is in progress.
+  // A candidate can sit on one question with no requests going out, letting
+  // the access token lapse; a light authenticated ping every 4 minutes lets
+  // the API client refresh the token before it expires, keeping the login
+  // alive for the whole test.
+  useEffect(() => {
+    if (Number.isNaN(sid)) return;
+    const keepAlive = window.setInterval(
+      () => {
+        void retrieveSession(sid).catch(() => {});
+      },
+      4 * 60 * 1000,
+    );
+    return () => window.clearInterval(keepAlive);
+  }, [sid]);
+
   const { data: session, isLoading: sessionLoading } = useQuery({
     queryKey: ["assessment-session", sid],
     queryFn: () => retrieveSession(sid),
@@ -650,13 +666,30 @@ export default function SessionPlayerPage() {
   // Group questions by section for the sidebar navigation tree.
   // Within each section, sub-questions from the same parent question are
   // grouped together (for multi-question types 1c-1h, 2c-2d).
-  const sections = new Map<number | null, { questionIndex: number }[]>();
-  questions.forEach((q, i) => {
-    const sid = q.section;
+  // Report 7 #43: the sidebar lists sections and questions in the ASSIGNED
+  // (static) order and numbering even when delivery is random; each button
+  // still jumps to wherever that question sits in the delivered sequence.
+  const staticOrder = questions
+    .map((q, i) => ({ questionIndex: i, rank: q.static_index ?? i }))
+    .sort((a, b) => a.rank - b.rank);
+  const sections = new Map<number | null, { questionIndex: number; label: number }[]>();
+  staticOrder.forEach(({ questionIndex }, pos) => {
+    const sid = questions[questionIndex].section;
     if (!sections.has(sid)) sections.set(sid, []);
-    sections.get(sid)!.push({ questionIndex: i });
+    sections.get(sid)!.push({ questionIndex, label: pos + 1 });
   });
   const sectionEntries = Array.from(sections.entries());
+
+  // Report 7 #39/#40: before submitting, point the candidate back to any
+  // bookmarked or skipped questions.
+  const indexOfKey = (key: string) =>
+    questions.findIndex((sq) => String(sq.question) === key.split("_")[0]);
+  const firstBookmarked = Math.min(...[...bookmarked].map(indexOfKey).filter((i) => i >= 0));
+  const firstSkipped = Math.min(...[...skipped].map(indexOfKey).filter((i) => i >= 0));
+  const goBackTo = (index: number) => {
+    setShowSubmitConfirm(false);
+    if (Number.isFinite(index)) setCurrentIndex(groupStartOf(index));
+  };
 
   return (
     <div className="flex h-screen flex-col bg-slate-50">
@@ -776,7 +809,7 @@ export default function SessionPlayerPage() {
                       `Section ${secIdx + 1}`}
                 </p>
                 <div className="flex flex-wrap gap-1">
-                  {items.map(({ questionIndex: i }) => {
+                  {items.map(({ questionIndex: i, label }) => {
                     const aKey = `${questions[i].question}_${questions[i].sub_question_index}`;
                     // A multi-sub-question item is answered once every
                     // sub-question is.
@@ -813,7 +846,7 @@ export default function SessionPlayerPage() {
                               ? "Time for this section is over"
                               : !jumpAllowed
                                 ? "Backward navigation is not allowed this far back for this assessment"
-                                : `Question ${i + 1}`
+                                : `Question ${label}`
                         }
                         className={`h-7 w-7 rounded-md text-xs font-medium transition-colors ${
                           isCurrent
@@ -827,7 +860,7 @@ export default function SessionPlayerPage() {
                                   : "bg-slate-100 text-slate-500 hover:bg-slate-200"
                         } ${isDisabled ? "cursor-not-allowed opacity-50" : ""}`}
                       >
-                        {i + 1}
+                        {label}
                       </button>
                     );
                   })}
@@ -1182,17 +1215,38 @@ export default function SessionPlayerPage() {
           questions.
           {answeredCount < totalQuestions && (
             <span className="mt-2 block text-amber-600">
-              ⚠ {remainingCount} question(s) are unanswered and will score 0. Are you sure you want
-              to submit?
+              ⚠ {remainingCount} question(s) are unanswered and will score 0.
             </span>
           )}
         </p>
+        {bookmarkedCount > 0 && (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <span>
+              You have bookmarked <strong>{bookmarkedCount}</strong> question
+              {bookmarkedCount === 1 ? "" : "s"}. Do you want to go back and attempt?
+            </span>
+            <Button size="sm" variant="outline" onClick={() => goBackTo(firstBookmarked)}>
+              Go back
+            </Button>
+          </div>
+        )}
+        {skippedCount > 0 && (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800">
+            <span>
+              You have skipped <strong>{skippedCount}</strong> question
+              {skippedCount === 1 ? "" : "s"}. Do you want to go back and attempt?
+            </span>
+            <Button size="sm" variant="outline" onClick={() => goBackTo(firstSkipped)}>
+              Go back
+            </Button>
+          </div>
+        )}
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="outline" onClick={() => setShowSubmitConfirm(false)}>
             Cancel
           </Button>
           <Button variant="danger" loading={submitMutation.isPending} onClick={performSubmit}>
-            Submit Assessment
+            {bookmarkedCount > 0 || skippedCount > 0 ? "No, submit" : "Submit Assessment"}
           </Button>
         </div>
       </Modal>

@@ -378,6 +378,8 @@ export interface SessionQuestion {
   section_order_mode: "STATIC" | "RANDOM";
   /** Section titles root → leaf, for the sidebar (Report 7 #3/#42). */
   section_path?: string[];
+  /** Position in the assigned (static) order — sidebar order (Report 7 #43). */
+  static_index?: number | null;
   /**
    * Saved state of every sub-question of this question, keyed by
    * sub_question_index — restores answers on resume (Report 7 #9/#18).
