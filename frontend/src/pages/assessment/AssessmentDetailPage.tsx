@@ -43,6 +43,7 @@ import {
   ATTEMPT_RULES,
   NAVIGATION_RULES,
   TIMER_LEVELS,
+  timerLevelLabel,
   approveModificationRequest,
   assignQuestion,
   createPsychometricGroup,
@@ -619,6 +620,7 @@ export default function AssessmentDetailPage() {
                       key={s.id}
                       section={s}
                       depth={0}
+                      timerLevel={a.timer_level}
                       canManage={canEdit}
                       onAddSubsection={(parentId) =>
                         setSectionModal({ open: true, parent: parentId, editSection: null })
@@ -641,6 +643,7 @@ export default function AssessmentDetailPage() {
             assessmentId={aid}
             assessmentType={a.assessment_type}
             sections={a.sections}
+            timerLevel={a.timer_level}
             canManage={canEdit}
           />
         </TabsContent>
@@ -668,6 +671,12 @@ export default function AssessmentDetailPage() {
         open={sectionModal.open}
         parentId={sectionModal.parent}
         editSection={sectionModal.editSection}
+        timerLevel={a.timer_level}
+        sectionLevel={
+          sectionModal.editSection
+            ? sectionModal.editSection.level
+            : (findSection(a.sections, sectionModal.parent)?.level ?? 0) + 1
+        }
         loading={sectionCreateMutation.isPending || sectionUpdateMutation.isPending}
         onClose={() => setSectionModal({ open: false, parent: null, editSection: null })}
         onSubmit={(payload) => {
@@ -751,11 +760,13 @@ function QuestionAssignmentTab({
   assessmentId,
   assessmentType,
   sections,
+  timerLevel,
   canManage,
 }: {
   assessmentId: number;
   assessmentType: "normal" | "psychometric";
   sections: AssessmentSection[];
+  timerLevel: string;
   canManage: boolean;
 }) {
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(
@@ -851,12 +862,19 @@ function QuestionAssignmentTab({
 
   // ASM-7: set a per-assessment score override on an assigned question.
   const scoreMutation = useMutation({
-    mutationFn: (v: { aqId: number; score_override: number | null }) =>
+    mutationFn: (v: {
+      aqId: number;
+      score_override?: number | null;
+      duration_seconds?: number | null;
+    }) =>
       updateAssignedQuestion(assessmentId, selectedSectionId!, v.aqId, {
-        score_override: v.score_override,
+        ...(v.score_override !== undefined && { score_override: v.score_override }),
+        ...(v.duration_seconds !== undefined && { duration_seconds: v.duration_seconds }),
       }),
-    onSuccess: () => {
-      toast.success("Score updated.");
+    onSuccess: (_d, v) => {
+      toast.success(
+        v.duration_seconds !== undefined ? "Question timer updated." : "Score updated.",
+      );
       void queryClient.invalidateQueries({
         queryKey: ["assessment-section-questions", assessmentId, selectedSectionId],
       });
@@ -946,6 +964,27 @@ function QuestionAssignmentTab({
                             const val = raw === "" ? null : Number(raw);
                             if (val !== (aq.score_override ?? null)) {
                               scoreMutation.mutate({ aqId: aq.id, score_override: val });
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                    {canManage && timerLevel === "question" && (
+                      <label
+                        className="flex items-center gap-1 text-slate-400"
+                        title="Question-level timer (Doc 3 §5.2) — the question disappears when its time is up"
+                      >
+                        Timer (s)
+                        <input
+                          type="number"
+                          min={1}
+                          defaultValue={aq.duration_seconds ?? ""}
+                          className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-xs"
+                          onBlur={(e) => {
+                            const raw = e.target.value.trim();
+                            const val = raw === "" ? null : Number(raw);
+                            if (val !== (aq.duration_seconds ?? null)) {
+                              scoreMutation.mutate({ aqId: aq.id, duration_seconds: val });
                             }
                           }}
                         />
@@ -1169,6 +1208,7 @@ function QuestionPreviewModal({
 function SectionTreeRow({
   section,
   depth,
+  timerLevel,
   canManage,
   onAddSubsection,
   onEditSection,
@@ -1176,6 +1216,7 @@ function SectionTreeRow({
 }: {
   section: AssessmentSection;
   depth: number;
+  timerLevel: string;
   canManage: boolean;
   onAddSubsection: (parentId: number) => void;
   onEditSection: (section: AssessmentSection) => void;
@@ -1190,7 +1231,8 @@ function SectionTreeRow({
         <div className="flex items-center gap-2">
           <Badge variant="outline">L{section.level}</Badge>
           <span className="text-sm font-medium text-slate-900">{section.title}</span>
-          {section.duration_seconds && (
+          {/* Doc 3 §5.2: only the configured timer level's durations apply. */}
+          {section.duration_seconds && timerLevel === `level${section.level}` && (
             <span className="text-xs text-slate-400">
               · {Math.floor(section.duration_seconds / 60)} min
             </span>
@@ -1226,6 +1268,7 @@ function SectionTreeRow({
             key={child.id}
             section={child}
             depth={depth + 1}
+            timerLevel={timerLevel}
             canManage={canManage}
             onAddSubsection={onAddSubsection}
             onEditSection={onEditSection}
@@ -1244,6 +1287,8 @@ function CreateSectionModal({
   open,
   parentId,
   editSection,
+  timerLevel,
+  sectionLevel,
   loading,
   onClose,
   onSubmit,
@@ -1252,6 +1297,10 @@ function CreateSectionModal({
   parentId: number | null;
   /** When set, the modal is in edit-mode (pre-populated with this section). */
   editSection: AssessmentSection | null;
+  /** The assessment's single timer level (Doc 3 §5.2). */
+  timerLevel: string;
+  /** Level of the section being created/edited (1-4). */
+  sectionLevel: number;
   loading: boolean;
   onClose: () => void;
   onSubmit: (payload: {
@@ -1287,6 +1336,7 @@ function CreateSectionModal({
   }, [open, editSection]);
 
   const isEdit = editSection !== null;
+  const timerHere = timerLevel === `level${sectionLevel}`;
 
   return (
     <Modal
@@ -1311,7 +1361,7 @@ function CreateSectionModal({
             description,
             // ASM-4: the server derives level from the parent (parent.level + 1),
             // so Level 3/4 sub-sections are created correctly.
-            duration_seconds: durationMin.trim() ? Number(durationMin) * 60 : null,
+            duration_seconds: timerHere && durationMin.trim() ? Number(durationMin) * 60 : null,
             delivery_count: deliveryCount.trim() ? Number(deliveryCount) : null,
             order_mode: orderMode,
           });
@@ -1348,13 +1398,21 @@ function CreateSectionModal({
               id="sec-timer"
               type="number"
               min={0}
-              value={durationMin}
+              value={timerHere ? durationMin : ""}
               onChange={(e) => setDurationMin(e.target.value)}
-              placeholder="e.g. 15"
+              placeholder={timerHere ? "e.g. 15" : "Not used at this level"}
+              disabled={!timerHere}
             />
             <p className="mt-1 text-xs text-slate-500">
-              Per-section time limit (SRS §5.2). Used when the assessment timer level is a section
-              level.
+              {timerHere ? (
+                <>Time limit for each Level {sectionLevel} section (Doc 3 §5.2).</>
+              ) : (
+                <>
+                  A timer can be set at only one level (Doc 3 §5.2). This assessment&apos;s timer is
+                  at <strong>{timerLevelLabel(timerLevel)}</strong> — change it under Overview ›
+                  Edit to time Level {sectionLevel} sections.
+                </>
+              )}
             </p>
           </div>
           <div>
@@ -1583,7 +1641,8 @@ function EditAssessmentModal({
         onSubmit={(e) => {
           e.preventDefault();
           // Convert minutes (form input) → seconds (backend storage).
-          const durationMinutes = duration ? parseInt(duration, 10) : null;
+          const durationMinutes =
+            timerLevel === "assessment" && duration ? parseInt(duration, 10) : null;
           onSubmit({
             title,
             objective,
@@ -1636,10 +1695,23 @@ function EditAssessmentModal({
               id="edit-duration"
               type="number"
               min="1"
-              value={duration}
+              value={timerLevel === "assessment" ? duration : ""}
               onChange={(e) => setDuration(e.target.value)}
-              placeholder="Leave empty for no time limit"
+              placeholder={
+                timerLevel === "assessment" ? "Leave empty for no time limit" : "Set per level"
+              }
+              disabled={timerLevel !== "assessment"}
             />
+            {timerLevel !== "assessment" && (
+              <p className="mt-1 text-xs text-slate-500">
+                Only one timer level is allowed (Doc 3 §5.2). With the timer at{" "}
+                {timerLevelLabel(timerLevel)}, set durations on those{" "}
+                {timerLevel === "question"
+                  ? "questions (Questions tab)"
+                  : "sections (Sections tab)"}
+                .
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="edit-price">Price (0 = free)</Label>
@@ -2124,4 +2196,15 @@ function PsychometricGroupsTab({
       </CardContent>
     </Card>
   );
+}
+
+/** Depth-first lookup of a section (and its descendants) by id. */
+function findSection(secs: AssessmentSection[], id: number | null): AssessmentSection | undefined {
+  if (id == null) return undefined;
+  for (const s of secs) {
+    if (s.id === id) return s;
+    const hit = findSection(s.subsections ?? [], id);
+    if (hit) return hit;
+  }
+  return undefined;
 }

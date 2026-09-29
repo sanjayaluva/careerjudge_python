@@ -376,6 +376,13 @@ export interface SessionQuestion {
   question_duration_seconds: number | null;
   /** ASM-5 (§5.1): this question's section delivery order mode. */
   section_order_mode: "STATIC" | "RANDOM";
+  /** Section titles root → leaf, for the sidebar (Report 7 #3/#42). */
+  section_path?: string[];
+  /**
+   * Saved state of every sub-question of this question, keyed by
+   * sub_question_index — restores answers on resume (Report 7 #9/#18).
+   */
+  sub_answers?: Record<string, { status: string; raw_answer: Record<string, unknown> | null }>;
   question_detail: {
     id: number;
     question_title: string;
@@ -629,6 +636,11 @@ export const TIMER_LEVELS = [
   { value: "level4", label: "Level 4" },
   { value: "question", label: "Question Level" },
 ];
+
+/** Human label for an assessment's timer level (Doc 3 §5.2). */
+export function timerLevelLabel(value: string | null | undefined): string {
+  return TIMER_LEVELS.find((t) => t.value === (value ?? "assessment"))?.label ?? "Assessment Level";
+}
 
 // ---------------------------------------------------------------------------
 // Psychometric grouping (PSY-A1) — signed Approach 1

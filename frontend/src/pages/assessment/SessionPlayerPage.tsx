@@ -51,6 +51,14 @@ export default function SessionPlayerPage() {
   // has finished. Used to gate Question Text 2 + answer options until the
   // presentation is over (SRS feedback Common Issue 4).
   const [presentationDone, setPresentationDone] = useState<Set<number>>(new Set());
+  // Question ids whose media presentation has actually STARTED. Replay is
+  // locked only for these: leaving a question before pressing Play must not
+  // lock its media (Report 7 #41 — spec: play once, replay blocked after play).
+  const [startedMedia, setStartedMedia] = useState<Set<number>>(new Set());
+  // Timer sections whose section-level time has expired: they disappear
+  // (Doc 3 §5.2) — no navigating back into them (Report 7 #21).
+  const [expiredTimerSections, setExpiredTimerSections] = useState<Set<number>>(new Set());
+  const [hydrated, setHydrated] = useState(false);
   // In-question sub-question navigation. For multi-sub-question questions
   // (sub_question_count > 1), this tracks which sub-question the candidate
   // is currently on (0-indexed). Resets when the question changes.
@@ -67,7 +75,14 @@ export default function SessionPlayerPage() {
   useEffect(() => {
     if (!session || session.status !== "active") return;
     if (timeLeft !== null) return; // already initialised
-    if (session.total_duration_seconds && session.total_duration_seconds > 0) {
+    // Doc 3 §5.2: one timer level only — the overall countdown applies when
+    // the timer is at assessment level; section/question timers run below.
+    const assessmentLevelTimer = (session.timer_level ?? "assessment") === "assessment";
+    if (
+      assessmentLevelTimer &&
+      session.total_duration_seconds &&
+      session.total_duration_seconds > 0
+    ) {
       // For an in-progress session we approximate remaining time from started_at.
       // (Server-side enforcement is the source of truth; this is purely UX.)
       const elapsed = Math.floor((Date.now() - new Date(session.started_at).getTime()) / 1000);
@@ -103,55 +118,58 @@ export default function SessionPlayerPage() {
     queryKey: ["assessment-session-questions", sid],
     queryFn: () => getSessionQuestions(sid),
     enabled: !Number.isNaN(sid),
+    // The delivered set/order is fixed for the session — a background
+    // refetch must never move the candidate's position.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 
-  // Apply random display order if the assessment requests it.
-  // The shuffle is stable per session (seeded by session ID) so the candidate
-  // sees the same order on refresh, but different from the authoring order.
-  const questions = (() => {
-    if (!rawQuestions || rawQuestions.length === 0) return rawQuestions;
-
-    // Deterministic shuffle seeded per session, so the order is stable across
-    // refreshes (not cryptographically secure — display ordering only).
-    const shuffleSeeded = <T,>(arr: T[], seedBase: number): T[] => {
-      const a = [...arr];
-      let seed = seedBase;
-      for (let i = a.length - 1; i > 0; i--) {
-        seed = (seed * 9301 + 49297) % 233280;
-        const j = Math.floor((seed / 233280) * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-      }
-      return a;
-    };
-
-    // Assessment-level RANDOM shuffles the whole set (existing behaviour).
-    if (session?.display_order === "RANDOM") {
-      return shuffleSeeded(rawQuestions, sid);
+  // Resume (Report 7 #9/#10/#18/#19): restore saved answers, bookmarks and
+  // skips from the server, lock media that was already presented, and start
+  // at the first question that still has an unanswered sub-question
+  // (QT spec: "On resume, test starts from the suspended question").
+  useEffect(() => {
+    if (hydrated || !rawQuestions) return;
+    const restored: Record<string, Record<string, unknown>> = {};
+    const marks = new Set<string>();
+    const skips = new Set<string>();
+    const presented = new Set<number>();
+    rawQuestions.forEach((sq) => {
+      Object.entries(sq.sub_answers ?? {}).forEach(([idx, st]) => {
+        const key = `${sq.question}_${idx}`;
+        if (st.status === "attempted" && st.raw_answer) {
+          restored[key] = st.raw_answer;
+          presented.add(sq.question);
+        } else if (st.status === "bookmarked") {
+          marks.add(key);
+        } else if (st.status === "skipped") {
+          skips.add(key);
+          presented.add(sq.question);
+        }
+      });
+    });
+    setAnswers(restored);
+    setBookmarked(marks);
+    setSkipped(skips);
+    setStartedMedia(presented);
+    setViewedQuestions(presented);
+    if (Object.keys(restored).length > 0) {
+      const resumeAt = rawQuestions.findIndex((sq) => {
+        const n = sq.question_detail.sub_question_count ?? 1;
+        for (let i = 0; i < n; i++) if (!restored[`${sq.question}_${i}`]) return true;
+        return false;
+      });
+      if (resumeAt > 0) setCurrentIndex(resumeAt);
     }
+    setHydrated(true);
+  }, [rawQuestions, hydrated]);
 
-    // ASM-5 (§5.1): otherwise apply per-section order — shuffle questions within
-    // sections whose order_mode is RANDOM, keeping the delivered order elsewhere.
-    // Delivered questions are already grouped by section (backend sorts by
-    // level/order), so shuffle each consecutive same-section run in place.
-    if (!rawQuestions.some((q) => q.section_order_mode === "RANDOM")) {
-      return rawQuestions;
-    }
-    const result: typeof rawQuestions = [];
-    let i = 0;
-    while (i < rawQuestions.length) {
-      const sec = rawQuestions[i].section;
-      let j = i;
-      while (j < rawQuestions.length && rawQuestions[j].section === sec) j++;
-      const group = rawQuestions.slice(i, j);
-      if (group[0]?.section_order_mode === "RANDOM") {
-        result.push(...shuffleSeeded(group, sid + (sec ?? 0)));
-      } else {
-        result.push(...group);
-      }
-      i = j;
-    }
-    return result;
-  })();
+  // Delivery order (static tree order, per-section and assessment-level
+  // randomisation) is computed server-side and stable per session — see
+  // backend apps/assessment/delivery.py. Shuffling again here re-ordered the
+  // list whenever it changed, so Previous jumped to a random question
+  // (Report 7 #20).
+  const questions = rawQuestions;
 
   // PSY-A1: a psychometric group is delivered with a negative synthetic
   // question id (``-group_id``). Route its answer to the group endpoint; every
@@ -272,6 +290,9 @@ export default function SessionPlayerPage() {
           // Find the last delivered question in the expiring section and jump
           // to the one after it (the next section). Order-independent of the
           // candidate's current position within the section.
+          if (expiringSectionId != null) {
+            setExpiredTimerSections((prev) => new Set(prev).add(expiringSectionId));
+          }
           if (questions) {
             let lastIdx = -1;
             questions.forEach((qq, i) => {
@@ -326,6 +347,10 @@ export default function SessionPlayerPage() {
 
   const q = questions[currentIndex];
   const qd = q.question_detail;
+  // Replay is locked only once the media was actually started and the
+  // candidate has moved away from it.
+  const mediaLocked = (id: number) => startedMedia.has(id) && viewedQuestions.has(id);
+  const markMediaStarted = (id: number) => setStartedMedia((prev) => new Set(prev).add(id));
   const answerKey = `${q.question}_${activeSubQ}`;
   const isLast = currentIndex === questions.length - 1;
   const answeredCount = Object.keys(answers).length;
@@ -392,7 +417,7 @@ export default function SessionPlayerPage() {
   // Retest fix: Question Text2 is also gated for presentation-first types —
   // it must appear only AFTER the presentation ends.
   const presentationActive =
-    hasTimedPresentation && !presentationDone.has(qd.id) && !viewedQuestions.has(qd.id);
+    hasTimedPresentation && !presentationDone.has(qd.id) && !mediaLocked(qd.id);
 
   // Per-sub-question text: from sub_question_texts[activeSubQ].
   const subQuestionText = qd.sub_question_texts?.[activeSubQ] ?? "";
@@ -406,8 +431,13 @@ export default function SessionPlayerPage() {
   // Section delivery order — needed by PREV_SECTION to tell "the section
   // immediately before this one" apart from any section further back.
   const questionSectionOrder = sectionDeliveryOrder(questions.map((sq) => sq.section));
+  const isExpired = (index: number) => {
+    const ts = questions[index]?.timer_section_id;
+    return ts != null && expiredTimerSections.has(ts);
+  };
   const canGoBack = () => {
     if (currentIndex === 0) return true;
+    if (isExpired(currentIndex - 1)) return false;
     const targetSection = questions[currentIndex - 1].section;
     return canNavigateBackToSection(navRule, questionSectionOrder, q.section, targetSection);
   };
@@ -415,6 +445,7 @@ export default function SessionPlayerPage() {
   // backward by more than one question/section in a single click, unlike
   // the Previous button above).
   const canJumpTo = (targetIndex: number) => {
+    if (isExpired(targetIndex)) return false;
     if (targetIndex >= currentIndex) return true; // forward jumps are unrestricted
     return canNavigateBackToSection(
       navRule,
@@ -554,7 +585,7 @@ export default function SessionPlayerPage() {
     answerMutation.mutate({
       question_id: q.question,
       bookmark: true,
-      sub_question_index: q.sub_question_index,
+      sub_question_index: activeSubQ,
     });
   };
 
@@ -738,12 +769,21 @@ export default function SessionPlayerPage() {
             {sectionEntries.map(([sid, items], secIdx) => (
               <div key={sid ?? "no-section"} className="mb-3">
                 <p className="mb-1 text-xs font-medium text-slate-700">
-                  {sid !== null ? `Section ${secIdx + 1}` : "Questions"}
+                  {sid === null
+                    ? "Questions"
+                    : questions[items[0].questionIndex].section_path?.join(" › ") ||
+                      `Section ${secIdx + 1}`}
                 </p>
                 <div className="flex flex-wrap gap-1">
                   {items.map(({ questionIndex: i }) => {
                     const aKey = `${questions[i].question}_${questions[i].sub_question_index}`;
-                    const isAnswered = Boolean(answers[aKey]);
+                    // A multi-sub-question item is answered once every
+                    // sub-question is.
+                    const subCount = questions[i].question_detail.sub_question_count ?? 1;
+                    const isAnswered = Array.from(
+                      { length: subCount },
+                      (_, k) => answers[`${questions[i].question}_${k}`],
+                    ).every(Boolean);
                     const isBookmarked = bookmarked.has(aKey);
                     const isSkipped = skipped.has(aKey);
                     // QT-3: highlight the whole continuous-rating group as active.
@@ -846,7 +886,8 @@ export default function SessionPlayerPage() {
                       displayCount={qd.flash_display_count ?? qd.flash_items.length}
                       order={qd.flash_order}
                       replayMode={qd.replay_mode ?? "not_permitted"}
-                      hasBeenViewed={viewedQuestions.has(qd.id)}
+                      hasBeenViewed={mediaLocked(qd.id)}
+                      onPresentationStart={() => markMediaStarted(qd.id)}
                       onPresentationEnd={() =>
                         setPresentationDone((prev) => new Set(prev).add(qd.id))
                       }
@@ -862,7 +903,8 @@ export default function SessionPlayerPage() {
                       displayDurationSeconds={qd.display_duration_seconds ?? null}
                       displayMode={qd.display_mode ?? "timed"}
                       replayMode={qd.replay_mode ?? "not_permitted"}
-                      hasBeenViewed={viewedQuestions.has(qd.id)}
+                      hasBeenViewed={mediaLocked(qd.id)}
+                      onPresentationStart={() => markMediaStarted(qd.id)}
                       onPresentationEnd={() =>
                         setPresentationDone((prev) => new Set(prev).add(qd.id))
                       }
@@ -882,7 +924,8 @@ export default function SessionPlayerPage() {
                       imageUrl={qd.image}
                       durationSeconds={qd.display_duration_seconds ?? 30}
                       replayMode={qd.replay_mode ?? "not_permitted"}
-                      hasBeenViewed={viewedQuestions.has(qd.id)}
+                      hasBeenViewed={mediaLocked(qd.id)}
+                      onPresentationStart={() => markMediaStarted(qd.id)}
                       onPresentationEnd={() =>
                         setPresentationDone((prev) => new Set(prev).add(qd.id))
                       }
@@ -906,7 +949,8 @@ export default function SessionPlayerPage() {
                         key={`audio-${media.id}`}
                         fileUrl={media.file}
                         replayMode={qd.replay_mode ?? "not_permitted"}
-                        hasBeenViewed={viewedQuestions.has(qd.id)}
+                        hasBeenViewed={mediaLocked(qd.id)}
+                        onPresentationStart={() => markMediaStarted(qd.id)}
                         onPresentationEnd={() =>
                           setPresentationDone((prev) => new Set(prev).add(qd.id))
                         }
@@ -921,7 +965,8 @@ export default function SessionPlayerPage() {
                         key={`video-${media.id}`}
                         fileUrl={media.file}
                         replayMode={qd.replay_mode ?? "not_permitted"}
-                        hasBeenViewed={viewedQuestions.has(qd.id)}
+                        hasBeenViewed={mediaLocked(qd.id)}
+                        onPresentationStart={() => markMediaStarted(qd.id)}
                         onPresentationEnd={() =>
                           setPresentationDone((prev) => new Set(prev).add(qd.id))
                         }
@@ -1891,6 +1936,7 @@ function FlashSimulation({
   replayMode = "not_permitted",
   hasBeenViewed = false,
   onPresentationEnd,
+  onPresentationStart,
 }: {
   items: FlashItemLike[];
   intervalMs: number;
@@ -1899,6 +1945,8 @@ function FlashSimulation({
   replayMode?: "permitted" | "not_permitted";
   hasBeenViewed?: boolean;
   onPresentationEnd?: () => void;
+  /** Fired when playback/display begins (arms the replay lock). */
+  onPresentationStart?: () => void;
 }) {
   // Use only items flagged for the display pool (default to all if none flagged)
   const pool = items.filter((i) => i.is_in_display_pool);
@@ -1928,6 +1976,7 @@ function FlashSimulation({
 
   const play = () => {
     if (sequence.length === 0 || replayLocked) return;
+    onPresentationStart?.();
     setPlaying(true);
     setCurrentIndex(0);
 
@@ -2049,6 +2098,7 @@ function PassageDisplay({
   replayMode = "not_permitted",
   hasBeenViewed = false,
   onPresentationEnd,
+  onPresentationStart,
 }: {
   title: string;
   body: string;
@@ -2057,6 +2107,8 @@ function PassageDisplay({
   replayMode?: "permitted" | "not_permitted";
   hasBeenViewed?: boolean;
   onPresentationEnd?: () => void;
+  /** Fired when playback/display begins (arms the replay lock). */
+  onPresentationStart?: () => void;
 }) {
   // For 'timed' mode: passage starts hidden until user clicks 'Start Passage Presentation'
   // For 'unlimited' mode: passage is always visible
@@ -2092,6 +2144,7 @@ function PassageDisplay({
   }, [secondsLeft]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startPresentation = () => {
+    onPresentationStart?.();
     setPresentationStarted(true);
     setVisible(true);
     if (displayMode === "timed" && displayDurationSeconds) {
@@ -2289,12 +2342,15 @@ function ImageDisplayTimed({
   replayMode = "not_permitted",
   hasBeenViewed = false,
   onPresentationEnd,
+  onPresentationStart,
 }: {
   imageUrl: string;
   durationSeconds: number;
   replayMode?: "permitted" | "not_permitted";
   hasBeenViewed?: boolean;
   onPresentationEnd?: () => void;
+  /** Fired when playback/display begins (arms the replay lock). */
+  onPresentationStart?: () => void;
 }) {
   const [visible, setVisible] = useState(false);
   const [started, setStarted] = useState(false);
@@ -2319,6 +2375,7 @@ function ImageDisplayTimed({
   }, [secondsLeft]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const start = () => {
+    onPresentationStart?.();
     setStarted(true);
     setVisible(true);
     setSecondsLeft(durationSeconds);
@@ -2410,11 +2467,14 @@ function AudioPlayerControlled({
   replayMode,
   hasBeenViewed,
   onPresentationEnd,
+  onPresentationStart,
 }: {
   fileUrl: string;
   replayMode: "permitted" | "not_permitted";
   hasBeenViewed: boolean;
   onPresentationEnd?: () => void;
+  /** Fired when playback/display begins (arms the replay lock). */
+  onPresentationStart?: () => void;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [hasPlayed, setHasPlayed] = useState(false);
@@ -2430,6 +2490,7 @@ function AudioPlayerControlled({
 
   const startPlayback = () => {
     if (audioRef.current) {
+      onPresentationStart?.();
       audioRef.current.play();
       setIsPlaying(true);
     }
@@ -2552,11 +2613,14 @@ function VideoPlayerControlled({
   replayMode,
   hasBeenViewed,
   onPresentationEnd,
+  onPresentationStart,
 }: {
   fileUrl: string;
   replayMode: "permitted" | "not_permitted";
   hasBeenViewed: boolean;
   onPresentationEnd?: () => void;
+  /** Fired when playback/display begins (arms the replay lock). */
+  onPresentationStart?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [hasPlayed, setHasPlayed] = useState(false);
@@ -2572,6 +2636,7 @@ function VideoPlayerControlled({
 
   const startPlayback = () => {
     if (videoRef.current) {
+      onPresentationStart?.();
       videoRef.current.play();
       setIsPlaying(true);
     }

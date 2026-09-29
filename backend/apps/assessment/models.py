@@ -247,7 +247,9 @@ class AssessmentSection(models.Model):
     )
 
     class Meta:
-        ordering = ["level", "order"]
+        # `id` breaks ties so equal `order` values list in creation order
+        # (Report 7 #12: sections listed last-to-first).
+        ordering = ["level", "order", "id"]
         verbose_name = _("assessment section")
         verbose_name_plural = _("assessment sections")
 
@@ -288,7 +290,7 @@ class AssessmentQuestion(models.Model):
     )
 
     class Meta:
-        ordering = ["order"]
+        ordering = ["order", "id"]
         verbose_name = _("assessment question")
         verbose_name_plural = _("assessment questions")
         unique_together = [("section", "question", "sub_question_index")]
