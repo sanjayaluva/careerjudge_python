@@ -217,6 +217,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
             # Corporate fields
             "manager_name",
             "tan_number",
+            # Counsellor self-setup (CounselingPage "Create my profile"):
+            # rate per session + availability, shown on the counsellor list.
+            "hourly_rate",
+            "is_available_for_counseling",
         ]
         read_only_fields = ["avatar"]  # avatar handled via separate upload endpoint
 

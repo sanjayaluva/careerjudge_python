@@ -162,6 +162,16 @@ export interface FollowupSession {
 // Category API
 // ---------------------------------------------------------------------------
 
+/** CJ Admin: set a counsellor's categories (Doc 8 keys, e.g. "career"). */
+export function setCounsellorCategories(
+  counsellorId: number,
+  categories: string[],
+): Promise<CounsellorProfile> {
+  return apiPost<CounsellorProfile>(`${BASE}/counsellors/${counsellorId}/set-categories/`, {
+    categories,
+  });
+}
+
 export function listCategories(): Promise<CounselingCategory[]> {
   return apiGetPaged<CounselingCategory>(`${BASE}/categories/`).then((r) => r.results);
 }

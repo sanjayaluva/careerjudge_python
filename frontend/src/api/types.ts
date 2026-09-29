@@ -90,6 +90,9 @@ export interface UserProfile {
   mobile: string;
   avatar: string | null;
   bio: string;
+  /** Counsellors: rate per session + bookable flag. */
+  hourly_rate?: number | string | null;
+  is_available_for_counseling?: boolean;
   // Name fields
   first_name: string;
   middle_name: string;

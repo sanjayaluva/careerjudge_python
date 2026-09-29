@@ -33,6 +33,7 @@ import {
 } from "@/components/ui";
 import {
   COUNSELING_CATEGORIES,
+  setCounsellorCategories,
   cancelSession,
   createCounsellorProfile,
   getCounselingSettings,
@@ -49,7 +50,8 @@ import {
   type CounselingSession,
   type SessionFeedback,
 } from "@/api/counseling";
-import { extractApiError, apiPatch } from "@/api/client";
+import { extractApiError } from "@/api/client";
+import { updateMe } from "@/api/me";
 import { useAuth } from "@/hooks/useAuth";
 import { CounsellorDashboard } from "./CounsellorDashboard";
 import { JoinSessionButton } from "./JoinSession";
@@ -65,6 +67,9 @@ export default function CounselingPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [bookingCounsellor, setBookingCounsellor] = useState<CounsellorProfile | null>(null);
+  // Report 8 #39: CJ Admin tags counsellors with their counselling categories.
+  const isAdmin = user?.role === "cj_admin";
+  const [taggingCounsellor, setTaggingCounsellor] = useState<CounsellorProfile | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["counseling", "counsellors", debouncedSearch, categoryFilter],
@@ -183,6 +188,15 @@ export default function CounselingPage() {
                       </TableCell>
                       <TableCell className="text-slate-500">
                         {c.category_names.join(", ") || "—"}
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            className="ml-2 text-xs text-primary-600 hover:underline"
+                            onClick={() => setTaggingCounsellor(c)}
+                          >
+                            Edit
+                          </button>
+                        )}
                       </TableCell>
                       <TableCell className="text-slate-500">₹{c.hourly_rate}/Session</TableCell>
                       <TableCell>
@@ -272,6 +286,12 @@ export default function CounselingPage() {
         </Tabs>
       </PageCard>
 
+      {taggingCounsellor && (
+        <CategoryTagModal
+          counsellor={taggingCounsellor}
+          onClose={() => setTaggingCounsellor(null)}
+        />
+      )}
       {bookingCounsellor && (
         <BookingModal counsellor={bookingCounsellor} onClose={() => setBookingCounsellor(null)} />
       )}
@@ -563,10 +583,14 @@ function CounsellorDashboardWrapper() {
   const createMut = useMutation({
     mutationFn: async () => {
       // Step 1: Update UserProfile with counsellor-specific fields
-      await apiPatch("/me/profile/", {
-        bio,
-        hourly_rate: parseFloat(hourlyRate),
-        is_available_for_counseling: true,
+      // The profile lives under /api/me/ (nested `profile`); the old
+      // /me/profile/ URL doesn't exist, so profile creation failed here.
+      await updateMe({
+        profile: {
+          bio,
+          hourly_rate: parseFloat(hourlyRate),
+          is_available_for_counseling: true,
+        },
       });
       // Step 2: Create CounsellorProfile (lightweight — just links user + categories)
       return createCounsellorProfile({
@@ -1015,4 +1039,61 @@ function FollowupCountdown({ target }: { target: string }) {
   const mins = Math.floor((diff % 3_600_000) / 60_000);
   const parts = [days ? `${days}d` : "", hours ? `${hours}h` : "", `${mins}m`].filter(Boolean);
   return <span className="text-xs font-medium text-amber-800">in {parts.join(" ")}</span>;
+}
+
+// ---------------------------------------------------------------------------
+// CategoryTagModal — CJ Admin tags a counsellor with categories (Report 8 #39)
+// ---------------------------------------------------------------------------
+
+function CategoryTagModal({
+  counsellor,
+  onClose,
+}: {
+  counsellor: CounsellorProfile;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState<string[]>(
+    COUNSELING_CATEGORIES.filter((c) => counsellor.category_names.includes(c.label)).map(
+      (c) => c.value,
+    ),
+  );
+  const save = useMutation({
+    mutationFn: () => setCounsellorCategories(counsellor.id, selected),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["counseling", "counsellors"] });
+      toast.success("Categories updated.");
+      onClose();
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+  return (
+    <Modal open onClose={onClose} title={`Categories — ${counsellor.full_name}`} size="sm">
+      <div className="space-y-2">
+        {COUNSELING_CATEGORIES.map((c) => (
+          <label key={c.value} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={selected.includes(c.value)}
+              onChange={(e) =>
+                setSelected((prev) =>
+                  e.target.checked ? [...prev, c.value] : prev.filter((v) => v !== c.value),
+                )
+              }
+            />
+            {c.label}
+          </label>
+        ))}
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button loading={save.isPending} onClick={() => save.mutate()}>
+          Save
+        </Button>
+      </div>
+    </Modal>
+  );
 }

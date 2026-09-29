@@ -1248,3 +1248,25 @@ def test_counselee_cannot_set_meeting_link(counselee_client, counselee_user, cou
     assert resp.status_code == 403, f"Got {resp.status_code}: {resp.data}"
     session.refresh_from_db()
     assert session.meeting_link == ""
+
+
+def test_admin_tags_counsellor_with_multiple_categories(
+    admin_client, counselee_client, counsellor_user
+):
+    """Report 8 #39/#40: CJ Admin tags an existing counsellor with several
+    categories; individuals see them and can filter by them."""
+    counsellor = _make_counsellor(counsellor_user)
+    url = f"/api/counseling/counsellors/{counsellor.id}/set-categories/"
+    resp = admin_client.post(url, {"categories": ["career", "learning"]}, format="json")
+    assert resp.status_code == 200, resp.data
+    assert sorted(resp.data["data"]["category_names"]) == [
+        "Career counselling",
+        "Learning difficulties",
+    ]
+
+    listed = counselee_client.get("/api/counseling/counsellors/?category=learning").data["data"]
+    results = listed["results"] if isinstance(listed, dict) else listed
+    assert [c["id"] for c in results] == [counsellor.id]
+
+    assert counselee_client.post(url, {"categories": ["career"]}, format="json").status_code == 403
+    assert admin_client.post(url, {"categories": ["astrology"]}, format="json").status_code == 400

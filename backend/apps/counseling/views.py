@@ -69,6 +69,7 @@ class HasCounselingPermission(HasModulePermission):
         "partial_update": "change",
         "destroy": "delete",
         "timeslots": "view",
+        "set_categories": "change",
         "confirm": "change",
         "cancel": "change",
         "complete": "change",
@@ -164,6 +165,42 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
         return Response(
             {"message": "Counsellor profile created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="set-categories")
+    def set_categories(self, request, pk=None):
+        """CJ Admin tags a counsellor with one or more counselling categories
+        (Doc 8 §1; Report 3 §1.17; Report 8 #39/#40). Tagging used to be
+        possible only when creating the counsellor's account, so existing
+        counsellors showed "—" and could not be filtered by expertise.
+
+        Body: {"categories": ["career", "learning", ...]} (Doc 8 category keys)
+        """
+        role = request.user.role.name if request.user.role_id else None
+        if role != "cj_admin" and not request.user.is_superuser:
+            return Response(
+                {"error": {"code": "forbidden", "message": "Only CJ Admin can tag counsellors."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        names = request.data.get("categories") or []
+        valid = {key for key, _label in CounselingCategory.CATEGORY_CHOICES}
+        unknown = [n for n in names if n not in valid]
+        if unknown:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": f"Unknown categories: {', '.join(map(str, unknown))}",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        profile = self.get_object()
+        cats = [CounselingCategory.objects.get_or_create(name=n)[0] for n in names]
+        profile.categories.set(cats)
+        return Response(
+            {"message": "Categories updated.", "data": CounsellorProfileSerializer(profile).data},
+            status=status.HTTP_200_OK,
         )
 
     @action(detail=True, methods=["get"])
