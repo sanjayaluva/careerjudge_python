@@ -808,9 +808,11 @@ export default function SessionPlayerPage() {
                         title={
                           presentationActive
                             ? "Wait for the presentation to finish before navigating"
-                            : !jumpAllowed
-                              ? "Backward navigation is not allowed this far back for this assessment"
-                              : `Question ${i + 1}`
+                            : isExpired(i)
+                              ? "Time for this section is over"
+                              : !jumpAllowed
+                                ? "Backward navigation is not allowed this far back for this assessment"
+                                : `Question ${i + 1}`
                         }
                         className={`h-7 w-7 rounded-md text-xs font-medium transition-colors ${
                           isCurrent
