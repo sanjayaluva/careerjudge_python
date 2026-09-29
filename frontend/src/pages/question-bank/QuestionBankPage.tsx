@@ -130,7 +130,9 @@ export default function QuestionBankPage() {
   const hasNext = Boolean(data?.next);
   const hasPrev = Boolean(data?.previous);
 
-  const canCreate = ["sme", "psychometrician", "cj_admin"].includes(user?.role ?? "");
+  // Report 8 #29 / Report 3 §4.1: trainers author questions for their course
+  // assessments (backend grants question_bank add/change, scoped to their own).
+  const canCreate = ["sme", "psychometrician", "cj_admin", "trainer"].includes(user?.role ?? "");
   const canDelete = ["sme", "cj_admin"].includes(user?.role ?? "");
   const isAdmin = user?.role === "cj_admin";
   const canManageCategories = ["psychometrician", "cj_admin"].includes(user?.role ?? "");

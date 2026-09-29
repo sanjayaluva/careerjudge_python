@@ -247,13 +247,16 @@ export default function QuestionDetailPage() {
 
   const q = question as QuestionDetail;
   const isAdmin = user?.role === "cj_admin";
-  const canEditAnyQuestion = ["sme", "psychometrician", "cj_admin"].includes(user?.role ?? "");
+  // Trainers author (and edit/submit) their own questions — Report 8 #29.
+  const canEditAnyQuestion = ["sme", "psychometrician", "cj_admin", "trainer"].includes(
+    user?.role ?? "",
+  );
   // Edit rules: cj_admin can edit ANY question; others can edit only draft/sent_back.
   const canEdit =
     isAdmin || (canEditAnyQuestion && (q.status === "draft" || q.status === "sent_back"));
   const canSubmit =
     (q.status === "draft" || q.status === "sent_back") &&
-    ["sme", "cj_admin"].includes(user?.role ?? "");
+    ["sme", "cj_admin", "trainer"].includes(user?.role ?? "");
   const canReviewContent =
     q.status === "pending_content_review" && ["reviewer", "cj_admin"].includes(user?.role ?? "");
   const canReviewPsychometric =

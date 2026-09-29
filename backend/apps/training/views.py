@@ -67,6 +67,15 @@ from .serializers import (
 )
 
 
+def _can_run_course(user, course) -> bool:
+    """Who may run a course's live sessions (consents, notify, reschedule —
+    Doc 7 §5 scheduler): CJ Admin, the course's creator, or a Trainer.
+    Creator-only checks refused a trainer working on a course CJ Admin had
+    created, although the screen offered them the actions (Report 8 #32)."""
+    role = user.role.name if user.role_id else None
+    return role in ("cj_admin", "trainer") or course.created_by_id == user.id
+
+
 class HasTrainingPermission(HasModulePermission):
     module = "training"
     action_map = {
@@ -1541,10 +1550,7 @@ class LiveSessionViewSet(ModelViewSet):
         """Trainer views the consent list for a live session (SRS §5)."""
         live_session = self.get_object()
         # Only the course trainer or admin can view consents
-        user_role_name = request.user.role.name if request.user.role_id else None
-        is_trainer_or_admin = (
-            live_session.course.created_by_id == request.user.id or user_role_name == "cj_admin"
-        )
+        is_trainer_or_admin = _can_run_course(request.user, live_session.course)
         if not is_trainer_or_admin:
             return Response(
                 {
@@ -1572,10 +1578,7 @@ class LiveSessionViewSet(ModelViewSet):
         from apps.notifications.models import notify_user
 
         live_session = self.get_object()
-        user_role_name = request.user.role.name if request.user.role_id else None
-        is_trainer_or_admin = (
-            live_session.course.created_by_id == request.user.id or user_role_name == "cj_admin"
-        )
+        is_trainer_or_admin = _can_run_course(request.user, live_session.course)
         if not is_trainer_or_admin:
             return Response(
                 {
@@ -1615,10 +1618,7 @@ class LiveSessionViewSet(ModelViewSet):
         notifies all registered students.
         """
         live_session = self.get_object()
-        user_role_name = request.user.role.name if request.user.role_id else None
-        is_trainer_or_admin = (
-            live_session.course.created_by_id == request.user.id or user_role_name == "cj_admin"
-        )
+        is_trainer_or_admin = _can_run_course(request.user, live_session.course)
         if not is_trainer_or_admin:
             return Response(
                 {

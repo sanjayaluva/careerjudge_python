@@ -154,12 +154,13 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert amr.requester == corp_admin
 
     def test_trainer_creates_and_sees_only_own_assessment(self):
-        """Doc 7 §2.4/§2.4.1 (signed): a trainer authors their own assessment
-        and sees only their own + published (never the whole CJ pool)."""
+        """Doc 7 §2.4/§2.4.1 (signed) + Report 8 #30: a trainer authors their
+        own assessment and sees only their own (never the rest of the pool)."""
         trainer = UserFactory.create(role=get_or_create_role("trainer", is_system=True))
         grant_assessment_perms(trainer)
-        # Someone else's unpublished assessment must NOT be visible to the trainer.
+        # Someone else's assessments — draft or published — are not visible.
         Assessment.objects.create(title="Other draft", status="draft", created_by=self.user)
+        Assessment.objects.create(title="Other published", status="published", created_by=self.user)
 
         self.client.force_authenticate(user=trainer)
         resp = self.client.post(
@@ -174,6 +175,7 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         titles = [a["title"] for a in lst.json()["data"]["results"]]
         assert "Trainer Quiz" in titles
         assert "Other draft" not in titles  # not the whole pool
+        assert "Other published" not in titles
 
     def test_update_published_assessment_without_reason_rejected(self):
         corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
@@ -511,9 +513,10 @@ class TestAssessmentVisibilityFiltering(AssessmentViewTestBase):
         assert "Published A" in titles
         assert "Draft A" not in titles
 
-    def test_trainer_sees_own_and_published_only(self):
-        """Report 3 §4.2: trainers see published assessments + their OWN
-        (created_by=trainer), but NOT other trainers' drafts or the full pool."""
+    def test_trainer_sees_own_only(self):
+        """Report 3 §4.2, clarified by Report 8 #30: trainers see only their
+        OWN assessments (created_by=trainer) — not others' published ones,
+        drafts, or the full pool."""
         trainer = UserFactory.create(role=get_or_create_role("trainer", is_system=True))
         grant_assessment_perms(trainer, actions=("view", "add", "change", "delete"))
         # Trainer's own draft
@@ -523,7 +526,7 @@ class TestAssessmentVisibilityFiltering(AssessmentViewTestBase):
         data = resp.json()["data"]
         results = data.get("results", data) if isinstance(data, dict) else data
         titles = [r["title"] for r in results]
-        assert "Published A" in titles  # published (not owned) — visible
+        assert "Published A" not in titles  # published but not owned — hidden
         assert "My Draft" in titles  # own draft — visible
         assert "Draft A" not in titles  # someone else's draft — hidden
         assert "Archived A" not in titles  # not owned — hidden

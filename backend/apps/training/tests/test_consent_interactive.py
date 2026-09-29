@@ -183,6 +183,25 @@ def test_notify_students_sends_notifications(trainer_client, trainer_user, stude
     assert notif.exists()
 
 
+def test_trainer_can_notify_on_course_created_by_admin(trainer_client, student_user):
+    """Report 8 #32: a trainer running a course CJ Admin created got 'Only the
+    trainer or admin can notify students'."""
+    from apps.accounts.models import Role, User
+
+    admin_role, _ = Role.objects.get_or_create(name="cj_admin", defaults={"is_system": True})
+    admin = User.objects.create_user(
+        email="cjadmin@t.com", password="pw", is_active=True, role=admin_role
+    )
+    course = TrainingCourse.objects.create(title="C", created_by=admin, status="published")
+    CourseRegistration.objects.create(course=course, student=student_user, payment_status="paid")
+    live = LiveSession.objects.create(
+        course=course, title="Q&A", mode="online", scheduled_at="2026-08-01T10:00:00Z"
+    )
+    resp = trainer_client.post(f"/api/training/live-sessions/{live.id}/notify_students/")
+    assert resp.status_code == 200, resp.data
+    assert resp.data["data"]["notified_count"] == 1
+
+
 def test_student_cannot_notify_students(student_client, trainer_user):
     course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
     live = LiveSession.objects.create(

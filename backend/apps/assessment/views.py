@@ -361,13 +361,10 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
             )
             if not is_manager:
                 if role_name == "trainer":
-                    # Report 3 §4.2: trainers can author assessments using the
-                    # CJ Question Bank but see only their OWN assessments
-                    # (plus published ones they can take). They must NOT see
-                    # the entire assessment pool.
-                    from django.db.models import Q
-
-                    qs = qs.filter(Q(status="published") | Q(created_by=self.request.user))
+                    # Report 3 §4.2 / Report 8 #30: trainers author their own
+                    # course assessments and see ONLY those — not the rest of
+                    # the CJ assessment pool (published or not).
+                    qs = qs.filter(created_by=self.request.user)
                 else:
                     qs = qs.filter(status="published")
 
