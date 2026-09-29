@@ -641,8 +641,7 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         """
         course = self.get_object()
         user = request.user
-        user_role_name = user.role.name if user.role_id else None
-        is_trainer_or_admin = course.created_by_id == user.id or user_role_name == "cj_admin"
+        is_trainer_or_admin = _can_run_course(user, course)
         if not is_trainer_or_admin:
             return Response(
                 {
@@ -999,7 +998,7 @@ class CourseRegistrationViewSet(ModelViewSet):
         # Validate sender is either the student or the course trainer
         user = request.user
         is_student = reg.student_id == user.id
-        is_trainer = reg.course.created_by_id == user.id
+        is_trainer = _can_run_course(user, reg.course)
         user_role_name = user.role.name if user.role_id else None
         is_admin = user_role_name == "cj_admin"
         if not (is_student or is_trainer or is_admin):
@@ -1037,10 +1036,7 @@ class CourseRegistrationViewSet(ModelViewSet):
         if request.method == "GET":
             # Trainer/admin can view all reports; student views only their own
             user = request.user
-            user_role_name = user.role.name if user.role_id else None
-            is_trainer_or_admin = (
-                reg.course.created_by_id == user.id or user_role_name == "cj_admin"
-            )
+            is_trainer_or_admin = _can_run_course(user, reg.course)
             if not is_trainer_or_admin and reg.student_id != user.id:
                 return Response(
                     {"error": {"code": "forbidden", "message": "Not authorized."}},
@@ -1226,8 +1222,7 @@ class CourseRegistrationViewSet(ModelViewSet):
         """
         reg = self.get_object()
         user = request.user
-        user_role_name = user.role.name if user.role_id else None
-        is_trainer_or_admin = reg.course.created_by_id == user.id or user_role_name == "cj_admin"
+        is_trainer_or_admin = _can_run_course(user, reg.course)
         if not is_trainer_or_admin:
             return Response(
                 {
@@ -1305,8 +1300,7 @@ class CourseRegistrationViewSet(ModelViewSet):
         """
         reg = self.get_object()
         user = request.user
-        user_role_name = user.role.name if user.role_id else None
-        is_trainer_or_admin = reg.course.created_by_id == user.id or user_role_name == "cj_admin"
+        is_trainer_or_admin = _can_run_course(user, reg.course)
         if not is_trainer_or_admin:
             return Response(
                 {

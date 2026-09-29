@@ -351,3 +351,51 @@ def test_meeting_link_withheld_until_registered_and_paid(
     reg.save()
     assert link(student_client) == ("https://zoom.us/j/123", False)
     assert link(trainer_client) == ("https://zoom.us/j/123", False)
+
+
+def test_trainer_sees_and_reviews_reports_on_admin_created_course(trainer_client, student_user):
+    """Report 8 #25-#27: submitted assignment reports were invisible to a
+    trainer who hadn't created the course (403 -> empty Reports modal)."""
+    from apps.accounts.models import Role, User
+    from apps.training.models import (
+        Assignment,
+        AssignmentReport,
+        CourseLesson,
+        LessonTopic,
+        TopicSession,
+    )
+
+    admin_role, _ = Role.objects.get_or_create(name="cj_admin", defaults={"is_system": True})
+    admin = User.objects.create_user(
+        email="cja@t.com", password="pw", is_active=True, role=admin_role
+    )
+    course = TrainingCourse.objects.create(title="C", created_by=admin, status="published")
+    session = TopicSession.objects.create(
+        topic=LessonTopic.objects.create(
+            lesson=CourseLesson.objects.create(course=course, title="L"), title="T"
+        ),
+        title="S",
+    )
+    assignment = Assignment.objects.create(
+        session=session, title="Introduce yourself", report_submission_enabled=True
+    )
+    reg = CourseRegistration.objects.create(
+        course=course, student=student_user, payment_status="paid"
+    )
+    report = AssignmentReport.objects.create(
+        assignment=assignment, student=student_user, report_text="Ich heisse..."
+    )
+
+    resp = trainer_client.get(f"/api/training/registrations/{reg.id}/assignment_reports/")
+    assert resp.status_code == 200, resp.data
+    assert [r["id"] for r in resp.data["data"]] == [report.id]
+
+    resp = trainer_client.post(
+        f"/api/training/registrations/{reg.id}/review-report/",
+        {"report_id": report.id, "trainer_score": 8, "trainer_feedback": "Gut gemacht"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    report.refresh_from_db()
+    assert report.status == "reviewed"
+    assert report.trainer_feedback == "Gut gemacht"
