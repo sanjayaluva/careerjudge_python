@@ -111,6 +111,8 @@ export interface LiveSession {
   schedule_mode: "advance" | "ongoing";
   depends_on: number | null;
   meeting_url: string;
+  /** Link withheld: viewer is not registered + paid (Report 8 #36). */
+  join_locked?: boolean;
   venue: string;
   scheduled_at: string;
   duration_minutes: number;

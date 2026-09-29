@@ -353,7 +353,12 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         if request.method == "GET":
             sessions = course.live_sessions.all()
             return Response(
-                {"message": "OK", "data": LiveSessionSerializer(sessions, many=True).data},
+                {
+                    "message": "OK",
+                    "data": LiveSessionSerializer(
+                        sessions, many=True, context={"request": request}
+                    ).data,
+                },
                 status=status.HTTP_200_OK,
             )
         serializer = LiveSessionSerializer(data=request.data)

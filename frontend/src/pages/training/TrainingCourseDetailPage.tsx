@@ -383,7 +383,11 @@ export default function TrainingCourseDetailPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {s.mode === "online" && s.meeting_url ? (
+                          {s.mode === "online" && s.join_locked ? (
+                            <span className="text-xs text-slate-500">
+                              Register &amp; complete payment to join
+                            </span>
+                          ) : s.mode === "online" && s.meeting_url ? (
                             <a
                               href={s.meeting_url}
                               target="_blank"

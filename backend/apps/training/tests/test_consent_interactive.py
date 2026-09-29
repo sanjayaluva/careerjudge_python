@@ -322,3 +322,32 @@ def test_interactive_questions_nested_in_content(trainer_client, trainer_user):
     contents = lessons[0]["topics"][0]["sessions"][0]["contents"]
     assert len(contents[0]["interactive_questions"]) == 1
     assert contents[0]["interactive_questions"][0]["question_text"] == "Q1"
+
+
+def test_meeting_link_withheld_until_registered_and_paid(
+    student_client, trainer_client, student_user, trainer_user
+):
+    """Report 8 #36 / Doc 7 §6: an unpaid user must not get the Join link."""
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="published")
+    live = LiveSession.objects.create(
+        course=course,
+        title="Q&A",
+        mode="online",
+        scheduled_at="2026-08-01T10:00:00Z",
+        meeting_url="https://zoom.us/j/123",
+    )
+
+    def link(client):
+        data = client.get(f"/api/training/courses/{course.id}/").data["data"]
+        (s,) = (x for x in data["live_sessions"] if x["id"] == live.id)
+        return s["meeting_url"], s["join_locked"]
+
+    assert link(student_client) == ("", True)  # not registered
+    reg = CourseRegistration.objects.create(
+        course=course, student=student_user, payment_status="pending"
+    )
+    assert link(student_client) == ("", True)  # registered, unpaid
+    reg.payment_status = "paid"
+    reg.save()
+    assert link(student_client) == ("https://zoom.us/j/123", False)
+    assert link(trainer_client) == ("https://zoom.us/j/123", False)
