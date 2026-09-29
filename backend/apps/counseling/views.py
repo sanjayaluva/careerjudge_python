@@ -405,6 +405,13 @@ class CounselingSessionViewSet(ModelViewSet):
         # Admin + helpdesk see all
         return qs
 
+    def list(self, request, *args, **kwargs):
+        # Report 8 #41: wrap in the standard envelope like every other list
+        # endpoint — the counsellor dashboard unwraps `data`, and the bare
+        # paginated body left it showing "No sessions yet" after bookings.
+        resp = super().list(request, *args, **kwargs)
+        return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
+
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         return Response(

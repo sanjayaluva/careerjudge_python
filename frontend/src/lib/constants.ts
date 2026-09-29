@@ -41,7 +41,8 @@ export type ModuleKey =
   | "concerns"
   | "messaging"
   | "live_chat"
-  | "invoicing";
+  | "invoicing"
+  | "payments";
 
 export const ROLE_LABELS: Record<RoleName, string> = {
   cj_admin: "CareerJudge Admin",
@@ -97,6 +98,9 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "cms",
     "tasks",
     "invoicing",
+    // E-PLT-2: approve pending payments (offline / manual) so the candidate,
+    // student or counselee gets access. cj_admin-only, like users/roles.
+    "payments",
   ],
   helpdesk: ["dashboard", "profile", "training", "counseling"],
   corp_admin: [
@@ -272,6 +276,15 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "Receipt",
     roles: roleListFor("invoicing"),
   },
+  {
+    // E-PLT-2 — admin payment authorisation (Report 8 #1/#11/#48: was only
+    // reachable via a link on the Invoicing page).
+    key: "payments",
+    label: "Payments",
+    to: "/admin/payments",
+    icon: "CreditCard",
+    roles: roleListFor("payments"),
+  },
 ];
 
 /** Helper that returns the list of roles that can see a given module. */
@@ -313,7 +326,7 @@ export const API_BASE_URL =
 export const TOKEN_STORAGE_KEY = "cj_auth_v1";
 
 /** Modules that require cj_admin only (admin-only section). */
-export const ADMIN_ONLY_MODULES: ModuleKey[] = ["users", "roles"];
+export const ADMIN_ONLY_MODULES: ModuleKey[] = ["users", "roles", "payments"];
 
 /** Pretty label for a module key. */
 export const MODULE_LABELS: Record<ModuleKey, string> = {
@@ -334,6 +347,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   messaging: "Messages",
   live_chat: "Live Chat",
   invoicing: "Invoicing",
+  payments: "Payments",
 };
 
 /** Short description shown on the dashboard cards. */
@@ -355,4 +369,5 @@ export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
   messaging: "Send messages to the admin, helpdesk, and other roles you work with.",
   live_chat: "Chat live with the CareerJudge support team.",
   invoicing: "Raise and track invoices for empanelled work; CJ Admin reviews and pays them.",
+  payments: "Approve pending payments so users get access to courses, tests and sessions.",
 };

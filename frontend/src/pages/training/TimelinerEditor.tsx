@@ -20,20 +20,25 @@ import {
 } from "@/api/training";
 import { extractApiError } from "@/api/client";
 
+import { MediaPlayer, type MediaPlayerHandle } from "./MediaPlayer";
+
 export function TimelinerEditor({
   contentId,
   contentUrl,
   title,
+  kind = "video",
   onClose,
 }: {
   contentId: number;
   contentUrl: string;
   title: string;
+  /** Audio content uses the same timeliner (SRS §2.3.1 audio format). */
+  kind?: "video" | "audio";
   onClose: () => void;
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<MediaPlayerHandle>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -75,7 +80,7 @@ export function TimelinerEditor({
 
   function seekTo(time: number) {
     if (videoRef.current) {
-      videoRef.current.currentTime = time;
+      videoRef.current.seekTo(time);
       setCurrentTime(time);
     }
   }
@@ -85,13 +90,12 @@ export function TimelinerEditor({
       <div className="space-y-4">
         {/* Video player */}
         <div className="relative">
-          <video
+          <MediaPlayer
             ref={videoRef}
             src={contentUrl}
-            controls
-            className="w-full rounded-md border border-slate-200"
-            onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+            kind={kind}
+            onTimeUpdate={setCurrentTime}
+            onDurationChange={setDuration}
           />
           {/* Question markers on the timeline */}
           {duration > 0 && sortedQuestions.length > 0 && (
@@ -241,19 +245,30 @@ function QuestionForm({
 
       <div>
         <Label>Answer options</Label>
+        <p className="mb-2 text-xs text-slate-500">
+          Select the <strong>Correct</strong> button next to the right answer.
+        </p>
         <div className="space-y-2">
           {options.map((opt, i) => (
             <div key={opt.id} className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="correct-option"
-                checked={opt.is_correct}
-                onChange={() =>
-                  setOptions(options.map((o) => ({ ...o, is_correct: o.id === opt.id })))
-                }
-                className="h-4 w-4"
-                title="Mark as correct"
-              />
+              <label
+                className={`flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-medium ${
+                  opt.is_correct
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                    : "border-slate-200 text-slate-500"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="correct-option"
+                  checked={opt.is_correct}
+                  onChange={() =>
+                    setOptions(options.map((o) => ({ ...o, is_correct: o.id === opt.id })))
+                  }
+                  className="h-4 w-4"
+                />
+                Correct
+              </label>
               <Input
                 value={opt.text}
                 onChange={(e) => {

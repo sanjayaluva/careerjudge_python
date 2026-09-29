@@ -256,6 +256,38 @@ def test_my_sessions(counselee_client, counselee_user, counsellor_user):
     assert len(resp.data["data"]) == 1
 
 
+def test_counsellor_lists_booked_sessions_in_envelope(
+    counsellor_client, counselee_user, counsellor_user, admin_user
+):
+    """Report 8 #41 / D8 §3.2: after a booking the counsellor must see the
+    session (with counselee + topic) on their dashboard. The list endpoint
+    returns the standard {message, data:{results}} envelope the dashboard
+    unwraps — a bare paginated body left it showing 'No sessions yet'."""
+    counsellor = _make_counsellor(counsellor_user)
+    other = _make_counsellor(admin_user, full_name="Dr. Other")
+    CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=counsellor,
+        timeslot=_make_timeslot(counsellor),
+        topic="Exam stress",
+        description="Anxious before finals",
+        fee=counsellor.hourly_rate,
+    )
+    CounselingSession.objects.create(
+        counselee=counselee_user,
+        counsellor=other,
+        timeslot=_make_timeslot(other),
+        topic="Not mine",
+        fee=other.hourly_rate,
+    )
+    resp = counsellor_client.get("/api/counseling/sessions/")
+    assert resp.status_code == 200
+    results = resp.data["data"]["results"]
+    assert [r["topic"] for r in results] == ["Exam stress"]
+    assert results[0]["description"] == "Anxious before finals"
+    assert results[0]["counselee"] == counselee_user.id
+
+
 # ---------------------------------------------------------------------------
 # Session confirmation tests (SRS §3.2)
 # ---------------------------------------------------------------------------

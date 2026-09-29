@@ -440,9 +440,12 @@ function ContentPlayer({
   if (content.content_format === "audio" && mediaSrc) {
     return (
       <div className="space-y-3">
-        <audio controls className="w-full" src={mediaSrc} onEnded={markComplete}>
-          Your browser does not support audio playback.
-        </audio>
+        <InteractiveVideoPlayer
+          kind="audio"
+          contentUrl={mediaSrc}
+          questions={content.interactive_questions as InteractiveQuestion[]}
+          onEnded={markComplete}
+        />
         <Button onClick={markComplete} loading={trackProgress.isPending}>
           ✓ Mark as completed
         </Button>

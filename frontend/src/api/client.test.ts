@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { apiClient, extractApiError } from "./client";
+import { apiClient, apiGetPaged, extractApiError } from "./client";
 import { useAuthStore } from "@/stores/auth";
 import type { LoginResponse } from "@/api/types";
 
@@ -68,6 +68,48 @@ describe("apiClient request interceptor", () => {
 
     const config = mockAdapter.mock.calls[0]![0];
     expect(config.headers.Authorization).toBe("Bearer ACCESS");
+  });
+});
+
+describe("apiClient multipart uploads", () => {
+  it("sends FormData as-is (not JSON-serialised) so files survive", async () => {
+    mockAdapter.mockImplementation(async (config) => ({
+      data: { message: "OK", data: null },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+    }));
+
+    const form = new FormData();
+    form.append("media_file", new File(["x"], "clip.mp4", { type: "video/mp4" }));
+    await apiClient.post("/upload/", form);
+
+    const config = mockAdapter.mock.calls[0]![0];
+    expect(config.data).toBeInstanceOf(FormData);
+    expect(String(config.headers.getContentType() ?? "")).not.toContain("application/json");
+  });
+});
+
+describe("apiGetPaged", () => {
+  const page = { count: 1, next: null, previous: null, results: [{ id: 7 }] };
+  const respond = (data: unknown) =>
+    mockAdapter.mockImplementation(async (config) => ({
+      data,
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+    }));
+
+  it("unwraps the {message, data} envelope", async () => {
+    respond({ message: "OK", data: page });
+    await expect(apiGetPaged("/x/")).resolves.toEqual(page);
+  });
+
+  it("accepts a bare DRF paginated body", async () => {
+    respond(page);
+    await expect(apiGetPaged("/x/")).resolves.toEqual(page);
   });
 });
 

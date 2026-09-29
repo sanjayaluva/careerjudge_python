@@ -12,14 +12,21 @@ import { useRef, useState } from "react";
 import { Badge, Modal } from "@/components/ui";
 import type { InteractiveQuestion } from "@/api/training";
 
+import { MediaPlayer, type MediaPlayerHandle } from "./MediaPlayer";
+
 export function InteractiveVideoPlayer({
   contentUrl,
   questions,
+  kind = "video",
+  onEnded,
 }: {
   contentUrl: string;
   questions: InteractiveQuestion[];
+  /** Audio content gets the same timeliner behaviour (SRS §2.3.1 audio). */
+  kind?: "video" | "audio";
+  onEnded?: () => void;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<MediaPlayerHandle>(null);
   const [activeQuestion, setActiveQuestion] = useState<InteractiveQuestion | null>(null);
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<number>>(new Set());
   const [feedback, setFeedback] = useState<{ correct: boolean; jumpTo: number } | null>(null);
@@ -27,11 +34,10 @@ export function InteractiveVideoPlayer({
   // Sort questions by trigger timestamp
   const sortedQuestions = [...questions].sort((a, b) => a.trigger_timestamp - b.trigger_timestamp);
 
-  function handleTimeUpdate() {
+  function handleTimeUpdate(currentTime: number) {
     const video = videoRef.current;
     if (!video || activeQuestion) return;
 
-    const currentTime = video.currentTime;
     // Find a question that should trigger at this time and hasn't been answered
     for (const q of sortedQuestions) {
       if (Math.abs(currentTime - q.trigger_timestamp) < 0.5 && !answeredQuestions.has(q.id)) {
@@ -58,7 +64,7 @@ export function InteractiveVideoPlayer({
     // After 2 seconds (showing feedback), jump and resume
     setTimeout(() => {
       if (videoRef.current) {
-        videoRef.current.currentTime = jumpTo;
+        videoRef.current.seekTo(jumpTo);
         videoRef.current.play();
       }
       setActiveQuestion(null);
@@ -69,7 +75,7 @@ export function InteractiveVideoPlayer({
   if (!contentUrl) {
     return (
       <div className="rounded-md border border-slate-200 bg-slate-50 p-8 text-center">
-        <p className="text-sm text-slate-500">No video content available.</p>
+        <p className="text-sm text-slate-500">No {kind} content available.</p>
       </div>
     );
   }
@@ -77,14 +83,14 @@ export function InteractiveVideoPlayer({
   return (
     <div className="space-y-3">
       <div className="relative">
-        <video
+        <MediaPlayer
           ref={videoRef}
           src={contentUrl}
-          controls
-          className="w-full rounded-md border border-slate-200"
+          kind={kind}
           onTimeUpdate={handleTimeUpdate}
+          onEnded={onEnded}
         />
-        {sortedQuestions.length > 0 && (
+        {kind === "video" && sortedQuestions.length > 0 && (
           <div className="absolute bottom-12 left-2 flex gap-1">
             {sortedQuestions.map((q) => (
               <div
