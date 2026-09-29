@@ -1053,14 +1053,24 @@ export default function SessionPlayerPage() {
                   {continuousTail.map((gi) => {
                     const gq = questions[gi];
                     const gKey = `${gq.question}_0`;
+                    const gText1 = gq.question_detail.question_text_1 || "";
+                    // Report 7 #31: each item shows its statement (Text 2); the
+                    // shared instruction (Text 1) is shown once, not per item.
+                    const sameInstruction = gText1.trim() === (qd.question_text_1 || "").trim();
                     return (
                       <div key={gq.id}>
-                        <div
-                          className="prose prose-sm mb-3 max-w-none text-base font-medium text-slate-900 [&_p]:my-1"
-                          dangerouslySetInnerHTML={{
-                            __html: gq.question_detail.question_text_1 || "",
-                          }}
-                        />
+                        {!sameInstruction && (
+                          <div
+                            className="prose prose-sm mb-3 max-w-none text-base font-medium text-slate-900 [&_p]:my-1"
+                            dangerouslySetInnerHTML={{ __html: gText1 }}
+                          />
+                        )}
+                        {gq.question_detail.question_text_2 && (
+                          <div
+                            className="prose prose-sm mb-3 max-w-none text-sm text-slate-700 [&_p]:my-1"
+                            dangerouslySetInnerHTML={{ __html: gq.question_detail.question_text_2 }}
+                          />
+                        )}
                         <AnswerInput
                           question={gq}
                           currentAnswer={answers[gKey]}
@@ -1339,22 +1349,37 @@ function AnswerInput({
   if (qType === "STANDARD_RATING_SCALE") {
     const rating: number = (currentAnswer?.rating as number) || 0;
     const points = qd.rating_scale_points || 5;
+    // Scale legends (QT spec type 7: descriptive column headers) are stored as
+    // "Point n" options. Older saves duplicated them, so keep the latest per
+    // point (Report 7 #32: legends were not shown).
+    const legends: Record<number, string> = {};
+    [...qd.options]
+      .filter((o) => /^Point \d+$/.test(o.label ?? ""))
+      .sort((a, b) => a.id - b.id)
+      .forEach((o) => {
+        legends[Number((o.label ?? "").slice(6))] = o.text_value ?? "";
+      });
 
     return (
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         {[...Array(points)].map((_, p) => (
-          <button
-            key={p}
-            type="button"
-            onClick={() => onChange({ rating: p + 1 })}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-medium ${
-              rating === p + 1
-                ? "border-primary-600 bg-primary-100 text-primary-700"
-                : "border-slate-300 text-slate-500 hover:border-primary-300"
-            }`}
-          >
-            {p + 1}
-          </button>
+          <div key={p} className="flex w-20 flex-col items-center gap-1 text-center">
+            <button
+              type="button"
+              onClick={() => onChange({ rating: p + 1 })}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-medium ${
+                rating === p + 1
+                  ? "border-primary-600 bg-primary-100 text-primary-700"
+                  : "border-slate-300 text-slate-500 hover:border-primary-300"
+              }`}
+              aria-label={legends[p + 1] || `Point ${p + 1}`}
+            >
+              {p + 1}
+            </button>
+            {legends[p + 1] && (
+              <span className="text-[11px] leading-tight text-slate-500">{legends[p + 1]}</span>
+            )}
+          </div>
         ))}
       </div>
     );

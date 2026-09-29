@@ -90,3 +90,24 @@ def test_image_flash_requires_a_name_per_image():
     w = _fitb("FITB_WORD_FLASH_MULTI", [], flash_interval_ms=500)
     _flash(w, ["Apple"])
     assert validate_question_config(w) == []
+
+
+def test_rating_legend_dedupe_migration_keeps_latest_per_point():
+    from importlib import import_module
+
+    from django.apps import apps as django_apps
+
+    q = Question.objects.create(
+        question_type="STANDARD_RATING_SCALE",
+        question_title="r",
+        question_text_1="r",
+        status="confirmed",
+        rating_scale_points=3,
+    )
+    for rnd in ("old", "new"):
+        for n in (1, 2, 3):
+            ResponseOption.objects.create(question=q, label=f"Point {n}", text_value=f"{rnd}{n}")
+    mig = import_module("apps.question_bank.migrations.0021_dedupe_rating_legends")
+    mig.forwards(django_apps, None)
+    legends = sorted(q.options.values_list("label", "text_value"))
+    assert legends == [("Point 1", "new1"), ("Point 2", "new2"), ("Point 3", "new3")]
