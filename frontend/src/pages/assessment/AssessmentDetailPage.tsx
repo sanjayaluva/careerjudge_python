@@ -32,7 +32,9 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  RichText,
   stripHtml,
+  WysiwygEditorLite,
   useToast,
 } from "@/components/ui";
 import {
@@ -1977,6 +1979,11 @@ function PsychometricGroupsTab({
   });
   const statements = statementsPage?.results ?? [];
 
+  // Report 8 #60: title + formatted instructions for the group, with Preview.
+  const [qTitle, setQTitle] = useState("");
+  const [qText1, setQText1] = useState("");
+  const [qText2, setQText2] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
   const isFC = groupType.startsWith("forced_choice");
   const needsRating = groupType === "rank_then_rate" || groupType === "forced_choice_two_level";
 
@@ -1986,6 +1993,9 @@ function PsychometricGroupsTab({
         group_type: groupType,
         group_number: (groups?.length ?? 0) + 1,
         ...(needsRating ? { rating_scale_points: Number(ratingPoints) } : {}),
+        question_title: qTitle,
+        question_text_1: qText1,
+        question_text_2: qText2,
         items: rows
           .filter((r) => r.statement && r.section)
           .map((r, i) => ({
@@ -1999,6 +2009,9 @@ function PsychometricGroupsTab({
         queryKey: ["assessment", assessmentId, "psych-groups"],
       });
       toast.success("Group created.");
+      setQTitle("");
+      setQText1("");
+      setQText2("");
       setRows([
         { statement: "", section: "" },
         { statement: "", section: "" },
@@ -2041,6 +2054,9 @@ function PsychometricGroupsTab({
                   <span className="font-medium">
                     {GROUP_TYPES.find((t) => t.value === g.group_type)?.label ?? g.group_type} · #
                     {g.group_number}
+                    {g.question_title && (
+                      <span className="ml-2 font-normal text-slate-600">— {g.question_title}</span>
+                    )}
                   </span>
                   {canManage && (
                     <button
@@ -2160,11 +2176,77 @@ function PsychometricGroupsTab({
               </p>
             )}
 
-            <div className="flex justify-end">
+            <div className="space-y-3 rounded-md border border-slate-200 p-3">
+              <div>
+                <Label htmlFor="pg-title">Question title</Label>
+                <Input
+                  id="pg-title"
+                  value={qTitle}
+                  onChange={(e) => setQTitle(e.target.value)}
+                  placeholder="e.g. Work style"
+                />
+              </div>
+              <div>
+                <Label>Question Text 1 (instructions)</Label>
+                <WysiwygEditorLite
+                  value={qText1}
+                  onChange={setQText1}
+                  minHeight={70}
+                  placeholder="e.g. Choose the statement that most closely describes you."
+                />
+              </div>
+              <div>
+                <Label>Question Text 2 (optional)</Label>
+                <WysiwygEditorLite
+                  value={qText2}
+                  onChange={setQText2}
+                  minHeight={50}
+                  placeholder="e.g. Be spontaneous."
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setPreviewOpen(true)}>
+                Preview
+              </Button>
               <Button type="submit" loading={createMut.isPending}>
                 Create group
               </Button>
             </div>
+            <Modal
+              open={previewOpen}
+              onClose={() => setPreviewOpen(false)}
+              title="Candidate preview"
+              size="lg"
+            >
+              <div className="space-y-3">
+                {qTitle && <p className="text-xs uppercase text-slate-500">{qTitle}</p>}
+                <RichText html={qText1} className="text-base font-medium text-slate-900" />
+                <RichText html={qText2} className="text-sm text-slate-600" />
+                <ol className="space-y-2">
+                  {rows
+                    .filter((r) => r.statement)
+                    .map((r, i) => {
+                      const st = statements.find((x) => String(x.id) === r.statement);
+                      return (
+                        <li
+                          key={i}
+                          className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+                        >
+                          <RichText html={st?.question_text_1 ?? st?.question_title ?? ""} />
+                        </li>
+                      );
+                    })}
+                </ol>
+                <p className="text-xs text-slate-500">
+                  {isFC
+                    ? "The candidate picks one statement"
+                    : "The candidate ranks these statements"}
+                  {needsRating ? ` and rates it on a ${ratingPoints}-point scale.` : "."}
+                </p>
+              </div>
+            </Modal>
           </form>
         )}
       </CardContent>

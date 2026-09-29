@@ -393,9 +393,22 @@ class PsychometricGroupSerializer(serializers.ModelSerializer):
             "group_number",
             "rating_scale_points",
             "order",
+            "question_title",
+            "question_text_1",
+            "question_text_2",
             "items",
         ]
         read_only_fields = ["id", "assessment"]
+
+    def validate_question_text_1(self, value):
+        from core.rich_html import sanitize_rich_html
+
+        return sanitize_rich_html(value)
+
+    def validate_question_text_2(self, value):
+        from core.rich_html import sanitize_rich_html
+
+        return sanitize_rich_html(value)
 
     def validate(self, attrs):
 

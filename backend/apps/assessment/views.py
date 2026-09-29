@@ -196,11 +196,12 @@ def _serialize_group_for_player(group, response) -> dict:
         "section_order_mode": "STATIC",
         "question_detail": {
             "id": -group.id,
-            "question_title": title,
+            "question_title": group.question_title or title,
             "question_type": qtype,
             "question_type_label": title,
-            "question_text_1": title,
-            "question_text_2": "",
+            # Report 8 #60: the group's authored instructions, when set.
+            "question_text_1": group.question_text_1 or group.question_title or title,
+            "question_text_2": group.question_text_2,
             "image": None,
             "scoring_type": "",
             "scoring_type_label": "",

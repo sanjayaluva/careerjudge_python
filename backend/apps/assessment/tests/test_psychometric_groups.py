@@ -134,3 +134,41 @@ def test_rejects_non_statement_question(admin_client):
     )
     assert resp.status_code == 400
     assert "not a psychometric statement" in str(resp.data).lower()
+
+
+def test_group_title_and_texts_are_saved_sanitised_and_delivered(admin_client):
+    """Report 8 #60: groups carry a title + formatted Text 1/2, shown to the
+    candidate in place of the generated label."""
+    from apps.accounts.models import Role, User
+    from apps.assessment.models import AssessmentSession
+
+    a, secs = _setup()
+    stmts = [_statement(f"S{i}") for i in range(2)]
+    resp = admin_client.post(
+        f"/api/assessments/{a.id}/psychometric-groups/",
+        {
+            "group_type": "forced_choice_single",
+            "group_number": 1,
+            "question_title": "Work style",
+            "question_text_1": "<p><strong>Choose</strong> the statement most like you.</p>"
+            "<script>alert(1)</script>",
+            "question_text_2": "<p><em>Be spontaneous.</em></p>",
+            "items": [{"statement": stmts[i].id, "section": secs[i].id} for i in range(2)],
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, resp.data
+    g = PsychometricGroup.objects.get(assessment=a)
+    assert "<strong>Choose</strong>" in g.question_text_1 and "<script" not in g.question_text_1
+
+    role, _ = Role.objects.get_or_create(name="individual", defaults={"is_system": True})
+    cand = User.objects.create_user(email="c@t.com", password="pw", is_active=True, role=role)
+    session = AssessmentSession.objects.create(assessment=a, candidate=cand, status="active")
+    from rest_framework.test import APIClient
+
+    client = APIClient()
+    client.force_authenticate(cand)
+    units = client.get(f"/api/assessments/sessions/{session.id}/questions/").data["data"]
+    unit = next(u for u in units if u.get("group_id") == g.id)
+    assert unit["question_detail"]["question_title"] == "Work style"
+    assert "<em>Be spontaneous.</em>" in unit["question_detail"]["question_text_2"]
