@@ -232,7 +232,21 @@ function SessionRow({
       <TableCell className="font-medium text-slate-900">
         {session.counselee_name ?? session.counselee_email}
       </TableCell>
-      <TableCell className="text-slate-700">{session.topic}</TableCell>
+      <TableCell className="text-slate-700">
+        {/* Report 8 #41 / D8 §2.1: the registration form (topic + issue
+            description) is viewable by the counsellor, with booking status. */}
+        <div>{session.topic}</div>
+        {session.description && (
+          <div className="mt-0.5 max-w-xs whitespace-pre-line text-xs text-slate-500">
+            {session.description}
+          </div>
+        )}
+        <div className="mt-1">
+          <Badge variant={session.payment_status === "paid" ? "success" : "warning"}>
+            {session.payment_status === "paid" ? "Paid" : `Payment ${session.payment_status}`}
+          </Badge>
+        </div>
+      </TableCell>
       <TableCell className="text-slate-500">
         {session.timeslot_detail
           ? new Date(session.timeslot_detail.start_time).toLocaleString()
