@@ -422,11 +422,9 @@ def _score_partial(
     # Each correctly recalled flash item earns +1. The accepted answers are
     # the UNION of (a) the FLASH ITEMS in the display pool and (b) the
     # manually authored correct_answers on the field options. Max = number
-    # of recallable items: the flash pool when flash items are authored;
-    # otherwise the authored correct answers (legacy-authored flash
-    # questions carry the key on their options). Recall order does not
-    # matter; no negative marking. Handled BEFORE the options guard — a
-    # recall question may have no field options at all.
+    # of flash items in the display pool. Recall order does not matter; no
+    # negative marking. Handled BEFORE the options guard — a recall
+    # question may have no field options at all (the flash items are the key).
     if question.question_type in ("FITB_IMAGE_FLASH_MULTI", "FITB_WORD_FLASH_MULTI"):
         from apps.question_bank.models import FlashItem
 
@@ -434,7 +432,10 @@ def _score_partial(
         if not pool:
             # No display pool flagged — fall back to all flash items.
             pool = list(question.flash_items.all())
+        max_score = float(max(len(pool), 1))
         answers = raw_answer.get("answers", [])
+        if not answers:
+            return 0.0, max_score
         all_correct = set()
         for fi in pool:
             label = (fi.text_value or "").strip()
@@ -446,13 +447,6 @@ def _score_partial(
                 if not question.case_sensitive:
                     val = val.lower()
                 all_correct.add(val)
-        # Max = number of recallable items: the flash pool when flash items
-        # are authored (§25/§26 — the pool is the answer key); otherwise the
-        # authored correct_answers on the field options (legacy-authored
-        # flash questions where the options carry the key).
-        max_score = float(len(pool)) if pool else float(len(all_correct))
-        if not answers:
-            return 0.0, max_score
         matched_correct = set()
         score = 0.0
         for ans in answers:
