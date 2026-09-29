@@ -219,8 +219,16 @@ class QuestionListSerializer(serializers.ModelSerializer):
 class QuestionDetailSerializer(serializers.ModelSerializer):
     """Full serializer with nested children for detail/create/update views."""
 
-    # Allow image to be a URL string or base64 data URL (read-only here; created via QuestionCreateSerializer)
-    image = serializers.CharField(read_only=True)
+    # URL string or base64 data URL. Writable: this serializer handles
+    # updates, and a read-only image silently dropped every image change
+    # made while editing (Report 7 #37: 1h "requires a question image").
+    image = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+
+    def to_internal_value(self, data):
+        ret = super().to_internal_value(data)
+        if "image" in ret and ret["image"] is None:
+            ret["image"] = ""
+        return ret
 
     options = ResponseOptionSerializer(many=True, read_only=True)
     media_files = MediaFileSerializer(many=True, read_only=True)

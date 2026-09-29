@@ -1,4 +1,4 @@
-"""Partial-credit scoring for 2b / 2c / 2d (Report 7 #24/#25/#26).
+"""Report 7 scoring + Question Bank authoring fixes (#24-#26, #29/#30, #37).
 
 Scoring spec (00_scoring_rules PARTIAL): each item +1, no negative marking;
 recall types score each flashed item recalled, in any order.
@@ -111,3 +111,96 @@ def test_rating_legend_dedupe_migration_keeps_latest_per_point():
     mig.forwards(django_apps, None)
     legends = sorted(q.options.values_list("label", "text_value"))
     assert legends == [("Point 1", "new1"), ("Point 2", "new2"), ("Point 3", "new3")]
+
+
+def test_question_image_can_be_changed_on_update():
+    """Report 7 #37: PATCHing a question's image was silently ignored."""
+    from rest_framework.test import APIClient
+
+    from apps.accounts.models import ModuleRight, Role, User
+
+    role, _ = Role.objects.get_or_create(name="cj_admin", defaults={"is_system": True})
+    for action in ("view", "add", "change"):
+        ModuleRight.objects.get_or_create(role=role, module="question_bank", action=action)
+    admin = User.objects.create_user(email="qa@t.com", password="pw", is_active=True, role=role)
+    q = Question.objects.create(
+        question_type="MCQ_IMAGE_DISPLAY_MULTI", question_title="1h", question_text_1="q"
+    )
+    c = APIClient()
+    c.force_authenticate(admin)
+    img = "data:image/png;base64,iVBORw0KGgo="
+    r = c.patch(f"/api/question-bank/questions/{q.id}/", {"image": img}, format="json")
+    assert r.status_code == 200, r.data
+    q.refresh_from_db()
+    assert q.image == img
+    # Omitting image on a later edit leaves it alone; null clears to "".
+    c.patch(f"/api/question-bank/questions/{q.id}/", {"question_title": "1h v2"}, format="json")
+    q.refresh_from_db()
+    assert q.image == img
+    c.patch(f"/api/question-bank/questions/{q.id}/", {"image": None}, format="json")
+    q.refresh_from_db()
+    assert q.image == ""
+
+
+def test_negative_marking_follows_signed_rule():
+    """Report 7 #22: 1f sub-question, 3 correct options, all selected -> 3/3."""
+    q = Question.objects.create(
+        question_type="MCQ_IMAGE_FLASH_MULTI",
+        question_title="1f",
+        question_text_1="q",
+        scoring_type="NEGATIVE",
+    )
+    ids = {}
+    for name, ok in (("Lemon", True), ("Potato", True), ("Tomato", True), ("Car", False)):
+        ids[name] = ResponseOption.objects.create(
+            question=q, label=name, text_value=name, is_correct=ok
+        ).id
+    three = [ids["Lemon"], ids["Potato"], ids["Tomato"]]
+    assert score_question(q, {"selected_option_ids": three}) == (3.0, 3.0)
+    assert score_question(q, {"selected_option_ids": [ids["Lemon"], ids["Car"]]}) == (0.0, 3.0)
+    assert score_question(q, {"selected_option_ids": [ids["Lemon"]]}) == (1.0, 3.0)
+    assert _get_max_score(q) == 3.0
+
+
+def test_rescore_sessions_command_updates_stale_results():
+    from io import StringIO
+
+    from django.core.management import call_command
+
+    from apps.accounts.models import Role, User
+    from apps.assessment.models import (
+        Assessment,
+        AssessmentQuestion,
+        AssessmentSection,
+        AssessmentSession,
+        QuestionAttempt,
+    )
+
+    q = _fitb("FITB_MULTI_FIELD", [["keep"], ["pay"], ["pass"]])
+    a = Assessment.objects.create(title="A", assessment_type="normal", status="published")
+    sec = AssessmentSection.objects.create(assessment=a, title="S", level=1, order=1)
+    AssessmentQuestion.objects.create(section=sec, question=q, order=1)
+    role, _ = Role.objects.get_or_create(name="individual", defaults={"is_system": True})
+    cand = User.objects.create_user(email="c@t.com", password="pw", is_active=True, role=role)
+    s = AssessmentSession.objects.create(
+        assessment=a, candidate=cand, status="completed", total_score=0, max_score=1
+    )
+    QuestionAttempt.objects.create(
+        session=s,
+        question=q,
+        section=sec,
+        status="attempted",
+        raw_answer={"answers": ["keep", "pay", "pass"]},
+        score=0,
+        max_score=1,
+    )
+
+    call_command("rescore_sessions", "--dry-run", stdout=StringIO())
+    s.refresh_from_db()
+    assert (s.total_score, s.max_score) == (0, 1)
+
+    out = StringIO()
+    call_command("rescore_sessions", "--assessment", str(a.id), stdout=out)
+    s.refresh_from_db()
+    assert (s.total_score, s.max_score) == (3, 3)
+    assert "1 changed" in out.getvalue()

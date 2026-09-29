@@ -23,6 +23,7 @@ import {
 } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
 import { canNavigateBackToSection, sectionDeliveryOrder } from "./navigationRules";
+import { seededShuffle } from "./seededShuffle";
 
 export default function SessionPlayerPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -1291,8 +1292,14 @@ function AnswerInput({
                 onChange={() => handleSelect(opt.id)}
                 className="h-4 w-4 shrink-0"
               />
+              {/* QT spec 1b: option images may be large — show them whole
+                  (Report 7 #16: a 48px cover crop cut them off). */}
               {opt.image_file && (
-                <img src={opt.image_file} alt="" className="h-12 w-12 rounded object-cover" />
+                <img
+                  src={opt.image_file}
+                  alt=""
+                  className="h-auto max-h-72 w-auto max-w-full rounded object-contain"
+                />
               )}
               {/* Hide '(image)' text for image-only options per SRS feedback Issue 2 (1b) */}
               {opt.text_value && <span>{opt.text_value}</span>}
@@ -1771,16 +1778,13 @@ function AnswerInput({
     const groupB = qd.options.filter((o) => o.option_type === "MATCH_B");
     const dummyB = qd.options.filter((o) => o.option_type === "MATCH_DUMMY");
 
-    // Combine real Group B + dummy options, then shuffle deterministically
-    // per question (so refreshes don't reshuffle). Use question id as seed.
+    // Report 7 #17: Group A and Group B (incl. dummy options) are shown in
+    // random order, stable per question so refreshes don't reshuffle. The old
+    // sort-by-hash of consecutive ids kept roughly the creation order.
     const allGroupB = [...groupB, ...dummyB];
     const seed = qd.id || 0;
-    const shuffledGroupB = [...allGroupB].sort((a, b) => {
-      // Simple deterministic pseudo-random based on option id + question seed
-      const ha = ((a.id * 9301 + seed * 49297) % 233280) / 233280;
-      const hb = ((b.id * 9301 + seed * 49297) % 233280) / 233280;
-      return ha - hb;
-    });
+    const shuffledGroupA = seededShuffle(groupA, seed * 2 + 1);
+    const shuffledGroupB = seededShuffle(allGroupB, seed * 2 + 2);
 
     const handleMatch = (bId: number) => {
       if (selectedA === null) return;
@@ -1805,7 +1809,7 @@ function AnswerInput({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Group A</p>
-            {groupA.map((opt) => {
+            {shuffledGroupA.map((opt) => {
               const matchedB = getMatchedB(opt.id);
               const matchedBOpt = shuffledGroupB.find((b) => b.id === matchedB);
               const isSelected = selectedA === opt.id;

@@ -347,7 +347,7 @@ def _get_max_score(question: Question, sub_question_index: int = 0) -> float:
             return float(n_match_a)  # pairs; MATCH_DUMMY distractors excluded
         return float(opts_qs.count())
     elif st == "NEGATIVE":
-        return 1.0
+        return float(opts_qs.filter(is_correct=True).count()) or 1.0
     elif st == "RANK":
         # A complete ranking always sums to N(N+1)/2 (rank 1 -> N ... rank
         # N -> 1), so that is the true achievable total for the question.
@@ -559,30 +559,25 @@ def _score_partial(
 def _score_negative(
     question: Question, raw_answer: dict, sub_question_index: int = 0
 ) -> tuple[float, float]:
-    """Correct = +1, wrong = -0.25 (configurable). Floor at 0."""
-    max_score = 1.0
-    negative_fraction = 0.25  # TODO: make configurable per question
+    """Negative marking (00_scoring_rules NEGATIVE; client feedback C-FE-1):
+    +1 per correct option selected, -1 per incorrect option selected,
+    floored at 0; omissions cost nothing. Max = number of correct options.
 
+    Replaces a placeholder that capped every question at 1 (0.5 partial,
+    -0.25 TODO) — a 1f sub-question with three correct answers all selected
+    scored 1/1 instead of 3/3 (Report 7 #22).
+    """
     selected_ids = raw_answer.get("selected_option_ids", [])
     if not selected_ids and "selected_option_id" in raw_answer:
         selected_ids = [raw_answer["selected_option_id"]]
 
     opts_qs = question.options.filter(sub_question_index=sub_question_index)
-    correct_options = list(opts_qs.filter(is_correct=True))
-    correct_ids = {o.id for o in correct_options}
+    correct_ids = set(opts_qs.filter(is_correct=True).values_list("id", flat=True))
+    max_score = float(len(correct_ids)) or 1.0
 
-    if not selected_ids:
-        return 0.0, max_score
-
-    selected_set = set(selected_ids)
-    if selected_set <= correct_ids:
-        # All selected are correct
-        if selected_set == correct_ids:
-            return 1.0, max_score
-        return 0.5, max_score  # partial
-    else:
-        # Some wrong selections
-        return max(0.0, -negative_fraction), max_score
+    selected = set(selected_ids)
+    raw = len(selected & correct_ids) - len(selected - correct_ids)
+    return max(0.0, float(raw)), max_score
 
 
 # ---------------------------------------------------------------------------
