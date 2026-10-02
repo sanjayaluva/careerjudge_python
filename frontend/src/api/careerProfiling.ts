@@ -22,6 +22,17 @@ export interface ProfilingSolution {
   created_by_name: string | null;
   assessment_count: number;
   selected_assessments: SelectedAssessment[];
+  /** Report 9 #77 (list rows): the requesting candidate's standing. */
+  my_status?: "not_attempted" | "suspended" | "completed" | null;
+  /** Report 9 #77 (list rows): the candidate's status per selected assessment. */
+  my_assessments?:
+    | {
+        assessment_id: number;
+        label: string;
+        title: string;
+        status: "not_attempted" | "in_progress" | "completed";
+      }[]
+    | null;
   created_at: string;
   updated_at: string;
 }

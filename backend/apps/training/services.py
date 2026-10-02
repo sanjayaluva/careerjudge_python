@@ -91,3 +91,84 @@ def unassign_course_for_organization(reg):
         "info",
         "/training",
     )
+
+
+def registration_progress_rows(registrations) -> list[dict]:
+    """Report 8.1 #62 (trainer) / Report 9 #17 (organization managers): each
+    learner's course progress at a glance — status, completion %, items done
+    of total, start, last activity, assessment and assignment scores — in one
+    list instead of one ``progress_summary`` call per learner. The caller
+    scopes ``registrations`` (the trainer's course, the manager's members)."""
+    from apps.assessment.models import AssessmentSession
+
+    from .models import AssignmentReport
+    from .views import _course_completion, _sync_completion_status
+
+    rows = []
+    for reg in registrations:
+        # Assessments complete outside the progress endpoint — re-sync first,
+        # exactly as progress_summary does.
+        _sync_completion_status(reg)
+        records = list(reg.progress_records.all())
+        pct, done, total = _course_completion(reg, records)
+        last_activity = max(
+            (p.last_accessed_at for p in records if p.last_accessed_at), default=None
+        )
+        assessment_scores = []
+        for ca in reg.course.assessments.all():
+            latest = (
+                AssessmentSession.objects.filter(
+                    assessment_id=ca.assessment_id, candidate=reg.student, status="completed"
+                )
+                .order_by("-completed_at")
+                .first()
+            )
+            assessment_scores.append(
+                {
+                    "course_assessment_id": ca.id,
+                    "title": ca.title,
+                    "percentage": latest.percentage if latest else None,
+                    "status": "completed" if latest else "not_attempted",
+                }
+            )
+            if (
+                latest
+                and latest.completed_at
+                and (last_activity is None or latest.completed_at > last_activity)
+            ):
+                last_activity = latest.completed_at
+        assignment_reports = [
+            {
+                "report_id": ar.id,
+                "assignment_id": ar.assignment_id,
+                "assignment_title": ar.assignment.title,
+                "status": ar.status,
+                "trainer_score": ar.trainer_score,
+                "submitted_at": ar.submitted_at.isoformat(),
+            }
+            for ar in AssignmentReport.objects.filter(
+                assignment__session__topic__lesson__course=reg.course, student=reg.student
+            ).select_related("assignment")
+        ]
+        last_activity = last_activity or reg.started_at
+        rows.append(
+            {
+                "registration_id": reg.id,
+                "course_id": reg.course_id,
+                "user_id": reg.student_id,
+                "full_name": reg.student.full_name,
+                "email": reg.student.email,
+                "payment_status": reg.payment_status,
+                "completion_status": reg.completion_status,
+                "completion_percentage": pct,
+                "completed_count": done,
+                "total_count": total,
+                "registered_at": reg.registered_at.isoformat(),
+                "started_at": reg.started_at.isoformat() if reg.started_at else None,
+                "completed_at": reg.completed_at.isoformat() if reg.completed_at else None,
+                "last_activity_at": last_activity.isoformat() if last_activity else None,
+                "assessment_scores": assessment_scores,
+                "assignment_reports": assignment_reports,
+            }
+        )
+    return rows

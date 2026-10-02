@@ -215,6 +215,62 @@ class ProfilingSolutionListSerializer(serializers.ModelSerializer):
         source="created_by.full_name", read_only=True, default=None
     )
     assessment_count = serializers.IntegerField(source="selected_assessments.count", read_only=True)
+    # Report 9 #77: the requesting candidate's standing on this solution,
+    # from his sessions on its selected assessments — none started → "not
+    # attempted"; all completed → "completed"; anything in between →
+    # "suspended". Plus each assessment's own status so he knows what is left.
+    my_status = serializers.SerializerMethodField()
+    my_assessments = serializers.SerializerMethodField()
+
+    def _session_statuses(self) -> dict[int, set[str]] | None:
+        """assessment id → statuses of the candidate's sessions, fetched once
+        per response and cached on the shared serializer context."""
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not getattr(user, "is_authenticated", False):
+            return None
+        cached = self.context.get("_cp_session_statuses")
+        if cached is None:
+            from apps.assessment.models import AssessmentSession
+
+            cached = {}
+            for aid, st in AssessmentSession.objects.filter(candidate=user).values_list(
+                "assessment_id", "status"
+            ):
+                cached.setdefault(aid, set()).add(st)
+            self.context["_cp_session_statuses"] = cached
+        return cached
+
+    @staticmethod
+    def _assessment_status(statuses: set[str]) -> str:
+        if "completed" in statuses:
+            return "completed"
+        return "in_progress" if statuses else "not_attempted"
+
+    def get_my_assessments(self, obj) -> list[dict] | None:
+        sessions = self._session_statuses()
+        if sessions is None:
+            return None
+        return [
+            {
+                "assessment_id": sa.assessment_id,
+                "label": sa.label,
+                "title": sa.assessment.title,
+                "status": self._assessment_status(sessions.get(sa.assessment_id, set())),
+            }
+            for sa in sorted(obj.selected_assessments.all(), key=lambda s: (s.order, s.id))
+        ]
+
+    def get_my_status(self, obj) -> str | None:
+        items = self.get_my_assessments(obj)
+        if items is None:
+            return None
+        statuses = {i["status"] for i in items}
+        if items and statuses == {"completed"}:
+            return "completed"
+        if statuses - {"not_attempted"}:
+            return "suspended"
+        return "not_attempted"
 
     class Meta:
         model = ProfilingSolution
@@ -231,6 +287,8 @@ class ProfilingSolutionListSerializer(serializers.ModelSerializer):
             "created_by",
             "created_by_name",
             "assessment_count",
+            "my_status",
+            "my_assessments",
             "created_at",
             "updated_at",
         ]

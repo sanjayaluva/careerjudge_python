@@ -27,6 +27,11 @@ export interface Assessment {
   attempt_rule: string;
   /** PLT-3 pay-for-test: price to attempt (as a decimal string). "0.00" = free. */
   price: string;
+  /**
+   * Report 9 #72 (list rows): the requesting user may take it now — free,
+   * paid for, or licensed to his organization.
+   */
+  is_unlocked?: boolean | null;
   created_by: number | null;
   created_by_name: string | null;
   section_count: number;

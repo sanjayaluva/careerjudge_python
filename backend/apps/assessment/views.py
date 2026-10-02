@@ -777,14 +777,11 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         # (handled above) is always allowed, so a candidate who has already
         # paid and begun is never re-charged.
         if assessment.price and assessment.price > 0:
-            from apps.payments.models import Payment
+            from .serializers import unlocked_assessment_ids
 
-            paid = Payment.objects.filter(
-                user=request.user,
-                module="assessment",
-                item_id=assessment.id,
-                status__in=["paid", "free"],
-            ).exists()
+            # Report 9 #72: paid for — or licensed to the member's
+            # organization, whose licence covers the fee.
+            paid = assessment.id in unlocked_assessment_ids(request.user)
             if not paid:
                 return Response(
                     {

@@ -27,13 +27,13 @@ import {
 } from "@/components/ui";
 import {
   MODULE_DESCRIPTIONS,
-  MODULE_LABELS,
   NAV_ITEMS,
   ROLE_LABELS,
   type ModuleKey,
   type RoleName,
 } from "@/lib/constants";
 import { useAuth } from "@/hooks/useAuth";
+import { dashboardCardLabel, orderDashboardModules } from "./dashboardCards";
 import { UpcomingCounselingCard } from "./UpcomingCounselingCard";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -61,8 +61,11 @@ export default function DashboardPage() {
   // Filter modules by the user's role — only show what they can actually access.
   // Exclude 'dashboard' (we're on it) and 'profile' (shown in topbar avatar menu).
   const userRole = (user?.role ?? "individual") as RoleName;
-  const visibleModules = NAV_ITEMS.filter(
-    (item) => item.key !== "dashboard" && item.key !== "profile" && item.roles.includes(userRole),
+  const visibleModules = orderDashboardModules(
+    userRole,
+    NAV_ITEMS.filter(
+      (item) => item.key !== "dashboard" && item.key !== "profile" && item.roles.includes(userRole),
+    ),
   );
 
   return (
@@ -140,7 +143,7 @@ export default function DashboardPage() {
                     <Icon className="h-5 w-5" aria-hidden="true" />
                   </div>
                   <h3 className="text-base font-semibold text-slate-900">
-                    {MODULE_LABELS[item.key]}
+                    {dashboardCardLabel(userRole, item.key)}
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">{MODULE_DESCRIPTIONS[item.key]}</p>
                 </Link>

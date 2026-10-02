@@ -142,6 +142,10 @@ export interface TrainingCourse {
   content_sequencing_enabled: boolean;
   created_by: number | null;
   created_by_name: string | null;
+  /** Report 9 #83: the trainer CJ Admin named (optional). */
+  trainer: number | null;
+  /** Report 9 #83: "Name of Trainer" — the named trainer, else the creator. */
+  trainer_name: string | null;
   registration_count: number;
   lessons: CourseLesson[];
   live_sessions: LiveSession[];
@@ -166,6 +170,10 @@ export interface TrainingCourseListItem {
   content_sequencing_enabled: boolean;
   created_by: number | null;
   created_by_name: string | null;
+  /** Report 9 #83: the trainer CJ Admin named (optional). */
+  trainer: number | null;
+  /** Report 9 #83: "Name of Trainer" — the named trainer, else the creator. */
+  trainer_name: string | null;
   registration_count: number;
   created_at: string;
   updated_at: string;
@@ -517,6 +525,46 @@ export function registerForCourse(
 
 export function listCourseRegistrations(courseId: number): Promise<CourseRegistration[]> {
   return apiGet<CourseRegistration[]>(`${BASE}/courses/${courseId}/registrations/`);
+}
+
+/**
+ * Report 8.1 #62 / Report 9 #17: one learner's progress in a course (rows of
+ * the trainer's and the organization manager's progress views).
+ */
+export interface LearnerProgress {
+  registration_id: number;
+  course_id: number;
+  user_id: number;
+  full_name: string;
+  email: string;
+  payment_status: string;
+  completion_status: string;
+  completion_percentage: number;
+  completed_count: number;
+  total_count: number;
+  registered_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  last_activity_at: string | null;
+  assessment_scores: {
+    course_assessment_id: number;
+    title: string;
+    percentage: number | null;
+    status: "completed" | "not_attempted";
+  }[];
+  assignment_reports: {
+    report_id: number;
+    assignment_id: number;
+    assignment_title: string;
+    status: string;
+    trainer_score: number | null;
+    submitted_at: string;
+  }[];
+}
+
+/** Report 8.1 #62: every registered learner's progress (trainer / CJ Admin). */
+export function listCourseProgress(courseId: number): Promise<LearnerProgress[]> {
+  return apiGet<LearnerProgress[]>(`${BASE}/courses/${courseId}/registrations-progress/`);
 }
 
 export function listMyCourses(): Promise<CourseRegistration[]> {

@@ -237,6 +237,7 @@ class HasTrainingPermission(HasModulePermission):
         "completion_parameters": "change",
         "register": "add",
         "registrations": "view",
+        "registrations_progress": "view",
         "progress": "change",
         "start": "change",
         "my_courses": "view",
@@ -276,6 +277,24 @@ def _next_order(queryset, field="order"):
 def _is_training_admin(user) -> bool:
     user_role_name = user.role.name if user.role_id else None
     return bool(user.is_superuser or user_role_name == "cj_admin")
+
+
+def _require_course_staff(request):
+    """Report 9 #83: a course's registrations (who registered, their
+    progress) are for CJ Admin and the trainer only — "the user doesn't need
+    to know who are all registered". Returns a 403 Response, or None."""
+    user = request.user
+    if _is_training_admin(user) or (user.role_id and user.role.name == "trainer"):
+        return None
+    return Response(
+        {
+            "error": {
+                "code": "forbidden",
+                "message": "Only the trainer and CJ Admin can view a course's registrations.",
+            }
+        },
+        status=status.HTTP_403_FORBIDDEN,
+    )
 
 
 def _require_course_edit_allowed(request, course):
@@ -387,7 +406,9 @@ class TrainingCategoryViewSet(ActionSerializerMixin, ModelViewSet):
 class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
     """CRUD for training courses + registration + progress endpoints."""
 
-    queryset = TrainingCourse.objects.select_related("category", "created_by").prefetch_related(
+    queryset = TrainingCourse.objects.select_related(
+        "category", "created_by", "trainer"
+    ).prefetch_related(
         "lessons__topics__sessions__contents",
         "lessons__topics__sessions__assignments",
         "live_sessions",
@@ -804,9 +825,34 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
     def registrations(self, request, pk=None):
         """Trainer views all registrations for a course."""
         course = self.get_object()
+        denied = _require_course_staff(request)
+        if denied:
+            return denied
         regs = course.registrations.select_related("student").all()
         return Response(
             {"message": "OK", "data": CourseRegistrationSerializer(regs, many=True).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get"], url_path="registrations-progress")
+    def registrations_progress(self, request, pk=None):
+        """GET /courses/<id>/registrations-progress/ — Report 8.1 #62: the
+        trainer sees how far each registered learner has got (status,
+        completion %, items done/total, started, last activity, scores) in one
+        call. A trainer reaches only his own courses (get_queryset)."""
+        from .services import registration_progress_rows
+
+        course = self.get_object()
+        denied = _require_course_staff(request)
+        if denied:
+            return denied
+        regs = (
+            course.registrations.select_related("student", "course")
+            .prefetch_related("progress_records")
+            .order_by("student__full_name", "student__email")
+        )
+        return Response(
+            {"message": "OK", "data": registration_progress_rows(regs)},
             status=status.HTTP_200_OK,
         )
 
