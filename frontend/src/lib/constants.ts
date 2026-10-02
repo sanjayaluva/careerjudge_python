@@ -102,17 +102,21 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     // student or counselee gets access. cj_admin-only, like users/roles.
     "payments",
   ],
-  helpdesk: ["dashboard", "profile", "training", "counseling"],
+  // Help Desk browses users (view only — Report 9 #110/#111).
+  helpdesk: ["dashboard", "profile", "users", "training", "counseling"],
+  // Report 9 #5/#9/#36/#56: organization managers have no access to the CJ
+  // user list — they manage their members from their organization's page.
+  // Live Chat is signed for Corp Admin and Group Admin (User Details pp.3–4).
   corp_admin: [
     "dashboard",
     "profile",
-    "users",
     "organizations",
     "assessments",
     "reports",
     "training",
+    "live_chat",
   ],
-  corp_exclusive: ["dashboard", "profile", "users", "organizations", "assessments", "reports"],
+  corp_exclusive: ["dashboard", "profile", "organizations", "assessments", "reports"],
   // H14: empanelled role (Doc 4) — bills CJ Admin, so also sees Invoicing.
   psychometrician: [
     "dashboard",
@@ -129,19 +133,12 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
   sme: ["dashboard", "profile", "question_bank", "tasks", "invoicing"],
   reviewer: ["dashboard", "profile", "question_bank", "tasks", "invoicing"],
   trainer: ["dashboard", "profile", "assessments", "training", "tasks", "invoicing"],
-  group_admin: ["dashboard", "profile", "organizations", "assessments"],
-  // Report 4 Counsellor-1/2: no assessment or profiling access — those tabs are
-  // removed; the counsellor keeps Reports (limited to their own clients).
-  counsellor: ["dashboard", "profile", "reports", "counseling", "tasks", "invoicing"],
-  channel_partner: [
-    "dashboard",
-    "profile",
-    "users",
-    "organizations",
-    "assessments",
-    "reports",
-    "invoicing",
-  ],
+  group_admin: ["dashboard", "profile", "organizations", "assessments", "live_chat"],
+  // Report 4 Counsellor-1/2 + Report 9 #85/#86: no assessment, profiling or
+  // report access.
+  counsellor: ["dashboard", "profile", "counseling", "tasks", "invoicing"],
+  // Report 9 #56/#58: no CJ user list and no access to users' reports.
+  channel_partner: ["dashboard", "profile", "organizations", "assessments", "invoicing"],
   individual: [
     "dashboard",
     "profile",

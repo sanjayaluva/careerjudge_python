@@ -32,7 +32,9 @@ import {
   updateUser as apiUpdateUser,
 } from "@/api/users";
 import { listRoles } from "@/api/roles";
-import { extractApiError, apiClient } from "@/api/client";
+import { BulkUploadModal } from "@/components/users/BulkUploadModal";
+import { usePermissions } from "@/hooks/usePermissions";
+import { extractApiError } from "@/api/client";
 import { ROLE_LABELS, ROLE_NAME_CHOICES, type RoleName } from "@/lib/constants";
 import { getRoleSpecificFields } from "@/lib/profileFields";
 import type { AdminCreateUserPayload, AdminUpdateUserPayload, Role, User } from "@/api/types";
@@ -42,6 +44,12 @@ const USERS_KEY = ["admin", "users"];
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
+  // Report 9 #110/#111: show only the actions the user actually holds — Help
+  // Desk browses users but cannot create, edit, delete or change roles.
+  const { canPerform, isSuperAdmin } = usePermissions();
+  const canAdd = canPerform("users", "add");
+  const canChange = canPerform("users", "change");
+  const canDelete = canPerform("users", "delete");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -76,6 +84,8 @@ export default function UsersPage() {
     queryKey: ["admin", "roles"],
     queryFn: listRoles,
     staleTime: 5 * 60_000,
+    // Role management is CJ Admin's alone; other roles would get 403.
+    enabled: isSuperAdmin,
   });
 
   const deleteMutation = useMutation({
@@ -113,12 +123,14 @@ export default function UsersPage() {
                   : "Manage user accounts"}
               </CardDescription>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setBulkUploadOpen(true)}>
-                Bulk upload
-              </Button>
-              <Button onClick={() => setCreateOpen(true)}>Create user</Button>
-            </div>
+            {canAdd && (
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setBulkUploadOpen(true)}>
+                  Bulk upload
+                </Button>
+                <Button onClick={() => setCreateOpen(true)}>Create user</Button>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -214,23 +226,29 @@ export default function UsersPage() {
                       <TableCell className="text-slate-500">{formatDate(u.created_at)}</TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => setAssignTarget(u)}>
-                            Role
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setEditUser(u)}>
-                            Edit
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-danger hover:bg-danger-50"
-                            onClick={() => {
-                              setDeleteError(null);
-                              setDeleteUser(u);
-                            }}
-                          >
-                            Delete
-                          </Button>
+                          {isSuperAdmin && (
+                            <Button variant="ghost" size="sm" onClick={() => setAssignTarget(u)}>
+                              Role
+                            </Button>
+                          )}
+                          {canChange && (
+                            <Button variant="ghost" size="sm" onClick={() => setEditUser(u)}>
+                              Edit
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-danger hover:bg-danger-50"
+                              onClick={() => {
+                                setDeleteError(null);
+                                setDeleteUser(u);
+                              }}
+                            >
+                              Delete
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -753,212 +771,6 @@ function DeleteUserModal({ user, error, loading, onClose, onConfirm }: DeleteUse
           Delete user
         </Button>
       </div>
-    </Modal>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Bulk Upload Modal — CSV upload with template download + results display
-// ---------------------------------------------------------------------------
-
-interface BulkResult {
-  created_count: number;
-  skipped_count: number;
-  error_count: number;
-  created: { row: number; email: string; full_name: string }[];
-  skipped: { row: number; email: string; reason: string }[];
-  errors: { row: number; email: string; error: string }[];
-}
-
-function BulkUploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const queryClient = useQueryClient();
-  const [file, setFile] = useState<File | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<BulkResult | null>(null);
-
-  const uploadMutation = useMutation({
-    mutationFn: async (uploadedFile: File) => {
-      const formData = new FormData();
-      formData.append("file", uploadedFile);
-      const resp = await apiClient.post("/accounts/users/bulk-upload/", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      return resp.data as { message: string; data: BulkResult };
-    },
-    onSuccess: (resp) => {
-      setResult(resp.data);
-      void queryClient.invalidateQueries({ queryKey: USERS_KEY });
-    },
-    onError: (err) => setError(extractApiError(err)),
-  });
-
-  const handleDownloadTemplate = async () => {
-    try {
-      const resp = await apiClient.get("/accounts/users/bulk-upload/template/", {
-        responseType: "blob",
-      });
-      // Create a download link from the blob
-      const url = window.URL.createObjectURL(new Blob([resp.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", "careerjudge_bulk_users_template.csv");
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      setError(extractApiError(err));
-    }
-  };
-
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setResult(null);
-    if (!file) {
-      setError("Please select a CSV file.");
-      return;
-    }
-    uploadMutation.mutate(file);
-  };
-
-  const handleClose = () => {
-    setFile(null);
-    setError(null);
-    setResult(null);
-    onClose();
-  };
-
-  return (
-    <Modal
-      open={open}
-      onClose={handleClose}
-      title="Bulk upload users"
-      description="Upload a CSV file to create multiple users at once."
-      size="lg"
-    >
-      {error && (
-        <Alert variant="error" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {result ? (
-        <div className="space-y-4">
-          <Alert variant="success" className="mb-4">
-            <AlertDescription>
-              Upload complete: {result.created_count} created, {result.skipped_count} skipped,{" "}
-              {result.error_count} errors.
-            </AlertDescription>
-          </Alert>
-
-          {result.created.length > 0 && (
-            <div>
-              <p className="mb-2 text-sm font-semibold text-slate-900">
-                Created ({result.created_count})
-              </p>
-              <div className="max-h-32 overflow-y-auto rounded-md border border-slate-200">
-                {result.created.map((c, i) => (
-                  <div key={i} className="border-b border-slate-100 px-3 py-1.5 text-xs">
-                    <span className="font-medium text-slate-900">{c.full_name}</span>
-                    <span className="mx-2 text-slate-400">—</span>
-                    <span className="text-slate-500">{c.email}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {result.skipped.length > 0 && (
-            <div>
-              <p className="mb-2 text-sm font-semibold text-slate-600">
-                Skipped ({result.skipped_count})
-              </p>
-              <div className="max-h-32 overflow-y-auto rounded-md border border-slate-200">
-                {result.skipped.map((s, i) => (
-                  <div key={i} className="border-b border-slate-100 px-3 py-1.5 text-xs">
-                    <span className="text-slate-600">{s.email}</span>
-                    <span className="ml-2 text-slate-400">— {s.reason}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {result.errors.length > 0 && (
-            <div>
-              <p className="mb-2 text-sm font-semibold text-danger">
-                Errors ({result.error_count})
-              </p>
-              <div className="max-h-32 overflow-y-auto rounded-md border border-danger-200">
-                {result.errors.map((er, i) => (
-                  <div key={i} className="border-b border-danger-100 px-3 py-1.5 text-xs">
-                    <span className="text-slate-600">
-                      Row {er.row}: {er.email}
-                    </span>
-                    <span className="ml-2 text-danger">— {er.error}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end border-t border-slate-100 pt-4">
-            <Button type="button" onClick={handleClose}>
-              Done
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-            <p className="mb-2 text-sm font-medium text-slate-700">Instructions</p>
-            <ol className="ml-4 list-decimal space-y-1 text-xs text-slate-600">
-              <li>Download the CSV template using the button below</li>
-              <li>Fill in user details (full_name and email are required)</li>
-              <li>
-                Optional columns: phone, role_name (e.g., individual, corp_admin, sme, reviewer)
-              </li>
-              <li>Upload the filled CSV file below</li>
-              <li>Users will be created with a random password and signup email sent</li>
-            </ol>
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              className="mt-2 p-0"
-              onClick={handleDownloadTemplate}
-            >
-              Download CSV template
-            </Button>
-          </div>
-
-          <div>
-            <Label htmlFor="bulk-file">CSV file</Label>
-            <input
-              id="bulk-file"
-              type="file"
-              accept=".csv"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-md file:border-0 file:bg-primary-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-primary-700"
-            />
-            {file && (
-              <p className="mt-1 text-xs text-slate-500">
-                Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
-              </p>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-            <Button type="button" variant="outline" onClick={handleClose}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={uploadMutation.isPending} disabled={!file}>
-              Upload & create users
-            </Button>
-          </div>
-        </form>
-      )}
     </Modal>
   );
 }

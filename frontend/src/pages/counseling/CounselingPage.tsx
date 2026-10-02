@@ -72,7 +72,9 @@ export default function CounselingPage() {
   const isAdmin = user?.role === "cj_admin";
   const [taggingCounsellor, setTaggingCounsellor] = useState<CounsellorProfile | null>(null);
   const [detailsCounsellor, setDetailsCounsellor] = useState<CounsellorProfile | null>(null);
-  const canBook = !isAdmin && !isCounsellor;
+  // Report 9 #117: only the counselee books — not CJ Admin, counsellors,
+  // Help Desk or other staff.
+  const canBook = user?.role === "individual";
 
   const { data, isLoading } = useQuery({
     queryKey: ["counseling", "counsellors", debouncedSearch, categoryFilter],

@@ -178,11 +178,14 @@ def test_trainer_delete_rules(trainer_client, trainer_user, cj_admin_user):
     )
     others = TrainingCourse.objects.create(title="Other", created_by=cj_admin_user, status="draft")
     own_draft = TrainingCourse.objects.create(title="Mine", created_by=trainer_user, status="draft")
-    for course in (published, others):
-        resp = trainer_client.delete(f"/api/training/courses/{course.id}/")
-        assert resp.status_code == 403
-        assert resp.data["error"]["code"] == "forbidden"
-        assert TrainingCourse.objects.filter(id=course.id).exists()
+    resp = trainer_client.delete(f"/api/training/courses/{published.id}/")
+    assert resp.status_code == 403
+    assert resp.data["error"]["code"] == "forbidden"
+    assert TrainingCourse.objects.filter(id=published.id).exists()
+    # Report 9 #84: another user's course is not even visible to a trainer.
+    resp = trainer_client.delete(f"/api/training/courses/{others.id}/")
+    assert resp.status_code == 404
+    assert TrainingCourse.objects.filter(id=others.id).exists()
     resp = trainer_client.delete(f"/api/training/courses/{own_draft.id}/")
     assert resp.status_code in (200, 204)
     assert not TrainingCourse.objects.filter(id=own_draft.id).exists()
@@ -230,7 +233,8 @@ def test_student_can_register_for_published_course(student_client, individual_us
 def test_student_cannot_register_for_draft_course(student_client, trainer_user):
     course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status="draft")
     resp = student_client.post(f"/api/training/courses/{course.id}/register/")
-    assert resp.status_code == 403
+    # Drafts are hidden from learners altogether (Report 9).
+    assert resp.status_code == 404
 
 
 def test_registration_is_idempotent(student_client, individual_user, trainer_user):
@@ -1635,3 +1639,25 @@ def test_completion_counts_assessments_and_attended_live_sessions(
     assert {r["title"] for r in data["requirements"] if r["completed"]} == {"Quiz", "Q&A"}
     reg.refresh_from_db()
     assert reg.completion_status == "completed"
+
+
+def test_trainer_sees_only_own_courses_and_learner_only_published(
+    trainer_client, student_client, trainer_user, cj_admin_user
+):
+    """Report 9 #84: trainers see only their own courses; learners see only
+    published ones."""
+    mine = TrainingCourse.objects.create(title="Mine", created_by=trainer_user, status="draft")
+    admins = TrainingCourse.objects.create(
+        title="Admin's", created_by=cj_admin_user, status="published"
+    )
+    draft = TrainingCourse.objects.create(title="Draft", created_by=cj_admin_user, status="draft")
+
+    def ids(client):
+        body = client.get("/api/training/courses/").data["data"]
+        rows = body["results"] if isinstance(body, dict) else body
+        return {c["id"] for c in rows}
+
+    assert ids(trainer_client) == {mine.id}
+    learner = ids(student_client)
+    assert admins.id in learner
+    assert draft.id not in learner and mine.id not in learner

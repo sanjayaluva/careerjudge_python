@@ -1,7 +1,7 @@
 /**
  * Reporting API client.
  */
-import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { apiClient, apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
 
 const BASE = "/reporting";
 
@@ -123,6 +123,34 @@ export function retrieveGeneratedReport(id: number): Promise<GeneratedReport> {
  */
 export function generatedReportPdfUrl(id: number): string {
   return `${BASE}/generated/${id}/pdf/`;
+}
+
+/** Generated reports the current user may see (Report 9 #12/#78): his own,
+ * or — for an organization's admin — his members'. Scoped by the server. */
+export function listVisibleGeneratedReports(params?: {
+  page?: number;
+  mine?: boolean;
+}): Promise<{ count: number; results: GeneratedReport[] }> {
+  return apiGetPaged<GeneratedReport>(`${BASE}/generated/`, {
+    params: {
+      ...(params?.page ? { page: params.page } : {}),
+      ...(params?.mine ? { mine: 1 } : {}),
+    },
+  });
+}
+
+/** Downloads a generated report's PDF with the user's login (a plain link
+ * would be refused) and saves it under ``filename``. */
+export async function downloadGeneratedReportPdf(id: number, filename: string): Promise<void> {
+  const res = await apiClient.get(generatedReportPdfUrl(id), { responseType: "blob" });
+  const url = window.URL.createObjectURL(res.data as Blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 // ---------------------------------------------------------------------------

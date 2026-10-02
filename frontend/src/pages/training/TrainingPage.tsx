@@ -44,6 +44,8 @@ export default function TrainingPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const canManage = ["cj_admin", "trainer"].includes(user?.role ?? "");
+  // Report 9 #116: only learners register (CJ Admin may too, to test a course).
+  const canRegister = ["individual", "cj_admin"].includes(user?.role ?? "");
   const [deleting, setDeleting] = useState<{
     id: number;
     title: string;
@@ -192,7 +194,7 @@ export default function TrainingPage() {
                       <TableCell>
                         {myRegs.some((r) => r.course === c.id) ? (
                           <Badge variant="success">Registered</Badge>
-                        ) : (
+                        ) : !canRegister ? null : (
                           <Button
                             size="sm"
                             variant="outline"

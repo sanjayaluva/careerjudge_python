@@ -361,7 +361,16 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
             qs = qs.filter(category_id=category)
         if course_type := params.get("course_type"):
             qs = qs.filter(course_type=course_type)
-        return qs
+        # Report 9 #84: a trainer sees and manages only his own courses (User
+        # Details p.9 "View Assigned Courses"); learners and every other role
+        # see published courses only (drafts were visible to everyone).
+        user = self.request.user
+        role = user.role.name if getattr(user, "role", None) else None
+        if user.is_superuser or role == "cj_admin":
+            return qs
+        if role == "trainer":
+            return qs.filter(created_by=user)
+        return qs.filter(status="published")
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

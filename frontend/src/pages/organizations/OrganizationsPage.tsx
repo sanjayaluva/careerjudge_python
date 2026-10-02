@@ -32,6 +32,7 @@ import {
 } from "@/api/organizations";
 import { extractApiError } from "@/api/client";
 import { Link } from "react-router-dom";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const ORGS_KEY = ["organizations"];
 
@@ -48,6 +49,7 @@ const STATUS_VARIANTS: Record<string, "success" | "warning" | "default"> = {
 };
 
 export default function OrganizationsPage() {
+  const { isSuperAdmin } = usePermissions();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -99,7 +101,10 @@ export default function OrganizationsPage() {
                   : "Manage corporate entities"}
               </CardDescription>
             </div>
-            <Button onClick={() => setCreateOpen(true)}>Create organization</Button>
+            {/* Report 9 #1/#22/#34/#53: only CJ Admin creates or deletes organizations. */}
+            {isSuperAdmin && (
+              <Button onClick={() => setCreateOpen(true)}>Create organization</Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -187,9 +192,11 @@ export default function OrganizationsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => setDeleteOrg(org)}>
-                            Delete
-                          </Button>
+                          {isSuperAdmin && (
+                            <Button variant="ghost" size="sm" onClick={() => setDeleteOrg(org)}>
+                              Delete
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

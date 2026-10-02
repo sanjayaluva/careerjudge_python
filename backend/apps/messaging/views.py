@@ -158,6 +158,9 @@ class ConversationViewSet(ModelViewSet):
             "group_admin",
             "corp_exclusive",
             "channel_partner",
+            # Report 9 #94: the Psychometrician was missing, so his contact
+            # list was empty (User Details p.10 "Send Message").
+            "psychometrician",
             "sme",
             "reviewer",
             "trainer",
@@ -171,6 +174,7 @@ class ConversationViewSet(ModelViewSet):
                 "group_admin",
                 "corp_exclusive",
                 "channel_partner",
+                "psychometrician",
                 "sme",
                 "reviewer",
                 "trainer",
@@ -185,6 +189,7 @@ class ConversationViewSet(ModelViewSet):
                 "group_admin",
                 "corp_exclusive",
                 "channel_partner",
+                "psychometrician",
                 "sme",
                 "reviewer",
                 "trainer",

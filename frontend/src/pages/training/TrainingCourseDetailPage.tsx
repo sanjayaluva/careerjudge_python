@@ -289,7 +289,8 @@ export default function TrainingCourseDetailPage() {
                     Publish course
                   </Button>
                 )}
-                {(!canManage || user?.role === "cj_admin") &&
+                {/* Report 9 #116: only learners (and CJ Admin, for testing) register. */}
+                {["individual", "cj_admin"].includes(user?.role ?? "") &&
                   course.status === "published" &&
                   !myRegistration && (
                     <Button

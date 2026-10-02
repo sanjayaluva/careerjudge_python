@@ -36,15 +36,34 @@ import {
   listMembers,
   listSchedules,
   removeMember,
+  rescheduleSchedule,
   retrieveOrganization,
   updateMember,
   updateWebsite,
 } from "@/api/organizations";
 import { listAssessments } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
+import { BulkUploadModal } from "@/components/users/BulkUploadModal";
+import { usePermissions } from "@/hooks/usePermissions";
 import { ROLE_LABELS } from "@/lib/constants";
 
 const ORG_KEY = (id: number) => ["organizations", id];
+
+/** What the viewer may do on this page (Report 9 #10/#22): CJ Admin does
+ * everything; an organization's own admin manages its members, schedules and
+ * website; a Group Admin works inside his group only. */
+function useOrgAccess() {
+  const { isSuperAdmin, canPerform, role } = usePermissions();
+  const canManage = canPerform("organizations", "change");
+  const isGroupAdmin = role === "group_admin";
+  return {
+    isCJAdmin: isSuperAdmin,
+    canManageMembers: canManage,
+    canManageGroups: canManage && !isGroupAdmin,
+    canSchedule: canManage,
+    canCustomizeWebsite: canManage && !isGroupAdmin,
+  };
+}
 
 export default function OrganizationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -52,6 +71,8 @@ export default function OrganizationDetailPage() {
 
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [memberModalOpen, setMemberModalOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const access = useOrgAccess();
 
   const {
     data: org,
@@ -106,9 +127,11 @@ export default function OrganizationDetailPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Groups</CardTitle>
-            <Button size="sm" onClick={() => setGroupModalOpen(true)}>
-              Add group
-            </Button>
+            {access.canManageGroups && (
+              <Button size="sm" onClick={() => setGroupModalOpen(true)}>
+                Add group
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -127,7 +150,7 @@ export default function OrganizationDetailPage() {
               </TableHeader>
               <TableBody>
                 {org.groups.map((g) => (
-                  <GroupRow key={g.id} orgId={orgId} group={g} />
+                  <GroupRow key={g.id} orgId={orgId} group={g} canDelete={access.canManageGroups} />
                 ))}
               </TableBody>
             </Table>
@@ -140,9 +163,16 @@ export default function OrganizationDetailPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Members</CardTitle>
-            <Button size="sm" onClick={() => setMemberModalOpen(true)}>
-              Add member
-            </Button>
+            {access.canManageMembers && (
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setBulkOpen(true)}>
+                  Bulk upload
+                </Button>
+                <Button size="sm" onClick={() => setMemberModalOpen(true)}>
+                  Add member
+                </Button>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -164,7 +194,13 @@ export default function OrganizationDetailPage() {
               </TableHeader>
               <TableBody>
                 {members.map((m) => (
-                  <MemberRow key={m.id} orgId={orgId} member={m} groups={org.groups} />
+                  <MemberRow
+                    key={m.id}
+                    orgId={orgId}
+                    member={m}
+                    groups={org.groups}
+                    canEdit={access.canManageMembers}
+                  />
                 ))}
               </TableBody>
             </Table>
@@ -174,13 +210,26 @@ export default function OrganizationDetailPage() {
 
       {/* Assigned content section (CJ_UC030): corporate individuals see only
           the assessments assigned to their organization. */}
-      <AssignmentsCard orgId={orgId} />
+      <AssignmentsCard orgId={orgId} canAssign={access.isCJAdmin} />
 
       {/* Schedule assessments for employees (CJ_UC053). */}
-      <SchedulesCard orgId={orgId} groups={org.groups} />
+      <SchedulesCard orgId={orgId} groups={org.groups} canSchedule={access.canSchedule} />
 
       {/* Branded portal / website (CJ_UC054 + CJ_UC055). */}
-      <WebsiteCard orgId={orgId} defaultName={org.name} />
+      <WebsiteCard
+        orgId={orgId}
+        defaultName={org.name}
+        canCreate={access.isCJAdmin}
+        canCustomize={access.canCustomizeWebsite}
+      />
+
+      <BulkUploadModal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        organizationId={orgId}
+        groups={org.groups}
+        invalidateKeys={[[...ORG_KEY(orgId), "members"], [...ORG_KEY(orgId)]]}
+      />
 
       <CreateGroupModal
         orgId={orgId}
@@ -203,8 +252,10 @@ export default function OrganizationDetailPage() {
 function GroupRow({
   orgId,
   group,
+  canDelete,
 }: {
   orgId: number;
+  canDelete: boolean;
   group: {
     id: number;
     name: string;
@@ -235,15 +286,17 @@ function GroupRow({
       <TableCell>
         <div className="flex items-center justify-end gap-2">
           {error && <span className="text-xs text-danger">{error}</span>}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-danger hover:bg-danger-50"
-            loading={deleteMutation.isPending}
-            onClick={() => deleteMutation.mutate()}
-          >
-            Delete
-          </Button>
+          {canDelete && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-danger hover:bg-danger-50"
+              loading={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate()}
+            >
+              Delete
+            </Button>
+          )}
         </div>
       </TableCell>
     </TableRow>
@@ -258,8 +311,10 @@ function MemberRow({
   orgId,
   member,
   groups,
+  canEdit,
 }: {
   orgId: number;
+  canEdit: boolean;
   member: {
     id: number;
     user: { id: number; email: string; full_name: string; role: string | null };
@@ -315,7 +370,7 @@ function MemberRow({
               group_id: e.target.value ? Number(e.target.value) : null,
             });
           }}
-          disabled={updateMutation.isPending}
+          disabled={!canEdit || updateMutation.isPending}
         >
           <option value="">No group</option>
           {groups.map((g) => (
@@ -333,7 +388,7 @@ function MemberRow({
             setError(null);
             updateMutation.mutate({ is_admin: e.target.checked });
           }}
-          disabled={updateMutation.isPending}
+          disabled={!canEdit || updateMutation.isPending}
           className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
         />
       </TableCell>
@@ -343,15 +398,17 @@ function MemberRow({
       <TableCell>
         <div className="flex items-center justify-end gap-2">
           {error && <span className="text-xs text-danger">{error}</span>}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-danger hover:bg-danger-50"
-            loading={removeMutation.isPending}
-            onClick={() => removeMutation.mutate()}
-          >
-            Remove
-          </Button>
+          {canEdit && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-danger hover:bg-danger-50"
+              loading={removeMutation.isPending}
+              onClick={() => removeMutation.mutate()}
+            >
+              Remove
+            </Button>
+          )}
         </div>
       </TableCell>
     </TableRow>
@@ -362,7 +419,7 @@ function MemberRow({
 // Assigned content (CJ_UC030) — assign published assessments to the org
 // ---------------------------------------------------------------------------
 
-function AssignmentsCard({ orgId }: { orgId: number }) {
+function AssignmentsCard({ orgId, canAssign }: { orgId: number; canAssign: boolean }) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -410,34 +467,38 @@ function AssignmentsCard({ orgId }: { orgId: number }) {
       </CardHeader>
       <CardContent>
         <p className="mb-3 text-sm text-slate-500">
-          Corporate individuals in this organization see only the assessments assigned here.
+          {canAssign
+            ? "Corporate individuals in this organization see only the assessments assigned here."
+            : "The assessments CJ Admin has assigned to your organization. You can schedule these for your members."}
         </p>
         {error && (
           <Alert variant="error" className="mb-3">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        <div className="mb-4 flex items-center gap-2">
-          <select
-            className="h-10 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-          >
-            <option value="">Select a published assessment…</option>
-            {available.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.title}
-              </option>
-            ))}
-          </select>
-          <Button
-            size="sm"
-            disabled={!selected || assignMutation.isPending}
-            onClick={() => selected && assignMutation.mutate(Number(selected))}
-          >
-            Assign
-          </Button>
-        </div>
+        {canAssign && (
+          <div className="mb-4 flex items-center gap-2">
+            <select
+              className="h-10 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              value={selected}
+              onChange={(e) => setSelected(e.target.value)}
+            >
+              <option value="">Select a published assessment…</option>
+              {available.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.title}
+                </option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              disabled={!selected || assignMutation.isPending}
+              onClick={() => selected && assignMutation.mutate(Number(selected))}
+            >
+              Assign
+            </Button>
+          </div>
+        )}
         {assignments.length === 0 ? (
           <p className="py-2 text-center text-sm text-slate-500">No assessments assigned yet.</p>
         ) : (
@@ -446,7 +507,7 @@ function AssignmentsCard({ orgId }: { orgId: number }) {
               <TableRow>
                 <TableHead>Assessment</TableHead>
                 <TableHead>Assigned by</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {canAssign && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -456,17 +517,19 @@ function AssignmentsCard({ orgId }: { orgId: number }) {
                     {titleFor(a.item_id)}
                   </TableCell>
                   <TableCell className="text-slate-500">{a.assigned_by_name || "—"}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-danger hover:bg-danger-50"
-                      loading={removeMutation.isPending}
-                      onClick={() => removeMutation.mutate(a.id)}
-                    >
-                      Remove
-                    </Button>
-                  </TableCell>
+                  {canAssign && (
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-danger hover:bg-danger-50"
+                        loading={removeMutation.isPending}
+                        onClick={() => removeMutation.mutate(a.id)}
+                      >
+                        Remove
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -484,15 +547,18 @@ function AssignmentsCard({ orgId }: { orgId: number }) {
 function SchedulesCard({
   orgId,
   groups,
+  canSchedule,
 }: {
   orgId: number;
   groups: { id: number; name: string }[];
+  canSchedule: boolean;
 }) {
   const queryClient = useQueryClient();
   const [assessmentId, setAssessmentId] = useState("");
   const [when, setWhen] = useState("");
   const [groupId, setGroupId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [moving, setMoving] = useState<{ id: number; when: string } | null>(null);
   const KEY = [...ORG_KEY(orgId), "schedules"];
 
   const { data: schedules = [] } = useQuery({
@@ -504,7 +570,28 @@ function SchedulesCard({
     queryKey: ["assessments", "published", "for-assign"],
     queryFn: () => listAssessments({ status: "published" }),
   });
-  const assessments = assessmentsPage?.results ?? [];
+  // Only assessments CJ Admin assigned to this organization can be scheduled
+  // (Report 9 #8).
+  const { data: assignments = [] } = useQuery({
+    queryKey: [...ORG_KEY(orgId), "assignments"],
+    queryFn: () => listAssignments(orgId),
+    enabled: !Number.isNaN(orgId),
+  });
+  const assignedIds = new Set(
+    assignments.filter((a) => a.item_type === "assessment").map((a) => a.item_id),
+  );
+  const assessments = (assessmentsPage?.results ?? []).filter((a) => assignedIds.has(a.id));
+
+  const rescheduleMutation = useMutation({
+    mutationFn: (m: { id: number; when: string }) =>
+      rescheduleSchedule(orgId, m.id, { scheduled_at: new Date(m.when).toISOString() }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: KEY });
+      setMoving(null);
+      setError(null);
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -543,45 +630,52 @@ function SchedulesCard({
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-4">
-          <select
-            className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={assessmentId}
-            onChange={(e) => setAssessmentId(e.target.value)}
-          >
-            <option value="">Assessment…</option>
-            {assessments.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.title}
-              </option>
-            ))}
-          </select>
-          <input
-            type="datetime-local"
-            className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={when}
-            onChange={(e) => setWhen(e.target.value)}
-          />
-          <select
-            className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={groupId}
-            onChange={(e) => setGroupId(e.target.value)}
-          >
-            <option value="">All members</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-          <Button
-            size="sm"
-            disabled={!assessmentId || !when || createMutation.isPending}
-            onClick={() => createMutation.mutate()}
-          >
-            Schedule
-          </Button>
-        </div>
+        {canSchedule && assessments.length === 0 && (
+          <p className="mb-3 text-sm text-slate-500">
+            No assessments have been assigned to this organization yet, so none can be scheduled.
+          </p>
+        )}
+        {canSchedule && (
+          <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-4">
+            <select
+              className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              value={assessmentId}
+              onChange={(e) => setAssessmentId(e.target.value)}
+            >
+              <option value="">Assessment…</option>
+              {assessments.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.title}
+                </option>
+              ))}
+            </select>
+            <input
+              type="datetime-local"
+              className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+            />
+            <select
+              className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              value={groupId}
+              onChange={(e) => setGroupId(e.target.value)}
+            >
+              <option value="">All members</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              disabled={!assessmentId || !when || createMutation.isPending}
+              onClick={() => createMutation.mutate()}
+            >
+              Schedule
+            </Button>
+          </div>
+        )}
         {schedules.length === 0 ? (
           <p className="py-2 text-center text-sm text-slate-500">Nothing scheduled yet.</p>
         ) : (
@@ -591,7 +685,7 @@ function SchedulesCard({
                 <TableHead>Assessment</TableHead>
                 <TableHead>When</TableHead>
                 <TableHead>Target</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {canSchedule && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -599,20 +693,57 @@ function SchedulesCard({
                 <TableRow key={s.id}>
                   <TableCell className="font-medium text-slate-900">{s.assessment_title}</TableCell>
                   <TableCell className="text-slate-500">
-                    {new Date(s.scheduled_at).toLocaleString()}
+                    {moving?.id === s.id ? (
+                      <input
+                        type="datetime-local"
+                        aria-label="New date and time"
+                        className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                        value={moving.when}
+                        onChange={(e) => setMoving({ id: s.id, when: e.target.value })}
+                      />
+                    ) : (
+                      new Date(s.scheduled_at).toLocaleString()
+                    )}
                   </TableCell>
                   <TableCell className="text-slate-500">{s.group_name || "All members"}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-danger hover:bg-danger-50"
-                      loading={removeMutation.isPending}
-                      onClick={() => removeMutation.mutate(s.id)}
-                    >
-                      Remove
-                    </Button>
-                  </TableCell>
+                  {canSchedule && (
+                    <TableCell className="text-right">
+                      {moving?.id === s.id ? (
+                        <>
+                          <Button
+                            size="sm"
+                            disabled={!moving.when}
+                            loading={rescheduleMutation.isPending}
+                            onClick={() => rescheduleMutation.mutate(moving)}
+                          >
+                            Save
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setMoving(null)}>
+                            Cancel
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setMoving({ id: s.id, when: "" })}
+                          >
+                            Reschedule
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-danger hover:bg-danger-50"
+                            loading={removeMutation.isPending}
+                            onClick={() => removeMutation.mutate(s.id)}
+                          >
+                            Cancel schedule
+                          </Button>
+                        </>
+                      )}
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -627,7 +758,17 @@ function SchedulesCard({
 // Branded portal / website (CJ_UC054 customization + CJ_UC055 create)
 // ---------------------------------------------------------------------------
 
-function WebsiteCard({ orgId, defaultName }: { orgId: number; defaultName: string }) {
+function WebsiteCard({
+  orgId,
+  defaultName,
+  canCreate,
+  canCustomize,
+}: {
+  orgId: number;
+  defaultName: string;
+  canCreate: boolean;
+  canCustomize: boolean;
+}) {
   const queryClient = useQueryClient();
   const KEY = [...ORG_KEY(orgId), "website"];
   const [companyName, setCompanyName] = useState(defaultName);
@@ -700,6 +841,7 @@ function WebsiteCard({ orgId, defaultName }: { orgId: number; defaultName: strin
                   id="w-layout"
                   className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
                   value={website.layout}
+                  disabled={!canCustomize}
                   onChange={(e) => updateMutation.mutate({ layout: e.target.value })}
                 >
                   <option value="classic">Classic</option>
@@ -714,6 +856,7 @@ function WebsiteCard({ orgId, defaultName }: { orgId: number; defaultName: strin
                   type="color"
                   className="h-10 w-full rounded-md border border-slate-200 bg-white px-1"
                   value={website.primary_color}
+                  disabled={!canCustomize}
                   onChange={(e) => updateMutation.mutate({ primary_color: e.target.value })}
                 />
               </div>
@@ -722,12 +865,18 @@ function WebsiteCard({ orgId, defaultName }: { orgId: number; defaultName: strin
                 <Input
                   id="w-logo"
                   defaultValue={website.logo_url}
+                  disabled={!canCustomize}
                   onBlur={(e) => updateMutation.mutate({ logo_url: e.target.value })}
                   placeholder="https://…/logo.png"
                 />
               </div>
             </div>
           </div>
+        ) : !canCreate ? (
+          <p className="text-sm text-slate-500">
+            No website has been set up for this organization yet. CJ Admin sets it up; you can then
+            customize it here.
+          </p>
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-slate-500">

@@ -365,9 +365,25 @@ apiClient.interceptors.response.use(
 /**
  * GET — returns the unwrapped `data` field of the success envelope.
  */
+/** Unwrap the standard ``{message, data}`` envelope; a few endpoints (e.g. a
+ * task's detail) return the object bare, which used to come back as
+ * ``undefined`` and showed "not found" (Report 9 #63/#93). */
+function unwrapEnvelope<T>(body: unknown): T {
+  if (
+    body !== null &&
+    typeof body === "object" &&
+    !Array.isArray(body) &&
+    "data" in body &&
+    "message" in body
+  ) {
+    return (body as ApiSuccessEnvelope<T>).data;
+  }
+  return body as T;
+}
+
 export async function apiGet<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-  const res = await apiClient.get<ApiSuccessEnvelope<T>>(url, config);
-  return res.data.data;
+  const res = await apiClient.get<ApiSuccessEnvelope<T> | T>(url, config);
+  return unwrapEnvelope<T>(res.data);
 }
 
 /** GET that returns a paginated envelope. */
@@ -391,8 +407,8 @@ export async function apiPost<T>(
   body?: unknown,
   config?: AxiosRequestConfig,
 ): Promise<T> {
-  const res = await apiClient.post<ApiSuccessEnvelope<T>>(url, body, config);
-  return res.data.data;
+  const res = await apiClient.post<ApiSuccessEnvelope<T> | T>(url, body, config);
+  return unwrapEnvelope<T>(res.data);
 }
 
 /** PATCH — returns the unwrapped `data`. */
@@ -401,8 +417,8 @@ export async function apiPatch<T>(
   body?: unknown,
   config?: AxiosRequestConfig,
 ): Promise<T> {
-  const res = await apiClient.patch<ApiSuccessEnvelope<T>>(url, body, config);
-  return res.data.data;
+  const res = await apiClient.patch<ApiSuccessEnvelope<T> | T>(url, body, config);
+  return unwrapEnvelope<T>(res.data);
 }
 
 /** PUT — returns the unwrapped `data`. */

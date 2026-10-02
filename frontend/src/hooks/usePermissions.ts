@@ -4,15 +4,11 @@
  * backend returns on /api/me (the RBAC single source of truth — see
  * ModuleRight in apps/accounts/models.py).
  *
- * A module is visible when EITHER:
- *   - the static MODULE_VISIBILITY map says so for the user's role name
- *     (keeps today's behavior for every seeded role, and is the only signal
- *     available for "dashboard" / "profile" / "roles", which have no direct
- *     backend module), OR
- *   - the user's module_rights include a grant for that module's backend
- *     equivalent (MODULE_KEY_BACKEND_MODULE) — this is what makes custom
- *     roles and admin-granted ModuleRights (that aren't in the static map)
- *     actually show up in the UI.
+ * A module is visible when:
+ *   - for a built-in role, the static MODULE_VISIBILITY map lists it (the
+ *     signed role map — rights alone never add a tab to a built-in role);
+ *   - for a custom role, the user's module_rights include a grant for that
+ *     module's backend equivalent (MODULE_KEY_BACKEND_MODULE).
  *
  * When module_rights is absent (e.g. /api/me hasn't resolved yet), this
  * degrades to the old purely-static behavior — nothing crashes.
@@ -60,7 +56,10 @@ function isModuleVisible(
   moduleRights: ModuleRightGrant[] | undefined,
 ): boolean {
   if (ALWAYS_VISIBLE_MODULES.includes(module)) return true;
-  if ((MODULE_VISIBILITY[role] ?? []).includes(module)) return true;
+  // Built-in roles: the signed role map above is authoritative. Deriving
+  // menus from rights showed tabs a role must not have (e.g. Users for any
+  // role with "view users", Assessments from a leftover right — Report 9).
+  if (role in MODULE_VISIBILITY) return MODULE_VISIBILITY[role].includes(module);
   if (!moduleRights) return false;
   // "roles" has no backend module (role management rides on "accounts", same
   // as "users") — it's cj_admin-only by product decision, not by grant, so

@@ -107,7 +107,9 @@ describe("<RoleBasedNav />", () => {
       .getAllByRole("link")
       .map((a) => a.textContent?.trim() ?? "");
 
-    expect(labels).toContain("Users");
+    // Report 9 #5/#9: no CJ user list for Corp Admin — members are managed
+    // from the organization page.
+    expect(labels).not.toContain("Users");
     expect(labels).toContain("Organizations");
     expect(labels).not.toContain("Roles & Permissions");
     expect(labels).not.toContain("CMS");
@@ -177,12 +179,13 @@ describe("<RoleBasedNav />", () => {
       expect(within(list).getAllByRole("link")).toHaveLength(6);
     });
 
-    it("surfaces a ModuleRight grant not present in the static map for a seeded role", () => {
-      // seed_demo grants corp_admin `counseling.view`, but the static
-      // MODULE_VISIBILITY map (pre-H13) never included "Counseling" for
-      // corp_admin — a real backend grant that never reached the UI. The
-      // nav must now show it once it's present in module_rights.
-      setUser("corp_admin", [{ module: "counseling", action: "view" }]);
+    it("ignores a stray ModuleRight grant for a seeded role (signed role map wins)", () => {
+      // Report 9: leftover rights (e.g. Assessments for a counsellor) used to
+      // bring removed tabs back. Built-in roles now follow the role map only.
+      setUser("counsellor", [
+        { module: "assessment", action: "view" },
+        { module: "accounts", action: "view" },
+      ]);
       renderNav();
 
       const list = screen.getByRole("navigation");
@@ -190,11 +193,9 @@ describe("<RoleBasedNav />", () => {
         .getAllByRole("link")
         .map((a) => a.textContent?.trim() ?? "");
 
+      expect(labels).not.toContain("Assessments");
+      expect(labels).not.toContain("Users");
       expect(labels).toContain("Counseling");
-      // The rest of corp_admin's usual static set is still present (union,
-      // not replacement).
-      expect(labels).toContain("Users");
-      expect(labels).toContain("Organizations");
     });
 
     it("still shows nothing extra for individual when module_rights matches the static set", () => {

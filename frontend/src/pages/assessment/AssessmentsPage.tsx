@@ -61,9 +61,9 @@ export default function AssessmentsPage() {
   // using the CJ Question Bank. The backend scopes a trainer to their OWN
   // assessments; the list only shows their drafts + published, so Publish/Delete
   // here act on their own drafts.
-  const canManage = ["cj_admin", "corp_admin", "psychometrician", "trainer"].includes(
-    user?.role ?? "",
-  );
+  // Report 9 #10: corporate admins do not author assessments — they see and
+  // schedule only what CJ Admin assigned to their organization.
+  const canManage = ["cj_admin", "psychometrician", "trainer"].includes(user?.role ?? "");
 
   const { data, isLoading } = useQuery({
     queryKey: [...ASSESS_KEY, debouncedSearch, statusFilter],
@@ -187,18 +187,21 @@ export default function AssessmentsPage() {
             }}
             className="max-w-sm"
           />
-          <select
-            className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="">All statuses</option>
-            {ASSESSMENT_STATUSES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+          {/* Report 9 #74: only authors see drafts, so only they filter by status. */}
+          {canManage && (
+            <select
+              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">All statuses</option>
+              {ASSESSMENT_STATUSES.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {isLoading ? (
@@ -207,7 +210,9 @@ export default function AssessmentsPage() {
           </div>
         ) : assessments.length === 0 ? (
           <p className="py-8 text-center text-sm text-slate-500">
-            No assessments yet. Create one to get started.
+            {canManage
+              ? "No assessments yet. Create one to get started."
+              : "No assessments are available to you yet."}
           </p>
         ) : (
           <Table>

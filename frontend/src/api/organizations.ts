@@ -221,6 +221,15 @@ export function createSchedule(
   return apiPost<AssessmentSchedule>(`${BASE}/${orgId}/schedules/`, payload);
 }
 
+/** Report 9 #11: reschedule — members are notified again. */
+export function rescheduleSchedule(
+  orgId: number,
+  scheduleId: number,
+  payload: { scheduled_at: string },
+): Promise<AssessmentSchedule> {
+  return apiPatch<AssessmentSchedule>(`${BASE}/${orgId}/schedules/${scheduleId}/`, payload);
+}
+
 export function deleteSchedule(orgId: number, scheduleId: number): Promise<void> {
   return apiDelete(`${BASE}/${orgId}/schedules/${scheduleId}/`);
 }

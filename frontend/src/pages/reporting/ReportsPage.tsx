@@ -23,8 +23,11 @@ import {
 } from "@/components/ui";
 import {
   createReport,
+  downloadGeneratedReportPdf,
   duplicateReport,
+  type GeneratedReport,
   listReports,
+  listVisibleGeneratedReports,
   REPORT_STATUSES,
   REPORT_TYPES,
   DATA_INPUT_LEVELS,
@@ -44,6 +47,130 @@ const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
 
 export default function ReportsPage() {
   const { user } = useAuth();
+  // Report designers (CJ Admin, Psychometrician) manage report definitions;
+  // everyone else sees the generated reports he may view (Report 9 #12/#78).
+  if (!["cj_admin", "psychometrician"].includes(user?.role ?? "")) {
+    return <GeneratedReportsView isOrgAdmin={ORG_ADMIN_ROLES.includes(user?.role ?? "")} />;
+  }
+  return <ReportDesignerView />;
+}
+
+const ORG_ADMIN_ROLES = ["corp_admin", "corp_exclusive", "group_admin"];
+
+function GeneratedReportsView({ isOrgAdmin }: { isOrgAdmin: boolean }) {
+  const toast = useToast();
+  const [page, setPage] = useState(1);
+  const [downloading, setDownloading] = useState<number | null>(null);
+  const { data, isLoading } = useQuery({
+    queryKey: ["reporting", "generated", "visible", page],
+    queryFn: () => listVisibleGeneratedReports({ page }),
+  });
+  const rows = data?.results ?? [];
+  const count = data?.count ?? 0;
+
+  const download = async (r: GeneratedReport) => {
+    setDownloading(r.id);
+    try {
+      const safe = (r.report_title || "report").replace(/[^A-Za-z0-9_-]+/g, "_");
+      await downloadGeneratedReportPdf(r.id, `${safe}.pdf`);
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageCard>
+        <div className="p-6">
+          <h1 className="text-lg font-bold text-slate-900">
+            {isOrgAdmin ? "Members' Reports" : "My Reports"}
+          </h1>
+          <p className="text-sm text-slate-500">
+            {isOrgAdmin
+              ? "Assessment reports of the members of your organization."
+              : "Your assessment reports. Open or download any of them as a PDF."}
+          </p>
+        </div>
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Spinner size="lg" />
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="px-6 pb-8 text-center text-sm text-slate-500">
+            {isOrgAdmin
+              ? "No reports have been generated for your members yet."
+              : "You have no reports yet. Your report appears here once it has been generated for an assessment you completed."}
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Report</TableHead>
+                <TableHead>Assessment</TableHead>
+                {isOrgAdmin && <TableHead>Member</TableHead>}
+                <TableHead>Generated</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="font-medium text-slate-900">{r.report_title}</TableCell>
+                  <TableCell className="text-slate-500">{r.assessment_title ?? "—"}</TableCell>
+                  {isOrgAdmin && (
+                    <TableCell className="text-slate-500">{r.candidate_name ?? "—"}</TableCell>
+                  )}
+                  <TableCell className="text-slate-500">
+                    {new Date(r.generated_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {r.status === "generated" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        loading={downloading === r.id}
+                        onClick={() => void download(r)}
+                      >
+                        Download PDF
+                      </Button>
+                    ) : (
+                      <Badge variant="warning">{r.status}</Badge>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        {count > rows.length && (
+          <div className="flex justify-end gap-2 p-4">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page * 20 >= count}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </PageCard>
+    </div>
+  );
+}
+
+function ReportDesignerView() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
@@ -51,7 +178,7 @@ export default function ReportsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const canManage = ["cj_admin", "psychometrician", "counsellor"].includes(user?.role ?? "");
+  const canManage = ["cj_admin", "psychometrician"].includes(user?.role ?? "");
 
   const { data, isLoading } = useQuery({
     queryKey: [...REPORT_KEY, debouncedSearch, statusFilter],
