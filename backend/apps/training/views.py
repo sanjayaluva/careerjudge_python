@@ -19,6 +19,7 @@ Endpoints:
   GET       /api/training/my-courses/                   — student's own registrations
 """
 
+from django.db.models import Q
 from rest_framework import filters, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -327,7 +328,8 @@ def _require_course_edit_allowed(request, course):
             status=status.HTTP_403_FORBIDDEN,
         )
     # Report 9 #84: a trainer edits only his own courses (and their items).
-    if course.created_by_id != user.id:
+    # The course's creator, or the trainer CJ Admin assigned to it (#83).
+    if user.id not in (course.created_by_id, course.trainer_id):
         return Response(
             {
                 "error": {
@@ -441,14 +443,15 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         if user.is_superuser or role == "cj_admin":
             return qs
         if role == "trainer":
-            return qs.filter(created_by=user)
+            # User Details p.9 "View Assigned Courses": courses he created or
+            # that CJ Admin assigned to him as Name of Trainer.
+            return qs.filter(Q(created_by=user) | Q(trainer=user))
         qs = qs.filter(status="published")
         # Report 9 #14/#28/#52/#59: members and managers of a corporate,
         # corp-exclusive or channel-partner organization see only the courses
         # CJ Admin licensed to it (plus any they are already registered in).
         # Plain individuals with no organization still see every published
         # course.
-        from django.db.models import Q
 
         from apps.organizations.scoping import assigned_item_ids, is_licence_scoped
 

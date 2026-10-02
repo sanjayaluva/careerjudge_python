@@ -1937,3 +1937,23 @@ def test_trainer_cannot_edit_another_trainers_draft_items(trainer_client, roles)
         f"/api/training/courses/{course.id}/lessons/", {"title": "New", "order": 2}, format="json"
     )
     assert resp.status_code in (403, 404)
+
+
+def test_trainer_assigned_by_admin_sees_and_runs_the_course(
+    trainer_client, trainer_user, cj_admin_user
+):
+    """User Details p.9 "View Assigned Courses": a course CJ Admin assigns to
+    a trainer (Name of Trainer) is his to see and edit."""
+    from apps.training.models import CourseLesson
+
+    course = TrainingCourse.objects.create(
+        title="Assigned", created_by=cj_admin_user, trainer=trainer_user, status="draft"
+    )
+    body = trainer_client.get("/api/training/courses/").data["data"]
+    rows = body["results"] if isinstance(body, dict) else body
+    assert course.id in {c["id"] for c in rows}
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = trainer_client.patch(
+        f"/api/training/lessons/{lesson.id}/", {"title": "Renamed"}, format="json"
+    )
+    assert resp.status_code == 200, resp.data
