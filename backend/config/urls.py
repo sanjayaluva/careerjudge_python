@@ -39,6 +39,8 @@ urlpatterns = [
     path("api/tasks/", include("apps.tasks.urls", namespace="tasks")),
     path("api/messaging/", include("apps.messaging.urls", namespace="messaging")),
     path("api/invoicing/", include("apps.invoicing.urls", namespace="invoicing")),
+    # Signed Doc 3 §2.1.2: images uploaded from the rich-text editor.
+    path("api/uploads/", include("core.urls_uploads")),
     # Schema
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger"),

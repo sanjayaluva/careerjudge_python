@@ -3,7 +3,8 @@
  *
  * Features: bold, italic, underline, text colour, font size, headings, lists,
  * links, images, text alignment (colour/size/underline: Report 8 #9).
- * Outputs clean HTML.
+ * Images are inserted by URL or uploaded from the author's computer (Signed
+ * Doc 3 §2.1.2 "Image Upload"). Outputs clean HTML.
  */
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -11,7 +12,10 @@ import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import TextAlign from "@tiptap/extension-text-align";
 import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
-import { useEffect } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
+
+import { extractApiError } from "@/api/client";
+import { EDITOR_IMAGE_MAX_BYTES, EDITOR_IMAGE_TYPES, uploadEditorImage } from "@/api/uploads";
 
 interface WysiwygEditorProps {
   value: string;
@@ -45,6 +49,22 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
     },
   });
 
+  // Signed Doc 3 §2.1.2: the image button offers upload or URL.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageMenuRef = useRef<HTMLDivElement>(null);
+  const [imageMenuOpen, setImageMenuOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!imageMenuOpen) return;
+    const close = (e: MouseEvent) => {
+      if (!imageMenuRef.current?.contains(e.target as Node)) setImageMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [imageMenuOpen]);
+
   // Sync external value changes (e.g., when loading existing content)
   useEffect(() => {
     if (editor && value !== editor.getHTML()) {
@@ -56,14 +76,46 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
     return <div className="rounded-md border border-slate-200 p-4">Loading editor...</div>;
   }
 
+  const insertImageFromUrl = () => {
+    setImageMenuOpen(false);
+    const url = window.prompt("Enter image URL:");
+    if (url) editor.chain().focus().setImage({ src: url }).run();
+  };
+
+  const uploadImage = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // picking the same file again still fires onChange
+    if (!file) return;
+    if (!EDITOR_IMAGE_TYPES.includes(file.type)) {
+      setImageError("Upload a PNG, JPEG, GIF or WebP image.");
+      return;
+    }
+    if (file.size > EDITOR_IMAGE_MAX_BYTES) {
+      setImageError("The image is larger than 5 MB.");
+      return;
+    }
+    setImageError(null);
+    setUploading(true);
+    try {
+      const { url } = await uploadEditorImage(file);
+      const alt = file.name.replace(/\.[^.]+$/, "");
+      editor.chain().focus().setImage({ src: url, alt }).run();
+    } catch (err) {
+      setImageError(extractApiError(err));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const btnClass =
     "px-2 py-1 text-sm rounded hover:bg-slate-100 transition-colors disabled:opacity-30";
   const activeClass = "bg-slate-200 font-semibold";
 
   return (
-    <div className="overflow-hidden rounded-md border border-slate-200">
+    // No overflow-hidden: the image menu may extend past a short editor.
+    <div className="rounded-md border border-slate-200">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 bg-slate-50 p-2">
+      <div className="flex flex-wrap items-center gap-1 rounded-t-md border-b border-slate-100 bg-slate-50 p-2">
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBold().run()}
@@ -162,16 +214,51 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
         >
           🔗 Link
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            const url = window.prompt("Enter image URL:");
-            if (url) editor.chain().focus().setImage({ src: url }).run();
-          }}
-          className={btnClass}
-        >
-          🖼 Image
-        </button>
+        <div className="relative" ref={imageMenuRef}>
+          <button
+            type="button"
+            onClick={() => setImageMenuOpen((open) => !open)}
+            className={btnClass}
+            disabled={uploading}
+            aria-haspopup="menu"
+            aria-expanded={imageMenuOpen}
+          >
+            {uploading ? "Uploading…" : "🖼 Image"}
+          </button>
+          {imageMenuOpen && (
+            <div
+              role="menu"
+              className="absolute left-0 top-full z-20 mt-1 w-56 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50"
+                onClick={() => {
+                  setImageMenuOpen(false);
+                  fileInputRef.current?.click();
+                }}
+              >
+                Upload image from computer
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50"
+                onClick={insertImageFromUrl}
+              >
+                Insert image from URL
+              </button>
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={EDITOR_IMAGE_TYPES.join(",")}
+            className="hidden"
+            onChange={(e) => void uploadImage(e)}
+          />
+        </div>
         <div className="mx-1 h-5 w-px bg-slate-200" />
         <button
           type="button"
@@ -195,6 +282,14 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
           ➡
         </button>
       </div>
+      {imageError && (
+        <p
+          role="alert"
+          className="border-b border-red-100 bg-red-50 px-3 py-1.5 text-xs text-red-700"
+        >
+          {imageError}
+        </p>
+      )}
       {/* Editor */}
       <EditorContent editor={editor} />
     </div>

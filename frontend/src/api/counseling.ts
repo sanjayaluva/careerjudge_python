@@ -9,11 +9,17 @@ const BASE = "/counseling";
 // Types
 // ---------------------------------------------------------------------------
 
+/** Report 9 #105: admin-managed counselling ("domain") category. */
 export interface CounselingCategory {
   id: number;
+  /** Stable code (e.g. "career"), fixed once created. */
   name: string;
+  /** What people read; CJ Admin can rename it. */
+  label: string;
   description: string;
   is_active: boolean;
+  counsellor_count: number;
+  session_count: number;
 }
 
 export interface CounsellorProfile {
@@ -194,18 +200,41 @@ export interface FollowupSession {
 // Category API
 // ---------------------------------------------------------------------------
 
-/** CJ Admin: set a counsellor's categories (Doc 8 keys, e.g. "career"). */
+/** CJ Admin: set a counsellor's categories (category ids). */
 export function setCounsellorCategories(
   counsellorId: number,
-  categories: string[],
+  categories: number[],
 ): Promise<CounsellorProfile> {
   return apiPost<CounsellorProfile>(`${BASE}/counsellors/${counsellorId}/set-categories/`, {
     categories,
   });
 }
 
-export function listCategories(): Promise<CounselingCategory[]> {
-  return apiGetPaged<CounselingCategory>(`${BASE}/categories/`).then((r) => r.results);
+/** Report 9 #105: the live category list. CJ Admin gets inactive ones too
+ * (unless `activeOnly`); everyone else gets the active ones only. */
+export function listCategories(params?: { activeOnly?: boolean }): Promise<CounselingCategory[]> {
+  return apiGet<CounselingCategory[]>(`${BASE}/categories/`, {
+    params: params?.activeOnly ? { active: "true" } : {},
+  });
+}
+
+export function createCategory(payload: {
+  label: string;
+  description?: string;
+}): Promise<CounselingCategory> {
+  return apiPost<CounselingCategory>(`${BASE}/categories/`, payload);
+}
+
+export function updateCategory(
+  id: number,
+  payload: Partial<Pick<CounselingCategory, "label" | "description" | "is_active">>,
+): Promise<CounselingCategory> {
+  return apiPatch<CounselingCategory>(`${BASE}/categories/${id}/`, payload);
+}
+
+/** Refused (409) while counsellors or sessions use the category. */
+export function deleteCategory(id: number): Promise<void> {
+  return apiDelete(`${BASE}/categories/${id}/`);
 }
 
 // ---------------------------------------------------------------------------
@@ -429,16 +458,6 @@ export function declineFollowup(followupId: number): Promise<FollowupSession> {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-export const COUNSELING_CATEGORIES = [
-  { value: "career", label: "Career counselling" },
-  { value: "learning", label: "Learning difficulties" },
-  { value: "emotional", label: "Emotional problems" },
-  { value: "relationship", label: "Relationship problems" },
-  { value: "marital", label: "Marital problems" },
-  { value: "clinical", label: "Clinical problems" },
-  { value: "health", label: "Health counselling" },
-];
 
 export const SESSION_STATUSES = [
   { value: "pending", label: "Pending" },
