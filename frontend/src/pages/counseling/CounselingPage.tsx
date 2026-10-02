@@ -54,12 +54,16 @@ import {
 import { extractApiError } from "@/api/client";
 import { updateMe } from "@/api/me";
 import { useAuth } from "@/hooks/useAuth";
+import { AllBookedSessions } from "./AllBookedSessions";
 import { CounsellorDashboard } from "./CounsellorDashboard";
 import { JoinSessionButton } from "./JoinSession";
 
 export default function CounselingPage() {
   const { user } = useAuth();
   const isCounsellor = user?.role === "counsellor";
+  // Report 9 #115: Help Desk views (read-only) every booked session; it never
+  // books one, so it has no "My Sessions".
+  const isHelpdesk = user?.role === "helpdesk";
   // CNS-3 (§2.1): show a payment-received confirmation when Stripe redirects
   // back to /counseling?payment=success.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -125,15 +129,16 @@ export default function CounselingPage() {
           </div>
         )}
 
-        <Tabs defaultValue="browse">
+        <Tabs defaultValue={isHelpdesk ? "all-sessions" : "browse"}>
           <div className="px-6">
             <TabsList>
               <TabsTrigger value="browse">Browse Counsellors ({counsellors.length})</TabsTrigger>
               {isCounsellor && <TabsTrigger value="dashboard">My Dashboard</TabsTrigger>}
               {/* Report 3 §1.18: counsellors don't book sessions — hide the tab */}
-              {!isCounsellor && (
+              {!isCounsellor && !isHelpdesk && (
                 <TabsTrigger value="my-sessions">My Sessions ({sessions.length})</TabsTrigger>
               )}
+              {isHelpdesk && <TabsTrigger value="all-sessions">All booked sessions</TabsTrigger>}
             </TabsList>
           </div>
 
@@ -238,6 +243,12 @@ export default function CounselingPage() {
           {isCounsellor && (
             <TabsContent value="dashboard" className="px-6 py-4">
               <CounsellorDashboardWrapper />
+            </TabsContent>
+          )}
+
+          {isHelpdesk && (
+            <TabsContent value="all-sessions" className="px-6 py-4">
+              <AllBookedSessions />
             </TabsContent>
           )}
 

@@ -46,6 +46,7 @@ import QuestionDetailPage from "@/pages/question-bank/QuestionDetailPage";
 import QuestionEditorPage from "@/pages/question-bank/QuestionEditorPage";
 import AssessmentsPage from "@/pages/assessment/AssessmentsPage";
 import AssessmentDetailPage from "@/pages/assessment/AssessmentDetailPage";
+import AssessmentStartPage from "@/pages/assessment/AssessmentStartPage";
 import SessionPlayerPage from "@/pages/assessment/SessionPlayerPage";
 import SessionResultsPage from "@/pages/assessment/SessionResultsPage";
 import { useAuthStore } from "@/stores/auth";
@@ -160,6 +161,8 @@ export default function App() {
                 <Route path="question-bank/:id" element={<QuestionDetailPage />} />
                 <Route path="assessments" element={<AssessmentsPage />} />
                 <Route path="assessments/:id" element={<AssessmentDetailPage />} />
+                {/* Report 9 #75: assessment description page before the session starts. */}
+                <Route path="assessments/:id/start" element={<AssessmentStartPage />} />
                 <Route
                   path="assessments/sessions/:sessionId/results"
                   element={<SessionResultsPage />}

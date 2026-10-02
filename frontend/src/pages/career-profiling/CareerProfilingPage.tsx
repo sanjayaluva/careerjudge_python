@@ -1,5 +1,7 @@
 /**
- * Career Profiling page — list profiling solutions + create new.
+ * Career Profiling page — authors (CJ Admin, Psychometrician) list profiling
+ * solutions of every status and create new ones; everyone else sees the
+ * published solutions available to them (Report 9 #76).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -21,7 +23,12 @@ import {
   TableRow,
   useToast,
 } from "@/components/ui";
-import { createSolution, listSolutions, SOLUTION_STATUSES } from "@/api/careerProfiling";
+import {
+  createSolution,
+  listSolutions,
+  SOLUTION_STATUSES,
+  type ProfilingSolution,
+} from "@/api/careerProfiling";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -45,6 +52,7 @@ export default function CareerProfilingPage() {
   const canManage = ["cj_admin", "psychometrician"].includes(user?.role ?? "");
 
   const { data, isLoading } = useQuery({
+    enabled: canManage,
     queryKey: [...CP_KEY, debouncedSearch, statusFilter],
     queryFn: () =>
       listSolutions({
@@ -64,6 +72,11 @@ export default function CareerProfilingPage() {
   });
 
   const solutions = data?.results ?? [];
+
+  // Report 9 #76: a candidate (individual or any non-author) is not an
+  // author — no status filter or Create button; the server returns only
+  // published solutions.
+  if (!canManage) return <PublishedSolutionsView />;
 
   return (
     <div className="space-y-6">
@@ -162,6 +175,60 @@ export default function CareerProfilingPage() {
         onClose={() => setCreateOpen(false)}
         onSubmit={(payload) => createMutation.mutate(payload)}
       />
+    </div>
+  );
+}
+
+function PublishedSolutionsView() {
+  const { data, isLoading } = useQuery({
+    queryKey: [...CP_KEY, "published"],
+    queryFn: () => listSolutions(),
+  });
+  const solutions = data?.results ?? [];
+
+  return (
+    <div className="space-y-6">
+      <PageCard>
+        <div className="p-6">
+          <h1 className="text-lg font-bold text-slate-900">Career Profiling</h1>
+          <p className="text-sm text-slate-500">
+            {solutions.length} profiling solution{solutions.length !== 1 ? "s" : ""} available
+          </p>
+        </div>
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Spinner size="lg" />
+          </div>
+        ) : solutions.length === 0 ? (
+          <p className="px-6 pb-8 text-center text-sm text-slate-500">
+            No profiling solutions are available yet.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 px-6 pb-6 md:grid-cols-2">
+            {solutions.map((s) => (
+              <SolutionCard key={s.id} solution={s} />
+            ))}
+          </div>
+        )}
+      </PageCard>
+    </div>
+  );
+}
+
+function SolutionCard({ solution: s }: { solution: ProfilingSolution }) {
+  return (
+    <div className="flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
+      {s.image && <img src={s.image} alt="" className="h-40 w-full object-cover" />}
+      <div className="space-y-2 p-4">
+        <h2 className="text-base font-semibold text-slate-900">{s.title}</h2>
+        {s.purpose && <p className="text-sm text-slate-600">{s.purpose}</p>}
+        {s.description && (
+          <p className="whitespace-pre-line text-sm text-slate-600">{s.description}</p>
+        )}
+        <p className="text-xs text-slate-400">
+          {s.assessment_count} assessment{s.assessment_count !== 1 ? "s" : ""}
+        </p>
+      </div>
     </div>
   );
 }

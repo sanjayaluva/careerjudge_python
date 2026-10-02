@@ -83,6 +83,19 @@ class AssessmentSerializer(serializers.ModelSerializer):
 
     question_count = serializers.SerializerMethodField()
 
+    # Report 9 #75 (Doc 3 §2.1.2): Description and Instructions are authored
+    # in the rich-text editor (formatting + images) and shown to candidates on
+    # the description page, so the HTML is sanitised before it is stored.
+    def validate_description(self, value):
+        from core.rich_html import sanitize_rich_html
+
+        return sanitize_rich_html(value)
+
+    def validate_instructions(self, value):
+        from core.rich_html import sanitize_rich_html
+
+        return sanitize_rich_html(value)
+
     class Meta:
         model = Assessment
         fields = [

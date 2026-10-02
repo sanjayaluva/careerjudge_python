@@ -83,6 +83,17 @@ class ProfilingSolutionViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated, HasProfilingPermission]
     serializer_class = ProfilingSolutionSerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Report 9 #76: only the authors (CJ Admin, Psychometrician) work with
+        # draft/archived solutions. Everyone else — individuals included —
+        # lists and opens PUBLISHED solutions only.
+        user = self.request.user
+        role = user.role.name if user.role_id else None
+        if not (user.is_superuser or role in ("cj_admin", "psychometrician")):
+            qs = qs.filter(status="published")
+        return qs
+
     def get_serializer_class(self):
         if self.action == "list":
             return ProfilingSolutionListSerializer
