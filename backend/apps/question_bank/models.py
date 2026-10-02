@@ -404,6 +404,17 @@ class Question(models.Model):
         blank=True,
         help_text=_("Reviewer routed this question for content review (same-domain routing)."),
     )
+    # Report 9 #92: the Psychometrician who last sent this question back at
+    # psychometric review. When the SME resubmits it and it clears content
+    # review again, it is routed back to (and notifies) this psychometrician.
+    assigned_psychometrician = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="assigned_psychometric_questions",
+        null=True,
+        blank=True,
+        help_text=_("Psychometrician who sent the question back; resubmissions return to them."),
+    )
     exposure_limit = models.PositiveIntegerField(
         _("exposure limit"),
         null=True,

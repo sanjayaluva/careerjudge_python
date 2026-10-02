@@ -15,6 +15,7 @@ import {
 import { retrieveUser } from "@/api/users";
 import { extractApiError } from "@/api/client";
 import { ROLE_LABELS } from "@/lib/constants";
+import { expertiseList } from "@/lib/profileFields";
 import { formatDate } from "@/lib/utils";
 
 export default function UserViewPage() {
@@ -169,6 +170,23 @@ export default function UserViewPage() {
                     .join(", ") || "—"}
                 </dd>
               </div>
+              {/* Report 9 #67/#69: an SME's / Reviewer's domains of expertise. */}
+              {(user.role === "sme" || user.role === "reviewer") && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Domains of expertise
+                  </dt>
+                  <dd className="mt-1 flex flex-wrap gap-1 text-sm text-slate-900">
+                    {expertiseList(user.profile.domains_of_expertise).length
+                      ? expertiseList(user.profile.domains_of_expertise).map((d) => (
+                          <Badge key={d} variant="outline">
+                            {d}
+                          </Badge>
+                        ))
+                      : "—"}
+                  </dd>
+                </div>
+              )}
               {user.profile.bio && (
                 <div className="sm:col-span-2">
                   <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">

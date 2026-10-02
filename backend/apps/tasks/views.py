@@ -53,7 +53,7 @@ class TaskViewSet(ModelViewSet):
     """Task CRUD + lifecycle actions (start, submit, approve, cancel)."""
 
     queryset = Task.objects.select_related(
-        "assigned_to", "assigned_by", "parent_task"
+        "assigned_to", "assigned_by", "parent_task", "reviewer__profile"
     ).prefetch_related("progress_updates", "extension_requests")
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]

@@ -409,6 +409,10 @@ class UserProfile(models.Model):
         _("communicative languages"), default=list, blank=True
     )
     age = models.PositiveSmallIntegerField(_("age"), null=True, blank=True)
+    # Report 9 #66/#68 (client change request): SMEs and Reviewers list the
+    # subject domains they are expert in (free-text tags), so CJ Admin can
+    # pick the right SME for a task and the right reviewer for it (#67/#69).
+    domains_of_expertise = models.JSONField(_("domains of expertise"), default=list, blank=True)
     postal_code = models.CharField(_("postal code"), max_length=20, blank=True)
     address_line1 = models.CharField(_("address line 1"), max_length=255, blank=True)
     address_line2 = models.CharField(_("address line 2"), max_length=255, blank=True)

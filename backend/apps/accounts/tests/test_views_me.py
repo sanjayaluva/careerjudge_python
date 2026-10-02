@@ -185,3 +185,48 @@ class TestChangePassword:
             format="json",
         )
         assert resp.status_code == 401
+
+
+@pytest.mark.django_db
+class TestDomainsOfExpertise:
+    """Report 9 #66/#68: an SME / Reviewer enters his domains of expertise on
+    the profile page; #67/#69: CJ Admin sees them on the user view."""
+
+    @pytest.mark.parametrize("role_name", ["sme", "reviewer"])
+    def test_sme_and_reviewer_save_domains_on_profile(self, client, roles, role_name):
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        from .factories import UserFactory
+
+        user = UserFactory(role=roles[role_name], email=f"{role_name}-doe@test.com")
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(user).access_token}")
+        resp = client.patch(
+            "/api/me/",
+            {"profile": {"domains_of_expertise": "Quantitative Aptitude, Verbal , ,verbal"}},
+            format="json",
+        )
+        assert resp.status_code == 200, resp.content
+        user.profile.refresh_from_db()
+        assert user.profile.domains_of_expertise == ["Quantitative Aptitude", "Verbal"]
+        me = client.get("/api/me/").json()["data"]
+        assert me["profile"]["domains_of_expertise"] == ["Quantitative Aptitude", "Verbal"]
+
+        # Clearing the field empties the list.
+        client.patch("/api/me/", {"profile": {"domains_of_expertise": ""}}, format="json")
+        user.profile.refresh_from_db()
+        assert user.profile.domains_of_expertise == []
+
+    def test_cj_admin_sees_domains_on_user_view_and_list(self, authed_client, roles):
+        from apps.accounts.models import UserProfile
+
+        from .factories import UserFactory
+
+        sme = UserFactory(role=roles["sme"], email="sme-view-doe@test.com")
+        UserProfile.objects.update_or_create(
+            user=sme, defaults={"domains_of_expertise": ["Logical Reasoning"]}
+        )
+        detail = authed_client.get(f"/api/accounts/users/{sme.id}/").json()["data"]
+        assert detail["profile"]["domains_of_expertise"] == ["Logical Reasoning"]
+        listing = authed_client.get("/api/accounts/users/?role=sme").json()["data"]
+        row = next(u for u in listing["results"] if u["id"] == sme.id)
+        assert row["profile"]["domains_of_expertise"] == ["Logical Reasoning"]

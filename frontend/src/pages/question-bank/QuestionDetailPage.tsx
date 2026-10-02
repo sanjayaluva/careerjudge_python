@@ -22,13 +22,14 @@ import {
   TabsTrigger,
   stripHtml,
 } from "@/components/ui";
-import { retrieveQuestion, submitForReview, submitReview } from "@/api/questionBank";
+import { retrieveQuestion, submitReview } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import type { QuestionDetail } from "@/api/questionBank";
 import { FlashPresentation } from "./FlashPresentation";
 import { HotspotImageWithShapes } from "./HotspotImageWithShapes";
 import { PassagePresentation } from "./PassagePresentation";
+import { SubmitForReviewModal } from "./SubmitForReviewModal";
 
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning" | "primary"> = {
   draft: "default",
@@ -195,11 +196,8 @@ export default function QuestionDetailPage() {
     enabled: !Number.isNaN(qid),
   });
 
-  const submitMutation = useMutation({
-    mutationFn: () => submitForReview(qid),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["question-bank"] }),
-    onError: (err) => setError(extractApiError(err)),
-  });
+  // Report 9 #65: Submit for Review opens the reviewer picker.
+  const [submitOpen, setSubmitOpen] = useState(false);
 
   // Act on the ?review=1 request once the question is loaded. Only auto-open
   // the ReviewModal if the user can actually review the question at its
@@ -462,12 +460,7 @@ export default function QuestionDetailPage() {
                   </Button>
                 )}
                 {canSubmit && (
-                  <Button
-                    loading={submitMutation.isPending}
-                    onClick={() => submitMutation.mutate()}
-                  >
-                    Submit for Review
-                  </Button>
+                  <Button onClick={() => setSubmitOpen(true)}>Submit for Review</Button>
                 )}
                 {canReviewContent && (
                   <Button onClick={() => setReviewOpen(true)}>Review (Content)</Button>
@@ -1142,6 +1135,15 @@ export default function QuestionDetailPage() {
         questionId={qid}
         reviewType={canReviewPsychometric ? "psychometric" : "content"}
         canSetExposure={canReviewPsychometric}
+      />
+      <SubmitForReviewModal
+        questionId={submitOpen ? qid : null}
+        questionTitle={q.question_title}
+        onClose={() => setSubmitOpen(false)}
+        onSubmitted={() => {
+          setSubmitOpen(false);
+          void queryClient.invalidateQueries({ queryKey: ["question-bank"] });
+        }}
       />
     </div>
   );

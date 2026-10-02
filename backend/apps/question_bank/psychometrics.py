@@ -98,6 +98,7 @@ def run_psychometric_analysis(
     region: str | None = None,
     age_min: int | None = None,
     age_max: int | None = None,
+    persist: bool = True,
 ) -> PsychometricResult:
     """Run psychometric analysis on a single question.
 
@@ -115,6 +116,9 @@ def run_psychometric_analysis(
             computed from UserProfile.date_of_birth (D2 filter: "User Age
             range"). Candidates with no date_of_birth are excluded when set.
         age_max: Optional upper bound (inclusive) on candidate age in years.
+        persist: When False the indices are only computed and returned, not
+            stored (Doc 1 §4.1.1: the Psychometrician inspects the outputs
+            first and only a Submit stores them).
 
     Returns:
         PsychometricResult with computed indices. The result is also
@@ -146,14 +150,16 @@ def run_psychometric_analysis(
                 "this question. Need at least 2 for psychometric analysis."
             ),
         )
-        _persist_result(question, result)
+        if persist:
+            _persist_result(question, result)
         return result
 
     if question.question_type.startswith("MCQ_"):
         result = _compute_mcq(question, summaries)
     else:
         result = _compute_non_mcq(question, summaries)
-    _persist_result(question, result)
+    if persist:
+        _persist_result(question, result)
     return result
 
 
