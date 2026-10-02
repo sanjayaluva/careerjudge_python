@@ -46,6 +46,7 @@ import { extractApiError } from "@/api/client";
 import { BulkUploadModal } from "@/components/users/BulkUploadModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ROLE_LABELS } from "@/lib/constants";
+import { PortalLogo } from "@/pages/site/PortalLogo";
 
 const ORG_KEY = (id: number) => ["organizations", id];
 
@@ -758,6 +759,16 @@ function SchedulesCard({
 // Branded portal / website (CJ_UC054 customization + CJ_UC055 create)
 // ---------------------------------------------------------------------------
 
+const LOGO_ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Report 9 #49: client-side check matching the server's (PNG/JPG/GIF/WebP, 2 MB). */
+function logoFileError(file: File): string | null {
+  if (!/\.(png|jpe?g|gif|webp)$/i.test(file.name)) return "Upload a PNG, JPG, GIF or WebP image.";
+  if (file.size > LOGO_MAX_BYTES) return "The logo must be 2 MB or smaller.";
+  return null;
+}
+
 function WebsiteCard({
   orgId,
   defaultName,
@@ -775,9 +786,12 @@ function WebsiteCard({
   const [layout, setLayout] = useState("classic");
   const [color, setColor] = useState("#4f46e5");
   const [logoUrl, setLogoUrl] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [adminEmail, setAdminEmail] = useState("");
   const [creds, setCreds] = useState<{ email: string; temporary_password: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const { data: website } = useQuery({
     queryKey: KEY,
@@ -791,7 +805,7 @@ function WebsiteCard({
         company_name: companyName,
         layout,
         primary_color: color,
-        logo_url: logoUrl,
+        ...(logoFile ? { logo: logoFile } : { logo_url: logoUrl }),
         ...(adminEmail ? { admin_email: adminEmail } : {}),
       }),
     onSuccess: (w) => {
@@ -803,11 +817,39 @@ function WebsiteCard({
   });
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { layout?: string; primary_color?: string; logo_url?: string }) =>
-      updateWebsite(orgId, payload),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: KEY }),
-    onError: (err) => setError(extractApiError(err)),
+    mutationFn: (payload: Parameters<typeof updateWebsite>[1]) => updateWebsite(orgId, payload),
+    onSuccess: (w) => {
+      queryClient.setQueryData(KEY, w);
+      setError(null);
+      setSaved(true);
+    },
+    onError: (err) => {
+      setSaved(false);
+      setError(extractApiError(err));
+    },
   });
+
+  // Report 9 #48: the portal's full address, to share and demo.
+  const link = website ? `${window.location.origin}/site/${website.slug}` : "";
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Could not copy the link — select it and copy it manually.");
+    }
+  };
+
+  const uploadLogo = (file: File | undefined) => {
+    if (!file) return;
+    const problem = logoFileError(file);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    updateMutation.mutate({ logo: file });
+  };
 
   return (
     <Card>
@@ -829,12 +871,55 @@ function WebsiteCard({
           </Alert>
         )}
         {website ? (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">
-              Live at slug <code className="rounded bg-slate-100 px-1">{website.slug}</code>
-              {website.admin_email ? ` · admin ${website.admin_email}` : ""}
-            </p>
+          <div className="space-y-4">
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+              <Label htmlFor="w-link">Portal link</Label>
+              <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+                <Input
+                  id="w-link"
+                  readOnly
+                  value={link}
+                  onFocus={(e) => e.target.select()}
+                  className="bg-white"
+                />
+                <div className="flex shrink-0 gap-2">
+                  <Button variant="outline" onClick={() => void copyLink()}>
+                    {copied ? "Copied" : "Copy"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open(link, "_blank", "noopener,noreferrer")}
+                  >
+                    Open
+                  </Button>
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Employees open this link and sign in to take their assessments and training.
+                {website.admin_email ? ` Portal admin: ${website.admin_email}.` : ""}
+                {website.is_active ? "" : " The portal is currently switched off."}
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <Label htmlFor="w-company">Company name</Label>
+                <Input
+                  key={`name-${website.company_name}`}
+                  id="w-company"
+                  defaultValue={website.company_name}
+                  disabled={!canCustomize}
+                  onBlur={(e) => {
+                    const value = e.target.value.trim();
+                    if (!value) {
+                      e.target.value = website.company_name;
+                      setError("Company name is required.");
+                    } else if (value !== website.company_name) {
+                      updateMutation.mutate({ company_name: value });
+                    }
+                  }}
+                />
+              </div>
               <div>
                 <Label htmlFor="w-layout">Layout</Label>
                 <select
@@ -852,25 +937,85 @@ function WebsiteCard({
               <div>
                 <Label htmlFor="w-color">Primary color</Label>
                 <input
+                  key={`color-${website.primary_color}`}
                   id="w-color"
                   type="color"
                   className="h-10 w-full rounded-md border border-slate-200 bg-white px-1"
-                  value={website.primary_color}
+                  defaultValue={website.primary_color}
                   disabled={!canCustomize}
-                  onChange={(e) => updateMutation.mutate({ primary_color: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="w-logo">Logo URL</Label>
-                <Input
-                  id="w-logo"
-                  defaultValue={website.logo_url}
-                  disabled={!canCustomize}
-                  onBlur={(e) => updateMutation.mutate({ logo_url: e.target.value })}
-                  placeholder="https://…/logo.png"
+                  onBlur={(e) => {
+                    if (e.target.value !== website.primary_color) {
+                      updateMutation.mutate({ primary_color: e.target.value });
+                    }
+                  }}
                 />
               </div>
             </div>
+
+            <div>
+              <Label htmlFor="w-logo-file">Logo</Label>
+              <div className="mt-1 flex flex-wrap items-center gap-3">
+                <span className="flex h-14 min-w-[3.5rem] items-center justify-center rounded-md border border-slate-200 bg-white p-1">
+                  <PortalLogo
+                    src={website.logo_src}
+                    name={website.company_name}
+                    color={website.primary_color}
+                    size={44}
+                  />
+                </span>
+                {canCustomize && (
+                  <>
+                    <input
+                      id="w-logo-file"
+                      type="file"
+                      accept={LOGO_ACCEPT}
+                      className="max-w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-slate-200"
+                      onChange={(e) => {
+                        uploadLogo(e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                    {website.logo_src && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => updateMutation.mutate({ logo_url: "" })}
+                      >
+                        Remove logo
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">PNG, JPG, GIF or WebP, up to 2 MB.</p>
+              {canCustomize && (
+                <div className="mt-2 max-w-xl">
+                  <Label htmlFor="w-logo">…or use a logo link</Label>
+                  <Input
+                    key={`logo-${website.logo_url}`}
+                    id="w-logo"
+                    defaultValue={website.logo_url}
+                    onBlur={(e) => {
+                      const value = e.target.value.trim();
+                      if (value && value !== website.logo_url) {
+                        updateMutation.mutate({ logo_url: value });
+                      }
+                    }}
+                    placeholder="https://…/logo.png"
+                  />
+                </div>
+              )}
+            </div>
+
+            {canCustomize && (
+              <p className="text-xs text-slate-500" aria-live="polite">
+                {updateMutation.isPending
+                  ? "Saving…"
+                  : saved
+                    ? "Changes saved — open the portal link to see them."
+                    : "Changes save as you make them."}
+              </p>
+            )}
           </div>
         ) : !canCreate ? (
           <p className="text-sm text-slate-500">
@@ -880,7 +1025,7 @@ function WebsiteCard({
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-slate-500">
-              Create a branded portal for this corporate — its own URL slug, branding, and a
+              Create a branded portal for this corporate — its own web address, branding, and a
               generated admin login.
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -927,11 +1072,28 @@ function WebsiteCard({
                   onChange={(e) => setColor(e.target.value)}
                 />
               </div>
-              <div className="sm:col-span-2">
-                <Label htmlFor="w-new-logo">Logo URL</Label>
+              <div>
+                <Label htmlFor="w-new-logo-file">Logo (optional)</Label>
+                <input
+                  id="w-new-logo-file"
+                  type="file"
+                  accept={LOGO_ACCEPT}
+                  className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-slate-200"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    const problem = file ? logoFileError(file) : null;
+                    setError(problem);
+                    setLogoFile(problem ? null : file);
+                    if (problem) e.target.value = "";
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="w-new-logo">…or a logo link</Label>
                 <Input
                   id="w-new-logo"
                   value={logoUrl}
+                  disabled={Boolean(logoFile)}
                   onChange={(e) => setLogoUrl(e.target.value)}
                   placeholder="https://…/logo.png"
                 />

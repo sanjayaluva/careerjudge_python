@@ -1,5 +1,8 @@
 """Serializers for the organizations module."""
 
+import os
+import re
+
 from rest_framework import serializers
 
 from apps.accounts.models import User
@@ -167,10 +170,20 @@ class AssessmentScheduleSerializer(serializers.ModelSerializer):
         ]
 
 
+# Report 9 #49: uploaded corporate logos — raster images only (no SVG, which
+# can carry script), at most 2 MB.
+LOGO_MAX_BYTES = 2 * 1024 * 1024
+LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+
+
 class CorporateWebsiteSerializer(serializers.ModelSerializer):
     """CJ_UC054/UC055: a corporate's branded portal."""
 
     admin_email = serializers.EmailField(source="admin_user.email", read_only=True, default=None)
+    # Write-only upload; reads use ``logo_src`` (uploaded file or typed URL).
+    logo = serializers.ImageField(write_only=True, required=False, allow_null=True)
+    logo_src = serializers.CharField(read_only=True)
 
     class Meta:
         model = CorporateWebsite
@@ -180,6 +193,8 @@ class CorporateWebsiteSerializer(serializers.ModelSerializer):
             "slug",
             "company_name",
             "logo_url",
+            "logo",
+            "logo_src",
             "layout",
             "primary_color",
             "admin_user",
@@ -197,6 +212,27 @@ class CorporateWebsiteSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def validate_company_name(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Company name is required.")
+        return value
+
+    def validate_primary_color(self, value):
+        if not HEX_COLOR_RE.match(value or ""):
+            raise serializers.ValidationError("Enter a colour as a hex code, e.g. #4f46e5.")
+        return value
+
+    def validate_logo(self, value):
+        if value is None:
+            return value
+        ext = os.path.splitext(value.name or "")[1].lower()
+        if ext not in LOGO_EXTENSIONS:
+            raise serializers.ValidationError("Upload a PNG, JPG, GIF or WebP image.")
+        if value.size > LOGO_MAX_BYTES:
+            raise serializers.ValidationError("The logo must be 2 MB or smaller.")
+        return value
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
