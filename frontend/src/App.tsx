@@ -49,6 +49,7 @@ import AssessmentDetailPage from "@/pages/assessment/AssessmentDetailPage";
 import AssessmentStartPage from "@/pages/assessment/AssessmentStartPage";
 import SessionPlayerPage from "@/pages/assessment/SessionPlayerPage";
 import SessionResultsPage from "@/pages/assessment/SessionResultsPage";
+import CorporatePortalPage from "@/pages/site/CorporatePortalPage";
 import { useAuthStore } from "@/stores/auth";
 
 const queryClient = new QueryClient({
@@ -205,6 +206,9 @@ export default function App() {
 
               {/* Public homepage (landing page) */}
               <Route path="/" element={<PublicHomepage />} />
+
+              {/* Corporate branded portal, no login (Report 9 #48/#95). */}
+              <Route path="/site/:slug" element={<CorporatePortalPage />} />
 
               {/* CMS page catch-all — tries to render a CMS page by slug
                   before falling back to 404. This makes /about-us work

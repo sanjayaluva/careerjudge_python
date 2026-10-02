@@ -2,6 +2,8 @@
  * Organizations API functions.
  * Endpoints live under /api/organizations/.
  */
+import { API_BASE_URL } from "@/lib/constants";
+
 import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
 
 export interface Organization {
@@ -305,6 +307,9 @@ export interface CorporateWebsite {
   slug: string;
   company_name: string;
   logo_url: string;
+  /** Report 9 #49: where the logo shows from — the uploaded file (an
+   * `/api/...` path) or the typed URL. Resolve with `resolveLogoSrc`. */
+  logo_src: string;
   layout: "classic" | "modern" | "minimal";
   primary_color: string;
   admin_user: number | null;
@@ -315,8 +320,47 @@ export interface CorporateWebsite {
   generated_credentials?: { email: string; temporary_password: string };
 }
 
+/** Public branding of a corporate portal (`/site/<slug>`, Report 9 #48/#95). */
+export interface PublicSite {
+  organization_id: number;
+  slug: string;
+  company_name: string;
+  /** Uploaded logo (`/api/...` path) or a typed URL; "" when none. */
+  logo_url: string;
+  layout: "classic" | "modern" | "minimal";
+  primary_color: string;
+}
+
+/** Turn a logo path served by the API (`/api/organizations/site/<slug>/logo/`)
+ * into a URL the browser can load, wherever the API is hosted. Absolute URLs
+ * (typed logo links) pass through unchanged. */
+export function resolveLogoSrc(src: string | null | undefined): string {
+  if (!src) return "";
+  if (!src.startsWith("/api/")) return src;
+  return API_BASE_URL.replace(/\/api\/?$/, "") + src;
+}
+
 export function getWebsite(orgId: number): Promise<CorporateWebsite | null> {
   return apiGet<CorporateWebsite | null>(`${BASE}/${orgId}/website/`);
+}
+
+type WebsiteFields = {
+  company_name: string;
+  layout: string;
+  primary_color: string;
+  logo_url: string;
+  is_active: boolean;
+};
+
+/** Build a multipart body when a logo file is included, else plain JSON. */
+function websiteBody(payload: Partial<WebsiteFields> & { admin_email?: string; logo?: File }) {
+  if (!payload.logo) return payload;
+  const form = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    form.append(key, value instanceof File ? value : String(value));
+  });
+  return form;
 }
 
 export function createWebsite(
@@ -327,20 +371,25 @@ export function createWebsite(
     primary_color?: string;
     logo_url?: string;
     admin_email?: string;
+    logo?: File;
   },
 ): Promise<CorporateWebsite> {
-  return apiPost<CorporateWebsite>(`${BASE}/${orgId}/website/`, payload);
+  return apiPost<CorporateWebsite>(`${BASE}/${orgId}/website/`, websiteBody(payload));
 }
 
 export function updateWebsite(
   orgId: number,
-  payload: Partial<{
-    company_name: string;
-    layout: string;
-    primary_color: string;
-    logo_url: string;
-    is_active: boolean;
-  }>,
+  payload: Partial<WebsiteFields> & { logo?: File },
 ): Promise<CorporateWebsite> {
-  return apiPatch<CorporateWebsite>(`${BASE}/${orgId}/website/`, payload);
+  return apiPatch<CorporateWebsite>(`${BASE}/${orgId}/website/`, websiteBody(payload));
+}
+
+/** Public, no login: the branding of an active portal by its slug. */
+export function getPublicSite(slug: string): Promise<PublicSite> {
+  return apiGet<PublicSite>(`${BASE}/site/${encodeURIComponent(slug)}/`);
+}
+
+/** The signed-in member's own organization portal branding, or null. */
+export function getMySite(): Promise<PublicSite | null> {
+  return apiGet<PublicSite | null>(`${BASE}/my-site/`);
 }

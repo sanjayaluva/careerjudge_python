@@ -1,5 +1,8 @@
 """Views for the organizations module."""
 
+import mimetypes
+
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.crypto import get_random_string
@@ -739,7 +742,10 @@ class CorporateWebsiteViewSet(ManagedOrgMixin, ModelViewSet):
 
     GET    /api/organizations/<org_id>/website/       (retrieve, 404 if none)
     POST   /api/organizations/<org_id>/website/       (create + generate admin)
-    PATCH  /api/organizations/<org_id>/website/       (customize: layout/logo/color)
+    PATCH  /api/organizations/<org_id>/website/       (customize: name/layout/logo/color)
+
+    Report 9 #49: the logo may be uploaded (multipart field ``logo``) or, for
+    older records, given as a ``logo_url``; whichever is saved last is used.
     """
 
     serializer_class = CorporateWebsiteSerializer
@@ -754,7 +760,7 @@ class CorporateWebsiteViewSet(ManagedOrgMixin, ModelViewSet):
         if website is None:
             return Response({"message": "OK", "data": None}, status=status.HTTP_200_OK)
         return Response(
-            {"message": "OK", "data": CorporateWebsiteSerializer(website).data},
+            {"message": "OK", "data": self.get_serializer(website).data},
             status=status.HTTP_200_OK,
         )
 
@@ -790,11 +796,12 @@ class CorporateWebsiteViewSet(ManagedOrgMixin, ModelViewSet):
             slug=slug,
             company_name=company_name,
             logo_url=serializer.validated_data.get("logo_url", ""),
+            logo=serializer.validated_data.get("logo"),
             layout=serializer.validated_data.get("layout", "classic"),
             primary_color=serializer.validated_data.get("primary_color", "#4f46e5"),
             admin_user=admin_user,
         )
-        data = CorporateWebsiteSerializer(website).data
+        data = self.get_serializer(website).data
         # Return the generated credentials exactly ONCE (never stored in plain text).
         if admin_user is not None and temp_password:
             data["generated_credentials"] = {
@@ -822,12 +829,24 @@ class CorporateWebsiteViewSet(ManagedOrgMixin, ModelViewSet):
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
-        for field in ("company_name", "logo_url", "layout", "primary_color", "is_active"):
-            if field in request.data:
-                setattr(website, field, request.data[field])
-        website.save()
+        # Report 9 #49: validate the edit (company name is editable, the logo
+        # can be an upload) instead of copying raw request values.
+        serializer = self.get_serializer(website, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        if data.get("logo"):
+            # A new upload replaces any earlier upload or typed URL.
+            if website.logo:
+                website.logo.delete(save=False)
+            data["logo_url"] = ""
+        elif "logo_url" in data or ("logo" in data and data["logo"] is None):
+            # A typed URL (or an explicit removal) drops the uploaded file.
+            if website.logo:
+                website.logo.delete(save=False)
+            data["logo"] = None
+        website = serializer.save()
         return Response(
-            {"message": "Website updated.", "data": CorporateWebsiteSerializer(website).data},
+            {"message": "Website updated.", "data": self.get_serializer(website).data},
             status=status.HTTP_200_OK,
         )
 
@@ -869,14 +888,31 @@ class CorporateWebsiteViewSet(ManagedOrgMixin, ModelViewSet):
         return admin, temp_password
 
 
+def _public_site_data(website):
+    """Non-sensitive branding shown on a corporate's portal (CJ_UC054)."""
+    return {
+        "organization_id": website.organization_id,
+        "slug": website.slug,
+        "company_name": website.company_name,
+        # Report 9 #49: the uploaded logo (served via the API) or a typed URL.
+        "logo_url": website.logo_src,
+        "layout": website.layout,
+        "primary_color": website.primary_color,
+    }
+
+
 class CorporateSitePublicView(APIView):
     """Public tenant branding by slug (CJ_UC054) — for rendering a corporate's
-    branded portal. No auth: only non-sensitive branding is exposed.
+    branded portal at /site/<slug> (Report 9 #48/#95). No auth: only
+    non-sensitive branding is exposed.
 
     GET /api/organizations/site/<slug>/
     """
 
     permission_classes = [AllowAny]
+    # Public page: a stale token in the visitor's browser must not turn this
+    # into a 401.
+    authentication_classes = []
 
     def get(self, request, slug):
         website = CorporateWebsite.objects.filter(slug=slug, is_active=True).first()
@@ -886,16 +922,55 @@ class CorporateSitePublicView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(
-            {
-                "message": "OK",
-                "data": {
-                    "organization_id": website.organization_id,
-                    "slug": website.slug,
-                    "company_name": website.company_name,
-                    "logo_url": website.logo_url,
-                    "layout": website.layout,
-                    "primary_color": website.primary_color,
-                },
-            },
+            {"message": "OK", "data": _public_site_data(website)},
+            status=status.HTTP_200_OK,
+        )
+
+
+class CorporateSiteLogoView(APIView):
+    """Report 9 #49: the uploaded logo, streamed through the API so it loads
+    wherever /api/* reaches the backend (media files are not proxied).
+
+    GET /api/organizations/site/<slug>/logo/
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request, slug):
+        website = CorporateWebsite.objects.filter(slug=slug).first()
+        if website is None or not website.logo:
+            raise NotFound("Logo not found.")
+        try:
+            handle = website.logo.open("rb")
+        except OSError as exc:
+            raise NotFound("Logo not found.") from exc
+        content_type = mimetypes.guess_type(website.logo.name)[0] or "application/octet-stream"
+        response = FileResponse(handle, content_type=content_type)
+        response["Cache-Control"] = "public, max-age=300"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
+
+
+class MyCorporateSiteView(APIView):
+    """Report 9 #51/#52: the branding of the signed-in member's organization
+    portal (if it has an active website), so the app's top bar can carry the
+    company logo/name after a portal sign-in. ``data`` is null otherwise.
+
+    GET /api/organizations/my-site/
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        website = (
+            CorporateWebsite.objects.filter(
+                is_active=True, organization__members__user=request.user
+            )
+            .order_by("id")
+            .first()
+        )
+        return Response(
+            {"message": "OK", "data": _public_site_data(website) if website else None},
             status=status.HTTP_200_OK,
         )

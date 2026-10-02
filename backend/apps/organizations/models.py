@@ -289,6 +289,9 @@ class CorporateWebsite(models.Model):
     slug = models.SlugField(_("slug"), max_length=63, unique=True)
     company_name = models.CharField(_("company name"), max_length=255)
     logo_url = models.CharField(_("logo URL"), max_length=1000, blank=True)
+    # Report 9 #49: CJ_UC054 lists the logo as an "Upload" field. An uploaded
+    # file takes the place of a typed ``logo_url`` (kept for older records).
+    logo = models.ImageField(_("logo"), upload_to="corporate_logos/", null=True, blank=True)
     layout = models.CharField(_("layout"), max_length=20, choices=LAYOUT_CHOICES, default="classic")
     primary_color = models.CharField(_("primary color"), max_length=9, default="#4f46e5")
     admin_user = models.ForeignKey(
@@ -310,3 +313,12 @@ class CorporateWebsite(models.Model):
 
     def __str__(self) -> str:
         return f"{self.company_name} ({self.slug})"
+
+    @property
+    def logo_src(self) -> str:
+        """Where the portal shows the logo from: the uploaded file (served by
+        the public API so it works behind the /api/* proxy) or the typed URL."""
+        if self.logo:
+            version = int(self.updated_at.timestamp()) if self.updated_at else 0
+            return f"/api/organizations/site/{self.slug}/logo/?v={version}"
+        return self.logo_url or ""
