@@ -134,10 +134,10 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         AssessmentModificationRequest instead."""
         from apps.assessment.models import AssessmentModificationRequest
 
-        # Switch to a non-admin role (corp_admin) to test the restriction.
-        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
-        grant_assessment_perms(corp_admin)
-        self.client.force_authenticate(user=corp_admin)
+        # Switch to a non-admin author (psychometrician) to test the restriction.
+        author = UserFactory.create(role=get_or_create_role("psychometrician", is_system=True))
+        grant_assessment_perms(author)
+        self.client.force_authenticate(user=author)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         resp = self.client.patch(
             f"/api/assessments/{a.id}/",
@@ -151,7 +151,7 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert amr.status == "pending"
         assert amr.action == "edit"
         assert amr.proposed_title == "Updated"
-        assert amr.requester == corp_admin
+        assert amr.requester == author
 
     def test_trainer_creates_and_sees_only_own_assessment(self):
         """Doc 7 §2.4/§2.4.1 (signed) + Report 8 #30: a trainer authors their
@@ -178,9 +178,9 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert "Other published" not in titles
 
     def test_update_published_assessment_without_reason_rejected(self):
-        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
-        grant_assessment_perms(corp_admin)
-        self.client.force_authenticate(user=corp_admin)
+        author = UserFactory.create(role=get_or_create_role("psychometrician", is_system=True))
+        grant_assessment_perms(author)
+        self.client.force_authenticate(user=author)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         resp = self.client.patch(f"/api/assessments/{a.id}/", {"title": "Updated"}, format="json")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
@@ -188,9 +188,9 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
     def test_update_published_assessment_non_title_field_still_blocked(self):
         """Only title edits go through the request→approve flow — other
         field edits on a published assessment remain blocked for non-admins."""
-        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
-        grant_assessment_perms(corp_admin)
-        self.client.force_authenticate(user=corp_admin)
+        author = UserFactory.create(role=get_or_create_role("psychometrician", is_system=True))
+        grant_assessment_perms(author)
+        self.client.force_authenticate(user=author)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         resp = self.client.patch(
             f"/api/assessments/{a.id}/", {"total_duration_seconds": 900}, format="json"
@@ -200,10 +200,10 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
     def test_admin_approve_title_change_applies_it(self):
         from apps.assessment.models import AssessmentModificationRequest
 
-        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
-        grant_assessment_perms(corp_admin)
+        author = UserFactory.create(role=get_or_create_role("psychometrician", is_system=True))
+        grant_assessment_perms(author)
         client = APIClient()
-        client.force_authenticate(user=corp_admin)
+        client.force_authenticate(user=author)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         client.patch(
             f"/api/assessments/{a.id}/",
@@ -223,10 +223,10 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
     def test_admin_decline_title_change_keeps_title(self):
         from apps.assessment.models import AssessmentModificationRequest
 
-        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
-        grant_assessment_perms(corp_admin)
+        author = UserFactory.create(role=get_or_create_role("psychometrician", is_system=True))
+        grant_assessment_perms(author)
         client = APIClient()
-        client.force_authenticate(user=corp_admin)
+        client.force_authenticate(user=author)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         client.patch(
             f"/api/assessments/{a.id}/",
@@ -246,10 +246,10 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
     def test_non_admin_cannot_approve_modification_request(self):
         from apps.assessment.models import AssessmentModificationRequest
 
-        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
-        grant_assessment_perms(corp_admin)
+        author = UserFactory.create(role=get_or_create_role("psychometrician", is_system=True))
+        grant_assessment_perms(author)
         client = APIClient()
-        client.force_authenticate(user=corp_admin)
+        client.force_authenticate(user=author)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         client.patch(
             f"/api/assessments/{a.id}/",
@@ -283,9 +283,9 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         it directly — it creates a pending AssessmentModificationRequest."""
         from apps.assessment.models import AssessmentModificationRequest
 
-        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
-        grant_assessment_perms(corp_admin)
-        self.client.force_authenticate(user=corp_admin)
+        author = UserFactory.create(role=get_or_create_role("psychometrician", is_system=True))
+        grant_assessment_perms(author)
+        self.client.force_authenticate(user=author)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         resp = self.client.delete(
             f"/api/assessments/{a.id}/", {"reason": "Obsolete"}, format="json"
@@ -297,9 +297,9 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
         assert amr.action == "delete"
 
     def test_delete_published_assessment_without_reason_rejected(self):
-        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
-        grant_assessment_perms(corp_admin)
-        self.client.force_authenticate(user=corp_admin)
+        author = UserFactory.create(role=get_or_create_role("psychometrician", is_system=True))
+        grant_assessment_perms(author)
+        self.client.force_authenticate(user=author)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         resp = self.client.delete(f"/api/assessments/{a.id}/")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
@@ -314,10 +314,10 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
     def test_admin_approve_delete_request_deletes_assessment(self):
         from apps.assessment.models import AssessmentModificationRequest
 
-        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
-        grant_assessment_perms(corp_admin)
+        author = UserFactory.create(role=get_or_create_role("psychometrician", is_system=True))
+        grant_assessment_perms(author)
         client = APIClient()
-        client.force_authenticate(user=corp_admin)
+        client.force_authenticate(user=author)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         client.delete(f"/api/assessments/{a.id}/", {"reason": "Obsolete"}, format="json")
         amr = AssessmentModificationRequest.objects.get(assessment=a)
@@ -330,10 +330,10 @@ class TestAssessmentCRUD(AssessmentViewTestBase):
     def test_admin_decline_delete_request_keeps_assessment(self):
         from apps.assessment.models import AssessmentModificationRequest
 
-        corp_admin = UserFactory.create(role=get_or_create_role("corp_admin", is_system=True))
-        grant_assessment_perms(corp_admin)
+        author = UserFactory.create(role=get_or_create_role("psychometrician", is_system=True))
+        grant_assessment_perms(author)
         client = APIClient()
-        client.force_authenticate(user=corp_admin)
+        client.force_authenticate(user=author)
         a = Assessment.objects.create(title="Test 1", status="published", created_by=self.user)
         client.delete(f"/api/assessments/{a.id}/", {"reason": "Obsolete"}, format="json")
         amr = AssessmentModificationRequest.objects.get(assessment=a)
@@ -436,7 +436,7 @@ class TestAssessmentVisibilityFiltering(AssessmentViewTestBase):
 
     Per requirement: individual users (candidates) should only see published
     assessments. Draft/archived assessments are visible only to assessment
-    managers (cj_admin, psychometrician, corp_admin, corp_exclusive).
+    managers (cj_admin, psychometrician, author, corp_exclusive).
     """
 
     def setUp(self):

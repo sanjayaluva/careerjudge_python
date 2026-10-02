@@ -8,7 +8,7 @@ Creates:
   sme, reviewer, trainer, group_admin, counsellor, channel_partner, individual)
 - 11 demo users (one per role) with predictable passwords
 - 1 superuser for emergency access
-- Sample module rights per role (view/add/change/delete on relevant modules)
+- Module rights per role, synced exactly to apps.accounts.role_rights
 
 SME vs Reviewer (split per client clarification 2026-06-30):
   - sme:      creates/views/edits/deletes OWN questions (unreviewed only).
@@ -22,11 +22,9 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from apps.accounts.models import UserProfile
-from apps.accounts.services import (
-    assign_permission_to_role,
-    get_or_create_default_roles,
-)
+from apps.accounts.models import ModuleRight, Role, UserProfile
+from apps.accounts.role_rights import ROLE_PERMISSIONS, sync_role_rights
+from apps.accounts.services import get_or_create_default_roles
 
 User = get_user_model()
 
@@ -49,198 +47,7 @@ DEMO_USERS = [
 ]
 
 
-# Role → list of (module, action) rights
-ROLE_PERMISSIONS = {
-    "cj_admin": [
-        ("accounts", "view"),
-        ("accounts", "add"),
-        ("accounts", "change"),
-        ("accounts", "delete"),
-        ("organizations", "view"),
-        ("organizations", "add"),
-        ("organizations", "change"),
-        ("organizations", "delete"),
-        ("question_bank", "view"),
-        ("question_bank", "add"),
-        ("question_bank", "change"),
-        ("question_bank", "delete"),
-        ("question_bank", "approve"),
-        ("question_bank", "reject"),
-        ("question_bank", "review"),
-        ("assessment", "view"),
-        ("assessment", "add"),
-        ("assessment", "change"),
-        ("assessment", "delete"),
-        ("career_profiling", "view"),
-        ("career_profiling", "change"),
-        ("reporting", "view"),
-        ("reporting", "generate_report"),
-        ("training", "view"),
-        ("training", "add"),
-        ("training", "change"),
-        ("training", "delete"),
-        ("counseling", "view"),
-        ("counseling", "add"),
-        ("counseling", "change"),
-        ("counseling", "delete"),
-        ("cms", "view"),
-        ("cms", "add"),
-        ("cms", "change"),
-        ("cms", "delete"),
-        ("notifications", "view"),
-        ("tasks", "view"),
-        ("tasks", "add"),
-        ("tasks", "change"),
-        ("tasks", "delete"),
-        ("tasks", "assign"),
-        ("tasks", "approve"),
-        # H14: CJ Admin reviews/approves/rejects/pays every invoice.
-        ("invoicing", "view"),
-        ("invoicing", "add"),
-        ("invoicing", "approve"),
-        ("invoicing", "reject"),
-        ("invoicing", "change"),
-    ],
-    "helpdesk": [
-        ("training", "view"),
-        ("counseling", "view"),
-        ("counseling", "add"),
-        ("counseling", "change"),
-        ("notifications", "view"),
-        ("accounts", "view"),
-    ],
-    "corp_admin": [
-        ("accounts", "view"),
-        ("accounts", "add"),
-        ("accounts", "change"),
-        ("organizations", "view"),
-        ("organizations", "add"),
-        ("organizations", "change"),
-        ("assessment", "view"),
-        ("assessment", "add"),
-        ("reporting", "view"),
-        ("reporting", "generate_report"),
-        ("training", "view"),
-        ("training", "add"),
-        ("counseling", "view"),
-    ],
-    "corp_exclusive": [
-        ("accounts", "view"),
-        ("accounts", "add"),
-        ("accounts", "change"),
-        ("organizations", "view"),
-        ("assessment", "view"),
-        ("assessment", "add"),
-        ("reporting", "view"),
-        ("reporting", "generate_report"),
-    ],
-    "psychometrician": [
-        # Psychometrician: full QB access (configures psychometric properties)
-        ("question_bank", "view"),
-        ("question_bank", "add"),
-        ("question_bank", "change"),
-        ("question_bank", "review"),
-        # Psychometrician is the primary assessment author per SRS UC029
-        # "Prepare Assessment Blueprint" — full CRUD on assessments.
-        ("assessment", "view"),
-        ("assessment", "add"),
-        ("assessment", "change"),
-        ("assessment", "delete"),
-        ("career_profiling", "view"),
-        ("career_profiling", "change"),
-        ("reporting", "view"),
-        ("reporting", "generate_report"),
-        # H14: empanelled role — bills CJ Admin for review work (Doc 4).
-        ("invoicing", "view"),
-        ("invoicing", "add"),
-    ],
-    "sme": [
-        # SME: creates/edits/deletes OWN questions (unreviewed only).
-        # Once reviewed, can only request_delete (admin approves).
-        ("question_bank", "view"),
-        ("question_bank", "add"),
-        ("question_bank", "change"),
-        ("question_bank", "delete"),
-        ("question_bank", "request_delete"),
-        # Report 4 SME-3: SME has no right to view/take assessments.
-        # H14: empanelled role — bills CJ Admin for question authoring (Doc 4).
-        ("invoicing", "view"),
-        ("invoicing", "add"),
-    ],
-    "reviewer": [
-        # Reviewer: reviews questions, approves/rejects. No create/edit/delete.
-        ("question_bank", "view"),
-        ("question_bank", "review"),
-        ("question_bank", "approve"),
-        ("question_bank", "reject"),
-        # Report 4 Reviewer-4: reviewer has no right to view/take assessments.
-        # H14: empanelled role — bills CJ Admin for review work (Doc 4).
-        ("invoicing", "view"),
-        ("invoicing", "add"),
-    ],
-    "trainer": [
-        ("training", "view"),
-        ("training", "add"),
-        ("training", "change"),
-        ("training", "delete"),
-        ("accounts", "view"),
-        ("assessment", "view"),
-        # Report 3 §4.1: trainers author their own course assessments using
-        # the CJ Question Bank (scoped to created_by in the viewsets).
-        ("assessment", "add"),
-        ("assessment", "change"),
-        ("assessment", "delete"),
-        ("question_bank", "view"),
-        ("question_bank", "add"),
-        ("question_bank", "change"),
-        # H14: empanelled role — bills CJ Admin for training delivery (Doc 4).
-        ("invoicing", "view"),
-        ("invoicing", "add"),
-    ],
-    "group_admin": [
-        ("accounts", "view"),
-        ("assessment", "view"),
-        ("assessment", "assign"),
-        ("organizations", "view"),
-    ],
-    "counsellor": [
-        ("counseling", "view"),
-        ("counseling", "add"),
-        ("counseling", "change"),
-        ("accounts", "view"),
-        # Report 4 Counsellor-1/2: no assessment or profiling access.
-        # Reports are kept (limited to the counsellor's own clients).
-        ("reporting", "view"),
-        # H14: empanelled role — bills CJ Admin for counselling delivery (Doc 4).
-        ("invoicing", "view"),
-        ("invoicing", "add"),
-    ],
-    "channel_partner": [
-        # Channel Partner: manages their own individual users + assessments
-        ("accounts", "view"),
-        ("accounts", "add"),
-        ("accounts", "change"),
-        ("organizations", "view"),
-        ("organizations", "change"),
-        ("assessment", "view"),
-        ("assessment", "add"),
-        ("reporting", "view"),
-        ("reporting", "generate_report"),
-        # H14: empanelled role — bills CJ Admin for commission (Doc 4).
-        ("invoicing", "view"),
-        ("invoicing", "add"),
-    ],
-    "individual": [
-        ("assessment", "view"),  # can take assessments
-        ("reporting", "view"),  # can view own reports
-        ("training", "view"),  # can browse + register for courses
-        ("training", "add"),  # can register (register action = 'add')
-        ("training", "change"),  # can track progress (progress action = 'change')
-        ("counseling", "view"),  # can browse counsellors
-        ("counseling", "add"),  # can book sessions
-        ("counseling", "change"),  # can submit feedback
-    ],
-}
+# Role rights live in apps.accounts.role_rights (single source of truth).
 
 
 class Command(BaseCommand):
@@ -254,11 +61,12 @@ class Command(BaseCommand):
             self.stdout.write(f"  ✓ Role: {name}")
 
         self.stdout.write(self.style.MIGRATE_HEADING("→ Assigning permissions to roles…"))
+        # Exact sync: grants missing rights AND removes rights a system role
+        # should no longer have (earlier seeds only ever added).
+        changes = sync_role_rights(Role, ModuleRight, ROLE_PERMISSIONS)
         for role_name, perms in ROLE_PERMISSIONS.items():
-            role = roles[role_name]
-            for module, action in perms:
-                assign_permission_to_role(role, module, action)
-            self.stdout.write(f"  ✓ {role_name}: {len(perms)} permissions")
+            added, removed = changes.get(role_name, (0, 0))
+            self.stdout.write(f"  ✓ {role_name}: {len(perms)} permissions (+{added} / -{removed})")
 
         self.stdout.write(self.style.MIGRATE_HEADING("→ Creating demo users (1 per role)…"))
         for role_name, email, full_name, password in DEMO_USERS:

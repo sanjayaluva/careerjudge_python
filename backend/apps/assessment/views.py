@@ -295,6 +295,9 @@ class HasAssessmentPermission(HasModulePermission):
         "publish": "change",
         "unpublish": "change",
         "readiness": "view",
+        # All candidates' sessions of an assessment — authors/admins only
+        # (was missing from the map, so refused for every non-superuser).
+        "sessions": "change",
         # AssessmentModificationRequestViewSet custom actions (SRS §2.2/§2.3)
         "approve": "change",
         "decline": "change",
@@ -342,23 +345,16 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         if qstatus:
             qs = qs.filter(status=qstatus)
 
-        # Role-based visibility: only assessment managers (cj_admin,
-        # psychometrician, corp_admin, corp_exclusive) can see non-published
-        # assessments. All other roles (individual, sme, reviewer, trainer,
-        # group_admin, counsellor, channel_partner) only see published ones.
-        # This applies to list + retrieve — candidates shouldn't be able to
-        # open a draft assessment by ID either.
+        # Role-based visibility: only assessment authors (cj_admin,
+        # psychometrician) can see non-published assessments. All other roles
+        # only see published ones. This applies to list + retrieve —
+        # candidates shouldn't be able to open a draft assessment by ID either.
+        # Report 9 #10: corporate admins are not authors, so they no longer
+        # see drafts.
         if self.request.user.is_authenticated:
             role_name = self.request.user.role.name if self.request.user.role else None
             is_manager = (
-                role_name
-                in (
-                    "cj_admin",
-                    "psychometrician",
-                    "corp_admin",
-                    "corp_exclusive",
-                )
-                or self.request.user.is_superuser
+                role_name in ("cj_admin", "psychometrician") or self.request.user.is_superuser
             )
             if not is_manager:
                 if role_name == "trainer":
@@ -373,9 +369,16 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         # corp-exclusive org) sees ONLY the assessments assigned to their
         # organization — not the whole published catalogue. Non-corporate users
         # (plain individuals with no membership, staff, admins) are unaffected.
-        from apps.organizations.scoping import assigned_item_ids, is_corporate_individual
+        from apps.organizations.scoping import (
+            assigned_item_ids,
+            is_corporate_individual,
+            is_org_manager,
+        )
 
-        if is_corporate_individual(self.request.user):
+        # Report 9 #8/#25/#57: likewise an organization manager (Corp Admin,
+        # Corp Exclusive, Group Admin, Channel Partner) works only with the
+        # assessments CJ Admin assigned to his organization.
+        if is_corporate_individual(self.request.user) or is_org_manager(self.request.user):
             qs = qs.filter(id__in=assigned_item_ids(self.request.user, "assessment"))
 
         return qs

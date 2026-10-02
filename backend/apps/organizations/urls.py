@@ -63,7 +63,9 @@ urlpatterns = [
     ),
     path(
         "<int:organization_id>/schedules/<int:pk>/",
-        AssessmentScheduleViewSet.as_view({"get": "retrieve", "delete": "destroy"}),
+        AssessmentScheduleViewSet.as_view(
+            {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}
+        ),
         name="schedule-detail",
     ),
     path(

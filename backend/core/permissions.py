@@ -15,7 +15,9 @@ class HasModulePermission(BasePermission):
     Base class for module-scoped permissions.
 
     Subclasses must set `module` (the module name) and may override `action_map`
-    to map DRF action names to permission codenames.
+    to map DRF action names to permission codenames. A value may also be a
+    dict keyed by HTTP method (e.g. {"GET": "view", "POST": "change"}) for
+    actions that both read and write; unlisted methods are refused.
 
     Example:
         class HasAccountsPermission(HasModulePermission):
@@ -41,6 +43,10 @@ class HasModulePermission(BasePermission):
 
         action = getattr(view, "action", None) or request.method.lower()
         required = self.action_map.get(action)
+        if isinstance(required, dict):
+            # Per-method rights for actions that both read and write, e.g.
+            # {"GET": "view", "POST": "change"}.
+            required = required.get(request.method)
         if required is None:
             return False
         return request.user.has_perm(f"{self.module}.{required}")

@@ -1,0 +1,247 @@
+"""Module rights of the built-in (system) roles — the single source of truth.
+
+``seed_demo`` and the ``sync_system_role_rights`` data migrations both apply
+this table EXACTLY: rights listed here are granted and any other right on a
+system role is removed. Custom roles are never touched.
+
+Changing a right therefore takes two steps: edit this table, and add a data
+migration that syncs the system roles to the new table (copy the table into
+the migration so it stays frozen at that point in history). A test compares
+this table with a freshly migrated database to catch drift.
+
+Basis: signed User Details.pdf role maps, SRS, Docs 1-9, and the client's
+Report 4 (13 Aug 2026) / Report 9 (1 Oct 2026) rights clarifications.
+"""
+
+ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
+    "cj_admin": [
+        ("accounts", "view"),
+        ("accounts", "add"),
+        ("accounts", "change"),
+        ("accounts", "delete"),
+        ("organizations", "view"),
+        ("organizations", "add"),
+        ("organizations", "change"),
+        ("organizations", "delete"),
+        ("question_bank", "view"),
+        ("question_bank", "add"),
+        ("question_bank", "change"),
+        ("question_bank", "delete"),
+        ("question_bank", "approve"),
+        ("question_bank", "reject"),
+        ("question_bank", "review"),
+        ("assessment", "view"),
+        ("assessment", "add"),
+        ("assessment", "change"),
+        ("assessment", "delete"),
+        # Report 9 #89/90/118/119: CJ Admin could open Profiling and Reports
+        # but not create or set anything up in them.
+        ("career_profiling", "view"),
+        ("career_profiling", "add"),
+        ("career_profiling", "change"),
+        ("career_profiling", "delete"),
+        ("reporting", "view"),
+        ("reporting", "add"),
+        ("reporting", "change"),
+        ("reporting", "delete"),
+        ("reporting", "generate_report"),
+        ("training", "view"),
+        ("training", "add"),
+        ("training", "change"),
+        ("training", "delete"),
+        ("counseling", "view"),
+        ("counseling", "add"),
+        ("counseling", "change"),
+        ("counseling", "delete"),
+        ("cms", "view"),
+        ("cms", "add"),
+        ("cms", "change"),
+        ("cms", "delete"),
+        ("notifications", "view"),
+        ("tasks", "view"),
+        ("tasks", "add"),
+        ("tasks", "change"),
+        ("tasks", "delete"),
+        ("tasks", "assign"),
+        ("tasks", "approve"),
+        # H14: CJ Admin reviews/approves/rejects/pays every invoice.
+        ("invoicing", "view"),
+        ("invoicing", "add"),
+        ("invoicing", "approve"),
+        ("invoicing", "reject"),
+        ("invoicing", "change"),
+    ],
+    "helpdesk": [
+        # Doc 8 §4: Help Desk is a liaison with the "minimum user role" — it
+        # follows up sessions (change) but never books one (Report 9 #117).
+        ("training", "view"),
+        ("counseling", "view"),
+        ("counseling", "change"),
+        ("notifications", "view"),
+        ("accounts", "view"),
+    ],
+    "corp_admin": [
+        # User Details p.3 + Report 9 #1-#14: manages his own organization's
+        # members, schedules and reports only (scoped in the viewsets); he
+        # cannot create organizations, assessments or courses.
+        ("accounts", "view"),
+        ("accounts", "add"),
+        ("accounts", "change"),
+        ("organizations", "view"),
+        ("organizations", "change"),
+        ("assessment", "view"),
+        ("reporting", "view"),
+        ("reporting", "generate_report"),
+        ("training", "view"),
+        ("counseling", "view"),
+    ],
+    "corp_exclusive": [
+        # Report 9 #35-#37, #45, #46, #49: runs his own organization (members,
+        # groups, schedules, website branding), scoped in the viewsets.
+        ("accounts", "view"),
+        ("accounts", "add"),
+        ("accounts", "change"),
+        ("organizations", "view"),
+        ("organizations", "change"),
+        ("assessment", "view"),
+        ("reporting", "view"),
+        ("reporting", "generate_report"),
+    ],
+    "psychometrician": [
+        # Psychometrician: full QB access (configures psychometric properties)
+        ("question_bank", "view"),
+        ("question_bank", "add"),
+        ("question_bank", "change"),
+        ("question_bank", "review"),
+        # Psychometrician is the primary assessment author per SRS UC029
+        # "Prepare Assessment Blueprint" — full CRUD on assessments.
+        ("assessment", "view"),
+        ("assessment", "add"),
+        ("assessment", "change"),
+        ("assessment", "delete"),
+        # Doc 5 §1 / Doc 4 / User Details p.10 "Design Report": the
+        # psychometrician builds profiling solutions and report designs
+        # (Report 9 #89/#90).
+        ("career_profiling", "view"),
+        ("career_profiling", "add"),
+        ("career_profiling", "change"),
+        ("reporting", "view"),
+        ("reporting", "add"),
+        ("reporting", "change"),
+        ("reporting", "generate_report"),
+        # H14: empanelled role — bills CJ Admin for review work (Doc 4).
+        ("invoicing", "view"),
+        ("invoicing", "add"),
+    ],
+    "sme": [
+        # SME: creates/edits/deletes OWN questions (unreviewed only).
+        # Once reviewed, can only request_delete (admin approves).
+        ("question_bank", "view"),
+        ("question_bank", "add"),
+        ("question_bank", "change"),
+        ("question_bank", "delete"),
+        ("question_bank", "request_delete"),
+        # Report 4 SME-3 / Report 9 #64: SME has no right to view/take assessments.
+        # H14: empanelled role — bills CJ Admin for question authoring (Doc 4).
+        ("invoicing", "view"),
+        ("invoicing", "add"),
+    ],
+    "reviewer": [
+        # Reviewer: reviews questions, approves/rejects. No create/edit/delete.
+        ("question_bank", "view"),
+        ("question_bank", "review"),
+        ("question_bank", "approve"),
+        ("question_bank", "reject"),
+        # Report 4 Reviewer-4: reviewer has no right to view/take assessments.
+        # H14: empanelled role — bills CJ Admin for review work (Doc 4).
+        ("invoicing", "view"),
+        ("invoicing", "add"),
+    ],
+    "trainer": [
+        ("training", "view"),
+        ("training", "add"),
+        ("training", "change"),
+        ("training", "delete"),
+        ("accounts", "view"),
+        ("assessment", "view"),
+        # Report 3 §4.1: trainers author their own course assessments using
+        # the CJ Question Bank (scoped to created_by in the viewsets).
+        ("assessment", "add"),
+        ("assessment", "change"),
+        ("assessment", "delete"),
+        ("question_bank", "view"),
+        ("question_bank", "add"),
+        ("question_bank", "change"),
+        # H14: empanelled role — bills CJ Admin for training delivery (Doc 4).
+        ("invoicing", "view"),
+        ("invoicing", "add"),
+    ],
+    "group_admin": [
+        # Works inside his own group only (scoped in the viewsets): members
+        # and assessment schedules for his group (Report 9 #26).
+        ("accounts", "view"),
+        ("assessment", "view"),
+        ("assessment", "assign"),
+        ("organizations", "view"),
+        ("organizations", "change"),
+    ],
+    "counsellor": [
+        ("counseling", "view"),
+        ("counseling", "add"),
+        ("counseling", "change"),
+        ("accounts", "view"),
+        # Report 4 Counsellor-1/2 + Report 9 #85/#86: no assessment, profiling
+        # or report access.
+        # H14: empanelled role — bills CJ Admin for counselling delivery (Doc 4).
+        ("invoicing", "view"),
+        ("invoicing", "add"),
+    ],
+    "channel_partner": [
+        # Channel Partner: manages the individual users of his own organization
+        # (scoped in the viewsets). Report 9 #57/#58: no assessment authoring
+        # and no access to users' reports.
+        ("accounts", "view"),
+        ("accounts", "add"),
+        ("accounts", "change"),
+        ("organizations", "view"),
+        ("organizations", "change"),
+        ("assessment", "view"),
+        # H14: empanelled role — bills CJ Admin for commission (Doc 4).
+        ("invoicing", "view"),
+        ("invoicing", "add"),
+    ],
+    "individual": [
+        ("assessment", "view"),  # can take assessments
+        ("reporting", "view"),  # can view own reports
+        ("training", "view"),  # can browse + register for courses
+        ("training", "add"),  # can register (register action = 'add')
+        ("training", "change"),  # can track progress (progress action = 'change')
+        ("counseling", "view"),  # can browse counsellors
+        ("counseling", "add"),  # can book sessions
+        ("counseling", "change"),  # can submit feedback
+    ],
+}
+
+
+def sync_role_rights(role_model, right_model, table) -> dict[str, tuple[int, int]]:
+    """Make every system role's rights match ``table`` exactly.
+
+    Works with real or historical (migration) models. Returns
+    ``{role_name: (added, removed)}`` for logging.
+    """
+    changes: dict[str, tuple[int, int]] = {}
+    for role_name, perms in table.items():
+        role = role_model.objects.filter(name=role_name).first()
+        if role is None:
+            continue
+        wanted = set(perms)
+        current = {(r.module, r.action): r for r in right_model.objects.filter(role=role)}
+        added = 0
+        for module, action in wanted - current.keys():
+            right_model.objects.create(role=role, module=module, action=action)
+            added += 1
+        stale = [current[key].pk for key in current.keys() - wanted]
+        if stale:
+            right_model.objects.filter(pk__in=stale).delete()
+        changes[role_name] = (added, len(stale))
+    return changes

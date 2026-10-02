@@ -359,6 +359,22 @@ class UserWriteSerializer(serializers.ModelSerializer):
         ),
     )
 
+    def validate_role(self, value):
+        """Report 9 #6/#36/#56: an organization manager may only give the
+        roles he is allowed to create (Corporate Individual, and Group Admin
+        for corporate admins) — never CJ Admin or any staff role."""
+        from apps.organizations.scoping import creatable_role_names
+
+        request = self.context.get("request")
+        allowed = creatable_role_names(request.user) if request else None
+        if allowed is None or value is None:
+            return value
+        if self.instance is not None and self.instance.role_id == value.id:
+            return value
+        if value.name not in allowed:
+            raise serializers.ValidationError("You cannot give users this role.")
+        return value
+
     def validate_email(self, value: str) -> str:
         """Email must be unique, but exclude the current instance on update."""
         if not value:
@@ -378,9 +394,15 @@ class UserWriteSerializer(serializers.ModelSerializer):
         password = validated_data.pop("password", None)
         # Use create_user to properly hash the password and normalize email
         user = User.objects.create_user(**validated_data)
+        # Report 9 #2/#33/#62: the verification link was sent only when the
+        # password was left blank, so users created with a password (e.g. by a
+        # Channel Partner) never got one. Every unverified user gets it now.
+        self.invite_email_sent = None
         if password:
             user.set_password(password)
             user.save(update_fields=["password"])
+            if not user.is_email_verified:
+                self.invite_email_sent = self._send_invite(user)
         else:
             # generate random password and email it (per UC002)
             from django.utils.crypto import get_random_string
@@ -396,12 +418,7 @@ class UserWriteSerializer(serializers.ModelSerializer):
             # otherwise leave them with a random password and no way in.
             # verify_email() both activates the account and lets them set a
             # password, so the link works whether or not is_active is set.
-            token = create_email_verification_token(user)
-            try:
-                send_verification_email(user, token)
-            except Exception:
-                # Email send failure should not block admin user creation
-                pass
+            self.invite_email_sent = self._send_invite(user)
         profile, _profile_created = UserProfile.objects.get_or_create(user=user)
         if profile_data:
             _apply_profile_fields(profile, profile_data)
@@ -420,6 +437,17 @@ class UserWriteSerializer(serializers.ModelSerializer):
                 # counseling app unavailable — skip silently
                 pass
         return user
+
+    @staticmethod
+    def _send_invite(user) -> bool:
+        """Send the activation/verification email; False if sending failed
+        (the failure is reported to the admin instead of being hidden)."""
+        token = create_email_verification_token(user)
+        try:
+            send_verification_email(user, token)
+        except Exception:
+            return False
+        return True
 
     def update(self, instance: User, validated_data: dict) -> User:
         """Update user. Hash password if provided; ignore blank password."""

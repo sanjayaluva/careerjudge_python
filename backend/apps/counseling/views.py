@@ -78,6 +78,8 @@ class HasCounselingPermission(HasModulePermission):
         "feedback": "add",  # counselee submits feedback
         "followups": "change",
         "confirm_followup": "add",
+        # Counselee declines a follow-up (was missing — refused for everyone).
+        "decline": "change",
         "my_sessions": "view",
         # H16/D8 §2.3: counsellor sets the per-session meeting link.
         "meeting_link": "change",
@@ -509,8 +511,17 @@ class CounselingSessionViewSet(ModelViewSet):
                 return qs.filter(counsellor=profile)
             except CounsellorProfile.DoesNotExist:
                 return qs.none()
-        # Admin + helpdesk see all
-        return qs
+        # Report 9 #18: organization managers see only their own members'
+        # sessions (they used to see everyone's).
+        from apps.organizations.scoping import managed_user_ids
+
+        member_ids = managed_user_ids(user)
+        if member_ids is not None:
+            return qs.filter(counselee_id__in=member_ids)
+        # Only CJ Admin and Help Desk see all; any other role sees his own.
+        if user.is_superuser or user_role_name in ("cj_admin", "helpdesk"):
+            return qs
+        return qs.filter(counselee=user)
 
     def list(self, request, *args, **kwargs):
         # Report 8 #41: wrap in the standard envelope like every other list

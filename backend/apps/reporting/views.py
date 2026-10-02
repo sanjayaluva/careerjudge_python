@@ -57,6 +57,9 @@ class HasReportingPermission(HasModulePermission):
         "duplicate": "add",
         "generate": "view",
         "generate_group": "view",
+        # Report 9 #119: the per-report "Generated" list was missing from this
+        # map, so it was refused for everyone except superusers.
+        "generated": "view",
         "select_data": "view",
         "cutoffs": "change",
         "bands": "change",
@@ -66,6 +69,31 @@ class HasReportingPermission(HasModulePermission):
         "sections_reorder": "change",
         "pdf": "view",  # PDF download for generated reports
     }
+
+
+# Roles that see every candidate's generated reports (report designers).
+_ALL_REPORTS_ROLES = ("cj_admin", "psychometrician")
+
+
+def visible_candidate_ids(user):
+    """Whose reports ``user`` may see: ``None`` = everyone (CJ Admin,
+    Psychometrician); an organization manager sees his members (Doc 4 group
+    report); everyone else only himself (Report 9 #12/#58/#78/#86)."""
+    from apps.organizations.scoping import managed_user_ids, role_name
+
+    if user.is_superuser or role_name(user) in _ALL_REPORTS_ROLES:
+        return None
+    member_ids = managed_user_ids(user)
+    if member_ids is not None:
+        return member_ids
+    return [user.id]
+
+
+def scope_to_visible_candidates(qs, user, field="candidate_id"):
+    ids = visible_candidate_ids(user)
+    if ids is None:
+        return qs
+    return qs.filter(**{f"{field}__in": ids})
 
 
 class ReportViewSet(ActionSerializerMixin, ModelViewSet):
@@ -211,7 +239,12 @@ class ReportViewSet(ActionSerializerMixin, ModelViewSet):
         from apps.assessment.models import AssessmentSession
 
         session_id = request.data.get("session_id")
-        session = get_object_or_404(AssessmentSession, id=session_id)
+        # A user may only generate reports for sessions whose candidate he is
+        # allowed to see (his own, or his organization's members).
+        session = get_object_or_404(
+            scope_to_visible_candidates(AssessmentSession.objects.all(), request.user),
+            id=session_id,
+        )
 
         # Scope validation: general reports require the session's assessment
         # to match the report's linked assessment
@@ -284,7 +317,9 @@ class ReportViewSet(ActionSerializerMixin, ModelViewSet):
     def generated(self, request, pk=None):
         """List all generated reports for this report definition."""
         report = self.get_object()
-        gen_reports = report.generated_reports.select_related("candidate", "session").all()
+        gen_reports = scope_to_visible_candidates(
+            report.generated_reports.select_related("candidate", "session").all(), request.user
+        )
         serializer = GeneratedReportSerializer(gen_reports, many=True)
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
 
@@ -343,7 +378,8 @@ class ReportViewSet(ActionSerializerMixin, ModelViewSet):
         from apps.assessment.models import AssessmentSession
 
         sessions = list(
-            AssessmentSession.objects.filter(id__in=session_ids, status="completed")
+            scope_to_visible_candidates(AssessmentSession.objects.all(), request.user)
+            .filter(id__in=session_ids, status="completed")
             .select_related("candidate", "assessment")
             .prefetch_related("section_scores__section")
         )
@@ -616,32 +652,24 @@ class GeneratedReportViewSet(ModelViewSet):
     """Retrieve generated reports."""
 
     queryset = GeneratedReport.objects.select_related("report", "session", "candidate")
-    permission_classes = [IsAuthenticated]
+    # Report 9 #58/#86: roles without the reporting right (Channel Partner,
+    # Counsellor) no longer reach generated reports at all.
+    permission_classes = [IsAuthenticated, HasReportingPermission]
     serializer_class = GeneratedReportSerializer
     http_method_names = ["get", "head", "options"]
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        # Doc 4: a corporate manager sees ONLY their own employees' reports.
-        # A corporate manager is a corp/corp-exclusive/group admin who is an
-        # admin member of at least one corporate organization. Non-corporate
-        # roles (CJ Admin, staff, individuals) keep their existing visibility.
-        user = self.request.user
-        role_name = user.role.name if getattr(user, "role", None) else None
-        if role_name in ("corp_admin", "corp_exclusive", "group_admin"):
-            from apps.organizations.models import OrganizationMember
-
-            admin_orgs = OrganizationMember.objects.filter(
-                user=user,
-                is_admin=True,
-                organization__type__in=("corporate", "corp_exclusive"),
-            ).values_list("organization_id", flat=True)
-            if admin_orgs:
-                employee_ids = OrganizationMember.objects.filter(
-                    organization_id__in=list(admin_orgs)
-                ).values_list("user_id", flat=True)
-                qs = qs.filter(candidate_id__in=list(employee_ids))
+        # Doc 4 + Report 9 #12/#78: a corporate manager sees ONLY his own
+        # members' reports and every other user ONLY his own; CJ Admin and
+        # the Psychometrician see all. ?mine=1 limits anyone to his own.
+        qs = scope_to_visible_candidates(super().get_queryset(), self.request.user)
+        if self.request.query_params.get("mine"):
+            qs = qs.filter(candidate=self.request.user)
         return qs
+
+    def list(self, request, *args, **kwargs):
+        resp = super().list(request, *args, **kwargs)
+        return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()

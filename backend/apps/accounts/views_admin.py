@@ -6,7 +6,7 @@ import io
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import filters, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
@@ -43,7 +43,13 @@ class HasAccountsPermission(HasModulePermission):
     }
 
 
-_CORPORATE_ROLES = ("corp_admin", "corp_exclusive", "group_admin", "channel_partner")
+class IsCJAdmin(BasePermission):
+    """CJ Admin or superuser only."""
+
+    def has_permission(self, request, view):
+        from apps.organizations.scoping import is_cj_admin
+
+        return is_cj_admin(request.user)
 
 
 def _is_corporate_member(user) -> bool:
@@ -57,6 +63,56 @@ def _is_corporate_member(user) -> bool:
     return OrganizationMember.objects.filter(
         user=user, organization__type__in=("corporate", "corp_exclusive")
     ).exists()
+
+
+def _forbidden(message: str):
+    return Response(
+        {"error": {"code": "forbidden", "message": message, "details": {}}},
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
+
+def _manager_target_org(request):
+    """For an organization manager, resolve the organization (and optional
+    group) new users are linked to. Returns ``(org, group, error_response)``;
+    ``(None, None, None)`` for unrestricted users (CJ Admin / staff)."""
+    from apps.organizations.models import Group, Organization
+    from apps.organizations.scoping import (
+        managed_group_ids,
+        managed_org_ids,
+        user_primary_organization,
+    )
+
+    org_ids = managed_org_ids(request.user)
+    if org_ids is None:
+        return None, None, None
+    if not org_ids:
+        return (
+            None,
+            None,
+            _forbidden(
+                "You are not linked to an organization yet. Please ask CJ Admin "
+                "to tag you to your organization."
+            ),
+        )
+    org_id = request.data.get("organization_id") or request.query_params.get("organization_id")
+    if org_id:
+        if int(org_id) not in org_ids:
+            return None, None, _forbidden("You can add users only to your own organization.")
+        org = Organization.objects.get(id=org_id)
+    else:
+        org = user_primary_organization(request.user)
+    group = None
+    group_id = request.data.get("group_id")
+    allowed_groups = managed_group_ids(request.user)
+    if group_id:
+        group = Group.objects.filter(id=group_id, organization=org).first()
+        if group is None or (allowed_groups is not None and group.id not in allowed_groups):
+            return None, None, _forbidden("You can add users only to your own group.")
+    elif allowed_groups:
+        # A Group Admin's users always land in his own group.
+        group = Group.objects.filter(id=allowed_groups[0]).first()
+    return org, group, None
 
 
 class UserViewSet(ModelViewSet):
@@ -78,11 +134,25 @@ class UserViewSet(ModelViewSet):
     ordering = ["-created_at"]
 
     def get_queryset(self):
-        """Allow filtering by role name via ?role=sme query param."""
+        """Allow filtering by role name via ?role=sme query param.
+
+        Report 9 #5/#9/#36/#56: an organization manager (Corp Admin, Corp
+        Exclusive, Group Admin, Channel Partner) sees only the members of his
+        own organization (his group, for a Group Admin) and himself — never
+        the system-wide user list.
+        """
+        from apps.organizations.scoping import managed_user_ids
+
         qs = super().get_queryset()
         role_name = self.request.query_params.get("role")
         if role_name:
             qs = qs.filter(role__name=role_name)
+        allowed_ids = managed_user_ids(self.request.user)
+        if allowed_ids is not None:
+            qs = qs.filter(id__in=[*allowed_ids, self.request.user.id])
+        org_id = self.request.query_params.get("organization")
+        if org_id:
+            qs = qs.filter(organization_memberships__organization_id=org_id)
         return qs
 
     def get_serializer_class(self):
@@ -106,36 +176,37 @@ class UserViewSet(ModelViewSet):
         )
 
     def create(self, request, *args, **kwargs):
+        # Doc 9 §2.3: a user added by an organization manager is linked to the
+        # manager's organization (the one chosen, else his first) and group,
+        # with the supplied Employee ID. A manager tagged to no organization
+        # cannot add users. CJ Admin / staff creating users link nothing.
+        target_org, target_group, error = _manager_target_org(request)
+        if error is not None:
+            return error
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
-        # Doc 9 §2.3: when a corporate admin adds a user, auto-link the new
-        # account to the creator's organization so it is scoped to that
-        # corporate (and carries the supplied Employee ID). CJ Admin / staff
-        # creating users are unaffected (no membership → no linkage).
-        requester = request.user
-        req_role = requester.role.name if getattr(requester, "role", None) else None
-        if req_role in _CORPORATE_ROLES:
+        if target_org is not None:
             from apps.organizations.models import OrganizationMember
-            from apps.organizations.scoping import user_primary_organization
 
-            org = user_primary_organization(requester)
-            if (
-                org is not None
-                and not OrganizationMember.objects.filter(organization=org, user=user).exists()
-            ):
-                OrganizationMember.objects.create(
-                    organization=org,
-                    user=user,
-                    employee_id=(request.data.get("employee_id") or ""),
-                )
+            OrganizationMember.objects.get_or_create(
+                organization=target_org,
+                user=user,
+                defaults={
+                    "employee_id": (request.data.get("employee_id") or ""),
+                    "group": target_group,
+                },
+            )
 
+        data = UserSerializer(user).data
+        data["invite_email_sent"] = getattr(serializer, "invite_email_sent", None)
+        message = "User created."
+        if data["invite_email_sent"] is False:
+            message = "User created, but the verification email could not be sent."
         return Response(
-            {
-                "message": "User created.",
-                "data": UserSerializer(user).data,
-            },
+            {"message": message, "data": data},
             status=status.HTTP_201_CREATED,
         )
 
@@ -257,18 +328,13 @@ class AssignRoleView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, user_id):
-        # Require accounts.change permission
-        if not request.user.has_module_right("accounts", "change"):
-            return Response(
-                {
-                    "error": {
-                        "code": "forbidden",
-                        "message": "You do not have permission to assign roles.",
-                        "details": {},
-                    }
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        # Report 9 #6: only CJ Admin assigns roles (Doc 9 §2.1). The general
+        # 'change users' right let organization managers make anyone — even
+        # themselves — a CJ Admin.
+        from apps.organizations.scoping import is_cj_admin
+
+        if not is_cj_admin(request.user):
+            return _forbidden("You do not have permission to assign roles.")
         user = get_object_or_404(User, id=user_id)
         serializer = AssignRoleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -297,7 +363,9 @@ class RoleViewSet(ModelViewSet):
     """
 
     queryset = Role.objects.prefetch_related("rights", "users", "base_role").all()
-    permission_classes = [IsAuthenticated, HasAccountsPermission]
+    # Report 9: roles & permissions are CJ Admin's alone (Doc 9 §2.1) — the
+    # general users right let organization managers create roles.
+    permission_classes = [IsAuthenticated, HasAccountsPermission, IsCJAdmin]
     filter_backends = [filters.SearchFilter]
     search_fields = ["name", "description"]
 
@@ -401,17 +469,10 @@ class AssignPermissionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, role_id):
-        if not request.user.has_module_right("accounts", "change"):
-            return Response(
-                {
-                    "error": {
-                        "code": "forbidden",
-                        "message": "You do not have permission to assign permissions.",
-                        "details": {},
-                    }
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        from apps.organizations.scoping import is_cj_admin
+
+        if not is_cj_admin(request.user):
+            return _forbidden("You do not have permission to assign permissions.")
         role = get_object_or_404(Role, id=role_id)
         if role.is_system:
             return Response(
@@ -450,17 +511,10 @@ class RemovePermissionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, role_id):
-        if not request.user.has_module_right("accounts", "change"):
-            return Response(
-                {
-                    "error": {
-                        "code": "forbidden",
-                        "message": "You do not have permission to remove permissions.",
-                        "details": {},
-                    }
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        from apps.organizations.scoping import is_cj_admin
+
+        if not is_cj_admin(request.user):
+            return _forbidden("You do not have permission to remove permissions.")
         role = get_object_or_404(Role, id=role_id)
         if role.is_system:
             return Response(
@@ -614,14 +668,16 @@ class BulkUserUploadView(APIView):
         skipped = []
         errors = []
 
-        # Doc 9 §2.3: a corporate admin's bulk upload links every created user to
-        # the uploader's organization. CJ Admin / staff uploads link nothing.
-        upload_org = None
-        req_role = request.user.role.name if getattr(request.user, "role", None) else None
-        if req_role in _CORPORATE_ROLES:
-            from apps.organizations.scoping import user_primary_organization
+        # Doc 9 §2.3: an organization manager's bulk upload links every created
+        # user to his organization (the one chosen on the organization page,
+        # else his first) and group. CJ Admin / staff uploads link nothing.
+        upload_org, upload_group, error = _manager_target_org(request)
+        if error is not None:
+            return error
+        from apps.organizations.scoping import creatable_role_names
 
-            upload_org = user_primary_organization(request.user)
+        allowed_roles = creatable_role_names(request.user)
+        email_failed = 0
 
         for row_num, row in enumerate(reader, start=2):  # start=2 (1=header)
             full_name = (row.get("full_name") or "").strip()
@@ -662,8 +718,17 @@ class BulkUserUploadView(APIView):
                 skipped.append({"row": row_num, "email": email, "reason": "Email already exists"})
                 continue
 
-            # Resolve role
+            # Resolve role (Report 9 #6: managers create only allowed roles)
             role = default_role
+            if role_name and allowed_roles is not None and role_name not in allowed_roles:
+                errors.append(
+                    {
+                        "row": row_num,
+                        "email": email,
+                        "error": f"You cannot create users with role '{role_name}'",
+                    }
+                )
+                continue
             if role_name:
                 try:
                     role = Role.objects.get(name=role_name)
@@ -704,7 +769,7 @@ class BulkUserUploadView(APIView):
                     OrganizationMember.objects.get_or_create(
                         organization=upload_org,
                         user=user,
-                        defaults={"employee_id": employee_id},
+                        defaults={"employee_id": employee_id, "group": upload_group},
                     )
                 # Invited user: mint an activation token and send the same
                 # verification email self-registration uses, so they can
@@ -713,8 +778,9 @@ class BulkUserUploadView(APIView):
                 try:
                     send_verification_email(user, token)
                 except Exception:
-                    # Email send failure should not block bulk user creation
-                    pass
+                    # Email send failure must not block bulk user creation,
+                    # but is reported to the uploader (Report 9 #2).
+                    email_failed += 1
                 created.append({"row": row_num, "email": email, "full_name": full_name})
             except Exception as exc:
                 errors.append({"row": row_num, "email": email, "error": str(exc)})
@@ -722,8 +788,14 @@ class BulkUserUploadView(APIView):
         return Response(
             {
                 "message": f"Bulk upload complete: {len(created)} created, "
-                f"{len(skipped)} skipped, {len(errors)} errors.",
+                f"{len(skipped)} skipped, {len(errors)} errors."
+                + (
+                    f" {email_failed} verification email(s) could not be sent."
+                    if email_failed
+                    else ""
+                ),
                 "data": {
+                    "email_failed_count": email_failed,
                     "created_count": len(created),
                     "skipped_count": len(skipped),
                     "error_count": len(errors),

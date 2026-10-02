@@ -107,6 +107,7 @@ def test_schedule_group_only_notifies_group_members(cj_admin, org, roles):
 def test_corporate_manager_sees_only_own_employees_reports(roles):
     r = roles["corp_admin"]
     _grant(r, "organizations", "view")
+    _grant(r, "reporting", "view")
     org1 = Organization.objects.create(name="Org1", type="corporate")
     org2 = Organization.objects.create(name="Org2", type="corporate")
     manager = User.objects.create_user(email="mgr@t.com", password="pw", is_active=True, role=r)
@@ -123,11 +124,8 @@ def test_corporate_manager_sees_only_own_employees_reports(roles):
 
     resp = _auth(manager).get("/api/reporting/generated/")
     assert resp.status_code == 200, resp.data
-    rows = (
-        resp.data["results"]
-        if isinstance(resp.data, dict) and "results" in resp.data
-        else resp.data
-    )
+    body = resp.data["data"]
+    rows = body["results"] if isinstance(body, dict) and "results" in body else body
     candidate_ids = {row["candidate"] for row in rows}
     assert emp1.id in candidate_ids
     assert emp2.id not in candidate_ids

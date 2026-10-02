@@ -5,6 +5,7 @@ from django.utils import timezone
 from django.utils.crypto import get_random_string
 from django.utils.text import slugify
 from rest_framework import filters, status
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -20,6 +21,13 @@ from .models import (
     Organization,
     OrganizationAssignment,
     OrganizationMember,
+)
+from .scoping import (
+    can_manage_org,
+    is_cj_admin,
+    managed_group_ids,
+    managed_org_ids,
+    role_name,
 )
 from .serializers import (
     AssessmentScheduleSerializer,
@@ -44,6 +52,39 @@ class HasOrganizationsPermission(HasModulePermission):
     }
 
 
+class HasOrgContentPermission(HasModulePermission):
+    """Routes INSIDE an organization (groups, members, schedules, website):
+    adding or changing them is managing that organization ('change'), not
+    creating a new organization ('add')."""
+
+    module = "organizations"
+    action_map = {
+        "list": "view",
+        "retrieve": "view",
+        "create": "change",
+        "update": "change",
+        "partial_update": "change",
+        "destroy": "change",
+    }
+
+
+class ManagedOrgMixin:
+    """Nested organization routes: an organization manager (Corp Admin, Corp
+    Exclusive, Group Admin, Channel Partner) reaches only his own
+    organization's groups, members, schedules and website (Report 9 #1/#54)."""
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        org_id = self.kwargs.get("organization_id")
+        if org_id is not None and not can_manage_org(request.user, org_id):
+            raise NotFound("Organization not found.")
+
+
+def _require_cj_admin(request, message):
+    if not is_cj_admin(request.user):
+        raise PermissionDenied(message)
+
+
 class OrganizationViewSet(ActionSerializerMixin, ModelViewSet):
     """CRUD for organizations.
 
@@ -65,6 +106,14 @@ class OrganizationViewSet(ActionSerializerMixin, ModelViewSet):
     serializer_classes = {
         "list": OrganizationListSerializer,
     }
+
+    def get_queryset(self):
+        # Report 9 #1/#3/#22/#54: managers see only their own organization(s).
+        qs = super().get_queryset()
+        org_ids = managed_org_ids(self.request.user)
+        if org_ids is not None:
+            qs = qs.filter(id__in=org_ids)
+        return qs
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -94,6 +143,8 @@ class OrganizationViewSet(ActionSerializerMixin, ModelViewSet):
         )
 
     def update(self, request, *args, **kwargs):
+        # Doc 9 §2.2: the organization record itself is CJ Admin's.
+        _require_cj_admin(request, "Only CJ Admin can edit organization details.")
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
@@ -108,6 +159,7 @@ class OrganizationViewSet(ActionSerializerMixin, ModelViewSet):
         )
 
     def destroy(self, request, *args, **kwargs):
+        _require_cj_admin(request, "Only CJ Admin can delete an organization.")
         instance = self.get_object()
         instance.delete()
         return Response(
@@ -116,7 +168,7 @@ class OrganizationViewSet(ActionSerializerMixin, ModelViewSet):
         )
 
 
-class GroupViewSet(ActionSerializerMixin, ModelViewSet):
+class GroupViewSet(ManagedOrgMixin, ActionSerializerMixin, ModelViewSet):
     """CRUD for groups within an organization.
 
     GET    /api/organizations/<org_id>/groups/
@@ -127,11 +179,20 @@ class GroupViewSet(ActionSerializerMixin, ModelViewSet):
     """
 
     serializer_class = GroupSerializer
-    permission_classes = [IsAuthenticated, HasOrganizationsPermission]
+    permission_classes = [IsAuthenticated, HasOrgContentPermission]
 
     def get_queryset(self):
         org_id = self.kwargs.get("organization_id")
         return Group.objects.filter(organization_id=org_id)
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        # A Group Admin works inside his group; he does not create, rename or
+        # delete the organization's groups.
+        if request.method not in ("GET", "HEAD", "OPTIONS") and role_name(request.user) == (
+            "group_admin"
+        ):
+            raise PermissionDenied("Group Admins cannot change the organization's groups.")
 
     def perform_create(self, serializer):
         org_id = self.kwargs.get("organization_id")
@@ -188,7 +249,7 @@ class GroupViewSet(ActionSerializerMixin, ModelViewSet):
         )
 
 
-class OrganizationMemberViewSet(ModelViewSet):
+class OrganizationMemberViewSet(ManagedOrgMixin, ModelViewSet):
     """CRUD for organization members.
 
     GET    /api/organizations/<org_id>/members/
@@ -198,18 +259,49 @@ class OrganizationMemberViewSet(ModelViewSet):
     """
 
     serializer_class = OrganizationMemberSerializer
-    permission_classes = [IsAuthenticated, HasOrganizationsPermission]
+    permission_classes = [IsAuthenticated, HasOrgContentPermission]
 
     def get_queryset(self):
         org_id = self.kwargs.get("organization_id")
-        return OrganizationMember.objects.filter(organization_id=org_id).select_related(
+        qs = OrganizationMember.objects.filter(organization_id=org_id).select_related(
             "user", "group"
         )
+        group_ids = managed_group_ids(self.request.user)
+        if group_ids is not None:
+            qs = qs.filter(group_id__in=group_ids)
+        return qs
 
     def perform_create(self, serializer):
         org_id = self.kwargs.get("organization_id")
         org = get_object_or_404(Organization, id=org_id)
-        serializer.save(organization=org)
+        extra = {}
+        group_ids = managed_group_ids(self.request.user)
+        if group_ids is not None:
+            # A Group Admin's new members always join his own group.
+            requested = serializer.validated_data.get("group_id")
+            extra["group_id"] = requested if requested in group_ids else group_ids[0]
+        serializer.save(organization=org, **extra)
+
+    def _check_existing_user(self, email):
+        """Report 9: an organization manager may add an EXISTING account only
+        if it is a plain individual who belongs to no other organization —
+        otherwise he could pull anyone (even staff) into his organization."""
+        if managed_org_ids(self.request.user) is None or not email:
+            return
+        from apps.accounts.models import User
+
+        existing = User.objects.filter(email__iexact=email).first()
+        if existing is None:
+            return
+        if (
+            role_name(existing) != "individual"
+            or OrganizationMember.objects.filter(user=existing)
+            .exclude(organization_id=self.kwargs.get("organization_id"))
+            .exists()
+        ):
+            raise PermissionDenied(
+                "This email belongs to an account you cannot add. Please contact CJ Admin."
+            )
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -229,6 +321,7 @@ class OrganizationMemberViewSet(ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        self._check_existing_user(serializer.validated_data.get("user_email"))
         self.perform_create(serializer)
         return Response(
             {
@@ -266,7 +359,7 @@ class OrganizationMemberViewSet(ModelViewSet):
         )
 
 
-class OrganizationAssignmentViewSet(ModelViewSet):
+class OrganizationAssignmentViewSet(ManagedOrgMixin, ModelViewSet):
     """Assign published content to an organization (CJ_UC030, Doc 4).
 
     GET    /api/organizations/<org_id>/assignments/
@@ -279,7 +372,7 @@ class OrganizationAssignmentViewSet(ModelViewSet):
     """
 
     serializer_class = OrganizationAssignmentSerializer
-    permission_classes = [IsAuthenticated, HasOrganizationsPermission]
+    permission_classes = [IsAuthenticated, HasOrgContentPermission]
 
     def get_queryset(self):
         org_id = self.kwargs.get("organization_id")
@@ -297,6 +390,9 @@ class OrganizationAssignmentViewSet(ModelViewSet):
         return Response({"message": "OK", "data": resp.data}, status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
+        # Report 9 #8: assigning (licensing) content to an organization is CJ
+        # Admin's right; corporate admins then work with what was assigned.
+        _require_cj_admin(request, "Only CJ Admin can assign content to an organization.")
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         org_id = self.kwargs.get("organization_id")
@@ -322,6 +418,7 @@ class OrganizationAssignmentViewSet(ModelViewSet):
         )
 
     def destroy(self, request, *args, **kwargs):
+        _require_cj_admin(request, "Only CJ Admin can remove content from an organization.")
         instance = self.get_object()
         instance.delete()
         return Response(
@@ -330,7 +427,7 @@ class OrganizationAssignmentViewSet(ModelViewSet):
         )
 
 
-class AssessmentScheduleViewSet(ModelViewSet):
+class AssessmentScheduleViewSet(ManagedOrgMixin, ModelViewSet):
     """CJ_UC053 — schedule an assessment for a corporate's employees + notify.
 
     GET    /api/organizations/<org_id>/schedules/
@@ -339,21 +436,66 @@ class AssessmentScheduleViewSet(ModelViewSet):
     """
 
     serializer_class = AssessmentScheduleSerializer
-    permission_classes = [IsAuthenticated, HasOrganizationsPermission]
+    permission_classes = [IsAuthenticated, HasOrgContentPermission]
 
     def get_queryset(self):
         org_id = self.kwargs.get("organization_id")
-        return AssessmentSchedule.objects.filter(organization_id=org_id).select_related(
+        qs = AssessmentSchedule.objects.filter(organization_id=org_id).select_related(
             "assessment", "group"
         )
+        group_ids = managed_group_ids(self.request.user)
+        if group_ids is not None:
+            qs = qs.filter(group_id__in=group_ids)
+        return qs
+
+    def _validate_target(self, assessment, group):
+        """Report 9 #8/#26: a manager schedules only assessments CJ Admin
+        assigned to his organization, and a Group Admin only for his group."""
+        org_id = int(self.kwargs.get("organization_id"))
+        if managed_org_ids(self.request.user) is not None and assessment is not None:
+            assigned = OrganizationAssignment.objects.filter(
+                organization_id=org_id, item_type="assessment", item_id=assessment.id
+            ).exists()
+            if not assigned:
+                raise PermissionDenied(
+                    "This assessment has not been assigned to your organization by CJ Admin."
+                )
+        if group is not None and group.organization_id != org_id:
+            raise PermissionDenied("That group belongs to another organization.")
+        group_ids = managed_group_ids(self.request.user)
+        if group_ids is not None and (group is None or group.id not in group_ids):
+            raise PermissionDenied("You can schedule assessments only for your own group.")
 
     def perform_create(self, serializer):
         org_id = self.kwargs.get("organization_id")
         org = get_object_or_404(Organization, id=org_id)
+        self._validate_target(
+            serializer.validated_data.get("assessment"), serializer.validated_data.get("group")
+        )
         schedule = serializer.save(organization=org, created_by=self.request.user)
         self._notify_members(schedule)
 
-    def _notify_members(self, schedule):
+    def partial_update(self, request, *args, **kwargs):
+        """Report 9 #11: reschedule — change the date/time (and optionally the
+        group) of an existing schedule; the members are notified again."""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self._validate_target(
+            serializer.validated_data.get("assessment", instance.assessment),
+            serializer.validated_data.get("group", instance.group),
+        )
+        schedule = serializer.save()
+        self._notify_members(schedule, rescheduled=True)
+        return Response(
+            {
+                "message": "Assessment rescheduled and members notified.",
+                "data": AssessmentScheduleSerializer(schedule).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def _notify_members(self, schedule, rescheduled=False):
         from apps.notifications.models import notify_user
 
         members = OrganizationMember.objects.filter(
@@ -361,9 +503,10 @@ class AssessmentScheduleViewSet(ModelViewSet):
         ).select_related("user")
         if schedule.group_id:
             members = members.filter(group_id=schedule.group_id)
-        title = "Assessment scheduled"
+        title = "Assessment rescheduled" if rescheduled else "Assessment scheduled"
         when = timezone.localtime(schedule.scheduled_at).strftime("%d %b %Y, %H:%M")
-        body = f"'{schedule.assessment.title}' is scheduled for {when}."
+        verb = "has been rescheduled to" if rescheduled else "is scheduled for"
+        body = f"'{schedule.assessment.title}' {verb} {when}."
         for m in members:
             if m.is_admin:
                 continue
@@ -390,7 +533,7 @@ class AssessmentScheduleViewSet(ModelViewSet):
         return Response({"message": "Schedule removed.", "data": {}}, status=status.HTTP_200_OK)
 
 
-class CorporateWebsiteViewSet(ModelViewSet):
+class CorporateWebsiteViewSet(ManagedOrgMixin, ModelViewSet):
     """CJ_UC054/UC055 — a corporate's branded portal (single, per organization).
 
     GET    /api/organizations/<org_id>/website/       (retrieve, 404 if none)
@@ -399,7 +542,7 @@ class CorporateWebsiteViewSet(ModelViewSet):
     """
 
     serializer_class = CorporateWebsiteSerializer
-    permission_classes = [IsAuthenticated, HasOrganizationsPermission]
+    permission_classes = [IsAuthenticated, HasOrgContentPermission]
 
     def _org(self):
         return get_object_or_404(Organization, id=self.kwargs.get("organization_id"))
@@ -415,6 +558,9 @@ class CorporateWebsiteViewSet(ModelViewSet):
         )
 
     def create(self, request, *args, **kwargs):
+        # CJ_UC055: CJ Admin sets up the website and its admin login; the
+        # organization's own admin then customizes it (Report 9 #49/#95).
+        _require_cj_admin(request, "Only CJ Admin can set up an organization's website.")
         org = self._org()
         if getattr(org, "corporate_website", None) is not None:
             return Response(
@@ -460,6 +606,8 @@ class CorporateWebsiteViewSet(ModelViewSet):
         )
 
     def partial_update(self, request, *args, **kwargs):
+        if role_name(request.user) == "group_admin":
+            raise PermissionDenied("Only the organization's admin can customize its website.")
         org = self._org()
         website = getattr(org, "corporate_website", None)
         if website is None:
@@ -500,7 +648,10 @@ class CorporateWebsiteViewSet(ModelViewSet):
         if User.objects.filter(email__iexact=email).exists():
             # Reuse an existing account (don't clobber); no new password issued.
             return User.objects.get(email__iexact=email), None
-        role = Role.objects.filter(name="corp_admin").first()
+        # Report 9 #95: an exclusive organization's admin gets the Corporate
+        # Exclusive role, not Corporate Admin.
+        role_code = "corp_exclusive" if org.type == "corp_exclusive" else "corp_admin"
+        role = Role.objects.filter(name=role_code).first()
         temp_password = get_random_string(length=12)
         admin = User.objects.create_user(
             email=email,

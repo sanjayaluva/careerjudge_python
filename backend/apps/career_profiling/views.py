@@ -54,7 +54,12 @@ class HasProfilingPermission(HasModulePermission):
         "partial_update": "change",
         "destroy": "delete",
         "publish": "change",
-        "compute": "view",  # any user with view permission may compute (admins for any candidate, others for self)
+        "compute": "view",
+        # Report 9 #89/#118: these tabs were missing from the map, so every
+        # non-superuser was refused (the module looked unavailable).
+        "assessments": {"GET": "view", "POST": "change"},
+        "bands": {"GET": "view", "POST": "change"},
+        "match_indices": "view",  # any user with view permission may compute (admins for any candidate, others for self)
         "rank_definitions": "change",
         "rank_definitions_delete": "change",
         "polar_match_rules": "change",

@@ -71,3 +71,84 @@ def assigned_item_ids(user, item_type: str) -> set[int]:
             organization_id__in=org_ids, item_type=item_type
         ).values_list("item_id", flat=True)
     )
+
+
+# ---------------------------------------------------------------------------
+# Organization MANAGERS (Report 9, 1 Oct 2026)
+#
+# Corp Admin, Corp Exclusive Admin, Group Admin and Channel Partner manage
+# ONLY the organization(s) they are tagged to (User Details pp.3-5; Report 4).
+# CJ staff (CJ Admin, superuser, …) are unrestricted. ``None`` from these
+# helpers means "unrestricted"; a list (possibly empty) means "only these".
+# ---------------------------------------------------------------------------
+
+ORG_MANAGER_ROLES = ("corp_admin", "corp_exclusive", "group_admin", "channel_partner")
+
+# Roles each manager may create or assign (Doc 9 §2.3; SRS CJ_UC043).
+_CREATABLE_ROLES = {
+    "corp_admin": ("individual", "group_admin"),
+    "corp_exclusive": ("individual", "group_admin"),
+    "group_admin": ("individual",),
+    "channel_partner": ("individual",),
+}
+
+
+def role_name(user) -> str | None:
+    return user.role.name if getattr(user, "role", None) else None
+
+
+def is_cj_admin(user) -> bool:
+    """CJ Admin or superuser — the only users who manage roles and licensing."""
+    if not getattr(user, "is_authenticated", False):
+        return False
+    return bool(user.is_superuser or role_name(user) == "cj_admin")
+
+
+def is_org_manager(user) -> bool:
+    if not getattr(user, "is_authenticated", False) or user.is_superuser:
+        return False
+    return role_name(user) in ORG_MANAGER_ROLES
+
+
+def managed_org_ids(user) -> list[int] | None:
+    """Organizations an org manager may see/manage; ``None`` = unrestricted."""
+    if not is_org_manager(user):
+        return None
+    return user_org_ids(user)
+
+
+def managed_group_ids(user) -> list[int] | None:
+    """Group Admin tagged to a group is limited to that group; else ``None``."""
+    if role_name(user) != "group_admin" or not is_org_manager(user):
+        return None
+    ids = list(
+        OrganizationMember.objects.filter(user=user, group__isnull=False).values_list(
+            "group_id", flat=True
+        )
+    )
+    return ids or None
+
+
+def can_manage_org(user, organization_id) -> bool:
+    org_ids = managed_org_ids(user)
+    return org_ids is None or int(organization_id) in org_ids
+
+
+def managed_user_ids(user) -> list[int] | None:
+    """Users an org manager may see/manage: members of his organization(s)
+    (of his group, for a Group Admin tagged to one). ``None`` = unrestricted."""
+    org_ids = managed_org_ids(user)
+    if org_ids is None:
+        return None
+    members = OrganizationMember.objects.filter(organization_id__in=org_ids)
+    group_ids = managed_group_ids(user)
+    if group_ids is not None:
+        members = members.filter(group_id__in=group_ids)
+    return list(members.values_list("user_id", flat=True))
+
+
+def creatable_role_names(user) -> tuple[str, ...] | None:
+    """Role names a manager may give to users he creates; ``None`` = any."""
+    if not is_org_manager(user):
+        return None
+    return _CREATABLE_ROLES.get(role_name(user), ())
