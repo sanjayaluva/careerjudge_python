@@ -64,3 +64,18 @@ def test_authors_keep_every_status(solutions, role_name):
     )
     assert resp.status_code == 200
     assert _titles(resp) == {"draft solution", "published solution", "archived solution"}
+
+
+def test_candidate_sees_only_own_match_indices(solutions):
+    """Report 9 review: individuals hold profiling 'view' — match indices of
+    other candidates must not be listed to them."""
+    from apps.career_profiling.models import MatchIndex
+
+    me = _user("individual", "me@t.com")
+    other = _user("individual", "other@t.com")
+    sol = solutions["published"]
+    MatchIndex.objects.create(solution=sol, candidate=me, career_title="Mine")
+    MatchIndex.objects.create(solution=sol, candidate=other, career_title="Theirs")
+    resp = _client(me).get(f"/api/career-profiling/solutions/{sol.id}/match_indices/")
+    assert resp.status_code == 200, resp.data
+    assert {r["career_title"] for r in resp.data["data"]} == {"Mine"}

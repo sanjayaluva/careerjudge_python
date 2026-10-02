@@ -793,6 +793,12 @@ class ProfilingSolutionViewSet(ModelViewSet):
         """List match indices computed for this solution."""
         solution = self.get_object()
         indices = solution.match_indices.select_related("candidate").all()
+        # Report 9 review: candidates hold 'view' now (#76) — they see only
+        # their own results; authors (CJ Admin, Psychometrician) see all.
+        user = request.user
+        role = user.role.name if getattr(user, "role", None) else None
+        if not (user.is_superuser or role in ("cj_admin", "psychometrician")):
+            indices = indices.filter(candidate=user)
         serializer = MatchIndexSerializer(indices, many=True)
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
 

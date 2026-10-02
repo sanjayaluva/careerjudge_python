@@ -37,6 +37,23 @@ def _is_payments_admin(user) -> bool:
     return user.role_id is not None and user.role.name == "cj_admin"
 
 
+def _server_price(module: str, item_id: int):
+    """Price of a payable item as stored on the item, or None when the item
+    is unknown or must be paid through its own flow (e.g. a counselling
+    booking creates its payment when the session is booked)."""
+    if module == "assessment":
+        from apps.assessment.models import Assessment
+
+        item = Assessment.objects.filter(id=item_id, status="published").first()
+        return item.price if item else None
+    if module == "training":
+        from apps.training.models import TrainingCourse
+
+        item = TrainingCourse.objects.filter(id=item_id, status="published").first()
+        return item.price if item else None
+    return None
+
+
 class PaymentViewSet(ModelViewSet):
     """Payment CRUD + checkout + verification."""
 
@@ -94,7 +111,6 @@ class PaymentViewSet(ModelViewSet):
         """
         module = request.data.get("module")
         item_id = request.data.get("item_id")
-        amount = request.data.get("amount", "0")
         description = request.data.get("description", "")
 
         if not module or not item_id:
@@ -108,14 +124,32 @@ class PaymentViewSet(ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Get or create payment record
-        payment = get_or_create_payment(
-            user=request.user,
-            module=module,
-            item_id=int(item_id),
-            amount=amount,
-            description=description,
-        )
+        # The price is never taken from the browser (Report 9 review: a
+        # candidate could otherwise pay less than the real price). Reuse the
+        # payment the server already created (training registration,
+        # counselling booking), else look the price up on the item itself.
+        payment = Payment.objects.filter(
+            user=request.user, module=module, item_id=int(item_id)
+        ).first()
+        if payment is None:
+            amount = _server_price(module, int(item_id))
+            if amount is None:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "This item cannot be paid for here.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            payment = get_or_create_payment(
+                user=request.user,
+                module=module,
+                item_id=int(item_id),
+                amount=amount,
+                description=description,
+            )
 
         # Free items — no checkout needed
         if payment.status == "free":
