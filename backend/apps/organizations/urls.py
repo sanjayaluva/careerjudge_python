@@ -14,6 +14,12 @@ from .views import (
     OrganizationMemberViewSet,
     OrganizationViewSet,
 )
+from .views_licensing import (
+    CourseScheduleViewSet,
+    OrgCounselingSessionViewSet,
+    OrgCounsellorViewSet,
+    OrgCourseViewSet,
+)
 
 app_name = "organizations"
 
@@ -85,6 +91,60 @@ urlpatterns = [
             {"get": "retrieve", "post": "create", "patch": "partial_update"}
         ),
         name="website",
+    ),
+    # Report 9 #15/#16/#18/#19 (+ group admin / channel partner): licensed
+    # courses and counselling used by a manager on behalf of his members.
+    path(
+        "<int:organization_id>/courses/",
+        OrgCourseViewSet.as_view({"get": "list"}),
+        name="org-course-list",
+    ),
+    path(
+        "<int:organization_id>/courses/<int:pk>/assign/",
+        OrgCourseViewSet.as_view({"post": "assign"}),
+        name="org-course-assign",
+    ),
+    path(
+        "<int:organization_id>/courses/<int:pk>/unassign/",
+        OrgCourseViewSet.as_view({"post": "unassign"}),
+        name="org-course-unassign",
+    ),
+    path(
+        "<int:organization_id>/course-schedules/",
+        CourseScheduleViewSet.as_view({"get": "list", "post": "create"}),
+        name="course-schedule-list",
+    ),
+    path(
+        "<int:organization_id>/course-schedules/<int:pk>/",
+        CourseScheduleViewSet.as_view(
+            {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}
+        ),
+        name="course-schedule-detail",
+    ),
+    path(
+        "<int:organization_id>/counsellors/",
+        OrgCounsellorViewSet.as_view({"get": "list"}),
+        name="org-counsellor-list",
+    ),
+    path(
+        "<int:organization_id>/counsellors/<int:pk>/timeslots/",
+        OrgCounsellorViewSet.as_view({"get": "timeslots"}),
+        name="org-counsellor-timeslots",
+    ),
+    path(
+        "<int:organization_id>/counseling-sessions/",
+        OrgCounselingSessionViewSet.as_view({"get": "list", "post": "create"}),
+        name="org-counseling-session-list",
+    ),
+    path(
+        "<int:organization_id>/counseling-sessions/<int:pk>/reschedule/",
+        OrgCounselingSessionViewSet.as_view({"post": "reschedule"}),
+        name="org-counseling-session-reschedule",
+    ),
+    path(
+        "<int:organization_id>/counseling-sessions/<int:pk>/cancel/",
+        OrgCounselingSessionViewSet.as_view({"post": "cancel"}),
+        name="org-counseling-session-cancel",
     ),
     # Public tenant branding by slug (no auth) — must be a literal path segment
     # that cannot collide with the numeric <organization_id> routes above.

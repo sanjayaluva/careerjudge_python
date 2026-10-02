@@ -80,6 +80,16 @@ def _notify_on_cancellation(sender, instance, created, **kwargs):
                 f"{session.counsellor.full_name}. Refund: {refund_label}."
             )
             title = f"Please reschedule your session: {session.counsellor.full_name}"
+        elif instance.cancelled_by == "organization":
+            # Report 9 #19/#31/#61: the member's organization booked the
+            # session for him (no fee) and has now cancelled it.
+            when = _fmt_dt(session.timeslot.start_time) if session.timeslot_id else ""
+            body = (
+                f"Your organization cancelled your counselling session with "
+                f"{session.counsellor.full_name} on {when}"
+                f"{f' ({instance.reason})' if instance.reason else ''}."
+            )
+            title = f"Session cancelled: {session.counsellor.full_name}"
         else:
             body = (
                 f"Your session has been cancelled ({instance.get_cancelled_by_display()}). "

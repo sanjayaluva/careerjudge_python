@@ -5,6 +5,7 @@
 import { API_BASE_URL } from "@/lib/constants";
 
 import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import type { CounselingSession, CounsellorProfile, TimeSlot } from "./counseling";
 
 export interface Organization {
   id: number;
@@ -83,6 +84,8 @@ export interface OrganizationAssignment {
   organization: number;
   item_type: "assessment" | "training_course" | "counseling";
   item_id: number;
+  /** Report 9: the licensed item's title ("Counselling services" for counselling). */
+  item_title: string;
   assigned_by: number | null;
   assigned_by_name: string | null;
   assigned_at: string;
@@ -253,7 +256,8 @@ export function listAssignments(orgId: number): Promise<OrganizationAssignment[]
 
 export function createAssignment(
   orgId: number,
-  payload: { item_type: "assessment" | "training_course" | "counseling"; item_id: number },
+  // Counselling is licensed as a whole service: no item_id.
+  payload: { item_type: "assessment" | "training_course" | "counseling"; item_id?: number },
 ): Promise<OrganizationAssignment> {
   return apiPost<OrganizationAssignment>(`${BASE}/${orgId}/assignments/`, payload);
 }
@@ -392,4 +396,126 @@ export function getPublicSite(slug: string): Promise<PublicSite> {
 /** The signed-in member's own organization portal branding, or null. */
 export function getMySite(): Promise<PublicSite | null> {
   return apiGet<PublicSite | null>(`${BASE}/my-site/`);
+}
+
+// ---------------------------------------------------------------------------
+// Report 9: licensed courses and counselling used by a manager on behalf of
+// his members (Corp Admin, Corp Exclusive, Group Admin, Channel Partner).
+// ---------------------------------------------------------------------------
+
+export interface LicensedCourseMember {
+  registration_id: number;
+  user_id: number;
+  full_name: string;
+  email: string;
+  completion_status: string;
+  /** True when the registration was made by the organization. */
+  assigned_by_organization: boolean;
+  /** Only organization-made registrations not yet started can be withdrawn. */
+  can_unassign: boolean;
+}
+
+export interface LicensedCourse {
+  id: number;
+  title: string;
+  course_type: string;
+  schedule_type: string;
+  duration_days: number | null;
+  members: LicensedCourseMember[];
+}
+
+export function listLicensedCourses(orgId: number): Promise<LicensedCourse[]> {
+  return apiGet<LicensedCourse[]>(`${BASE}/${orgId}/courses/`);
+}
+
+export function assignCourse(orgId: number, courseId: number, userIds: number[]): Promise<unknown> {
+  return apiPost(`${BASE}/${orgId}/courses/${courseId}/assign/`, { user_ids: userIds });
+}
+
+export function unassignCourse(orgId: number, courseId: number, userId: number): Promise<unknown> {
+  return apiPost(`${BASE}/${orgId}/courses/${courseId}/unassign/`, { user_id: userId });
+}
+
+export interface CourseSchedule {
+  id: number;
+  organization: number;
+  group: number | null;
+  course: number;
+  course_title: string;
+  group_name: string | null;
+  scheduled_at: string;
+  created_by: number | null;
+  notified: boolean;
+  created_at: string;
+}
+
+export function listCourseSchedules(orgId: number): Promise<CourseSchedule[]> {
+  return apiGetPaged<CourseSchedule>(`${BASE}/${orgId}/course-schedules/`).then((r) => r.results);
+}
+
+export function createCourseSchedule(
+  orgId: number,
+  payload: { course: number; scheduled_at: string; group?: number | null },
+): Promise<CourseSchedule> {
+  return apiPost<CourseSchedule>(`${BASE}/${orgId}/course-schedules/`, payload);
+}
+
+export function rescheduleCourseSchedule(
+  orgId: number,
+  scheduleId: number,
+  payload: { scheduled_at: string },
+): Promise<CourseSchedule> {
+  return apiPatch<CourseSchedule>(`${BASE}/${orgId}/course-schedules/${scheduleId}/`, payload);
+}
+
+/** Cancel a course schedule — the members are notified. */
+export function cancelCourseSchedule(orgId: number, scheduleId: number): Promise<void> {
+  return apiDelete(`${BASE}/${orgId}/course-schedules/${scheduleId}/`);
+}
+
+export function listOrgCounsellors(orgId: number): Promise<CounsellorProfile[]> {
+  return apiGet<CounsellorProfile[]>(`${BASE}/${orgId}/counsellors/`);
+}
+
+export function listOrgCounsellorSlots(orgId: number, counsellorId: number): Promise<TimeSlot[]> {
+  return apiGet<TimeSlot[]>(`${BASE}/${orgId}/counsellors/${counsellorId}/timeslots/`);
+}
+
+export function listOrgCounselingSessions(orgId: number): Promise<CounselingSession[]> {
+  return apiGet<CounselingSession[]>(`${BASE}/${orgId}/counseling-sessions/`);
+}
+
+export function bookCounselingForMember(
+  orgId: number,
+  payload: {
+    counselee: number;
+    counsellor: number;
+    timeslot: number;
+    topic: string;
+    description?: string;
+    mode?: "online" | "offline";
+  },
+): Promise<CounselingSession> {
+  return apiPost<CounselingSession>(`${BASE}/${orgId}/counseling-sessions/`, payload);
+}
+
+export function rescheduleMemberCounseling(
+  orgId: number,
+  sessionId: number,
+  timeslot: number,
+): Promise<CounselingSession> {
+  return apiPost<CounselingSession>(
+    `${BASE}/${orgId}/counseling-sessions/${sessionId}/reschedule/`,
+    { timeslot },
+  );
+}
+
+export function cancelMemberCounseling(
+  orgId: number,
+  sessionId: number,
+  reason: string,
+): Promise<CounselingSession> {
+  return apiPost<CounselingSession>(`${BASE}/${orgId}/counseling-sessions/${sessionId}/cancel/`, {
+    reason,
+  });
 }

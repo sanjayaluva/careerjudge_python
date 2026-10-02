@@ -25,12 +25,10 @@ import {
 } from "@/components/ui";
 import {
   addMember,
-  createAssignment,
   createGroup,
   createGroupAdmin,
   createSchedule,
   createWebsite,
-  deleteAssignment,
   deleteGroup,
   deleteSchedule,
   getWebsite,
@@ -53,6 +51,13 @@ import { BulkUploadModal } from "@/components/users/BulkUploadModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ROLE_LABELS } from "@/lib/constants";
 import { PortalLogo } from "@/pages/site/PortalLogo";
+
+import {
+  CourseSchedulesCard,
+  LicensedContentCard,
+  LicensedCoursesCard,
+  MemberCounsellingCard,
+} from "./LicensedContentCards";
 
 const ORG_KEY = (id: number) => ["organizations", id];
 
@@ -267,12 +272,21 @@ export default function OrganizationDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Assigned content section (CJ_UC030): corporate individuals see only
-          the assessments assigned to their organization. */}
-      <AssignmentsCard orgId={orgId} canAssign={access.isCJAdmin} />
+      {/* Licensed content (CJ_UC030; Report 9 #98/#100-#103): members and
+          managers see only the assessments and courses licensed here. */}
+      <LicensedContentCard orgId={orgId} canLicense={access.isCJAdmin} />
+
+      {/* Report 9 #15/#28/#59: assign licensed courses to members. */}
+      <LicensedCoursesCard orgId={orgId} members={members} canAct={access.canSchedule} />
 
       {/* Schedule assessments for employees (CJ_UC053). */}
       <SchedulesCard orgId={orgId} groups={org.groups} canSchedule={access.canSchedule} />
+
+      {/* Report 9 #16/#29/#60: schedule licensed courses for members. */}
+      <CourseSchedulesCard orgId={orgId} groups={org.groups} canSchedule={access.canSchedule} />
+
+      {/* Report 9 #18/#19/#30/#31/#61: counselling booked for members. */}
+      <MemberCounsellingCard orgId={orgId} members={members} canAct={access.canSchedule} />
 
       {/* Branded portal / website (CJ_UC054 + CJ_UC055). */}
       <WebsiteCard
@@ -539,131 +553,6 @@ function MemberRow({
         </div>
       </TableCell>
     </TableRow>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Assigned content (CJ_UC030) — assign published assessments to the org
-// ---------------------------------------------------------------------------
-
-function AssignmentsCard({ orgId, canAssign }: { orgId: number; canAssign: boolean }) {
-  const queryClient = useQueryClient();
-  const [selected, setSelected] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const ASSIGN_KEY = [...ORG_KEY(orgId), "assignments"];
-
-  const { data: assignments = [] } = useQuery({
-    queryKey: ASSIGN_KEY,
-    queryFn: () => listAssignments(orgId),
-    enabled: !Number.isNaN(orgId),
-  });
-
-  const { data: assessmentsPage } = useQuery({
-    queryKey: ["assessments", "published", "for-assign"],
-    queryFn: () => listAssessments({ status: "published" }),
-  });
-  const assessments = assessmentsPage?.results ?? [];
-  const titleFor = (id: number) => assessments.find((a) => a.id === id)?.title ?? `#${id}`;
-
-  const assignMutation = useMutation({
-    mutationFn: (assessmentId: number) =>
-      createAssignment(orgId, { item_type: "assessment", item_id: assessmentId }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ASSIGN_KEY });
-      setSelected("");
-      setError(null);
-    },
-    onError: (err) => setError(extractApiError(err)),
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: (assignmentId: number) => deleteAssignment(orgId, assignmentId),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ASSIGN_KEY }),
-    onError: (err) => setError(extractApiError(err)),
-  });
-
-  const assignedIds = new Set(
-    assignments.filter((a) => a.item_type === "assessment").map((a) => a.item_id),
-  );
-  const available = assessments.filter((a) => !assignedIds.has(a.id));
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Assigned assessments</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="mb-3 text-sm text-slate-500">
-          {canAssign
-            ? "Corporate individuals in this organization see only the assessments assigned here."
-            : "The assessments CJ Admin has assigned to your organization. You can schedule these for your members."}
-        </p>
-        {error && (
-          <Alert variant="error" className="mb-3">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        {canAssign && (
-          <div className="mb-4 flex items-center gap-2">
-            <select
-              className="h-10 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={selected}
-              onChange={(e) => setSelected(e.target.value)}
-            >
-              <option value="">Select a published assessment…</option>
-              {available.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.title}
-                </option>
-              ))}
-            </select>
-            <Button
-              size="sm"
-              disabled={!selected || assignMutation.isPending}
-              onClick={() => selected && assignMutation.mutate(Number(selected))}
-            >
-              Assign
-            </Button>
-          </div>
-        )}
-        {assignments.length === 0 ? (
-          <p className="py-2 text-center text-sm text-slate-500">No assessments assigned yet.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Assessment</TableHead>
-                <TableHead>Assigned by</TableHead>
-                {canAssign && <TableHead className="text-right">Actions</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {assignments.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="font-medium text-slate-900">
-                    {titleFor(a.item_id)}
-                  </TableCell>
-                  <TableCell className="text-slate-500">{a.assigned_by_name || "—"}</TableCell>
-                  {canAssign && (
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-danger hover:bg-danger-50"
-                        loading={removeMutation.isPending}
-                        onClick={() => removeMutation.mutate(a.id)}
-                      >
-                        Remove
-                      </Button>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
