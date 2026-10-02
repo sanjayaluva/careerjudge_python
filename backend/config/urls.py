@@ -39,6 +39,8 @@ urlpatterns = [
     path("api/tasks/", include("apps.tasks.urls", namespace="tasks")),
     path("api/messaging/", include("apps.messaging.urls", namespace="messaging")),
     path("api/invoicing/", include("apps.invoicing.urls", namespace="invoicing")),
+    # Signed Doc 3 §2.1.2: images uploaded from the rich-text editor.
+    path("api/uploads/", include("core.urls_uploads")),
     # Schema
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger"),
@@ -47,8 +49,22 @@ urlpatterns = [
     path("api/health/", include("core.urls_health")),
 ]
 
+# Uploaded files (training video/audio, avatars, report images, logos) are
+# served by Django whenever they live on local disk — not only in DEBUG,
+# otherwise they 404 as soon as DEBUG is off. Caddy routes /media/* here.
+if not getattr(settings, "MEDIA_ON_S3", False):
+    from django.urls import re_path
+    from django.views.static import serve
+
+    urlpatterns += [
+        re_path(
+            rf"^{settings.MEDIA_URL.lstrip('/')}(?P<path>.*)$",
+            serve,
+            {"document_root": settings.MEDIA_ROOT},
+        )
+    ]
+
 if settings.DEBUG:
     from django.conf.urls.static import static
 
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

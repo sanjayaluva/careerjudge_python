@@ -133,10 +133,17 @@ class TaskDetailSerializer(TaskListSerializer):
     progress_updates = TaskProgressUpdateSerializer(many=True, read_only=True)
     extension_requests = TaskExtensionRequestSerializer(many=True, read_only=True)
     parent_task_id = serializers.CharField(source="parent_task.task_id", read_only=True)
+    # Report 9 #65/#69: the Reviewer named on an SME task, with his domains
+    # of expertise so CJ Admin (and the SME) see why he was chosen.
+    reviewer_name = serializers.SerializerMethodField()
+    reviewer_domains = serializers.SerializerMethodField()
 
     class Meta(TaskListSerializer.Meta):
         fields = [
             *TaskListSerializer.Meta.fields,
+            "reviewer",
+            "reviewer_name",
+            "reviewer_domains",
             "spec",
             "specs",
             "progress_updates",
@@ -157,6 +164,34 @@ class TaskDetailSerializer(TaskListSerializer):
             "updated_at",
             "status",  # status is managed via lifecycle actions (start/submit/approve/cancel)
         ]
+
+    def get_reviewer_name(self, obj):
+        if obj.reviewer_id:
+            return obj.reviewer.full_name or obj.reviewer.email
+        return None
+
+    def get_reviewer_domains(self, obj):
+        if not obj.reviewer_id:
+            return []
+        profile = getattr(obj.reviewer, "profile", None)
+        return list(getattr(profile, "domains_of_expertise", None) or [])
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        # Report 9 #65: only an SME task names a reviewer, and it must be an
+        # active Reviewer.
+        role = attrs.get("assignee_role") or getattr(self.instance, "assignee_role", None)
+        reviewer = attrs.get("reviewer")
+        if reviewer is not None:
+            if role != "sme":
+                raise serializers.ValidationError(
+                    {"reviewer": "A reviewer can be named only on an SME task."}
+                )
+            if not (reviewer.is_active and reviewer.role_id and reviewer.role.name == "reviewer"):
+                raise serializers.ValidationError(
+                    {"reviewer": "Choose an active user with the Reviewer role."}
+                )
+        return attrs
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

@@ -1,5 +1,6 @@
 """Serializers for the Training module."""
 
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from apps.assessment.serializers import AssessmentListSerializer
@@ -24,6 +25,15 @@ from .models import (
     TrainingCategory,
     TrainingCourse,
 )
+
+
+def _trainer_name(course) -> str | None:
+    """Report 9 #83: learners see "Name of Trainer" — the course's named
+    trainer, else whoever created the course."""
+    person = course.trainer or course.created_by
+    if person is None:
+        return None
+    return person.full_name or person.email
 
 
 class TrainingCategorySerializer(serializers.ModelSerializer):
@@ -296,6 +306,10 @@ class TrainingCourseListSerializer(serializers.ModelSerializer):
     )
     category_name = serializers.CharField(source="category.name", read_only=True, default=None)
     registration_count = serializers.IntegerField(source="registrations.count", read_only=True)
+    trainer_name = serializers.SerializerMethodField()
+
+    def get_trainer_name(self, obj) -> str | None:
+        return _trainer_name(obj)
 
     class Meta:
         model = TrainingCourse
@@ -315,6 +329,8 @@ class TrainingCourseListSerializer(serializers.ModelSerializer):
             "created_by",
             "owner_organization",
             "created_by_name",
+            "trainer",
+            "trainer_name",
             "registration_count",
             "created_at",
             "updated_at",
@@ -323,6 +339,7 @@ class TrainingCourseListSerializer(serializers.ModelSerializer):
             "id",
             "created_by",
             "owner_organization",
+            "trainer",
             "created_at",
             "updated_at",
             "registration_count",
@@ -340,6 +357,27 @@ class TrainingCourseSerializer(serializers.ModelSerializer):
     live_sessions = LiveSessionSerializer(many=True, read_only=True)
     assessments = CourseAssessmentSerializer(many=True, read_only=True)
     registration_count = serializers.IntegerField(source="registrations.count", read_only=True)
+    # Report 9 #83: CJ Admin names the course's trainer (a Trainer user).
+    trainer = serializers.PrimaryKeyRelatedField(
+        queryset=get_user_model().objects.filter(role__name="trainer"),
+        required=False,
+        allow_null=True,
+    )
+    trainer_name = serializers.SerializerMethodField()
+
+    def get_trainer_name(self, obj) -> str | None:
+        return _trainer_name(obj)
+
+    def validate_trainer(self, value):
+        request = self.context.get("request")
+        current = self.instance.trainer if self.instance is not None else None
+        user = getattr(request, "user", None)
+        is_admin = bool(
+            user and (user.is_superuser or (user.role_id and user.role.name == "cj_admin"))
+        )
+        if request is not None and value != current and not is_admin:
+            raise serializers.ValidationError("Only CJ Admin can set the course trainer.")
+        return value
 
     class Meta:
         model = TrainingCourse
@@ -360,6 +398,8 @@ class TrainingCourseSerializer(serializers.ModelSerializer):
             "created_by",
             "owner_organization",
             "created_by_name",
+            "trainer",
+            "trainer_name",
             "registration_count",
             "lessons",
             "live_sessions",

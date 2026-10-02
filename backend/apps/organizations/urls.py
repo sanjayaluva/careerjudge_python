@@ -109,6 +109,12 @@ urlpatterns = [
         OrgCourseViewSet.as_view({"post": "unassign"}),
         name="org-course-unassign",
     ),
+    # Report 9 #17: members' progress in a licensed course.
+    path(
+        "<int:organization_id>/courses/<int:pk>/progress/",
+        OrgCourseViewSet.as_view({"get": "progress"}),
+        name="org-course-progress",
+    ),
     path(
         "<int:organization_id>/course-schedules/",
         CourseScheduleViewSet.as_view({"get": "list", "post": "create"}),

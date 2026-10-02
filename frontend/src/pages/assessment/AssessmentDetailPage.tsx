@@ -78,7 +78,9 @@ import {
 } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
 import { getPaymentConfig } from "@/api/payments";
+import { PrivateSpaceNote } from "@/components/PrivateSpaceNote";
 import { useAuth } from "@/hooks/useAuth";
+import { usePrivateSpace } from "@/hooks/usePrivateSpace";
 
 import { DefinitionText } from "./DefinitionText";
 import { fromEditorHtml, hasRichContent, toEditorHtml } from "./richDefinition";
@@ -109,6 +111,7 @@ export default function AssessmentDetailPage() {
   const canManage = ["cj_admin", "corp_admin", "psychometrician", "trainer"].includes(
     user?.role ?? "",
   );
+  const { ownsItem } = usePrivateSpace();
 
   const { data: assessment, isLoading } = useQuery({
     queryKey: ["assessments", aid],
@@ -282,7 +285,12 @@ export default function AssessmentDetailPage() {
   // - Managers can edit DRAFT assessments
   // - cj_admin can also edit PUBLISHED assessments (admin override per SRS §2.2)
   // This single variable drives all section/question edit-button visibility.
-  const canEdit = canManage && (a.status === "draft" || user?.role === "cj_admin");
+  // Report 9 #41/#42: the Corporate Exclusive Admin fully configures his
+  // organization's private assessments — CJ's post-publish approval does not
+  // apply there. CJ assessments licensed to him stay read-only.
+  const ownsPrivate = ownsItem(a);
+  const manage = canManage || ownsPrivate;
+  const canEdit = manage && (a.status === "draft" || user?.role === "cj_admin" || ownsPrivate);
   // ASM-2: a non-admin manager can't edit a published assessment directly, but
   // may request an admin-approved title change / deletion.
   const canRequestChange = canManage && a.status === "published" && !isCjAdmin;
@@ -311,6 +319,11 @@ export default function AssessmentDetailPage() {
           )}
         </div>
         {a.objective && <p className="mt-1 text-sm text-slate-500">{a.objective}</p>}
+        {ownsPrivate && (
+          <div className="mt-2">
+            <PrivateSpaceNote what="assessment" />
+          </div>
+        )}
       </div>
 
       <Tabs defaultValue="overview">
@@ -323,8 +336,8 @@ export default function AssessmentDetailPage() {
           {/* Questions tab: MANAGERS ONLY. Candidates must NOT see the
               assigned questions before taking the assessment — showing
               question titles/content would let them preview the test. */}
-          {canManage && <TabsTrigger value="questions">Questions ({questionCount})</TabsTrigger>}
-          {canManage && a.assessment_type === "psychometric" && (
+          {manage && <TabsTrigger value="questions">Questions ({questionCount})</TabsTrigger>}
+          {manage && a.assessment_type === "psychometric" && (
             <TabsTrigger value="psych-groups">Psychometric Groups</TabsTrigger>
           )}
           <TabsTrigger value="sessions">My Sessions ({sessionCount})</TabsTrigger>
@@ -426,7 +439,7 @@ export default function AssessmentDetailPage() {
 
               {/* Readiness checklist — shows what's missing before publishing.
                   Only visible on draft assessments for managers. */}
-              {a.status === "draft" && canManage && readiness && (
+              {a.status === "draft" && manage && readiness && (
                 <div
                   className={`mt-4 rounded-md border p-4 ${
                     readiness.ready
@@ -474,7 +487,7 @@ export default function AssessmentDetailPage() {
                     Edit Assessment
                   </Button>
                 )}
-                {canManage && (
+                {manage && (
                   <Button variant="outline" onClick={() => navigate(`/assessments/${a.id}/start`)}>
                     Preview description page
                   </Button>
@@ -493,7 +506,7 @@ export default function AssessmentDetailPage() {
                     </Button>
                   </>
                 )}
-                {a.status === "draft" && canManage && (
+                {a.status === "draft" && manage && (
                   <Button
                     loading={publishMutation.isPending}
                     disabled={readiness && !readiness.ready}

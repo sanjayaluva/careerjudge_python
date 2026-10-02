@@ -37,7 +37,9 @@ import { listAssessments } from "@/api/assessment";
 import { listSolutions } from "@/api/careerProfiling";
 import { extractApiError } from "@/api/client";
 import { getMyOrgAccess } from "@/api/organizations";
+import { PrivateSpaceNote } from "@/components/PrivateSpaceNote";
 import { useAuth } from "@/hooks/useAuth";
+import { usePrivateSpace } from "@/hooks/usePrivateSpace";
 
 const REPORT_KEY = ["reporting", "reports"];
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
@@ -50,6 +52,16 @@ export default function ReportsPage() {
   const { user } = useAuth();
   // Report designers (CJ Admin, Psychometrician) manage report definitions;
   // everyone else sees the generated reports he may view (Report 9 #12/#78).
+  // Report 9 #43/#44: the Corporate Exclusive Admin designs his organization's
+  // private reports and views his members' reports.
+  if (user?.role === "corp_exclusive") {
+    return (
+      <div className="space-y-6">
+        <ReportDesignerView />
+        <GeneratedReportsView isOrgAdmin isGroupAdmin={false} />
+      </div>
+    );
+  }
   if (!["cj_admin", "psychometrician"].includes(user?.role ?? "")) {
     return (
       <GeneratedReportsView
@@ -200,7 +212,7 @@ function ReportDesignerView() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const canManage = ["cj_admin", "psychometrician"].includes(user?.role ?? "");
+  const canManage = ["cj_admin", "psychometrician", "corp_exclusive"].includes(user?.role ?? "");
 
   const { data, isLoading } = useQuery({
     queryKey: [...REPORT_KEY, debouncedSearch, statusFilter],
@@ -244,6 +256,9 @@ function ReportDesignerView() {
             </p>
           </div>
           {canManage && <Button onClick={() => setCreateOpen(true)}>Create report</Button>}
+        </div>
+        <div className="px-6 pb-4 empty:hidden">
+          <PrivateSpaceNote what="reports" />
         </div>
         <div className="flex flex-wrap items-center gap-2 px-6 pb-4">
           <Input
@@ -374,6 +389,12 @@ function CreateReportModal({
     queryKey: ["assessments", "for-report"],
     queryFn: () => listAssessments({ status: "published" }),
   });
+  // Report 9 #43 / Report 4 §3: his reports are designed on his organization's
+  // own assessments only, and profiling is not part of his environment.
+  const { isPrivateAuthor, ownsItem } = usePrivateSpace();
+  const reportAssessments = (assessments?.results ?? []).filter(
+    (a) => !isPrivateAuthor || ownsItem(a),
+  );
   const { data: solutions } = useQuery({
     queryKey: ["profiling", "solutions", "for-report"],
     queryFn: () => listSolutions({ status: "published" }),
@@ -462,7 +483,9 @@ function CreateReportModal({
               onChange={(e) => setScope(e.target.value)}
             >
               <option value="general">General (single assessment)</option>
-              <option value="profiling">Profiling (multiple assessments)</option>
+              {!isPrivateAuthor && (
+                <option value="profiling">Profiling (multiple assessments)</option>
+              )}
             </select>
           </div>
         </div>
@@ -479,7 +502,7 @@ function CreateReportModal({
               required
             >
               <option value="">Select an assessment...</option>
-              {(assessments?.results ?? []).map((a) => (
+              {reportAssessments.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.title}
                 </option>

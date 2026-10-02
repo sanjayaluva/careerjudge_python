@@ -39,6 +39,7 @@ import {
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 
+import { CandidateAssessments } from "./CandidateAssessments";
 import { fromEditorHtml } from "./richDefinition";
 import { useTakeAssessment } from "./useTakeAssessment";
 import { PrivateSpaceNote } from "@/components/PrivateSpaceNote";
@@ -74,6 +75,10 @@ export default function AssessmentsPage() {
   const { isPrivateAuthor, ownsItem } = usePrivateSpace();
   const canCreate = canManage || isPrivateAuthor;
   const canManageRow = (a: { owner_organization?: number | null }) => canManage || ownsItem(a);
+  // Report 9 #72: the individual sees My Assessments apart from Browse.
+  const isCandidate = user?.role === "individual";
+  // Report 9 #113: Help Desk views every assessment, read-only.
+  const viewOnly = user?.role === "helpdesk";
 
   const { data, isLoading } = useQuery({
     queryKey: [...ASSESS_KEY, debouncedSearch, statusFilter],
@@ -172,7 +177,7 @@ export default function AssessmentsPage() {
             className="max-w-sm"
           />
           {/* Report 9 #74: only authors see drafts, so only they filter by status. */}
-          {canCreate && (
+          {(canCreate || viewOnly) && (
             <select
               className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
               value={statusFilter}
@@ -198,6 +203,14 @@ export default function AssessmentsPage() {
               ? "No assessments yet. Create one to get started."
               : "No assessments are available to you yet."}
           </p>
+        ) : isCandidate ? (
+          <CandidateAssessments
+            assessments={assessments}
+            sessionByAssessment={sessionByAssessment}
+            take={take}
+            onResume={(id) => startSessionMutation.mutate(id)}
+            resuming={startSessionMutation.isPending}
+          />
         ) : (
           <Table>
             <TableHeader>
@@ -264,6 +277,7 @@ export default function AssessmentsPage() {
                       {/* Candidate actions: Take / Resume / View Results.
                           Available to all users on published assessments. */}
                       {a.status === "published" &&
+                        !viewOnly &&
                         (() => {
                           const session = sessionByAssessment.get(a.id);
                           if (!session) {

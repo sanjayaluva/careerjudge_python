@@ -36,13 +36,13 @@ import {
   listQuestions,
   QUESTION_STATUSES,
   QUESTION_TYPES,
-  submitForReview,
   type BulkImportResult,
 } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
 import { PrivateSpaceNote } from "@/components/PrivateSpaceNote";
 import { useAuth } from "@/hooks/useAuth";
 import { CategoryManagerModal } from "./CategoryManager";
+import { SubmitForReviewModal } from "./SubmitForReviewModal";
 
 const QB_KEY = ["question-bank", "questions"];
 
@@ -120,11 +120,8 @@ export default function QuestionBankPage() {
     onError: (err) => setError(extractApiError(err)),
   });
 
-  const submitMutation = useMutation({
-    mutationFn: (id: number) => submitForReview(id),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: QB_KEY }),
-    onError: (err) => setError(extractApiError(err)),
-  });
+  // Report 9 #65: Submit opens the reviewer picker.
+  const [submitQ, setSubmitQ] = useState<{ id: number; title: string } | null>(null);
 
   const questions = data?.results ?? [];
   const count = data?.count ?? 0;
@@ -367,7 +364,9 @@ export default function QuestionBankPage() {
               />
               My questions
             </label>
-            {canReviewContent && (
+            {/* Report 9 #92: a psychometrician's queue holds the questions
+                returned to him after he sent them back. */}
+            {(canReviewContent || user?.role === "psychometrician") && (
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"
@@ -570,15 +569,22 @@ export default function QuestionBankPage() {
                           {(q.status === "draft" || q.status === "sent_back") &&
                             canCreate &&
                             !isPrivateAuthor && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              loading={submitMutation.isPending}
-                              onClick={() => submitMutation.mutate(q.id)}
-                            >
-                              Submit
-                            </Button>
-                          )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  setSubmitQ({
+                                    id: q.id,
+                                    title:
+                                      q.question_title ||
+                                      stripHtml(q.question_text_1) ||
+                                      "(untitled)",
+                                  })
+                                }
+                              >
+                                Submit
+                              </Button>
+                            )}
                           {canEditQuestion(q.status) && canDelete && (
                             <Button
                               variant="ghost"
@@ -655,6 +661,16 @@ export default function QuestionBankPage() {
           onImported={() => void queryClient.invalidateQueries({ queryKey: QB_KEY })}
         />
       )}
+      <SubmitForReviewModal
+        questionId={submitQ?.id ?? null}
+        questionTitle={submitQ?.title}
+        onClose={() => setSubmitQ(null)}
+        onSubmitted={() => {
+          setSubmitQ(null);
+          toast.success("Question sent for review.");
+          void queryClient.invalidateQueries({ queryKey: QB_KEY });
+        }}
+      />
     </div>
   );
 }

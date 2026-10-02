@@ -84,7 +84,11 @@ export default function ReportDetailPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const canManage = ["cj_admin", "psychometrician", "counsellor"].includes(user?.role ?? "");
+  // Report 9 #43/#44: the Corporate Exclusive Admin configures his
+  // organization's private reports (the only ones he can open).
+  const canManage = ["cj_admin", "psychometrician", "counsellor", "corp_exclusive"].includes(
+    user?.role ?? "",
+  );
   const [editOpen, setEditOpen] = useState(false);
 
   const { data: report, isLoading } = useQuery({

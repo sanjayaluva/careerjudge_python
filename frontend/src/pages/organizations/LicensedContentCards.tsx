@@ -18,6 +18,8 @@ import {
   CardHeader,
   CardTitle,
   Input,
+  Modal,
+  Spinner,
   Table,
   TableBody,
   TableCell,
@@ -36,6 +38,7 @@ import {
   createAssignment,
   createCourseSchedule,
   deleteAssignment,
+  getLicensedCourseProgress,
   listAssignments,
   listCourseSchedules,
   listLicensedCourses,
@@ -49,6 +52,7 @@ import {
   type OrganizationMember,
 } from "@/api/organizations";
 import { listCourses } from "@/api/training";
+import { CourseProgressTable } from "@/pages/training/CourseProgressTable";
 
 const ORG_KEY = (id: number) => ["organizations", id];
 const SELECT =
@@ -299,6 +303,7 @@ export function LicensedCoursesCard({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [picked, setPicked] = useState<Record<number, string>>({});
+  const [progressFor, setProgressFor] = useState<number | null>(null);
   const KEY = [...ORG_KEY(orgId), "licensed-courses"];
   const { data: courses = [], isLoading } = useQuery({
     queryKey: KEY,
@@ -361,6 +366,13 @@ export function LicensedCoursesCard({
                   <TableRow key={c.id}>
                     <TableCell className="align-top font-medium text-slate-900">
                       {c.title}
+                      {c.members.length > 0 && (
+                        <div className="mt-1">
+                          <Button size="sm" variant="outline" onClick={() => setProgressFor(c.id)}>
+                            Progress
+                          </Button>
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="align-top">
                       {c.members.length === 0 ? (
@@ -431,8 +443,57 @@ export function LicensedCoursesCard({
             </TableBody>
           </Table>
         )}
+        {progressFor !== null && (
+          <CourseProgressModal
+            orgId={orgId}
+            courseId={progressFor}
+            onClose={() => setProgressFor(null)}
+          />
+        )}
       </CardContent>
     </Card>
+  );
+}
+
+// Report 9 #17: the course progress of the members assigned / registered
+// (his group's for a Group Admin) — status, completion %, items done, start,
+// last activity and assessment scores.
+function CourseProgressModal({
+  orgId,
+  courseId,
+  onClose,
+}: {
+  orgId: number;
+  courseId: number;
+  onClose: () => void;
+}) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: [...ORG_KEY(orgId), "licensed-courses", courseId, "progress"],
+    queryFn: () => getLicensedCourseProgress(orgId, courseId),
+  });
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="xl"
+      title={data ? `Course progress — ${data.course.title}` : "Course progress"}
+    >
+      {isLoading ? (
+        <div className="flex justify-center py-8">
+          <Spinner />
+        </div>
+      ) : error ? (
+        <ErrorNote error={extractApiError(error)} />
+      ) : !data || data.learners.length === 0 ? (
+        <p className="py-4 text-center text-sm text-slate-500">
+          None of your members is registered in this course yet.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <CourseProgressTable rows={data.learners} />
+        </div>
+      )}
+    </Modal>
   );
 }
 

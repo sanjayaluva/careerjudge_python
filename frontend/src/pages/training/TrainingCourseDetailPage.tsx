@@ -4,9 +4,11 @@
  * Tabs:
  * - Overview: course properties + publish button (trainer)
  * - Structure: lessons → topics → sessions → contents/assignments (read-only tree)
+ * - Learn: the course player
  * - Live Sessions: scheduled online/offline sessions
+ * - Assignments: the learner's assignments / the trainer's submissions
  * - Assessments: linked assessments at various levels
- * - Registrations: trainer views student registrations
+ * - Registrations: trainer views student registrations and their progress
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -43,13 +45,12 @@ import {
   addLiveSession,
   COURSE_TYPES,
   completionStatusLabel,
-  completionStatusVariant,
   createZoomMeeting,
   deleteCourseAssessment,
   deleteLiveSession,
   getZoomConfig,
   listCompletionParameters,
-  listCourseRegistrations,
+  listCourseProgress,
   listCourseUpdateRequests,
   approveCourseUpdateRequest,
   declineCourseUpdateRequest,
@@ -68,6 +69,7 @@ import {
   sendMessage,
   type AssignmentReport,
   type CourseLesson,
+  type CourseRegistration,
   publishCourse,
   registerForCourse,
   requestCourseUpdate,
@@ -83,9 +85,11 @@ import { extractApiError } from "@/api/client";
 import { listAssessments } from "@/api/assessment";
 import { createCheckout } from "@/api/payments";
 import { useAuth } from "@/hooks/useAuth";
+import { usePrivateSpace } from "@/hooks/usePrivateSpace";
 import { LiveSessionConsentModal } from "./LiveSessionConsentModal";
 import { CourseStructureEditor } from "./CourseStructureEditor";
-import { CoursePlayer } from "./CoursePlayer";
+import { AssignmentsPanel, CoursePlayer } from "./CoursePlayer";
+import { CourseProgressTable } from "./CourseProgressTable";
 import { RegistrationFormModal, type RegistrationForm } from "./RegistrationFormModal";
 
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
@@ -100,7 +104,6 @@ export default function TrainingCourseDetailPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const canManage = ["cj_admin", "trainer"].includes(user?.role ?? "");
   const [searchParams, setSearchParams] = useSearchParams();
 
   const { data: course, isLoading } = useQuery({
@@ -108,6 +111,11 @@ export default function TrainingCourseDetailPage() {
     queryFn: () => retrieveCourse(cid),
     enabled: !Number.isNaN(cid),
   });
+  // Report 9 #47: the Corporate Exclusive Admin manages his organization's
+  // own courses fully (no CJ update approval); licensed CJ courses are
+  // read-only for him.
+  const { isPrivateAuthor, ownsItem } = usePrivateSpace();
+  const canManage = ["cj_admin", "trainer"].includes(user?.role ?? "") || ownsItem(course);
 
   // Live session consent modal — shown when ?live_session=ID is in the URL
   const liveSessionId = searchParams.get("live_session");
@@ -194,6 +202,12 @@ export default function TrainingCourseDetailPage() {
     COURSE_TYPES.find((t) => t.value === course.course_type)?.label ?? course.course_type;
   const scheduleLabel =
     SCHEDULE_TYPES.find((s) => s.value === course.schedule_type)?.label ?? course.schedule_type;
+  const assignmentCount = course.lessons.reduce(
+    (n, l) =>
+      n +
+      l.topics.reduce((m, t) => m + t.sessions.reduce((k, s) => k + s.assignments.length, 0), 0),
+    0,
+  );
 
   return (
     <div className="space-y-6 p-6">
@@ -215,20 +229,23 @@ export default function TrainingCourseDetailPage() {
 
       <Tabs defaultValue={myRegistration ? "learn" : "overview"}>
         <TabsList>
+          {/* Report 9 #80: Overview » Structure » Learn » Live Sessions »
+              Assignments » Assessments. The player is "Learn" again (this
+              supersedes R8-14's "Run the Course"); R8 #1/#11: CJ Admin and
+              trainers can run the course too. */}
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          {/* Report 8 #14: Structure before the player, renamed "Run the Course";
-              #1/#11: CJ Admin and trainers can run the course too. */}
           <TabsTrigger value="structure">Structure ({course.lessons.length} lessons)</TabsTrigger>
-          {course.status === "published" && (
-            <TabsTrigger value="learn">▶ Run the Course</TabsTrigger>
-          )}
+          {course.status === "published" && <TabsTrigger value="learn">▶ Learn</TabsTrigger>}
           <TabsTrigger value="live-sessions">
             Live Sessions ({course.live_sessions.length})
           </TabsTrigger>
+          <TabsTrigger value="assignments">Assignments ({assignmentCount})</TabsTrigger>
           <TabsTrigger value="assessments">Assessments ({course.assessments.length})</TabsTrigger>
           {canManage && <TabsTrigger value="completion">Completion</TabsTrigger>}
           {canManage && <TabsTrigger value="registrations">Registrations</TabsTrigger>}
-          {canManage && <TabsTrigger value="update-requests">Update Requests</TabsTrigger>}
+          {canManage && !isPrivateAuthor && (
+            <TabsTrigger value="update-requests">Update Requests</TabsTrigger>
+          )}
         </TabsList>
 
         {/* === OVERVIEW TAB === */}
@@ -253,24 +270,37 @@ export default function TrainingCourseDetailPage() {
                     {course.duration_days ? `${course.duration_days} days` : "Self-paced"}
                   </dd>
                 </div>
+                {/* Report 9 #83: learners see the trainer, not who created the
+                    course or how many registered. */}
                 <div className="py-1">
                   <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Created by
+                    Name of Trainer
                   </dt>
-                  <dd className="mt-1 text-sm text-slate-900">{course.created_by_name ?? "—"}</dd>
+                  <dd className="mt-1 text-sm text-slate-900">{course.trainer_name ?? "—"}</dd>
                 </div>
-                <div className="py-1">
-                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Registrations
-                  </dt>
-                  <dd className="mt-1 text-sm text-slate-900">{course.registration_count}</dd>
-                </div>
+                {canManage && (
+                  <div className="py-1">
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Created by
+                    </dt>
+                    <dd className="mt-1 text-sm text-slate-900">{course.created_by_name ?? "—"}</dd>
+                  </div>
+                )}
+                {canManage && (
+                  <div className="py-1">
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Registrations
+                    </dt>
+                    <dd className="mt-1 text-sm text-slate-900">{course.registration_count}</dd>
+                  </div>
+                )}
               </dl>
 
               {course.description && (
                 <div className="mt-4 border-t border-slate-100 pt-4">
+                  {/* Report 9 #81 */}
                   <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Description
+                    About the Course
                   </div>
                   {/* E-X4: render the rich-text course description. */}
                   <RichText html={course.description} className="mt-1 text-sm text-slate-900" />
@@ -314,7 +344,7 @@ export default function TrainingCourseDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* === RUN THE COURSE TAB (course delivery player) === */}
+        {/* === LEARN TAB (course delivery player) === */}
         {course.status === "published" && (
           <TabsContent value="learn">
             <CoursePlayer course={course} onRegister={() => setShowRegForm(true)} />
@@ -477,6 +507,14 @@ export default function TrainingCourseDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        {/* === ASSIGNMENTS TAB (Report 9 #80) === */}
+        <TabsContent value="assignments">
+          {canManage ? (
+            <AssignmentSubmissionsTab course={course} />
+          ) : (
+            <MyAssignmentsTab course={course} registration={myRegistration} />
+          )}
+        </TabsContent>
         <TabsContent value="assessments">
           <Card>
             <CardHeader>
@@ -570,14 +608,20 @@ export default function TrainingCourseDetailPage() {
   );
 }
 
-function RegistrationsTab({ courseId }: { courseId: number }) {
-  const { data: regs, isLoading } = useQuery({
-    queryKey: ["training", "courses", courseId, "registrations"],
-    queryFn: () => listCourseRegistrations(courseId),
+// Report 8.1 #62: the trainer sees how far each registered learner has got —
+// status, completion %, items done, started, last activity, assessment scores.
+function useCourseProgress(courseId: number) {
+  return useQuery({
+    queryKey: ["training", "courses", courseId, "registrations-progress"],
+    queryFn: () => listCourseProgress(courseId),
   });
+}
+
+function RegistrationsTab({ courseId }: { courseId: number }) {
+  const { data: rows, isLoading } = useCourseProgress(courseId);
 
   if (isLoading) return <Spinner />;
-  const list = regs ?? [];
+  const list = rows ?? [];
 
   return (
     <Card>
@@ -588,54 +632,181 @@ function RegistrationsTab({ courseId }: { courseId: number }) {
         {list.length === 0 ? (
           <p className="py-4 text-center text-sm text-slate-500">No students registered yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Student</TableHead>
-                <TableHead>Payment</TableHead>
-                <TableHead>Progress</TableHead>
-                <TableHead>Started</TableHead>
-                <TableHead>Registered</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-medium text-slate-900">
-                    {r.student_name ?? r.student_email}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        r.payment_status === "paid"
-                          ? "success"
-                          : r.payment_status === "pending"
-                            ? "warning"
-                            : "danger"
-                      }
-                    >
-                      {r.payment_status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={completionStatusVariant(r.completion_status)}>
-                      {completionStatusLabel(r.completion_status)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-slate-500">
-                    {r.started_at ? new Date(r.started_at).toLocaleDateString() : "—"}
-                  </TableCell>
-                  <TableCell className="text-slate-500">
-                    {new Date(r.registered_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <RegistrationActions registrationId={r.id} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <CourseProgressTable
+            rows={list}
+            showPayment
+            actions={(r) => <RegistrationActions registrationId={r.registration_id} />}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Every assignment of the course with where it sits (lesson › topic › session). */
+function courseAssignments(course: TrainingCourse) {
+  return course.lessons.flatMap((l) =>
+    l.topics.flatMap((t) =>
+      t.sessions
+        .filter((s) => s.assignments.length > 0)
+        .map((s) => ({ session: s, where: `${l.title} › ${t.title} › ${s.title}` })),
+    ),
+  );
+}
+
+// Report 9 #80: the learner's assignments in one tab — submit a report, see
+// its status and the trainer's feedback (the same panel the player shows).
+function MyAssignmentsTab({
+  course,
+  registration,
+}: {
+  course: TrainingCourse;
+  registration?: CourseRegistration;
+}) {
+  const sessions = courseAssignments(course);
+  const canSubmit =
+    !!registration && (parseFloat(course.price) === 0 || registration.payment_status === "paid");
+  if (sessions.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-sm text-slate-500">
+          This course has no assignments.
+        </CardContent>
+      </Card>
+    );
+  }
+  if (!canSubmit) {
+    return (
+      <Card>
+        <CardContent className="space-y-2 py-6 text-sm text-slate-600">
+          <p>
+            {registration
+              ? "Complete payment for this course to submit its assignments."
+              : "Register for this course to submit its assignments."}
+          </p>
+          <ul className="list-disc pl-5 text-slate-500">
+            {sessions.flatMap(({ session, where }) =>
+              session.assignments.map((a) => (
+                <li key={a.id}>
+                  {a.title} <span className="text-xs">({where})</span>
+                </li>
+              )),
+            )}
+          </ul>
+        </CardContent>
+      </Card>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      {sessions.map(({ session, where }) => (
+        <AssignmentsPanel
+          key={session.id}
+          session={session}
+          registrationId={registration.id}
+          title={where}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Report 9 #80: the trainer's overview of assignment submissions — who
+// submitted what, its status and score, with Review opening the existing
+// review pop-up for that learner.
+function AssignmentSubmissionsTab({ course }: { course: TrainingCourse }) {
+  const { data: rows, isLoading } = useCourseProgress(course.id);
+  const [reviewing, setReviewing] = useState<number | null>(null);
+  const sessions = courseAssignments(course);
+
+  if (isLoading) return <Spinner />;
+  const learners = rows ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Assignment Submissions</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {sessions.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">
+            This course has no assignments. Add them under Structure.
+          </p>
+        ) : (
+          sessions.flatMap(({ session, where }) =>
+            session.assignments.map((a) => {
+              const submissions = learners.flatMap((l) =>
+                l.assignment_reports
+                  .filter((r) => r.assignment_id === a.id)
+                  .map((r) => ({ learner: l, report: r })),
+              );
+              return (
+                <div key={a.id}>
+                  <div className="mb-2 flex flex-wrap items-baseline gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900">{a.title}</h3>
+                    <span className="text-xs text-slate-500">{where}</span>
+                    {a.report_submission_enabled && a.is_mandatory && (
+                      <Badge variant="warning">Report mandatory</Badge>
+                    )}
+                    {a.submission_deadline && (
+                      <span className="text-xs text-slate-500">
+                        Deadline: {new Date(a.submission_deadline).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  {!a.report_submission_enabled ? (
+                    <p className="text-sm text-slate-500">No report submission for this one.</p>
+                  ) : submissions.length === 0 ? (
+                    <p className="text-sm text-slate-500">No submissions yet.</p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Learner</TableHead>
+                          <TableHead>Submitted</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Score</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {submissions.map(({ learner, report }) => (
+                          <TableRow key={report.report_id}>
+                            <TableCell className="font-medium text-slate-900">
+                              {learner.full_name || learner.email}
+                            </TableCell>
+                            <TableCell className="text-slate-500">
+                              {new Date(report.submitted_at).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={report.status === "reviewed" ? "success" : "warning"}>
+                                {report.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-slate-500">
+                              {report.trainer_score != null ? `${report.trainer_score}/10` : "—"}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setReviewing(learner.registration_id)}
+                              >
+                                Review
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+              );
+            }),
+          )
+        )}
+        {reviewing !== null && (
+          <ReportsReviewModal registrationId={reviewing} onClose={() => setReviewing(null)} />
         )}
       </CardContent>
     </Card>
@@ -694,6 +865,10 @@ function ReportsReviewModal({
       toast.success("Report reviewed.");
       void queryClient.invalidateQueries({
         queryKey: ["training", "assignment-reports", registrationId],
+      });
+      // The Assignments / Registrations overviews show the status and score.
+      void queryClient.invalidateQueries({
+        predicate: (q) => q.queryKey[3] === "registrations-progress",
       });
     },
     onError: (err) => toast.error(extractApiError(err)),
@@ -1125,8 +1300,8 @@ function AddLiveSessionForm({
             ))}
           </select>
           <p className="mt-1 text-xs text-slate-500">
-            Students see this session (with Join) in Run the Course after the chosen content — e.g.
-            the last content of a topic or lesson. Mark it mandatory on the Completion tab.
+            Students see this session (with Join) in Learn after the chosen content — e.g. the last
+            content of a topic or lesson. Mark it mandatory on the Completion tab.
           </p>
         </div>
       )}

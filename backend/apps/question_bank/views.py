@@ -53,6 +53,7 @@ class HasQuestionBankPermission(HasModulePermission):
         "tree": "view",
         "bulk_import": "add",  # E-QB-4: bulk full-question template import
         "submit_for_review": "change",
+        "reviewer_options": "change",  # Report 9 #65: reviewer picker for submit_for_review
         "validate_config": "view",
         "psychometric_analysis": "change",  # psychometrician-only: computes indices
         "psychometric_extract": "change",  # Report 9 #87: extract/list step before a run
@@ -66,6 +67,20 @@ class HasQuestionBankPermission(HasModulePermission):
         "approve": "change",
         "decline": "change",
     }
+
+
+# Doc 1 §4.1.1: the analyses the Psychometrician can choose to run, and the
+# Question fields each one produces.
+PSYCHOMETRIC_ANALYSES = {
+    "difficulty": (
+        "item_difficulty_index",
+        "top_group_difficulty_index",
+        "bottom_group_difficulty_index",
+        "difference_difficulty_index",
+    ),
+    "discrimination": ("discrimination_index",),
+    "item_total": ("item_total_correlation",),
+}
 
 
 def _is_qb_admin(user) -> bool:
@@ -142,6 +157,17 @@ def _pick_domain_reviewer(question):
     )
 
 
+def _usable_reviewer(user, question) -> bool:
+    """An active Reviewer who is not the question's author."""
+    return (
+        user is not None
+        and user.is_active
+        and user.role_id is not None
+        and user.role.name == "reviewer"
+        and user.id != question.created_by_id
+    )
+
+
 def _previous_reviewer(question):
     """Reviewer to route a resubmitted (sent-back) question to (Report 9 #71).
 
@@ -151,26 +177,89 @@ def _previous_reviewer(question):
     """
     from .models import QuestionReview
 
-    def usable(user):
-        return (
-            user is not None
-            and user.is_active
-            and user.role_id is not None
-            and user.role.name == "reviewer"
-            and user.id != question.created_by_id
-        )
-
     last = (
         QuestionReview.objects.filter(question=question, review_type="content", action="send_back")
         .select_related("reviewer__role")
         .order_by("-created_at", "-id")
         .first()
     )
-    if last and usable(last.reviewer):
+    if last and _usable_reviewer(last.reviewer, question):
         return last.reviewer
-    if usable(question.assigned_reviewer):
+    if _usable_reviewer(question.assigned_reviewer, question):
         return question.assigned_reviewer
     return None
+
+
+# Task statuses in which an SME is still working on (or finishing) a task.
+_OPEN_TASK_STATUSES = ("pending", "in_progress", "overdue", "awaiting_review")
+
+
+def _task_reviewer(question, author):
+    """Reviewer CJ Admin named on the author's open SME task (Report 9 #65).
+
+    When the SME has several open tasks naming a reviewer, the one whose
+    specification covers the question's category wins (subcategory, then
+    main category); otherwise the most recently assigned task. Returns None
+    when no open task names a usable reviewer.
+    """
+    from apps.tasks.models import Task
+
+    if author is None:
+        return None
+    tasks = list(
+        Task.objects.filter(
+            assigned_to=author,
+            assignee_role="sme",
+            status__in=_OPEN_TASK_STATUSES,
+            reviewer__isnull=False,
+        )
+        .select_related("reviewer__role")
+        .prefetch_related("specs")
+        .order_by("-created_at", "-id")
+    )
+    tasks = [t for t in tasks if _usable_reviewer(t.reviewer, question)]
+    if not tasks:
+        return None
+    if question.category_id:
+        cat_name = question.category.name.strip().lower()
+        root_name = question.category.domain_root.name.strip().lower()
+
+        def score(task):
+            best = 0
+            for spec in task.specs.all():
+                if spec.qb_subcategory and spec.qb_subcategory.strip().lower() == cat_name:
+                    best = max(best, 2)
+                elif spec.qb_category and spec.qb_category.strip().lower() in (
+                    root_name,
+                    cat_name,
+                ):
+                    best = max(best, 1)
+            return best
+
+        best_task = max(tasks, key=score)  # max keeps the first (newest) on ties
+        return best_task.reviewer
+    return tasks[0].reviewer
+
+
+def _reviewer_label(user) -> dict:
+    """A reviewer as shown in the SME's / CJ Admin's reviewer pickers."""
+    profile = getattr(user, "profile", None)
+    return {
+        "id": user.id,
+        "full_name": user.full_name or user.email,
+        "email": user.email,
+        # Report 9 #67/#69: domains of expertise shown next to the name.
+        "domains_of_expertise": list(getattr(profile, "domains_of_expertise", None) or []),
+    }
+
+
+def _usable_psychometrician(user) -> bool:
+    return (
+        user is not None
+        and user.is_active
+        and user.role_id is not None
+        and user.role.name == "psychometrician"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -366,8 +455,14 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
             qs = qs.filter(created_by=self.request.user)
 
         # E-X3: a reviewer's routed queue — questions assigned to them.
+        # Report 9 #92: a psychometrician's queue is the questions routed
+        # back to him after he sent them back.
         if params.get("assigned") == "me" and self.request.user.is_authenticated:
-            qs = qs.filter(assigned_reviewer=self.request.user)
+            user = self.request.user
+            if user.role_id and user.role.name == "psychometrician":
+                qs = qs.filter(assigned_psychometrician=user)
+            else:
+                qs = qs.filter(assigned_reviewer=user)
 
         # Report 3 §4.1/§4.2 + D1 §3.1: trainers and SMEs author questions but
         # must ALWAYS see ONLY their own questions (not the full CJ Question
@@ -608,12 +703,38 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Report 9 #65: the SME picks the Reviewer to send the question to.
+        chosen = None
+        chosen_id = request.data.get("reviewer")
+        if chosen_id not in (None, ""):
+            from apps.accounts.models import User
+
+            try:
+                chosen = User.objects.select_related("role").filter(id=int(chosen_id)).first()
+            except (TypeError, ValueError):
+                chosen = None
+            if not _usable_reviewer(chosen, question):
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "Choose an active Reviewer to send the question to.",
+                            "details": {"reviewer": chosen_id},
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         was_sent_back = question.status == "sent_back"
         question.status = "pending_content_review"
         # Report 9 #71: a sent-back question goes back to the SAME reviewer
-        # who sent it back. Only first submissions (or when that reviewer is
-        # no longer available) are routed afresh.
+        # who sent it back (the SME's picker shows it fixed). First
+        # submissions go to the reviewer the SME chose (#65), else the one
+        # named on his task, else - only as a fallback - the E-X3
+        # same-domain least-busy reviewer.
         reviewer = _previous_reviewer(question) if was_sent_back else None
+        if reviewer is None:
+            reviewer = chosen or _task_reviewer(question, question.created_by)
         if reviewer is None:
             # E-X3: route to a Reviewer in the same domain (category tree root).
             reviewer = _pick_domain_reviewer(question)
@@ -641,6 +762,45 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
                     "id": question.id,
                     "status": question.status,
                     "assigned_reviewer": reviewer.id if reviewer else None,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get"], url_path="reviewer-options")
+    def reviewer_options(self, request, pk=None):
+        """Reviewer picker for "Submit for review" (Report 9 #65).
+
+        GET /api/question-bank/questions/<id>/reviewer-options/
+        -> {
+             "reviewers": [{id, full_name, email, domains_of_expertise}, ...],
+             "default_reviewer": <id> | null,   # pre-selected in the picker
+             "task_reviewer": <id> | null,      # named by CJ Admin on the SME's task
+             "locked": bool,                    # sent back: returns to the same reviewer
+           }
+
+        The pool is every active Reviewer (never the question's author).
+        """
+        from apps.accounts.models import User
+
+        question = self.get_object()
+        pool = (
+            User.objects.filter(is_active=True, role__name="reviewer")
+            .exclude(id=question.created_by_id)
+            .select_related("profile")
+            .order_by("full_name", "email")
+        )
+        task_reviewer = _task_reviewer(question, question.created_by)
+        previous = _previous_reviewer(question) if question.status == "sent_back" else None
+        default = previous or task_reviewer
+        return Response(
+            {
+                "message": "OK",
+                "data": {
+                    "reviewers": [_reviewer_label(u) for u in pool],
+                    "default_reviewer": default.id if default else None,
+                    "task_reviewer": task_reviewer.id if task_reviewer else None,
+                    "locked": previous is not None,
                 },
             },
             status=status.HTTP_200_OK,
@@ -954,13 +1114,17 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
     def psychometric_analysis(self, request):
         """Run psychometric analysis on one or more questions (SRS 02).
 
-        Triggered by the Psychometrician. Computes per-question:
-          - Item Difficulty Index (IDI, TDI, BDI, DDI) for all questions
-          - Item Discrimination Index for MCQ questions
-          - Item-Total Correlation Index for non-MCQ questions
+        Triggered by the Psychometrician. Computes per-question the analyses
+        chosen in "analyses" (Doc 1 §4.1.1 "User selects relevant analyses";
+        all three when omitted):
+          - "difficulty": Item Difficulty Index (IDI, TDI, BDI, DDI)
+          - "discrimination": Item Discrimination Index (MCQ questions)
+          - "item_total": Item-Total Correlation Index (non-MCQ questions)
 
-        Results are persisted on each Question (item_difficulty_index,
-        top_group_difficulty_index, etc.) and returned in the response.
+        Doc 1 §4.1.1: the outputs are only returned for inspection - nothing
+        is stored here. When the Psychometrician clicks Submit the screen
+        stores the inspected values through psychometric-upload/; Cancel
+        simply discards them.
 
         Payload:
             {
@@ -976,7 +1140,8 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
                 "assessment_id": 42,               # optional, filter by assessment
                 "region": "Karnataka",             # optional (D2 "Region" filter)
                 "age_min": 18,                     # optional (D2 "User Age range" filter)
-                "age_max": 30                      # optional
+                "age_max": 30,                     # optional
+                "analyses": ["difficulty", "discrimination", "item_total"]  # optional
             }
 
         Returns:
@@ -1000,6 +1165,26 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         """
         from .psychometrics import run_psychometric_analysis
 
+        analyses = request.data.get("analyses")
+        if analyses in (None, ""):
+            analyses = list(PSYCHOMETRIC_ANALYSES)
+        if (
+            not isinstance(analyses, list)
+            or not analyses
+            or any(a not in PSYCHOMETRIC_ANALYSES for a in analyses)
+        ):
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "analyses must be a non-empty list of: "
+                        + ", ".join(PSYCHOMETRIC_ANALYSES)
+                        + ".",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         questions, filters, error = self._resolve_psychometric_filters(request.data)
         if error is not None:
             return error
@@ -1014,25 +1199,24 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
                 region=filters["region"],
                 age_min=filters["age_min"],
                 age_max=filters["age_max"],
+                persist=False,
             )
-            results.append(
-                {
-                    "question_id": r.question_id,
-                    "n_candidates": r.n_candidates,
-                    "item_difficulty_index": r.item_difficulty_index,
-                    "top_group_difficulty_index": r.top_group_difficulty_index,
-                    "bottom_group_difficulty_index": r.bottom_group_difficulty_index,
-                    "difference_difficulty_index": r.difference_difficulty_index,
-                    "discrimination_index": r.discrimination_index,
-                    "item_total_correlation": r.item_total_correlation,
-                    "error": r.error,
-                }
-            )
+            row = {
+                "question_id": r.question_id,
+                "n_candidates": r.n_candidates,
+                "error": r.error,
+            }
+            # Only the chosen analyses are reported (null = not chosen).
+            for analysis, fields in PSYCHOMETRIC_ANALYSES.items():
+                for field in fields:
+                    row[field] = getattr(r, field) if analysis in analyses else None
+            results.append(row)
 
         return Response(
             {
                 "message": f"Analysed {len(results)} question(s).",
                 "data": results,
+                "analyses": analyses,
             },
             status=status.HTTP_200_OK,
         )
@@ -1279,10 +1463,39 @@ class QuestionReviewView(APIView):
         # Refresh question from DB to get the updated status
         question.refresh_from_db()
 
+        # Report 9 #92: remember which psychometrician sent the question back,
+        # so the SME's resubmission returns to him after content review.
+        if review.action == "send_back" and review_type == "psychometric":
+            question.assigned_psychometrician = request.user
+            question.save(update_fields=["assigned_psychometrician", "updated_at"])
+
         # If content review approved, move to psychometric review
         if review.action == "approve" and review_type == "content":
             question.status = "pending_psychometric_review"
-            question.save(update_fields=["status", "updated_at"])
+            update_fields = ["status", "updated_at"]
+            # Report 9 #92: a resubmitted question goes back to the
+            # psychometrician who sent it back, and he is told so.
+            psychometrician = question.assigned_psychometrician
+            if psychometrician is not None and not _usable_psychometrician(psychometrician):
+                question.assigned_psychometrician = None
+                update_fields.append("assigned_psychometrician")
+                psychometrician = None
+            question.save(update_fields=update_fields)
+            if psychometrician is not None:
+                try:
+                    from apps.notifications.models import notify_user
+
+                    notify_user(
+                        psychometrician,
+                        "Resubmitted question returned for psychometric review",
+                        f"'{question.question_title}', which you sent back, has been "
+                        "revised by the SME and cleared content review. It is back with "
+                        "you for psychometric review.",
+                        "review",
+                        f"/question-bank/{question.id}?review=1",
+                    )
+                except Exception as e:  # pragma: no cover - notification is best-effort
+                    logger.warning("Psychometrician notification failed: %s", e)
 
         # If psychometric review approved with exposure limit, set it
         if review.action == "approve" and review_type == "psychometric":

@@ -71,7 +71,7 @@ export function CoursePlayer({
   onRegister,
 }: {
   course: TrainingCourse;
-  /** Opens the registration form (so "Run the Course" isn't a dead end). */
+  /** Opens the registration form (so "Learn" isn't a dead end). */
   onRegister?: () => void;
 }) {
   const toast = useToast();
@@ -756,12 +756,15 @@ function ProgressDashboard({ summary, loading }: { summary?: ProgressSummary; lo
 // Assignments Panel — shows assignments + report submission
 // ---------------------------------------------------------------------------
 
-function AssignmentsPanel({
+export function AssignmentsPanel({
   session,
   registrationId,
+  title = "Assignments",
 }: {
   session: TopicSession;
   registrationId: number;
+  /** Report 9 #80: the Assignments tab heads each panel with its session. */
+  title?: string;
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -806,7 +809,7 @@ function AssignmentsPanel({
   return (
     <Card className="mt-4">
       <CardHeader>
-        <CardTitle className="text-sm">Assignments</CardTitle>
+        <CardTitle className="text-sm">{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {session.assignments.map((a) => {

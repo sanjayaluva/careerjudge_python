@@ -59,7 +59,7 @@ jobs:
 
       - name: Copy repo to prod server
         run: |
-          rsync -avz --delete --exclude='.git' --exclude='node_modules' --exclude='.venv' \
+          rsync -avz --delete --exclude='.git' --exclude='node_modules' --exclude='.venv' --exclude='backend/media' \
             ./ ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:/opt/careerjudge/
 
       - name: Run deploy script

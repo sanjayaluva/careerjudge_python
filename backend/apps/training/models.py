@@ -127,6 +127,17 @@ class TrainingCourse(models.Model):
         blank=True,
         related_name="private_training_courses",
     )
+    # Report 9 #83: the course's trainer, shown to learners as "Name of
+    # Trainer". Optional — CJ Admin names one for a course he set up; when
+    # empty the creator is shown.
+    trainer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="trained_courses",
+        limit_choices_to={"role__name": "trainer"},
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

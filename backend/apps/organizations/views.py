@@ -181,8 +181,8 @@ class OrganizationViewSet(ActionSerializerMixin, ModelViewSet):
         )
 
     def create(self, request, *args, **kwargs):
-        org_type = None if is_cj_admin(request.user) else OWN_ORG_TYPE_BY_ROLE.get(
-            role_name(request.user)
+        org_type = (
+            None if is_cj_admin(request.user) else OWN_ORG_TYPE_BY_ROLE.get(role_name(request.user))
         )
         if org_type is None:
             serializer = self.get_serializer(data=request.data)

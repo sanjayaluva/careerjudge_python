@@ -57,8 +57,8 @@ class HasProfilingPermission(HasModulePermission):
         "compute": "view",
         # Report 9 #89/#118: these tabs were missing from the map, so every
         # non-superuser was refused (the module looked unavailable).
-        "assessments": {"GET": "view", "POST": "change"},
-        "bands": {"GET": "view", "POST": "change"},
+        "assessments": {"GET": "view", "HEAD": "view", "POST": "change"},
+        "bands": {"GET": "view", "HEAD": "view", "POST": "change"},
         "match_indices": "view",  # any user with view permission may compute (admins for any candidate, others for self)
         "rank_definitions": "change",
         "rank_definitions_delete": "change",
@@ -78,7 +78,7 @@ class ProfilingSolutionViewSet(ModelViewSet):
     """CRUD for profiling solutions."""
 
     queryset = ProfilingSolution.objects.select_related("created_by").prefetch_related(
-        "selected_assessments"
+        "selected_assessments__assessment"
     )
     permission_classes = [IsAuthenticated, HasProfilingPermission]
     serializer_class = ProfilingSolutionSerializer
@@ -90,7 +90,8 @@ class ProfilingSolutionViewSet(ModelViewSet):
         # lists and opens PUBLISHED solutions only.
         user = self.request.user
         role = user.role.name if user.role_id else None
-        if not (user.is_superuser or role in ("cj_admin", "psychometrician")):
+        # Report 9 #114: Help Desk views (only) every solution.
+        if not (user.is_superuser or role in ("cj_admin", "psychometrician", "helpdesk")):
             qs = qs.filter(status="published")
         return qs
 

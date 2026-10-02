@@ -89,7 +89,9 @@ def _space(owner, tag):
         question_text_1=f"{tag} question",
         status="confirmed",
     )
-    asm = Assessment.objects.create(title=f"{tag} asm", status="published", owner_organization=owner)
+    asm = Assessment.objects.create(
+        title=f"{tag} asm", status="published", owner_organization=owner
+    )
     sec = AssessmentSection.objects.create(assessment=asm, title="S1", level=1)
     AssessmentQuestion.objects.create(section=sec, question=q)
     draft = Assessment.objects.create(title=f"{tag} draft", owner_organization=owner)
@@ -97,7 +99,9 @@ def _space(owner, tag):
     course = TrainingCourse.objects.create(
         title=f"{tag} course", status="published", owner_organization=owner
     )
-    course_draft = TrainingCourse.objects.create(title=f"{tag} course draft", owner_organization=owner)
+    course_draft = TrainingCourse.objects.create(
+        title=f"{tag} course draft", owner_organization=owner
+    )
     return {
         "cat": cat,
         "q": q,
@@ -319,12 +323,46 @@ def test_cj_admin_sessions_and_registrations_exclude_private(world):
     assert cja.get(f"/api/training/lessons/?course={a['course'].id}").status_code == 200
 
 
+def test_generated_private_reports_stay_inside_the_organization(world):
+    from apps.reporting.models import GeneratedReport
+
+    a, member = world["a"], world["u"]["member_a"]
+    s = AssessmentSession.objects.create(assessment=a["asm"], candidate=member, status="completed")
+    gen = GeneratedReport.objects.create(
+        report=a["rep"], session=s, candidate=member, status="generated", rendered_data={}
+    )
+    for who in ("cj_admin", "psychometrician"):
+        assert gen.id not in _ids(_get(world, who, "/api/reporting/generated/"))
+        assert _get(world, who, f"/api/reporting/generated/{gen.id}/").status_code == 404
+    assert gen.id in _ids(_get(world, "member_a", "/api/reporting/generated/?mine=1"))
+    assert gen.id in _ids(_get(world, "excl_a", "/api/reporting/generated/"))
+    assert gen.id not in _ids(_get(world, "excl_b", "/api/reporting/generated/"))
+
+
+def test_publishing_private_assessment_notifies_only_its_members(world):
+    from apps.notifications.models import Notification
+
+    draft = world["a"]["draft"]
+    sec = AssessmentSection.objects.create(assessment=draft, title="S", level=1)
+    AssessmentQuestion.objects.create(section=sec, question=world["a"]["q"])
+    resp = _auth(world["u"]["excl_a"]).post(f"/api/assessments/{draft.id}/publish/")
+    assert resp.status_code == 200, resp.data
+    notified = set(
+        Notification.objects.filter(title="New assessment available").values_list(
+            "recipient_id", flat=True
+        )
+    )
+    assert notified == {world["u"]["member_a"].id}
+
+
 # ---------------------------------------------------------------------------
 # #34 / #53 — own organizations
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("who,kind", [("excl_a", "corp_exclusive"), ("channel_partner", "channel_partner")])
+@pytest.mark.parametrize(
+    "who,kind", [("excl_a", "corp_exclusive"), ("channel_partner", "channel_partner")]
+)
 def test_manager_creates_his_own_organization(world, who, kind):
     user = world["u"][who]
     c = _auth(user)
@@ -398,7 +436,9 @@ def test_exclusive_admin_builds_his_question_bank(world):
     assert (q.owner_organization_id, q.status) == (org_a.id, "confirmed")
     assert c.post(f"/api/question-bank/questions/{q.id}/submit_for_review/").status_code == 403
     # Edits and deletes directly, in any status.
-    resp = c.patch(f"/api/question-bank/questions/{q.id}/", {"question_text_1": "3+3?"}, format="json")
+    resp = c.patch(
+        f"/api/question-bank/questions/{q.id}/", {"question_text_1": "3+3?"}, format="json"
+    )
     assert resp.status_code == 200, resp.data
     opts = c.post(
         f"/api/question-bank/questions/{q.id}/options/bulk/",
@@ -426,7 +466,9 @@ def test_exclusive_admin_cannot_use_other_spaces(world):
             format="json",
         )
         assert resp.status_code == 400
-        resp = c.post("/api/question-bank/categories/", {"name": "x", "parent": cat.id}, format="json")
+        resp = c.post(
+            "/api/question-bank/categories/", {"name": "x", "parent": cat.id}, format="json"
+        )
         assert resp.status_code == 400
     # A CJ question's options are out of his reach; a CJ author's likewise for his.
     assert c.get(f"/api/question-bank/questions/{world['cj']['q'].id}/options/").status_code == 404
@@ -446,7 +488,11 @@ def test_exclusive_admin_builds_and_publishes_his_assessment(world):
     assert resp.status_code == 201, resp.data
     asm = Assessment.objects.get(id=resp.data["data"]["id"])
     assert asm.owner_organization_id == org_a.id
-    sec = c.post(f"/api/assessments/{asm.id}/sections/", {"title": "S1", "duration_seconds": None}, format="json")
+    sec = c.post(
+        f"/api/assessments/{asm.id}/sections/",
+        {"title": "S1", "duration_seconds": None},
+        format="json",
+    )
     assert sec.status_code == 201, sec.data
     base = f"/api/assessments/{asm.id}/sections/{sec.data['data']['id']}/questions/"
     assert c.post(base, {"question": world["cj"]["q"].id}, format="json").status_code == 400
@@ -473,7 +519,9 @@ def test_exclusive_admin_cannot_change_licensed_cj_assessment(world):
     cj_asm = world["cj"]["asm"]
     c = _auth(world["u"]["excl_a"])
     assert c.get(f"/api/assessments/{cj_asm.id}/").status_code == 200
-    assert c.patch(f"/api/assessments/{cj_asm.id}/", {"title": "x"}, format="json").status_code == 403
+    assert (
+        c.patch(f"/api/assessments/{cj_asm.id}/", {"title": "x"}, format="json").status_code == 403
+    )
     assert c.delete(f"/api/assessments/{cj_asm.id}/").status_code == 403
     resp = c.post(f"/api/assessments/{cj_asm.id}/sections/", {"title": "x"}, format="json")
     assert resp.status_code == 403
@@ -520,7 +568,9 @@ def test_exclusive_admin_designs_reports_on_his_assessments(world):
     assert resp.status_code == 201, resp.data
     rid = resp.data["data"]["id"]
     assert Report.objects.get(id=rid).owner_organization_id == org_a.id
-    resp = c.post("/api/reporting/reports/", {**payload, "assessment": world["cj"]["asm"].id}, format="json")
+    resp = c.post(
+        "/api/reporting/reports/", {**payload, "assessment": world["cj"]["asm"].id}, format="json"
+    )
     assert resp.status_code == 400
     sec = a["asm"].sections.first()
     resp = c.post(
@@ -530,7 +580,9 @@ def test_exclusive_admin_designs_reports_on_his_assessments(world):
     )
     assert resp.status_code == 201, resp.data
     assert c.post(f"/api/reporting/reports/{rid}/publish/").status_code == 200
-    assert c.patch(f"/api/reporting/reports/{rid}/", {"title": "R2"}, format="json").status_code == 200
+    assert (
+        c.patch(f"/api/reporting/reports/{rid}/", {"title": "R2"}, format="json").status_code == 200
+    )
     assert c.delete(f"/api/reporting/reports/{rid}/").status_code in (200, 204)
     # CJ's report designs are out of his reach.
     assert c.get(f"/api/reporting/reports/{world['cj']['rep'].id}/").status_code == 404
@@ -572,7 +624,10 @@ def test_exclusive_admin_builds_courses_his_members_learn(world):
     cja = _auth(world["u"]["cj_admin"])
     assert cja.get(f"/api/training/courses/{course.id}/").status_code == 404
     lesson_id = lesson.data["data"]["id"]
-    assert cja.patch(f"/api/training/lessons/{lesson_id}/", {"title": "x"}, format="json").status_code == 404
+    assert (
+        cja.patch(f"/api/training/lessons/{lesson_id}/", {"title": "x"}, format="json").status_code
+        == 404
+    )
 
     assert c.delete(f"/api/training/courses/{course.id}/").status_code in (200, 204)
 
@@ -581,7 +636,35 @@ def test_exclusive_admin_cannot_change_licensed_cj_course(world):
     cj_course = world["cj"]["course"]
     c = _auth(world["u"]["excl_a"])
     assert c.get(f"/api/training/courses/{cj_course.id}/").status_code == 200
-    assert c.patch(f"/api/training/courses/{cj_course.id}/", {"title": "x"}, format="json").status_code == 403
-    assert c.post(f"/api/training/courses/{cj_course.id}/lessons/", {"title": "x"}, format="json").status_code == 403
+    assert (
+        c.patch(f"/api/training/courses/{cj_course.id}/", {"title": "x"}, format="json").status_code
+        == 403
+    )
+    assert (
+        c.post(
+            f"/api/training/courses/{cj_course.id}/lessons/", {"title": "x"}, format="json"
+        ).status_code
+        == 403
+    )
     assert c.delete(f"/api/training/courses/{cj_course.id}/").status_code == 403
     assert c.post("/api/training/categories/", {"name": "Mine"}, format="json").status_code == 403
+
+
+def test_course_parts_follow_the_course_space(world):
+    from apps.training.models import CourseLesson, LiveSessionRequest
+
+    licensed = CourseLesson.objects.create(course=world["cj"]["course"], title="CJ licensed")
+    unlicensed = CourseLesson.objects.create(course=world["cj"]["course_draft"], title="CJ other")
+    own = CourseLesson.objects.create(course=world["a"]["course"], title="A lesson")
+    other = CourseLesson.objects.create(course=world["b"]["course"], title="B lesson")
+    seen = _ids(_get(world, "excl_a", "/api/training/lessons/"))
+    assert {licensed.id, own.id} <= seen and not seen & {unlicensed.id, other.id}
+    seen = _ids(_get(world, "cj_admin", "/api/training/lessons/"))
+    assert {licensed.id, unlicensed.id} <= seen and not seen & {own.id, other.id}
+
+    req = LiveSessionRequest.objects.create(
+        course=world["a"]["course"], student=world["u"]["member_a"]
+    )
+    assert req.id in _ids(_get(world, "excl_a", "/api/training/live-session-requests/"))
+    for who in ("cj_admin", "trainer"):
+        assert req.id not in _ids(_get(world, who, "/api/training/live-session-requests/"))

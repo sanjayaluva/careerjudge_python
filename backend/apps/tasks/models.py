@@ -117,6 +117,18 @@ class Task(models.Model):
         help_text=_("If this task builds on another (e.g. reviewer reviewing an SME task)"),
     )
 
+    # Report 9 #65 (client change request): on an SME question-creation task
+    # CJ Admin names the Reviewer the SME should send the completed questions
+    # to. The SME's "Submit for review" reviewer picker is pre-selected with it.
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tasks_as_designated_reviewer",
+        help_text=_("SME tasks: the Reviewer the SME sends the completed questions to."),
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

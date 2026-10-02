@@ -19,7 +19,8 @@ SECURE_REFERRER_POLICY = "same-origin"
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 
 # Static / Media via S3-compatible storage (OCI Object Storage or GCS)
-if env("USE_S3_STORAGE", default=False):
+MEDIA_ON_S3 = env.bool("USE_S3_STORAGE", default=False)
+if MEDIA_ON_S3:
     STORAGES = {
         "default": {
             "BACKEND": "storages.backends.s3.S3Storage",

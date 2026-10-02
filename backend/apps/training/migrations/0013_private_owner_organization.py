@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('organizations', '0008_organization_enabled_modules'),
-        ('training', '0011_courseregistration_organization_assigned_by'),
+        ('training', '0012_trainingcourse_trainer'),
     ]
 
     operations = [

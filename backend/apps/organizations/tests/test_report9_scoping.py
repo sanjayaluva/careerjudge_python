@@ -311,3 +311,32 @@ def test_cj_admin_switches_modules_off_for_an_organization(world):
         .status_code
         == 403
     )
+
+
+def test_helpdesk_views_everything_read_only(world, roles):
+    """Report 9 #112-#114: Help Desk views every organization, assessment
+    (any status) and profiling solution, but cannot change or take them."""
+    from apps.career_profiling.models import ProfilingSolution
+
+    hd = _user(roles, "helpdesk", "hd@t.com")
+    c = _auth(hd)
+    draft = Assessment.objects.create(title="Draft", status="draft")
+    pub = Assessment.objects.create(title="Pub", status="published")
+    sol = ProfilingSolution.objects.create(title="Draft solution", status="draft")
+
+    orgs = {o["id"] for o in _data(c.get("/api/organizations/"))}
+    assert {world["own"].id, world["other"].id} <= orgs
+    assessments = {a["id"] for a in _data(c.get("/api/assessments/"))}
+    assert {draft.id, pub.id} <= assessments
+    sols = {s["id"] for s in _data(c.get("/api/career-profiling/solutions/"))}
+    assert sol.id in sols
+
+    assert (
+        c.patch(f"/api/organizations/{world['own'].id}/", {"name": "X"}, format="json").status_code
+        == 403
+    )
+    assert c.post("/api/assessments/", {"title": "New"}, format="json").status_code == 403
+    assert c.post(f"/api/assessments/{pub.id}/start_session/").status_code == 403
+    assert (
+        c.post("/api/career-profiling/solutions/", {"title": "S"}, format="json").status_code == 403
+    )

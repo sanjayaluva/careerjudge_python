@@ -71,6 +71,9 @@ services:
              gunicorn config.wsgi:application --bind 0.0.0.0:8000
              --workers 4 --timeout 60
              --access-logfile - --error-logfile -"
+    volumes:
+      # Uploaded files must survive image rebuilds and redeploys.
+      - media_data:/app/media
     ports:
       - "8000:8000"
     networks:
@@ -94,6 +97,8 @@ services:
       - redis
     restart: always
     command: celery -A config worker --loglevel=info --concurrency=2
+    volumes:
+      - media_data:/app/media
     networks:
       - cj-net
 
@@ -151,6 +156,7 @@ networks:
     driver: bridge
 
 volumes:
+  media_data:
   pg_data:
   redis_data:
   caddy_data:

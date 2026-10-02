@@ -189,6 +189,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "city",
             "communicative_languages",
             "age",
+            # Report 9 #66/#68: SME / Reviewer domains of expertise.
+            "domains_of_expertise",
             "postal_code",
             "address_line1",
             "address_line2",
@@ -241,9 +243,20 @@ def _apply_profile_fields(profile: UserProfile, profile_data: dict) -> None:
             if value == "" and UserProfile._meta.get_field(attr).null:
                 value = None
             # Report 8 #45: the profile form sends text — languages arrive
-            # comma-separated and age as a string.
-            if attr == "communicative_languages" and isinstance(value, str):
-                value = [part.strip() for part in value.split(",") if part.strip()]
+            # comma-separated and age as a string. Report 9 #66/#68: so do
+            # an SME's / Reviewer's domains of expertise.
+            if attr in ("communicative_languages", "domains_of_expertise"):
+                if value is None:
+                    value = []
+                elif isinstance(value, str):
+                    value = [part.strip() for part in value.split(",") if part.strip()]
+                if attr == "domains_of_expertise":
+                    seen: set[str] = set()
+                    value = [
+                        v
+                        for v in (str(x).strip()[:100] for x in value)
+                        if v and not (v.lower() in seen or seen.add(v.lower()))
+                    ]
             if attr == "age" and value is not None:
                 try:
                     value = int(value)

@@ -12,6 +12,7 @@
  *  - Schedule type (scheduled / non-scheduled)
  *  - Duration days (scheduled only)
  *  - Price
+ *  - Trainer (CJ Admin only — Report 9 #83 "Name of Trainer")
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -43,7 +44,10 @@ import {
   updateCourse,
 } from "@/api/training";
 import { extractApiError, apiPatch } from "@/api/client";
+import { listUsers } from "@/api/users";
+import { PrivateSpaceNote } from "@/components/PrivateSpaceNote";
 import { useAuth } from "@/hooks/useAuth";
+import { usePrivateSpace } from "@/hooks/usePrivateSpace";
 
 const TRAINING_KEY = ["training", "courses"];
 
@@ -56,6 +60,17 @@ export default function TrainingCourseEditorPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const canManage = ["cj_admin", "trainer"].includes(user?.role ?? "");
+  // Report 9 #47: training categories stay CJ's; the Corporate Exclusive
+  // Admin files his private courses under them and edits published ones.
+  const { isPrivateAuthor } = usePrivateSpace();
+  // Report 9 #83: CJ Admin names the course's trainer (shown to learners as
+  // "Name of Trainer"; the creator when none is named).
+  const isAdmin = user?.role === "cj_admin";
+  const { data: trainersPage } = useQuery({
+    queryKey: ["users", "trainers"],
+    queryFn: () => listUsers({ role: "trainer", page_size: 100 }),
+    enabled: isAdmin,
+  });
 
   // Load categories for the dropdown
   const { data: categories } = useQuery({
@@ -100,7 +115,9 @@ export default function TrainingCourseEditorPage() {
         </h1>
       </div>
 
-      {isEditMode && course?.status !== "draft" && (
+      {isPrivateAuthor && <PrivateSpaceNote what="training courses" />}
+
+      {isEditMode && course?.status !== "draft" && !isPrivateAuthor && (
         <Alert variant="warning">
           <AlertDescription>
             This course is published. Edits are limited to admin users only.
@@ -111,6 +128,14 @@ export default function TrainingCourseEditorPage() {
       <CourseForm
         course={isEditMode ? course : undefined}
         categories={categories ?? []}
+        trainers={
+          isAdmin
+            ? (trainersPage?.results ?? []).map((t) => ({
+                id: t.id,
+                name: t.full_name || t.email,
+              }))
+            : undefined
+        }
         loading={saveMutation.isPending}
         onSubmit={(payload) => saveMutation.mutate(payload)}
       />
@@ -218,6 +243,7 @@ function CategoryManager() {
 function CourseForm({
   course,
   categories,
+  trainers,
   loading,
   onSubmit,
 }: {
@@ -231,8 +257,11 @@ function CourseForm({
     duration_days: number | null;
     price: string;
     content_sequencing_enabled?: boolean;
+    trainer?: number | null;
   };
   categories: { id: number; name: string }[];
+  /** CJ Admin only: Trainer users to name as the course's trainer. */
+  trainers?: { id: number; name: string }[];
   loading: boolean;
   onSubmit: (payload: Record<string, unknown>) => void;
 }) {
@@ -249,6 +278,7 @@ function CourseForm({
   const [contentSequencingEnabled, setEnforceSequence] = useState(
     course?.content_sequencing_enabled ?? false,
   );
+  const [trainerId, setTrainerId] = useState(course?.trainer ? String(course.trainer) : "");
 
   return (
     <Card>
@@ -269,6 +299,7 @@ function CourseForm({
               content_sequencing_enabled: contentSequencingEnabled,
             };
             if (categoryId) payload.category = Number(categoryId);
+            if (trainers) payload.trainer = trainerId ? Number(trainerId) : null;
             if (scheduleType === "scheduled") {
               payload.duration_days = Number(durationDays);
             }
@@ -323,6 +354,28 @@ function CourseForm({
               ))}
             </select>
           </div>
+
+          {trainers && (
+            <div>
+              <Label htmlFor="trainer">Trainer</Label>
+              <select
+                id="trainer"
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                value={trainerId}
+                onChange={(e) => setTrainerId(e.target.value)}
+              >
+                <option value="">Not set (show the course creator)</option>
+                {trainers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                Learners see this as &quot;Name of Trainer&quot; on the course overview.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>

@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('organizations', '0008_organization_enabled_modules'),
-        ('question_bank', '0022_rename_1f_label'),
+        ('question_bank', '0023_question_assigned_psychometrician'),
     ]
 
     operations = [

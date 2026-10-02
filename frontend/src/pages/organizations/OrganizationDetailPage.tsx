@@ -49,6 +49,7 @@ import { listAssessments } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
 import { BulkUploadModal } from "@/components/users/BulkUploadModal";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuthStore } from "@/stores/auth";
 import { ROLE_LABELS } from "@/lib/constants";
 import { PortalLogo } from "@/pages/site/PortalLogo";
 
@@ -58,6 +59,7 @@ import {
   LicensedCoursesCard,
   MemberCounsellingCard,
 } from "./LicensedContentCards";
+import { OrganizationDetailsModal } from "./OrganizationDetailsModal";
 import { OrganizationModulesCard } from "./OrganizationModulesCard";
 
 const ORG_KEY = (id: number) => ["organizations", id];
@@ -110,7 +112,10 @@ export default function OrganizationDetailPage() {
   const [memberModalOpen, setMemberModalOpen] = useState(false);
   const [groupAdminModalOpen, setGroupAdminModalOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const access = useOrgAccess();
+  const { role } = usePermissions();
+  const myId = useAuthStore((s) => s.user?.id);
 
   const {
     data: org,
@@ -145,13 +150,30 @@ export default function OrganizationDetailPage() {
     );
   }
 
+  // Report 9 #34/#53: CJ Admin, and the organization's own Corporate
+  // Exclusive Admin / Channel Partner, edit its details.
+  const canEditDetails =
+    access.isCJAdmin ||
+    ((role === "corp_exclusive" || role === "channel_partner") &&
+      members.some((m) => m.user.id === myId && m.is_admin));
+
   return (
     <div className="space-y-6 p-6">
       <div>
         <Link to="/organizations" className="text-sm text-primary-600 hover:underline">
           ← Back to organizations
         </Link>
-        <h1 className="mt-1 text-2xl font-bold text-slate-900">{org.name}</h1>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-2xl font-bold text-slate-900">{org.name}</h1>
+          {canEditDetails && (
+            <Button size="sm" variant="outline" onClick={() => setDetailsOpen(true)}>
+              Edit details
+            </Button>
+          )}
+        </div>
+        {detailsOpen && (
+          <OrganizationDetailsModal org={org} onClose={() => setDetailsOpen(false)} />
+        )}
         <div className="mt-2 flex flex-wrap gap-2">
           <Badge variant="default">{org.type}</Badge>
           <Badge variant={org.status === "active" ? "success" : "warning"}>{org.status}</Badge>
@@ -594,7 +616,10 @@ function SchedulesCard({
   const assignedIds = new Set(
     assignments.filter((a) => a.item_type === "assessment").map((a) => a.item_id),
   );
-  const assessments = (assessmentsPage?.results ?? []).filter((a) => assignedIds.has(a.id));
+  // Report 9 #46/#51: plus the organization's own published private assessments.
+  const assessments = (assessmentsPage?.results ?? []).filter(
+    (a) => assignedIds.has(a.id) || a.owner_organization === orgId,
+  );
 
   const rescheduleMutation = useMutation({
     mutationFn: (m: { id: number; when: string }) =>

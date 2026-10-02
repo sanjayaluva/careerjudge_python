@@ -19,6 +19,7 @@ Endpoints:
   GET       /api/training/my-courses/                   — student's own registrations
 """
 
+from django.db.models import Q
 from rest_framework import filters, status
 from rest_framework.decorators import action
 from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
@@ -264,10 +265,14 @@ def scope_courses_by_space(qs, user, course_path="course"):
 
     if user.is_superuser:
         return qs
-    return qs.filter(
-        Q(**{f"{course_path}__owner_organization__isnull": True})
-        | Q(**{f"{course_path}__owner_organization_id__in": member_exclusive_org_ids(user)})
-    )
+    private = Q(**{f"{course_path}__owner_organization_id__in": member_exclusive_org_ids(user)})
+    if is_private_author(user):
+        # Report 4 §3: of CJ's courses he reaches only those licensed to him.
+        from apps.organizations.scoping import assigned_item_ids
+
+        licensed = assigned_item_ids(user, "training_course")
+        return qs.filter(private | Q(**{f"{course_path}__id__in": licensed}))
+    return qs.filter(Q(**{f"{course_path}__owner_organization__isnull": True}) | private)
 
 
 class CourseSpaceMixin:
@@ -295,6 +300,7 @@ class HasTrainingPermission(HasModulePermission):
         "completion_parameters": "change",
         "register": "add",
         "registrations": "view",
+        "registrations_progress": "view",
         "progress": "change",
         "start": "change",
         "my_courses": "view",
@@ -336,6 +342,24 @@ def _is_training_admin(user) -> bool:
     return bool(user.is_superuser or user_role_name == "cj_admin")
 
 
+def _require_course_staff(request):
+    """Report 9 #83: a course's registrations (who registered, their
+    progress) are for CJ Admin and the trainer only — "the user doesn't need
+    to know who are all registered". Returns a 403 Response, or None."""
+    user = request.user
+    if _is_training_admin(user) or (user.role_id and user.role.name == "trainer"):
+        return None
+    return Response(
+        {
+            "error": {
+                "code": "forbidden",
+                "message": "Only the trainer and CJ Admin can view a course's registrations.",
+            }
+        },
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
+
 def _require_course_edit_allowed(request, course):
     """Doc 7 §5: once a course leaves 'draft', a non-admin trainer must go
     through the existing request_update/CourseModificationRequest flow
@@ -368,7 +392,8 @@ def _require_course_edit_allowed(request, course):
             status=status.HTTP_403_FORBIDDEN,
         )
     # Report 9 #84: a trainer edits only his own courses (and their items).
-    if course.created_by_id != user.id:
+    # The course's creator, or the trainer CJ Admin assigned to it (#83).
+    if user.id not in (course.created_by_id, course.trainer_id):
         return Response(
             {
                 "error": {
@@ -457,7 +482,9 @@ class TrainingCategoryViewSet(ActionSerializerMixin, ModelViewSet):
 class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
     """CRUD for training courses + registration + progress endpoints."""
 
-    queryset = TrainingCourse.objects.select_related("category", "created_by").prefetch_related(
+    queryset = TrainingCourse.objects.select_related(
+        "category", "created_by", "trainer"
+    ).prefetch_related(
         "lessons__topics__sessions__contents",
         "lessons__topics__sessions__assignments",
         "live_sessions",
@@ -499,15 +526,15 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         if role == "cj_admin":
             return qs
         if role == "trainer":
-            return qs.filter(created_by=user)
+            # User Details p.9 "View Assigned Courses": courses he created or
+            # that CJ Admin assigned to him as Name of Trainer.
+            return qs.filter(Q(created_by=user) | Q(trainer=user))
         qs = qs.filter(status="published")
         # Report 9 #14/#28/#52/#59: members and managers of a corporate,
         # corp-exclusive or channel-partner organization see only the courses
         # CJ Admin licensed to it (plus any they are already registered in).
         # Plain individuals with no organization still see every published
         # course.
-        from django.db.models import Q
-
         from apps.organizations.scoping import assigned_item_ids, is_licence_scoped
 
         if is_licence_scoped(user):
@@ -907,9 +934,34 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
     def registrations(self, request, pk=None):
         """Trainer views all registrations for a course."""
         course = self.get_object()
+        denied = _require_course_staff(request)
+        if denied:
+            return denied
         regs = course.registrations.select_related("student").all()
         return Response(
             {"message": "OK", "data": CourseRegistrationSerializer(regs, many=True).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get"], url_path="registrations-progress")
+    def registrations_progress(self, request, pk=None):
+        """GET /courses/<id>/registrations-progress/ — Report 8.1 #62: the
+        trainer sees how far each registered learner has got (status,
+        completion %, items done/total, started, last activity, scores) in one
+        call. A trainer reaches only his own courses (get_queryset)."""
+        from .services import registration_progress_rows
+
+        course = self.get_object()
+        denied = _require_course_staff(request)
+        if denied:
+            return denied
+        regs = (
+            course.registrations.select_related("student", "course")
+            .prefetch_related("progress_records")
+            .order_by("student__full_name", "student__email")
+        )
+        return Response(
+            {"message": "OK", "data": registration_progress_rows(regs)},
             status=status.HTTP_200_OK,
         )
 
@@ -2369,6 +2421,17 @@ class LiveSessionRequestViewSet(ModelViewSet):
         if user_role_name in ("cj_admin", "trainer") or user.is_superuser:
             # Staff who run courses see the requests (same rule as
             # _can_run_course); ?course=<id> narrows to one course.
+            if not user.is_superuser:
+                # Report 4 §3: not those of exclusive organizations' courses.
+                qs = qs.filter(course__owner_organization__isnull=True)
+            if course_id := self.request.query_params.get("course"):
+                qs = qs.filter(course_id=course_id)
+            return qs
+        if is_private_author(user):
+            # Report 9 #47: he runs his organization's private courses.
+            qs = qs.filter(
+                Q(student=user) | Q(course__owner_organization_id__in=author_org_ids(user))
+            )
             if course_id := self.request.query_params.get("course"):
                 qs = qs.filter(course_id=course_id)
             return qs

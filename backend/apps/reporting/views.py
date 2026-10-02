@@ -132,15 +132,12 @@ class ReportViewSet(ActionSerializerMixin, ModelViewSet):
         """A report is designed on assessments of its own space; profiling
         solutions are CJ-only (Report 4 §3 excludes profiling)."""
         data = serializer.validated_data
-        for field in ("assessment", "pmi_d_first_assessment", "pmi_d_second_assessment"):
-            assessment = data.get(field)
-            if assessment is not None:
-                require_same_space(owner_id, assessment.owner_organization_id, "assessment")
+        assessment = data.get("assessment")
+        if assessment is not None:
+            require_same_space(owner_id, assessment.owner_organization_id, "assessment")
         if owner_id and data.get("profiling_solution") is not None:
             raise ValidationError(
-                {
-                    "profiling_solution": "Profiling reports are not available in your organization's space."
-                }
+                {"profiling_solution": "Profiling reports are not available in your space."}
             )
 
     def perform_create(self, serializer):

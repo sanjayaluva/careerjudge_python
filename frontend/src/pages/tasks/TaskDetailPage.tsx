@@ -23,6 +23,7 @@ import {
 import { tasksApi, type Task, type AssigneeRole, type TaskExtensionRequest } from "@/api/tasks";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
+import { nameWithExpertise } from "@/lib/profileFields";
 
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-slate-100 text-slate-700",
@@ -431,6 +432,12 @@ export default function TaskDetailPage() {
                   <p className="text-xs text-slate-500">Completed</p>
                   <p>{task.completed_at ? new Date(task.completed_at).toLocaleString() : "—"}</p>
                 </div>
+                {task.assignee_role === "sme" && task.reviewer_name && (
+                  <div>
+                    <p className="text-xs text-slate-500">Send completed questions to</p>
+                    <p>{nameWithExpertise(task.reviewer_name, task.reviewer_domains)}</p>
+                  </div>
+                )}
                 {task.parent_task_id && (
                   <div>
                     <p className="text-xs text-slate-500">Parent Task</p>

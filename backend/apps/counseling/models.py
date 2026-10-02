@@ -22,9 +22,16 @@ from django.utils.translation import gettext_lazy as _
 
 
 class CounselingCategory(models.Model):
-    """Counselling category (SRS: career, learning, emotional, etc.)."""
+    """Counselling ("domain") category used to tag counsellors (Doc 8 §2).
 
-    CATEGORY_CHOICES = [
+    Report 9 #105: the categories are data that CJ Admin adds, renames and
+    deactivates; they used to be a fixed list in code. ``name`` is the stable
+    code (e.g. "career") that existing tags, filters and API clients use;
+    ``label`` is what people read. Migration 0008 created the seven Doc 8
+    categories below with their original codes and labels.
+    """
+
+    DEFAULT_CATEGORIES = [
         ("career", "Career counselling"),
         ("learning", "Learning difficulties"),
         ("emotional", "Emotional problems"),
@@ -34,17 +41,20 @@ class CounselingCategory(models.Model):
         ("health", "Health counselling"),
     ]
 
-    name = models.CharField(_("name"), max_length=20, choices=CATEGORY_CHOICES, unique=True)
+    name = models.CharField(_("code"), max_length=50, unique=True)
+    label = models.CharField(_("label"), max_length=100, default="")
     description = models.TextField(_("description"), blank=True, default="")
+    # An inactive category is hidden from new bookings and new tags but stays
+    # on the counsellors and sessions that already carry it.
     is_active = models.BooleanField(_("active"), default=True)
 
     class Meta:
-        ordering = ["name"]
+        ordering = ["label", "name"]
         verbose_name = _("counseling category")
         verbose_name_plural = _("counseling categories")
 
     def __str__(self) -> str:
-        return self.get_name_display()
+        return self.label or self.name
 
 
 class CounsellorProfile(models.Model):

@@ -341,8 +341,9 @@ def scope_assessments(qs, user):
         # Report 3 §4.2 / Report 8 #30: trainers author their own course
         # assessments and see ONLY those — not the rest of the CJ pool.
         cj = cj.filter(created_by=user)
-    elif role_name not in ("cj_admin", "psychometrician"):
+    elif role_name not in ("cj_admin", "psychometrician", "helpdesk"):
         # Report 9 #10: corporate admins are not authors — published only.
+        # Report 9 #113: Help Desk views (only) every CJ assessment.
         cj = cj.filter(status="published")
     if is_licence_scoped(user):
         cj = cj.filter(id__in=assigned_item_ids(user, "assessment"))
@@ -792,6 +793,18 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
     def start_session(self, request, pk=None):
         """Start a new assessment session for the current user."""
         assessment = self.get_object()
+        # Report 9 #113: Help Desk's access to assessments is view-only.
+        if request.user.role_id and request.user.role.name == "helpdesk":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Help Desk can view assessments but not take them.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if assessment.status != "published":
             return Response(
                 {
@@ -857,14 +870,11 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         # (handled above) is always allowed, so a candidate who has already
         # paid and begun is never re-charged.
         if assessment.price and assessment.price > 0:
-            from apps.payments.models import Payment
+            from .serializers import unlocked_assessment_ids
 
-            paid = Payment.objects.filter(
-                user=request.user,
-                module="assessment",
-                item_id=assessment.id,
-                status__in=["paid", "free"],
-            ).exists()
+            # Report 9 #72: paid for — or licensed to the member's
+            # organization, whose licence covers the fee.
+            paid = assessment.id in unlocked_assessment_ids(request.user)
             if not paid:
                 return Response(
                     {

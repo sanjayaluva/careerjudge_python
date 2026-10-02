@@ -48,8 +48,16 @@ const STATUS_VARIANTS: Record<string, "success" | "warning" | "default"> = {
   suspended: "default",
 };
 
+/** Report 9 #34/#53: the kind of organization a Corporate Exclusive Admin /
+ * Channel Partner creates for himself (the backend enforces it). */
+const OWN_ORG_TYPE: Partial<Record<string, string>> = {
+  corp_exclusive: "corp_exclusive",
+  channel_partner: "channel_partner",
+};
+
 export default function OrganizationsPage() {
-  const { isSuperAdmin } = usePermissions();
+  const { isSuperAdmin, canPerform, role } = usePermissions();
+  const forcedType = isSuperAdmin ? undefined : OWN_ORG_TYPE[role ?? ""];
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -101,8 +109,10 @@ export default function OrganizationsPage() {
                   : "Manage corporate entities"}
               </CardDescription>
             </div>
-            {/* Report 9 #1/#22/#34/#53: only CJ Admin creates or deletes organizations. */}
-            {isSuperAdmin && (
+            {/* Report 9 #34/#53: CJ Admin creates any organization; a Corporate
+                Exclusive Admin / Channel Partner creates his own (listed for him
+                only). Deleting stays CJ Admin's. */}
+            {canPerform("organizations", "add") && (isSuperAdmin || forcedType) && (
               <Button onClick={() => setCreateOpen(true)}>Create organization</Button>
             )}
           </div>
@@ -232,7 +242,11 @@ export default function OrganizationsPage() {
         </CardContent>
       </PageCard>
 
-      <CreateOrganizationModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreateOrganizationModal
+        open={createOpen}
+        forcedType={forcedType}
+        onClose={() => setCreateOpen(false)}
+      />
       <DeleteOrganizationModal
         org={deleteOrg}
         error={deleteError}
@@ -248,7 +262,16 @@ export default function OrganizationsPage() {
 // Create Organization Modal
 // ---------------------------------------------------------------------------
 
-function CreateOrganizationModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function CreateOrganizationModal({
+  open,
+  forcedType,
+  onClose,
+}: {
+  open: boolean;
+  /** Report 9 #34/#53: a manager's own organization is always of his kind. */
+  forcedType?: string;
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [type, setType] = useState("corporate");
@@ -291,7 +314,7 @@ function CreateOrganizationModal({ open, onClose }: { open: boolean; onClose: ()
     }
     mutation.mutate({
       name,
-      type,
+      type: forcedType ?? type,
       manager_name: managerName,
       tax_id: taxId,
       contact_email: contactEmail,
@@ -331,8 +354,9 @@ function CreateOrganizationModal({ open, onClose }: { open: boolean; onClose: ()
             </Label>
             <select
               id="org-type"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              value={type}
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 disabled:bg-slate-50"
+              value={forcedType ?? type}
+              disabled={Boolean(forcedType)}
               onChange={(e) => setType(e.target.value)}
             >
               <option value="corporate">Corporate</option>

@@ -32,7 +32,7 @@ import {
   useToast,
 } from "@/components/ui";
 import {
-  COUNSELING_CATEGORIES,
+  listCategories,
   setCounsellorCategories,
   getCounsellorAdminOverview,
   cancelSession,
@@ -55,6 +55,7 @@ import { extractApiError } from "@/api/client";
 import { updateMe } from "@/api/me";
 import { useAuth } from "@/hooks/useAuth";
 import { AllBookedSessions } from "./AllBookedSessions";
+import { CounselingCategoriesAdmin } from "./CounselingCategoriesAdmin";
 import { CounsellorDashboard } from "./CounsellorDashboard";
 import { JoinSessionButton } from "./JoinSession";
 
@@ -87,6 +88,13 @@ export default function CounselingPage() {
         ...(debouncedSearch ? { search: debouncedSearch } : {}),
         ...(categoryFilter ? { category: categoryFilter } : {}),
       }),
+  });
+
+  // Report 9 #105: the live, admin-managed categories (CJ Admin also gets the
+  // inactive ones, so he can still find counsellors tagged with them).
+  const { data: categories = [] } = useQuery({
+    queryKey: ["counseling", "categories"],
+    queryFn: () => listCategories(),
   });
 
   const { data: mySessions } = useQuery({
@@ -139,6 +147,8 @@ export default function CounselingPage() {
                 <TabsTrigger value="my-sessions">My Sessions ({sessions.length})</TabsTrigger>
               )}
               {isHelpdesk && <TabsTrigger value="all-sessions">All booked sessions</TabsTrigger>}
+              {/* Report 9 #105: CJ Admin manages the counselling categories. */}
+              {isAdmin && <TabsTrigger value="categories">Categories</TabsTrigger>}
             </TabsList>
           </div>
 
@@ -161,9 +171,10 @@ export default function CounselingPage() {
                 onChange={(e) => setCategoryFilter(e.target.value)}
               >
                 <option value="">All categories</option>
-                {COUNSELING_CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
+                {categories.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.label || c.name}
+                    {c.is_active ? "" : " (inactive)"}
                   </option>
                 ))}
               </select>
@@ -249,6 +260,12 @@ export default function CounselingPage() {
           {isHelpdesk && (
             <TabsContent value="all-sessions" className="px-6 py-4">
               <AllBookedSessions />
+            </TabsContent>
+          )}
+
+          {isAdmin && (
+            <TabsContent value="categories" className="px-6 py-4">
+              <CounselingCategoriesAdmin />
             </TabsContent>
           )}
 
@@ -1117,10 +1134,15 @@ function CategoryTagModal({
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [selected, setSelected] = useState<string[]>(
-    COUNSELING_CATEGORIES.filter((c) => counsellor.category_names.includes(c.label)).map(
-      (c) => c.value,
-    ),
+  const [selected, setSelected] = useState<number[]>(counsellor.categories ?? []);
+  // Report 9 #105: the live list. An inactive category is offered only if the
+  // counsellor already has it (it can be kept or removed, not newly given).
+  const { data: categories = [], isLoading } = useQuery({
+    queryKey: ["counseling", "categories"],
+    queryFn: () => listCategories(),
+  });
+  const choices = categories.filter(
+    (c) => c.is_active || (counsellor.categories ?? []).includes(c.id),
   );
   const save = useMutation({
     mutationFn: () => setCounsellorCategories(counsellor.id, selected),
@@ -1134,18 +1156,25 @@ function CategoryTagModal({
   return (
     <Modal open onClose={onClose} title={`Categories — ${counsellor.full_name}`} size="sm">
       <div className="space-y-2">
-        {COUNSELING_CATEGORIES.map((c) => (
-          <label key={c.value} className="flex items-center gap-2 text-sm">
+        {isLoading && <Spinner size="sm" />}
+        {!isLoading && choices.length === 0 && (
+          <p className="text-sm text-slate-500">
+            No categories yet — add them on the Categories tab.
+          </p>
+        )}
+        {choices.map((c) => (
+          <label key={c.id} className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              checked={selected.includes(c.value)}
+              checked={selected.includes(c.id)}
               onChange={(e) =>
                 setSelected((prev) =>
-                  e.target.checked ? [...prev, c.value] : prev.filter((v) => v !== c.value),
+                  e.target.checked ? [...prev, c.id] : prev.filter((v) => v !== c.id),
                 )
               }
             />
-            {c.label}
+            {c.label || c.name}
+            {!c.is_active && <span className="text-xs text-slate-400">(inactive)</span>}
           </label>
         ))}
       </div>

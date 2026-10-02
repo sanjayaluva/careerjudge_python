@@ -40,6 +40,7 @@ class HasOrgActingPermission(HasOrgContentPermission):
         **HasOrgContentPermission.action_map,
         "assign": "change",
         "unassign": "change",
+        "progress": "view",
         "timeslots": "view",
         "reschedule": "change",
         "cancel": "change",
@@ -115,6 +116,7 @@ class OrgCourseViewSet(ManagedOrgMixin, ViewSet):
     """GET  /api/organizations/<org_id>/courses/                 licensed courses + members
     POST /api/organizations/<org_id>/courses/<id>/assign/      {"user_ids": [..]}
     POST /api/organizations/<org_id>/courses/<id>/unassign/    {"user_id": ..}
+    GET  /api/organizations/<org_id>/courses/<id>/progress/    members' course progress
     """
 
     permission_classes = [IsAuthenticated, HasOrgActingPermission]
@@ -210,6 +212,35 @@ class OrgCourseViewSet(ManagedOrgMixin, ViewSet):
         unassign_course_for_organization(reg)
         return Response(
             {"message": f"'{course.title}' unassigned.", "data": {}},
+            status=status.HTTP_200_OK,
+        )
+
+    def progress(self, request, organization_id=None, pk=None):
+        """Report 9 #17: the manager views the course progress of his members
+        (his group's for a Group Admin) registered in a licensed course —
+        status, completion %, items done/total, started, last activity and
+        assessment scores. Read-only; members only, never other learners."""
+        from apps.training.models import CourseRegistration
+        from apps.training.services import registration_progress_rows
+
+        org = _organization(self)
+        course = _licensed_course(org.id, pk, request.user)
+        regs = (
+            CourseRegistration.objects.filter(
+                course=course, student_id__in=_member_ids(request.user, org.id)
+            )
+            .select_related("student", "course")
+            .prefetch_related("progress_records")
+            .order_by("student__full_name", "student__email")
+        )
+        return Response(
+            {
+                "message": "OK",
+                "data": {
+                    "course": {"id": course.id, "title": course.title},
+                    "learners": registration_progress_rows(regs),
+                },
+            },
             status=status.HTTP_200_OK,
         )
 

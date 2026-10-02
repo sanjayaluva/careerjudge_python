@@ -35,6 +35,7 @@ import { listCategories, QUESTION_TYPES } from "@/api/questionBank";
 import { listUsers } from "@/api/users";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
+import { nameWithExpertise } from "@/lib/profileFields";
 
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-slate-100 text-slate-700",
@@ -291,6 +292,8 @@ function AssignTaskModal({
   const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
   const [dueDate, setDueDate] = useState("");
   const [parentTaskId, setParentTaskId] = useState("");
+  // Report 9 #65: on an SME task, the Reviewer the SME sends the questions to.
+  const [taskReviewer, setTaskReviewer] = useState<number | "">("");
 
   // SME-specific spec fields — a task can carry multiple category/
   // difficulty/type rows (D9: SME multi-category task sheet), so this is a
@@ -343,6 +346,13 @@ function AssignTaskModal({
     queryFn: () => listUsers({ role: assigneeRole, page_size: 100 }),
   });
   const users = usersQuery.data?.results ?? [];
+  // Report 9 #65/#69: active reviewers (with domains) for the SME task.
+  const reviewersQuery = useQuery({
+    queryKey: ["users", "by-role", "reviewer"],
+    queryFn: () => listUsers({ role: "reviewer", page_size: 100 }),
+    enabled: assigneeRole === "sme",
+  });
+  const reviewers = (reviewersQuery.data?.results ?? []).filter((u) => u.is_active);
 
   const createMutation = useMutation({
     mutationFn: (input: TaskCreateInput) => tasksApi.create(input),
@@ -354,6 +364,7 @@ function AssignTaskModal({
       setPriority("medium");
       setDueDate("");
       setParentTaskId("");
+      setTaskReviewer("");
       setSpecRows([emptySpecRow()]);
     },
     onError: (err) => {
@@ -377,6 +388,7 @@ function AssignTaskModal({
       ...(parentTaskId && assigneeRole !== "sme" ? { parent_task_id: parentTaskId } : {}),
       ...(assigneeRole === "sme"
         ? {
+            reviewer: taskReviewer === "" ? null : taskReviewer,
             specs: specRows.map((row) => ({
               qb_category: row.qb_category,
               qb_subcategory: row.qb_subcategory,
@@ -451,7 +463,8 @@ function AssignTaskModal({
               <option value="">Select user…</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.full_name || u.email}
+                  {/* Report 9 #67/#69: domains of expertise next to the name. */}
+                  {nameWithExpertise(u.full_name || u.email, u.profile?.domains_of_expertise)}
                 </option>
               ))}
             </select>
@@ -521,6 +534,28 @@ function AssignTaskModal({
                 placeholder="e.g. TSK-2026-AB12CD — links this task to a parent"
               />
             )}
+          </div>
+        )}
+
+        {assigneeRole === "sme" && (
+          <div>
+            <Label htmlFor="task_reviewer">Reviewer to send completed questions to</Label>
+            <select
+              id="task_reviewer"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={taskReviewer}
+              onChange={(e) => setTaskReviewer(e.target.value ? Number(e.target.value) : "")}
+            >
+              <option value="">Not specified — the SME chooses</option>
+              {reviewers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {nameWithExpertise(u.full_name || u.email, u.profile?.domains_of_expertise)}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Pre-selected for the SME when he submits the questions for review.
+            </p>
           </div>
         )}
 

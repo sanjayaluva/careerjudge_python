@@ -20,7 +20,6 @@ from apps.accounts.models import ModuleRight
 from apps.accounts.services import get_or_create_default_roles
 from apps.accounts.tests.factories import UserFactory
 from apps.counseling.models import (
-    CounselingCategory,
     CounselingSession,
     CounsellorProfile,
     TimeSlot,
@@ -138,23 +137,26 @@ def _make_timeslot(counsellor, hours_from_now=48, **overrides):
 
 
 def test_admin_can_create_category(admin_client):
+    # Report 9 #105: "career" now exists from the start (migration 0008), so
+    # CJ Admin adds a new category; its code is made from the name.
     resp = admin_client.post(
         "/api/counseling/categories/",
-        {"name": "career", "description": "Career counselling"},
+        {"label": "Study abroad", "description": "Choosing a university abroad"},
         format="json",
     )
-    assert resp.status_code == 201
-    assert resp.data["data"]["name"] == "career"
+    assert resp.status_code == 201, resp.data
+    assert resp.data["data"]["name"] == "study_abroad"
+    assert resp.data["data"]["label"] == "Study abroad"
 
 
 def test_list_categories(admin_client):
-    CounselingCategory.objects.create(name="career")
-    CounselingCategory.objects.create(name="emotional")
+    # Report 9 #105: the seven Doc 8 categories exist from the start.
     resp = admin_client.get("/api/counseling/categories/")
     assert resp.status_code == 200
-    data = resp.data["data"]
-    results = data["results"] if isinstance(data, dict) and "results" in data else data
-    assert len(results) == 2
+    results = resp.data["data"]
+    assert {c["name"] for c in results} == {
+        "career", "learning", "emotional", "relationship", "marital", "clinical", "health",
+    }  # fmt: skip
 
 
 # ---------------------------------------------------------------------------
@@ -894,8 +896,8 @@ def test_admin_creating_counsellor_tags_categories(admin_client, admin_user):
     # also needs accounts.add.
     ModuleRight.objects.get_or_create(role=admin_user.role, module="accounts", action="add")
     roles = get_or_create_default_roles()
-    cat1 = CounselingCategory.objects.create(name="career")
-    cat2 = CounselingCategory.objects.create(name="learning")
+    cat1 = CounselingCategory.objects.get(name="career")
+    cat2 = CounselingCategory.objects.get(name="learning")
 
     resp = admin_client.post(
         "/api/accounts/users/",
