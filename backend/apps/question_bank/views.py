@@ -295,7 +295,8 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         # Filter by category (includes subcategories)
         category = params.get("category")
         if category:
-            qs = qs.filter(category_id=category)
+            root = Category.objects.filter(id=category).first()
+            qs = qs.filter(category_id__in=_domain_category_ids(root) if root else [category])
 
         # Filter by question type
         qtype = params.get("question_type")
