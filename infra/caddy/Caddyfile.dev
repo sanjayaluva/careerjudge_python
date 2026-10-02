@@ -44,6 +44,11 @@ careerjudge.pp.ua {
         # Django admin paths: /admin/, /admin/login/, /admin/logout/,
         # /admin/auth/, /admin/accounts/, /admin/static/admin/*, etc.
         # We match these specific patterns to avoid catching React's /admin/* routes.
+        # Uploaded files (training media, avatars, logos, report images) are
+        # served by Django — without this they fell through to the frontend.
+        handle /media/* {
+                reverse_proxy backend:8000
+        }
         @djangoAdmin {
                 path /admin /admin/ /admin/login /admin/login/ /admin/logout /admin/logout/
                 path /admin/auth/* /admin/accounts/* /admin/token_blacklist/*

@@ -102,3 +102,13 @@ def test_sanitiser_keeps_uploaded_image_src():
     url = "/api/uploads/editor-images/" + "a" * 32 + ".png"
     out = sanitize_rich_html(f'<p>See</p><img src="{url}" alt="chart">')
     assert f'src="{url}"' in out
+
+
+def test_uploaded_media_is_served_even_without_debug(settings, tmp_path, client):
+    """Uploaded files (training media, avatars, logos) must be reachable when
+    DEBUG is off — they used to 404 (Report 9 deployment review)."""
+    settings.MEDIA_ROOT = tmp_path
+    (tmp_path / "check.txt").write_text("ok")
+    resp = client.get("/media/check.txt")
+    assert resp.status_code == 200
+    assert b"".join(resp.streaming_content) == b"ok"

@@ -16,6 +16,10 @@ careerjudge.pp.ua {
 	}
 
 	# Django admin (superuser-only)
+	# Uploaded files are served by Django (persistent media volume).
+	handle /media/* {
+		reverse_proxy backend:8000
+	}
 	handle /admin/* {
 		reverse_proxy backend:8000
 	}
