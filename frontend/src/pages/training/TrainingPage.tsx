@@ -26,6 +26,8 @@ import {
 } from "@/components/ui";
 import {
   COURSE_TYPES,
+  completionStatusLabel,
+  completionStatusVariant,
   deleteCourse,
   listCourses,
   listMyCourses,
@@ -338,10 +340,8 @@ export default function TrainingPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={r.completion_status === "completed" ? "success" : "default"}
-                        >
-                          {r.completion_status.replace("_", " ")}
+                        <Badge variant={completionStatusVariant(r.completion_status)}>
+                          {completionStatusLabel(r.completion_status)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-500">

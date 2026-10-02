@@ -4,6 +4,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AssignmentViewSet,
     CourseAssessmentViewSet,
     CourseLessonViewSet,
     CourseModificationRequestViewSet,
@@ -27,6 +28,8 @@ router.register("lessons", CourseLessonViewSet, basename="lesson")
 router.register("topics", LessonTopicViewSet, basename="topic")
 router.register("sessions", TopicSessionViewSet, basename="session")
 router.register("contents", SessionContentViewSet, basename="content")
+# Report 8.1 #61: edit/delete an assignment (was a 404).
+router.register("assignments", AssignmentViewSet, basename="assignment")
 router.register("course-assessments", CourseAssessmentViewSet, basename="course-assessment")
 router.register("live-sessions", LiveSessionViewSet, basename="live-session")
 # Report 3 §6/§7

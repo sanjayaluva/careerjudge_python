@@ -322,12 +322,14 @@ def _update_module_payment_status(payment: Payment):
         ).first()
         if reg and reg.payment_status != "paid":
             reg.payment_status = "paid"
-            reg.completion_status = "in_progress"
+            # Report 8.1 #62: paying does not start the course — the status
+            # stays "not started" until the learner opens it (training
+            # registrations/<id>/start/). It used to read "in progress" at 0%.
             # SRS §6: for scheduled courses the duration countdown begins
             # when payment completes.
             if reg.course.schedule_type == "scheduled" and not reg.started_at:
                 reg.started_at = timezone.now()
-            reg.save(update_fields=["payment_status", "completion_status", "started_at"])
+            reg.save(update_fields=["payment_status", "started_at"])
             # Notify trainer + admin that payment confirmed (Report 3 §1.5).
             try:
                 from apps.notifications.models import notify_role, notify_user

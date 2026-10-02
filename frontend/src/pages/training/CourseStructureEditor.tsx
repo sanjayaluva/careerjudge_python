@@ -7,7 +7,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { Badge, Button, Input, Label, useToast } from "@/components/ui";
+import { Badge, Button, Input, Label, Modal, useToast } from "@/components/ui";
 import {
   addAssignment,
   addContent,
@@ -20,11 +20,15 @@ import {
   deleteSession,
   deleteContent,
   updateContent,
+  updateContentWithFile,
   deleteAssignment,
+  updateAssignment,
   updateLesson,
   updateTopic,
   updateSession,
+  type Assignment,
   type CourseLesson,
+  type SessionContent,
   type LessonTopic,
   type TopicSession,
 } from "@/api/training";
@@ -366,6 +370,16 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  const contentTitleMutation = useMutation({
+    mutationFn: (v: { contentId: number; title: string }) =>
+      updateContent(v.contentId, { title: v.title }),
+    onSuccess: () => {
+      refresh();
+      toast.success("Content updated.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   const deleteAssignmentMutation = useMutation({
     mutationFn: (assignmentId: number) => deleteAssignment(assignmentId),
     onSuccess: () => {
@@ -429,7 +443,16 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
               <div className="text-xs font-medium uppercase text-slate-400">Contents</div>
               {session.contents.map((c) => (
                 <div key={c.id} className="ml-2 flex items-center gap-1 text-xs text-slate-600">
-                  <Badge variant="outline">{c.content_format}</Badge> {c.title}
+                  <Badge variant="outline">{c.content_format}</Badge>{" "}
+                  {/* Report 8.1 #61: content titles are editable like lessons/topics. */}
+                  {canManage ? (
+                    <EditableTitle
+                      title={c.title}
+                      onSave={(t) => contentTitleMutation.mutate({ contentId: c.id, title: t })}
+                    />
+                  ) : (
+                    c.title
+                  )}
                   {c.duration_seconds && (
                     <span className="text-slate-400">({c.duration_seconds}s)</span>
                   )}
@@ -438,6 +461,9 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
                   )}
                   {canManage && c.content_format === "text" && (
                     <EditTextContentButton content={c} />
+                  )}
+                  {canManage && (c.content_format === "video" || c.content_format === "audio") && (
+                    <EditMediaContentButton content={c} />
                   )}
                   {canManage &&
                     (c.content_format === "video" || c.content_format === "audio") &&
@@ -495,6 +521,7 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
                 <div key={a.id} className="ml-2 flex items-center gap-1 text-xs text-slate-600">
                   {a.title}
                   {a.report_submission_enabled && <Badge variant="primary">report</Badge>}
+                  {canManage && <EditAssignmentButton assignment={a} />}
                   {canManage && (
                     <DeleteButton onDelete={() => deleteAssignmentMutation.mutate(a.id)} />
                   )}
@@ -881,5 +908,330 @@ function AddAssignmentForm({ sessionId, onDone }: { sessionId: number; onDone: (
         </Button>
       </div>
     </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit forms for existing content items and assignments (Report 8.1 #61).
+// Edits to a published course are refused by the server until an Admin has
+// approved a course update request (Doc 7 §5); the refusal shows as a toast.
+// ---------------------------------------------------------------------------
+
+/** ISO date-time → value for <input type="datetime-local"> (local time). */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+const FILE_INPUT_CLASS =
+  "block w-full text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-700 hover:file:bg-primary-100";
+
+/** Audio/video item: replace the link or the uploaded file, and the duration.
+ * The item itself is kept, so its Timeliner questions stay attached. */
+function EditMediaContentButton({ content }: { content: SessionContent }) {
+  const toast = useToast();
+  const refresh = useRefreshCourse();
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState(content.title);
+  const [url, setUrl] = useState(content.media_file ? "" : content.content_url);
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [duration, setDuration] = useState(
+    content.duration_seconds != null ? String(content.duration_seconds) : "",
+  );
+  const hasQuestions = (content.interactive_questions?.length ?? 0) > 0;
+
+  const reset = () => {
+    setTitle(content.title);
+    setUrl(content.media_file ? "" : content.content_url);
+    setMediaFile(null);
+    setDuration(content.duration_seconds != null ? String(content.duration_seconds) : "");
+  };
+
+  const save = useMutation({
+    mutationFn: () => {
+      const durationSeconds = duration ? Number(duration) : null;
+      if (mediaFile) {
+        return updateContentWithFile(content.id, {
+          title,
+          media_file: mediaFile,
+          duration_seconds: durationSeconds,
+        });
+      }
+      const payload: Record<string, unknown> = { title, duration_seconds: durationSeconds };
+      // A new link replaces an uploaded file (the player prefers the file).
+      if (url !== (content.media_file ? "" : content.content_url)) {
+        payload.content_url = url;
+        if (url && content.media_file) payload.media_file = null;
+      }
+      return updateContent(content.id, payload);
+    },
+    onSuccess: () => {
+      refresh();
+      toast.success("Content updated.");
+      setOpen(false);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const kind = content.content_format === "audio" ? "audio" : "video";
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          reset();
+          setOpen(true);
+        }}
+      >
+        ✎ Edit {kind}
+      </Button>
+      {open && (
+        <Modal
+          open
+          onClose={() => setOpen(false)}
+          title={`Edit ${kind} — ${content.title}`}
+          size="lg"
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              save.mutate();
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <Label htmlFor={`edit-content-title-${content.id}`} required>
+                Title
+              </Label>
+              <Input
+                id={`edit-content-title-${content.id}`}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
+            </div>
+            <div className="rounded-md border border-slate-100 bg-slate-50 p-2 text-xs text-slate-600">
+              Current {kind}:{" "}
+              {content.media_file ? (
+                <span>uploaded file ({content.media_file.split("/").pop()})</span>
+              ) : content.content_url ? (
+                <span className="break-all">{content.content_url.slice(0, 120)}</span>
+              ) : (
+                <span>none</span>
+              )}
+            </div>
+            <div>
+              <Label htmlFor={`edit-content-url-${content.id}`}>Replace with a link</Label>
+              <Input
+                id={`edit-content-url-${content.id}`}
+                value={url}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  if (e.target.value) setMediaFile(null);
+                }}
+                placeholder="Media URL (or base64 data URL)"
+                disabled={!!mediaFile}
+              />
+            </div>
+            <div>
+              <Label htmlFor={`edit-content-file-${content.id}`}>Or upload a new file</Label>
+              <input
+                id={`edit-content-file-${content.id}`}
+                type="file"
+                accept={kind === "audio" ? "audio/*" : "video/*"}
+                onChange={(e) => setMediaFile(e.target.files?.[0] ?? null)}
+                className={FILE_INPUT_CLASS}
+              />
+            </div>
+            <div>
+              <Label htmlFor={`edit-content-duration-${content.id}`}>Duration (seconds)</Label>
+              <Input
+                id={`edit-content-duration-${content.id}`}
+                type="number"
+                min={0}
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+            {hasQuestions && (
+              <p className="text-xs text-amber-600">
+                This {kind} keeps its {content.interactive_questions.length} Timeliner question(s).
+                If the new {kind} is cut differently, check their timings in 🎬 Timeliner.
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={save.isPending} disabled={!title.trim()}>
+                Save changes
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+/** Edit every field of an assignment (title, description, resource link,
+ * report submission, mandatory, deadline, report instructions). */
+function EditAssignmentButton({ assignment }: { assignment: Assignment }) {
+  const toast = useToast();
+  const refresh = useRefreshCourse();
+  const [open, setOpen] = useState(false);
+  const initial = () => ({
+    title: assignment.title,
+    description: assignment.description ?? "",
+    resource_url: assignment.resource_url ?? "",
+    report_submission_enabled: assignment.report_submission_enabled,
+    is_mandatory: assignment.is_mandatory,
+    deadline: toLocalInput(assignment.submission_deadline),
+    report_instructions: assignment.report_instructions ?? "",
+  });
+  const [form, setForm] = useState(initial);
+  const set = <K extends keyof ReturnType<typeof initial>>(
+    key: K,
+    value: ReturnType<typeof initial>[K],
+  ) => setForm((f) => ({ ...f, [key]: value }));
+  const id = (name: string) => `edit-assignment-${assignment.id}-${name}`;
+
+  const save = useMutation({
+    mutationFn: () =>
+      updateAssignment(assignment.id, {
+        title: form.title,
+        description: form.description,
+        resource_url: form.resource_url,
+        report_submission_enabled: form.report_submission_enabled,
+        is_mandatory: form.report_submission_enabled && form.is_mandatory,
+        submission_deadline:
+          form.report_submission_enabled && form.deadline
+            ? new Date(form.deadline).toISOString()
+            : null,
+        report_instructions: form.report_instructions,
+      }),
+    onSuccess: () => {
+      refresh();
+      toast.success("Assignment updated.");
+      setOpen(false);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          setForm(initial());
+          setOpen(true);
+        }}
+      >
+        ✎ Edit
+      </Button>
+      {open && (
+        <Modal
+          open
+          onClose={() => setOpen(false)}
+          title={`Edit assignment — ${assignment.title}`}
+          size="lg"
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              save.mutate();
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <Label htmlFor={id("title")} required>
+                Title
+              </Label>
+              <Input
+                id={id("title")}
+                value={form.title}
+                onChange={(e) => set("title", e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor={id("description")}>Description</Label>
+              <textarea
+                id={id("description")}
+                value={form.description}
+                onChange={(e) => set("description", e.target.value)}
+                rows={4}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <Label htmlFor={id("resource")}>Resource URL</Label>
+              <Input
+                id={id("resource")}
+                type="url"
+                value={form.resource_url}
+                onChange={(e) => set("resource_url", e.target.value)}
+                placeholder="YouTube, doc link, website…"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.report_submission_enabled}
+                onChange={(e) => set("report_submission_enabled", e.target.checked)}
+                className="h-4 w-4"
+              />
+              Enable report submission
+            </label>
+            {form.report_submission_enabled && (
+              <div className="space-y-3 rounded-md border border-slate-100 p-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.is_mandatory}
+                    onChange={(e) => set("is_mandatory", e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  Report is mandatory
+                </label>
+                <div>
+                  <Label htmlFor={id("deadline")}>Submission deadline</Label>
+                  <Input
+                    id={id("deadline")}
+                    type="datetime-local"
+                    value={form.deadline}
+                    onChange={(e) => set("deadline", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={id("instructions")}>Report instructions</Label>
+                  <textarea
+                    id={id("instructions")}
+                    value={form.report_instructions}
+                    onChange={(e) => set("report_instructions", e.target.value)}
+                    rows={3}
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={save.isPending} disabled={!form.title.trim()}>
+                Save changes
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </>
   );
 }

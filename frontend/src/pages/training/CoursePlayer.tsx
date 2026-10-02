@@ -33,10 +33,13 @@ import {
   useToast,
 } from "@/components/ui";
 import {
+  completionStatusLabel,
+  completionStatusVariant,
   getProgressSummary,
   listAssignmentReports,
   listMyCourses,
   listProgress,
+  startCourse,
   submitAssignmentReport,
   submitAssignmentReportFile,
   updateProgress,
@@ -157,6 +160,30 @@ export function CoursePlayer({
       .map((p) => p.content_id),
   );
   const currentCompleted = current ? completedContentIds.has(current.content.id) : false;
+
+  // Report 8.1 #62: opening the course (paid, or free) is what starts it —
+  // record the start date and move "not started" to "in progress" once.
+  // Paying no longer does this, so the trainer's "Started" column and the
+  // status reflect the learner, not the payment.
+  const queryClient = useQueryClient();
+  const startRequested = useRef(false);
+  const canPlay =
+    !!registration &&
+    (parseFloat(course.price) === 0 || registration.payment_status === "paid") &&
+    flatContent.length > 0;
+  useEffect(() => {
+    if (!registration || !canPlay || startRequested.current) return;
+    if (registration.completion_status !== "not_started" && registration.started_at) return;
+    startRequested.current = true;
+    startCourse(registration.id)
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ["training", "my-courses"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["training", "progress-summary", registration.id],
+        });
+      })
+      .catch(() => {});
+  }, [registration, canPlay, queryClient]);
   // A content item is unlocked if sequencing is off, or it's the first
   // incomplete content, or it's already completed.
   const isUnlocked = (idx: number) => {
@@ -633,16 +660,8 @@ function ProgressDashboard({ summary, loading }: { summary?: ProgressSummary; lo
           <div>
             <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Status</div>
             <div className="mt-1">
-              <Badge
-                variant={
-                  summary.completion_status === "completed"
-                    ? "success"
-                    : summary.completion_status === "in_progress"
-                      ? "primary"
-                      : "default"
-                }
-              >
-                {summary.completion_status.replace(/_/g, " ")}
+              <Badge variant={completionStatusVariant(summary.completion_status)}>
+                {completionStatusLabel(summary.completion_status)}
               </Badge>
             </div>
           </div>
