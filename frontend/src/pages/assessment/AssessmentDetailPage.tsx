@@ -34,6 +34,7 @@ import {
   TabsTrigger,
   RichText,
   stripHtml,
+  WysiwygEditor,
   WysiwygEditorLite,
   useToast,
 } from "@/components/ui";
@@ -65,7 +66,6 @@ import {
   removeQuestion,
   requestAssessmentTitleChange,
   retrieveAssessment,
-  startSession,
   updateAssessment,
   updateAssignedQuestion,
   updateSection,
@@ -76,9 +76,14 @@ import {
   PSYCHOMETRIC_QUESTION_TYPES_LIST,
   retrieveQuestion,
 } from "@/api/questionBank";
-import { extractApiError, extractApiErrorCode } from "@/api/client";
-import { createCheckout, openRazorpayCheckout } from "@/api/payments";
+import { extractApiError } from "@/api/client";
+import { getPaymentConfig } from "@/api/payments";
 import { useAuth } from "@/hooks/useAuth";
+
+import { DefinitionText } from "./DefinitionText";
+import { fromEditorHtml, hasRichContent, toEditorHtml } from "./richDefinition";
+import { formatPrice } from "./takeAssessment";
+import { useTakeAssessment } from "./useTakeAssessment";
 const STATUS_VARIANTS: Record<string, "default" | "success" | "warning"> = {
   draft: "default",
   published: "success",
@@ -130,47 +135,16 @@ export default function AssessmentDetailPage() {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
-  const startSessionMutation = useMutation({
-    mutationFn: () => startSession(aid),
-    onSuccess: (data) => {
-      void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
-      navigate(`/assessments/sessions/${data.id}`);
-    },
-    onError: async (err) => {
-      // PLT-3 pay-for-test gate: a priced assessment answers 402 until paid.
-      // Kick off Stripe checkout for this assessment; on return the candidate
-      // starts again and the server re-checks the payment.
-      if (extractApiErrorCode(err) === "payment_required") {
-        try {
-          const res = await createCheckout({
-            module: "assessment",
-            item_id: aid,
-            amount: assessment?.price ?? "0",
-            description: `Assessment: ${assessment?.title ?? ""}`,
-          });
-          if (res.order) {
-            // E-PLT-4: Razorpay is the active gateway — open its widget.
-            const paid = await openRazorpayCheckout(res.order);
-            if (paid) startSessionMutation.mutate();
-            else toast.error("Payment not completed. Start again once it has cleared.");
-            return;
-          }
-          if (res.checkout_url) {
-            window.location.href = res.checkout_url;
-            return;
-          }
-          if (res.status === "paid" || res.status === "free") {
-            startSessionMutation.mutate();
-            return;
-          }
-          toast.error("Payment is pending confirmation. Please start again once it has cleared.");
-        } catch (e) {
-          toast.error(extractApiError(e));
-        }
-        return;
-      }
-      toast.error(extractApiError(err));
-    },
+  // Report 9 #73/#75: taking the assessment shows the pay prompt with the
+  // price for a paid assessment, then the assessment description page whose
+  // Start button begins the session.
+  const take = useTakeAssessment();
+  const isPaid = Number(assessment?.price ?? 0) > 0;
+  const { data: paymentConfig } = useQuery({
+    queryKey: ["payments", "config"],
+    queryFn: getPaymentConfig,
+    enabled: isPaid,
+    staleTime: 60_000,
   });
 
   // Readiness check — fetches whether the assessment is ready to publish.
@@ -428,13 +402,24 @@ export default function AssessmentDetailPage() {
                 </div>
               </dl>
 
-              {a.instructions && (
+              {/* Report 9 #75: Description + Instructions (rich text). */}
+              {hasRichContent(a.description) && (
+                <div className="mt-4">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Description
+                  </dt>
+                  <dd className="mt-1 rounded-md bg-slate-50 p-3">
+                    <DefinitionText value={a.description} />
+                  </dd>
+                </div>
+              )}
+              {hasRichContent(a.instructions) && (
                 <div className="mt-4">
                   <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
                     Instructions
                   </dt>
-                  <dd className="mt-1 rounded-md bg-slate-50 p-3 text-sm text-slate-900">
-                    {a.instructions}
+                  <dd className="mt-1 rounded-md bg-slate-50 p-3">
+                    <DefinitionText value={a.instructions} />
                   </dd>
                 </div>
               )}
@@ -489,6 +474,11 @@ export default function AssessmentDetailPage() {
                     Edit Assessment
                   </Button>
                 )}
+                {canManage && (
+                  <Button variant="outline" onClick={() => navigate(`/assessments/${a.id}/start`)}>
+                    Preview description page
+                  </Button>
+                )}
                 {canRequestChange && (
                   <>
                     <Button variant="outline" onClick={() => setRequestChangeOpen(true)}>
@@ -529,16 +519,14 @@ export default function AssessmentDetailPage() {
                 )}
                 {a.status === "published" && (
                   <div className="flex flex-col items-end gap-1">
-                    {Number(a.price) > 0 && (
+                    {isPaid && (
                       <span className="text-xs text-slate-500">
-                        Paid assessment — {a.price} due before you start
+                        Paid assessment — {formatPrice(a.price, paymentConfig?.currency || "INR")}{" "}
+                        due before you start
                       </span>
                     )}
-                    <Button
-                      loading={startSessionMutation.isPending}
-                      onClick={() => startSessionMutation.mutate()}
-                    >
-                      {Number(a.price) > 0 ? `Pay & Start (${a.price})` : "Start Session"}
+                    <Button loading={take.checkingId === a.id} onClick={() => take.begin(a)}>
+                      Take Assessment
                     </Button>
                   </div>
                 )}
@@ -664,11 +652,13 @@ export default function AssessmentDetailPage() {
             assessmentId={aid}
             assessmentStatus={a.status}
             canStartSession={a.status === "published"}
-            onStartSession={() => startSessionMutation.mutate()}
-            startingSession={startSessionMutation.isPending}
+            onStartSession={() => take.begin(a)}
+            startingSession={take.checkingId === a.id}
           />
         </TabsContent>
       </Tabs>
+
+      {take.prompt}
 
       <CreateSectionModal
         open={sectionModal.open}
@@ -1591,6 +1581,7 @@ function EditAssessmentModal({
   // Local form state — initialised from the assessment on open.
   const [title, setTitle] = useState("");
   const [objective, setObjective] = useState("");
+  const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
   const [duration, setDuration] = useState("");
   const [navigationRule, setNavigationRule] = useState("FREE");
@@ -1604,7 +1595,9 @@ function EditAssessmentModal({
     if (!open) return;
     setTitle(assessment.title ?? "");
     setObjective(assessment.objective ?? "");
-    setInstructions(assessment.instructions ?? "");
+    // Report 9 #75: plain text written before the editor keeps its lines.
+    setDescription(toEditorHtml(assessment.description));
+    setInstructions(toEditorHtml(assessment.instructions));
     // Backend stores seconds; the form shows minutes.
     const minutes = assessment.total_duration_seconds
       ? Math.round(assessment.total_duration_seconds / 60)
@@ -1634,7 +1627,8 @@ function EditAssessmentModal({
           onSubmit({
             title,
             objective,
-            instructions,
+            description: fromEditorHtml(description),
+            instructions: fromEditorHtml(instructions),
             total_duration_seconds: durationMinutes !== null ? durationMinutes * 60 : null,
             navigation_rule: navigationRule,
             attempt_rule: attemptRule,
@@ -1666,15 +1660,16 @@ function EditAssessmentModal({
             onChange={(e) => setObjective(e.target.value)}
           />
         </div>
+        {/* Report 9 #75 (Doc 3 §2.1.2): Description and Instructions are
+            formatted text with images, shown on the assessment description
+            page before the test begins. */}
         <div>
-          <Label htmlFor="edit-instructions">Instructions (shown to candidates)</Label>
-          <textarea
-            id="edit-instructions"
-            rows={3}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-          />
+          <Label>Description (shown to candidates)</Label>
+          <WysiwygEditor value={description} onChange={setDescription} minHeight={140} />
+        </div>
+        <div>
+          <Label>Instructions (shown to candidates)</Label>
+          <WysiwygEditor value={instructions} onChange={setInstructions} minHeight={140} />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
