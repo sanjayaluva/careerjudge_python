@@ -1,5 +1,6 @@
 /**
- * Training page — list published courses + view my registrations.
+ * Training page — list published courses + view my registrations (My Courses:
+ * New / Ongoing / Completed, Report 9 #79).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -32,6 +33,7 @@ import {
   listCourses,
   listMyCourses,
   registerForCourse,
+  type CourseRegistration,
 } from "@/api/training";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -140,7 +142,7 @@ export default function TrainingPage() {
               {canManage && (
                 <TabsTrigger value="manage">Manage Courses ({allCourses.length})</TabsTrigger>
               )}
-              <TabsTrigger value="my-courses">My Sessions ({myRegs.length})</TabsTrigger>
+              <TabsTrigger value="my-courses">My Courses ({myRegs.length})</TabsTrigger>
             </TabsList>
           </div>
 
@@ -172,7 +174,8 @@ export default function TrainingPage() {
                     <TableHead>Type</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Price</TableHead>
-                    <TableHead>Registrations</TableHead>
+                    {/* Report 9 #83: learners don't see who / how many registered. */}
+                    {canManage && <TableHead>Registrations</TableHead>}
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -192,7 +195,9 @@ export default function TrainingPage() {
                       </TableCell>
                       <TableCell className="text-slate-500">{c.category_name ?? "—"}</TableCell>
                       <TableCell className="text-slate-500">${c.price}</TableCell>
-                      <TableCell className="text-slate-500">{c.registration_count}</TableCell>
+                      {canManage && (
+                        <TableCell className="text-slate-500">{c.registration_count}</TableCell>
+                      )}
                       <TableCell>
                         {myRegs.some((r) => r.course === c.id) ? (
                           <Badge variant="success">Registered</Badge>
@@ -298,67 +303,9 @@ export default function TrainingPage() {
             </TabsContent>
           )}
 
-          {/* === My Sessions Tab === */}
+          {/* === My Courses Tab (Report 9 #79) === */}
           <TabsContent value="my-courses" className="px-6 py-4">
-            {myRegs.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-500">
-                You haven&apos;t registered for any courses yet.
-              </p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Course</TableHead>
-                    <TableHead>Payment</TableHead>
-                    <TableHead>Progress</TableHead>
-                    <TableHead>Registered</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {myRegs.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-medium text-slate-900">
-                        <Link
-                          to={`/training/${r.course}`}
-                          className="text-primary-600 hover:underline"
-                        >
-                          {r.course_title}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            r.payment_status === "paid"
-                              ? "success"
-                              : r.payment_status === "pending"
-                                ? "warning"
-                                : "danger"
-                          }
-                        >
-                          {r.payment_status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={completionStatusVariant(r.completion_status)}>
-                          {completionStatusLabel(r.completion_status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-slate-500">
-                        {new Date(r.registered_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <Link to={`/training/${r.course}`}>
-                          <Button size="sm" variant="outline">
-                            Continue
-                          </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+            <MyCoursesTabs registrations={myRegs} />
           </TabsContent>
         </Tabs>
       </PageCard>
@@ -400,5 +347,134 @@ export default function TrainingPage() {
         }
       />
     </div>
+  );
+}
+
+// Report 9 #79: My Courses split by completion status — New (not started,
+// "Begin Course"), Ongoing (in progress, "Resume Course") and Completed
+// (completed, or the duration ran out: "Show Results"). A registration is
+// "not started" until the learner opens the course (Report 8.1 #62).
+const MY_COURSE_GROUPS: {
+  value: string;
+  label: string;
+  statuses: string[];
+  action: string;
+  empty: string;
+}[] = [
+  {
+    value: "new",
+    label: "New Courses",
+    statuses: ["not_started"],
+    action: "Begin Course",
+    empty: "No new courses. Register for one under Browse Courses.",
+  },
+  {
+    value: "ongoing",
+    label: "Ongoing Courses",
+    statuses: ["in_progress"],
+    action: "Resume Course",
+    empty: "No courses in progress.",
+  },
+  {
+    value: "completed",
+    label: "Completed Courses",
+    statuses: ["completed", "expired"],
+    action: "Show Results",
+    empty: "No completed courses yet.",
+  },
+];
+
+function MyCoursesTabs({ registrations }: { registrations: CourseRegistration[] }) {
+  if (registrations.length === 0) {
+    return (
+      <p className="py-8 text-center text-sm text-slate-500">
+        You haven&apos;t registered for any courses yet.
+      </p>
+    );
+  }
+  const firstWithCourses =
+    MY_COURSE_GROUPS.find((g) =>
+      registrations.some((r) => g.statuses.includes(r.completion_status)),
+    )?.value ?? "new";
+  return (
+    <Tabs defaultValue={firstWithCourses}>
+      <TabsList>
+        {MY_COURSE_GROUPS.map((g) => (
+          <TabsTrigger key={g.value} value={g.value}>
+            {g.label} (
+            {registrations.filter((r) => g.statuses.includes(r.completion_status)).length})
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      {MY_COURSE_GROUPS.map((g) => {
+        const rows = registrations.filter((r) => g.statuses.includes(r.completion_status));
+        return (
+          <TabsContent key={g.value} value={g.value} className="pt-4">
+            {rows.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-500">{g.empty}</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Course</TableHead>
+                    <TableHead>Payment</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Registered</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-medium text-slate-900">
+                        <Link
+                          to={`/training/${r.course}`}
+                          className="text-primary-600 hover:underline"
+                        >
+                          {r.course_title}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            r.payment_status === "paid"
+                              ? "success"
+                              : r.payment_status === "pending"
+                                ? "warning"
+                                : "danger"
+                          }
+                        >
+                          {r.payment_status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={completionStatusVariant(r.completion_status)}>
+                          {completionStatusLabel(r.completion_status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-slate-500">
+                        {new Date(r.registered_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        {/* The course opens on Learn: the player starts or
+                            resumes it, and shows the results once finished. */}
+                        <Link to={`/training/${r.course}`}>
+                          <Button
+                            size="sm"
+                            variant={g.value === "completed" ? "outline" : "primary"}
+                          >
+                            {g.action}
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </TabsContent>
+        );
+      })}
+    </Tabs>
   );
 }

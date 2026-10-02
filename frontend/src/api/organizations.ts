@@ -6,6 +6,7 @@ import { API_BASE_URL } from "@/lib/constants";
 
 import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
 import type { CounselingSession, CounsellorProfile, TimeSlot } from "./counseling";
+import type { LearnerProgress } from "./training";
 
 export interface Organization {
   id: number;
@@ -436,6 +437,14 @@ export interface LicensedCourse {
 
 export function listLicensedCourses(orgId: number): Promise<LicensedCourse[]> {
   return apiGet<LicensedCourse[]>(`${BASE}/${orgId}/courses/`);
+}
+
+/** Report 9 #17: the members' progress in a licensed course. */
+export function getLicensedCourseProgress(
+  orgId: number,
+  courseId: number,
+): Promise<{ course: { id: number; title: string }; learners: LearnerProgress[] }> {
+  return apiGet(`${BASE}/${orgId}/courses/${courseId}/progress/`);
 }
 
 export function assignCourse(orgId: number, courseId: number, userIds: number[]): Promise<unknown> {

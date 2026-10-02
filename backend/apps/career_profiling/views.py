@@ -78,7 +78,7 @@ class ProfilingSolutionViewSet(ModelViewSet):
     """CRUD for profiling solutions."""
 
     queryset = ProfilingSolution.objects.select_related("created_by").prefetch_related(
-        "selected_assessments"
+        "selected_assessments__assessment"
     )
     permission_classes = [IsAuthenticated, HasProfilingPermission]
     serializer_class = ProfilingSolutionSerializer

@@ -144,6 +144,23 @@ class AssessmentListSerializer(serializers.ModelSerializer):
     assessment_type_label = serializers.CharField(
         source="get_assessment_type_display", read_only=True
     )
+    # Report 9 #72: may the requesting user take it now (free, paid for, or
+    # licensed to his organization)? Drives "My Assessments" vs "Browse".
+    is_unlocked = serializers.SerializerMethodField()
+
+    def get_is_unlocked(self, obj) -> bool | None:
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not getattr(user, "is_authenticated", False):
+            return None
+        if not obj.price or obj.price <= 0:
+            return True
+        # One lookup per list response, cached on the shared context.
+        ids = self.context.get("_unlocked_assessment_ids")
+        if ids is None:
+            ids = unlocked_assessment_ids(user)
+            self.context["_unlocked_assessment_ids"] = ids
+        return obj.id in ids
 
     class Meta:
         model = Assessment
@@ -159,6 +176,7 @@ class AssessmentListSerializer(serializers.ModelSerializer):
             "navigation_rule",
             "attempt_rule",
             "price",
+            "is_unlocked",
             "created_by",
             "created_by_name",
             "section_count",
@@ -167,6 +185,24 @@ class AssessmentListSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_by", "created_at", "updated_at"]
+
+
+def unlocked_assessment_ids(user) -> set[int]:
+    """Report 9 #72: priced assessments ``user`` may take without paying
+    again — the ones he paid for (or got free), and, for a member of a
+    corporate / channel-partner organization, the ones CJ Admin licensed to
+    it (the organization's licence pays, as for licensed courses)."""
+    from apps.organizations.scoping import assigned_item_ids, is_licensed_member
+    from apps.payments.models import Payment
+
+    ids = set(
+        Payment.objects.filter(
+            user=user, module="assessment", status__in=["paid", "free"]
+        ).values_list("item_id", flat=True)
+    )
+    if is_licensed_member(user):
+        ids |= assigned_item_ids(user, "assessment")
+    return ids
 
 
 class AssessmentSessionSerializer(serializers.ModelSerializer):

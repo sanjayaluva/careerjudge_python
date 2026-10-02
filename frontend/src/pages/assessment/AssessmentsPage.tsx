@@ -39,6 +39,7 @@ import {
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 
+import { CandidateAssessments } from "./CandidateAssessments";
 import { fromEditorHtml } from "./richDefinition";
 import { useTakeAssessment } from "./useTakeAssessment";
 
@@ -67,6 +68,8 @@ export default function AssessmentsPage() {
   // Report 9 #10: corporate admins do not author assessments — they see and
   // schedule only what CJ Admin assigned to their organization.
   const canManage = ["cj_admin", "psychometrician", "trainer"].includes(user?.role ?? "");
+  // Report 9 #72: the individual sees My Assessments apart from Browse.
+  const isCandidate = user?.role === "individual";
 
   const { data, isLoading } = useQuery({
     queryKey: [...ASSESS_KEY, debouncedSearch, statusFilter],
@@ -188,6 +191,14 @@ export default function AssessmentsPage() {
               ? "No assessments yet. Create one to get started."
               : "No assessments are available to you yet."}
           </p>
+        ) : isCandidate ? (
+          <CandidateAssessments
+            assessments={assessments}
+            sessionByAssessment={sessionByAssessment}
+            take={take}
+            onResume={(id) => startSessionMutation.mutate(id)}
+            resuming={startSessionMutation.isPending}
+          />
         ) : (
           <Table>
             <TableHeader>

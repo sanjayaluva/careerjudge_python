@@ -1,7 +1,8 @@
 /**
  * Career Profiling page — authors (CJ Admin, Psychometrician) list profiling
  * solutions of every status and create new ones; everyone else sees the
- * published solutions available to them (Report 9 #76).
+ * published solutions available to them (Report 9 #76), in Not attempted /
+ * Suspended / Completed tabs (#77).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -21,6 +22,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   useToast,
 } from "@/components/ui";
 import {
@@ -179,12 +184,34 @@ export default function CareerProfilingPage() {
   );
 }
 
+// Report 9 #77: the candidate's solutions in Not attempted / Suspended /
+// Completed tabs, by his sessions on each solution's assessments.
+const CANDIDATE_TABS: {
+  value: "not_attempted" | "suspended" | "completed";
+  label: string;
+  empty: string;
+}[] = [
+  { value: "not_attempted", label: "Not attempted", empty: "Nothing left to start." },
+  { value: "suspended", label: "Suspended", empty: "No solutions in progress." },
+  { value: "completed", label: "Completed", empty: "No completed solutions yet." },
+];
+
+const ASSESSMENT_STATUS: Record<
+  string,
+  { label: string; variant: "default" | "warning" | "success" }
+> = {
+  not_attempted: { label: "Not attempted", variant: "default" },
+  in_progress: { label: "In progress", variant: "warning" },
+  completed: { label: "Completed", variant: "success" },
+};
+
 function PublishedSolutionsView() {
   const { data, isLoading } = useQuery({
     queryKey: [...CP_KEY, "published"],
     queryFn: () => listSolutions(),
   });
   const solutions = data?.results ?? [];
+  const inTab = (tab: string) => solutions.filter((s) => (s.my_status ?? "not_attempted") === tab);
 
   return (
     <div className="space-y-6">
@@ -204,11 +231,33 @@ function PublishedSolutionsView() {
             No profiling solutions are available yet.
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-4 px-6 pb-6 md:grid-cols-2">
-            {solutions.map((s) => (
-              <SolutionCard key={s.id} solution={s} />
-            ))}
-          </div>
+          <Tabs defaultValue="not_attempted">
+            <div className="px-6">
+              <TabsList>
+                {CANDIDATE_TABS.map((t) => (
+                  <TabsTrigger key={t.value} value={t.value}>
+                    {t.label} ({inTab(t.value).length})
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+            {CANDIDATE_TABS.map((t) => {
+              const rows = inTab(t.value);
+              return (
+                <TabsContent key={t.value} value={t.value} className="px-6 pb-6 pt-4">
+                  {rows.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-slate-500">{t.empty}</p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      {rows.map((s) => (
+                        <SolutionCard key={s.id} solution={s} />
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+              );
+            })}
+          </Tabs>
         )}
       </PageCard>
     </div>
@@ -225,9 +274,28 @@ function SolutionCard({ solution: s }: { solution: ProfilingSolution }) {
         {s.description && (
           <p className="whitespace-pre-line text-sm text-slate-600">{s.description}</p>
         )}
-        <p className="text-xs text-slate-400">
-          {s.assessment_count} assessment{s.assessment_count !== 1 ? "s" : ""}
-        </p>
+        {s.my_assessments && s.my_assessments.length > 0 ? (
+          <ul className="space-y-1 border-t border-slate-100 pt-2">
+            {s.my_assessments.map((a) => {
+              const st = ASSESSMENT_STATUS[a.status] ?? ASSESSMENT_STATUS.not_attempted;
+              return (
+                <li key={a.assessment_id} className="flex items-center justify-between gap-2">
+                  <Link
+                    to={`/assessments/${a.assessment_id}`}
+                    className="text-sm text-primary-600 hover:underline"
+                  >
+                    {a.title}
+                  </Link>
+                  <Badge variant={st.variant}>{st.label}</Badge>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-xs text-slate-400">
+            {s.assessment_count} assessment{s.assessment_count !== 1 ? "s" : ""}
+          </p>
+        )}
       </div>
     </div>
   );
