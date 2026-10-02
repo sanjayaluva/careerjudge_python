@@ -36,6 +36,7 @@ import {
 import { listAssessments } from "@/api/assessment";
 import { listSolutions } from "@/api/careerProfiling";
 import { extractApiError } from "@/api/client";
+import { getMyOrgAccess } from "@/api/organizations";
 import { useAuth } from "@/hooks/useAuth";
 
 const REPORT_KEY = ["reporting", "reports"];
@@ -50,14 +51,25 @@ export default function ReportsPage() {
   // Report designers (CJ Admin, Psychometrician) manage report definitions;
   // everyone else sees the generated reports he may view (Report 9 #12/#78).
   if (!["cj_admin", "psychometrician"].includes(user?.role ?? "")) {
-    return <GeneratedReportsView isOrgAdmin={ORG_ADMIN_ROLES.includes(user?.role ?? "")} />;
+    return (
+      <GeneratedReportsView
+        isOrgAdmin={ORG_ADMIN_ROLES.includes(user?.role ?? "")}
+        isGroupAdmin={user?.role === "group_admin"}
+      />
+    );
   }
   return <ReportDesignerView />;
 }
 
 const ORG_ADMIN_ROLES = ["corp_admin", "corp_exclusive", "group_admin"];
 
-function GeneratedReportsView({ isOrgAdmin }: { isOrgAdmin: boolean }) {
+function GeneratedReportsView({
+  isOrgAdmin,
+  isGroupAdmin,
+}: {
+  isOrgAdmin: boolean;
+  isGroupAdmin: boolean;
+}) {
   const toast = useToast();
   const [page, setPage] = useState(1);
   const [downloading, setDownloading] = useState<number | null>(null);
@@ -65,6 +77,14 @@ function GeneratedReportsView({ isOrgAdmin }: { isOrgAdmin: boolean }) {
     queryKey: ["reporting", "generated", "visible", page],
     queryFn: () => listVisibleGeneratedReports({ page }),
   });
+  // Report 9 #27: a Group Admin sees his group's reports only when his
+  // organization's admin gave him that permission.
+  const { data: orgAccess } = useQuery({
+    queryKey: ["organizations", "my-access"],
+    queryFn: getMyOrgAccess,
+    enabled: isGroupAdmin,
+  });
+  const reportsWithheld = isGroupAdmin && orgAccess?.can_view_member_reports === false;
   const rows = data?.results ?? [];
   const count = data?.count ?? 0;
 
@@ -89,7 +109,7 @@ function GeneratedReportsView({ isOrgAdmin }: { isOrgAdmin: boolean }) {
           </h1>
           <p className="text-sm text-slate-500">
             {isOrgAdmin
-              ? "Assessment reports of the members of your organization."
+              ? `Assessment reports of the members of your ${isGroupAdmin ? "group" : "organization"}.`
               : "Your assessment reports. Open or download any of them as a PDF."}
           </p>
         </div>
@@ -99,9 +119,11 @@ function GeneratedReportsView({ isOrgAdmin }: { isOrgAdmin: boolean }) {
           </div>
         ) : rows.length === 0 ? (
           <p className="px-6 pb-8 text-center text-sm text-slate-500">
-            {isOrgAdmin
-              ? "No reports have been generated for your members yet."
-              : "You have no reports yet. Your report appears here once it has been generated for an assessment you completed."}
+            {reportsWithheld
+              ? "Your organization's admin has not given you access to members' reports."
+              : isOrgAdmin
+                ? "No reports have been generated for your members yet."
+                : "You have no reports yet. Your report appears here once it has been generated for an assessment you completed."}
           </p>
         ) : (
           <Table>

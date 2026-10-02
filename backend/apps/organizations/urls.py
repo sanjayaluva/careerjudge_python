@@ -46,6 +46,12 @@ urlpatterns = [
         ),
         name="member-detail",
     ),
+    # Report 9 #21: the Corp Admin defines a Group Admin for a group.
+    path(
+        "<int:organization_id>/group-admins/",
+        OrganizationMemberViewSet.as_view({"post": "create_group_admin"}),
+        name="group-admin-create",
+    ),
     path(
         "<int:organization_id>/assignments/",
         OrganizationAssignmentViewSet.as_view({"get": "list", "post": "create"}),

@@ -43,9 +43,15 @@ export interface Group {
   id: number;
   organization: number;
   name: string;
+  /** Report 9 #23: parent group (null = top-level group). */
+  parent: number | null;
+  parent_name: string | null;
   region_division: string;
   description: string;
   member_count: number;
+  /** Whether the viewer may edit/delete this group (a Group Admin: only the
+   * sub-groups inside his own group). */
+  can_manage: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -60,8 +66,13 @@ export interface OrganizationMember {
     role: string | null;
   };
   group: number | null;
+  group_name: string | null;
   employee_id: string;
   is_admin: boolean;
+  /** Report 9 #21/#37: the member holds the Group Admin role. */
+  is_group_admin: boolean;
+  /** Report 9 #4/#13/#38: Group Admin may view & download members' reports. */
+  can_view_member_reports: boolean;
   joined_at: string;
 }
 
@@ -137,11 +148,24 @@ export function listGroups(orgId: number): Promise<Group[]> {
   return apiGetPaged<Group>(`${BASE}/${orgId}/groups/`).then((r) => r.results);
 }
 
-export function createGroup(
-  orgId: number,
-  payload: { name: string; region_division?: string; description?: string },
-): Promise<Group> {
+export interface GroupPayload {
+  name: string;
+  region_division?: string;
+  description?: string;
+  parent?: number | null;
+}
+
+export function createGroup(orgId: number, payload: GroupPayload): Promise<Group> {
   return apiPost<Group>(`${BASE}/${orgId}/groups/`, payload);
+}
+
+/** Report 9 #23: edit a group (name, region/division, parent). */
+export function updateGroup(
+  orgId: number,
+  groupId: number,
+  payload: Partial<GroupPayload>,
+): Promise<Group> {
+  return apiPatch<Group>(`${BASE}/${orgId}/groups/${groupId}/`, payload);
 }
 
 export function deleteGroup(orgId: number, groupId: number): Promise<void> {
@@ -168,9 +192,49 @@ export function addMember(
 export function updateMember(
   orgId: number,
   memberId: number,
-  payload: { group_id?: number | null; is_admin?: boolean },
+  payload: UpdateMemberPayload,
 ): Promise<OrganizationMember> {
   return apiPatch<OrganizationMember>(`${BASE}/${orgId}/members/${memberId}/`, payload);
+}
+
+export interface UpdateMemberPayload {
+  group_id?: number | null;
+  is_admin?: boolean;
+  /** Report 9 #37: tag (or untag) the member as Group Admin of his group. */
+  is_group_admin?: boolean;
+  /** Report 9 #4: Group Admin's "Can view & download members' reports". */
+  can_view_member_reports?: boolean;
+}
+
+export interface CreateGroupAdminPayload {
+  full_name: string;
+  email: string;
+  employee_id?: string;
+  group_id: number;
+  can_view_member_reports: boolean;
+}
+
+/** Report 9 #21: the Corp Admin defines a Group Admin (user + invite email). */
+export function createGroupAdmin(
+  orgId: number,
+  payload: CreateGroupAdminPayload,
+): Promise<OrganizationMember & { invite_email_sent: boolean | null }> {
+  return apiPost<OrganizationMember & { invite_email_sent: boolean | null }>(
+    `${BASE}/${orgId}/group-admins/`,
+    payload,
+  );
+}
+
+/** Report 9 #27: the viewer's own Group Admin set-up. */
+export interface MyOrgAccess {
+  is_group_admin: boolean;
+  organization_ids: number[];
+  group_ids: number[];
+  can_view_member_reports: boolean;
+}
+
+export function getMyOrgAccess(): Promise<MyOrgAccess> {
+  return apiGet<MyOrgAccess>(`${BASE}/my-access/`);
 }
 
 export function removeMember(orgId: number, memberId: number): Promise<void> {
