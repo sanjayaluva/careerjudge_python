@@ -79,6 +79,11 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("counseling", "change"),
         ("notifications", "view"),
         ("accounts", "view"),
+        # Report 9 #112-#114: VIEW-ONLY access to every organization,
+        # assessment and profiling solution (no write rights).
+        ("organizations", "view"),
+        ("assessment", "view"),
+        ("career_profiling", "view"),
     ],
     "corp_admin": [
         # User Details p.3 + Report 9 #1-#14: manages his own organization's
@@ -101,11 +106,29 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("accounts", "view"),
         ("accounts", "add"),
         ("accounts", "change"),
+        # Report 9 #34: creates his own organizations (visible only to him).
         ("organizations", "view"),
+        ("organizations", "add"),
         ("organizations", "change"),
+        # Report 9 #39-#44/#47: authors his organization's PRIVATE question
+        # bank, assessments, reports and courses (scoped to his organization).
+        ("question_bank", "view"),
+        ("question_bank", "add"),
+        ("question_bank", "change"),
+        ("question_bank", "delete"),
         ("assessment", "view"),
+        ("assessment", "add"),
+        ("assessment", "change"),
+        ("assessment", "delete"),
         ("reporting", "view"),
+        ("reporting", "add"),
+        ("reporting", "change"),
+        ("reporting", "delete"),
         ("reporting", "generate_report"),
+        ("training", "view"),
+        ("training", "add"),
+        ("training", "change"),
+        ("training", "delete"),
     ],
     "psychometrician": [
         # Psychometrician: full QB access (configures psychometric properties)
@@ -209,7 +232,9 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("accounts", "view"),
         ("accounts", "add"),
         ("accounts", "change"),
+        # Report 9 #53: creates his own organizations (visible only to him).
         ("organizations", "view"),
+        ("organizations", "add"),
         ("organizations", "change"),
         ("assessment", "view"),
         # H14: empanelled role — bills CJ Admin for commission (Doc 4).

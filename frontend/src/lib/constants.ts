@@ -103,7 +103,18 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "payments",
   ],
   // Help Desk browses users (view only — Report 9 #110/#111).
-  helpdesk: ["dashboard", "profile", "users", "training", "counseling"],
+  // Report 9 #112-#114: Help Desk also views (only) organizations,
+  // assessments and profiling solutions.
+  helpdesk: [
+    "dashboard",
+    "profile",
+    "users",
+    "organizations",
+    "assessments",
+    "career_profiling",
+    "training",
+    "counseling",
+  ],
   // Report 9 #5/#9/#36/#56: organization managers have no access to the CJ
   // user list — they manage their members from their organization's page.
   // Live Chat is signed for Corp Admin and Group Admin (User Details pp.3–4).
@@ -116,7 +127,17 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
     "training",
     "live_chat",
   ],
-  corp_exclusive: ["dashboard", "profile", "organizations", "assessments", "reports"],
+  // Report 9 #39-#47: Corp Exclusive authors his organization's private
+  // question bank, assessments, reports and courses.
+  corp_exclusive: [
+    "dashboard",
+    "profile",
+    "organizations",
+    "question_bank",
+    "assessments",
+    "reports",
+    "training",
+  ],
   // H14: empanelled role (Doc 4) — bills CJ Admin, so also sees Invoicing.
   psychometrician: [
     "dashboard",
