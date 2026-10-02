@@ -249,7 +249,6 @@ export default function OrganizationDetailPage() {
                   <TableHead>Admin</TableHead>
                   <TableHead>Group Admin</TableHead>
                   <TableHead>Members&apos; reports</TableHead>
-                  <TableHead>Joined</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -495,11 +494,9 @@ function MemberRow({
         />
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-2">
-          {member.is_group_admin && (
-            <Badge variant="primary">
-              Group Admin{member.group_name ? ` · ${member.group_name}` : ""}
-            </Badge>
+        <div className="flex items-center gap-2 whitespace-nowrap">
+          {member.is_group_admin && !canToggleGroupAdmin && (
+            <Badge variant="primary">Group Admin</Badge>
           )}
           {canToggleGroupAdmin && (
             <Button
@@ -536,9 +533,6 @@ function MemberRow({
         ) : (
           <span className="text-slate-400">—</span>
         )}
-      </TableCell>
-      <TableCell className="text-slate-500">
-        {new Date(member.joined_at).toLocaleDateString()}
       </TableCell>
       <TableCell>
         <div className="flex items-center justify-end gap-2">
