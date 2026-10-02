@@ -10,10 +10,14 @@ import os
 from .base import *  # noqa: F403
 from .base import env
 
-DEBUG = True
+# The shared dev server is client-facing: DEBUG and the email backend follow
+# its .env.dev (Report 9: verification emails were only printed to the log,
+# and debug 404 pages listed every internal route). Local checkouts keep the
+# old defaults (debug on, emails printed to the console).
+DEBUG = env.bool("DEBUG", default=True)
 ALLOWED_HOSTS = env("ALLOWED_HOSTS", default=["localhost", "127.0.0.1", "*"])
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 
 CORS_ALLOW_ALL_ORIGINS = True
 
