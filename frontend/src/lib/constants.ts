@@ -133,7 +133,8 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
   sme: ["dashboard", "profile", "question_bank", "tasks", "invoicing"],
   reviewer: ["dashboard", "profile", "question_bank", "tasks", "invoicing"],
   trainer: ["dashboard", "profile", "assessments", "training", "tasks", "invoicing"],
-  group_admin: ["dashboard", "profile", "organizations", "assessments", "live_chat"],
+  // Report 9 #27: Members' Reports — his group's, when his Corp Admin permits.
+  group_admin: ["dashboard", "profile", "organizations", "assessments", "reports", "live_chat"],
   // Report 4 Counsellor-1/2 + Report 9 #85/#86: no assessment, profiling or
   // report access.
   counsellor: ["dashboard", "profile", "counseling", "tasks", "invoicing"],

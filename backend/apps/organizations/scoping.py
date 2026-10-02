@@ -12,7 +12,7 @@ assigned (CJ_UC030). Non-corporate users (individuals with no membership,
 staff roles, admins) are never scoped by these helpers.
 """
 
-from .models import OrganizationAssignment, OrganizationMember
+from .models import Group, OrganizationAssignment, OrganizationMember
 
 CORPORATE_ORG_TYPES = ("corporate", "corp_exclusive")
 # Report 9 #57/#102: content is licensed to channel-partner organizations too,
@@ -152,16 +152,70 @@ def managed_org_ids(user) -> list[int] | None:
     return user_org_ids(user)
 
 
-def managed_group_ids(user) -> list[int] | None:
-    """Group Admin tagged to a group is limited to that group; else ``None``."""
-    if role_name(user) != "group_admin" or not is_org_manager(user):
-        return None
-    ids = list(
+def descendant_group_ids(group_ids) -> list[int]:
+    """All sub-groups (any depth) below ``group_ids``, excluding them."""
+    seen = set(group_ids)
+    found: list[int] = []
+    frontier = list(group_ids)
+    while frontier:
+        children = [
+            gid
+            for gid in Group.objects.filter(parent_id__in=frontier).values_list("id", flat=True)
+            if gid not in seen
+        ]
+        seen.update(children)
+        found.extend(children)
+        frontier = children
+    return found
+
+
+def own_group_ids(user) -> list[int]:
+    """Groups a Group Admin is tagged to (his own group, not sub-groups)."""
+    return list(
         OrganizationMember.objects.filter(user=user, group__isnull=False).values_list(
             "group_id", flat=True
         )
     )
-    return ids or None
+
+
+def managed_group_ids(user) -> list[int] | None:
+    """Group Admin tagged to a group is limited to that group and its
+    sub-groups (Report 9 #23) — his own group(s) first; else ``None``."""
+    if role_name(user) != "group_admin" or not is_org_manager(user):
+        return None
+    ids = own_group_ids(user)
+    if not ids:
+        return None
+    return ids + descendant_group_ids(ids)
+
+
+def group_admin_editable_group_ids(user) -> list[int]:
+    """Groups a Group Admin may edit or delete: the sub-groups below his own
+    group (never his own group itself — that is the Corp Admin's)."""
+    return descendant_group_ids(own_group_ids(user))
+
+
+def can_set_up_group_admins(user) -> bool:
+    """Report 9 #21/#37/#4: CJ Admin and the organization's own admin (Corp
+    Admin / Corp Exclusive Admin) define Group Admins and their rights."""
+    return is_cj_admin(user) or role_name(user) in ("corp_admin", "corp_exclusive")
+
+
+def report_member_ids_for_group_admin(user) -> list[int]:
+    """Report 9 #27: members whose reports a Group Admin may view/download —
+    those of the group(s) (and sub-groups) where his Corp Admin turned
+    "Can view & download members' reports" on; otherwise none."""
+    permitted = list(
+        OrganizationMember.objects.filter(
+            user=user, group__isnull=False, can_view_member_reports=True
+        ).values_list("group_id", flat=True)
+    )
+    if not permitted:
+        return []
+    group_ids = permitted + descendant_group_ids(permitted)
+    return list(
+        OrganizationMember.objects.filter(group_id__in=group_ids).values_list("user_id", flat=True)
+    )
 
 
 def can_manage_org(user, organization_id) -> bool:

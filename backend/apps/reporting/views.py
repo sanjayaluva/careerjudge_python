@@ -79,10 +79,18 @@ def visible_candidate_ids(user):
     """Whose reports ``user`` may see: ``None`` = everyone (CJ Admin,
     Psychometrician); an organization manager sees his members (Doc 4 group
     report); everyone else only himself (Report 9 #12/#58/#78/#86)."""
-    from apps.organizations.scoping import managed_user_ids, role_name
+    from apps.organizations.scoping import (
+        managed_user_ids,
+        report_member_ids_for_group_admin,
+        role_name,
+    )
 
     if user.is_superuser or role_name(user) in _ALL_REPORTS_ROLES:
         return None
+    if role_name(user) == "group_admin":
+        # Report 9 #27: a Group Admin sees his group's members' reports only
+        # when his Corp Admin gave him that permission; otherwise only his own.
+        return list({user.id, *report_member_ids_for_group_admin(user)})
     member_ids = managed_user_ids(user)
     if member_ids is not None:
         return member_ids

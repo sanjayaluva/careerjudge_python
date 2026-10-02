@@ -2,6 +2,8 @@
  * Organizations API functions.
  * Endpoints live under /api/organizations/.
  */
+import { API_BASE_URL } from "@/lib/constants";
+
 import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
 
 export interface Organization {
@@ -43,9 +45,15 @@ export interface Group {
   id: number;
   organization: number;
   name: string;
+  /** Report 9 #23: parent group (null = top-level group). */
+  parent: number | null;
+  parent_name: string | null;
   region_division: string;
   description: string;
   member_count: number;
+  /** Whether the viewer may edit/delete this group (a Group Admin: only the
+   * sub-groups inside his own group). */
+  can_manage: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -60,8 +68,13 @@ export interface OrganizationMember {
     role: string | null;
   };
   group: number | null;
+  group_name: string | null;
   employee_id: string;
   is_admin: boolean;
+  /** Report 9 #21/#37: the member holds the Group Admin role. */
+  is_group_admin: boolean;
+  /** Report 9 #4/#13/#38: Group Admin may view & download members' reports. */
+  can_view_member_reports: boolean;
   joined_at: string;
 }
 
@@ -137,11 +150,24 @@ export function listGroups(orgId: number): Promise<Group[]> {
   return apiGetPaged<Group>(`${BASE}/${orgId}/groups/`).then((r) => r.results);
 }
 
-export function createGroup(
-  orgId: number,
-  payload: { name: string; region_division?: string; description?: string },
-): Promise<Group> {
+export interface GroupPayload {
+  name: string;
+  region_division?: string;
+  description?: string;
+  parent?: number | null;
+}
+
+export function createGroup(orgId: number, payload: GroupPayload): Promise<Group> {
   return apiPost<Group>(`${BASE}/${orgId}/groups/`, payload);
+}
+
+/** Report 9 #23: edit a group (name, region/division, parent). */
+export function updateGroup(
+  orgId: number,
+  groupId: number,
+  payload: Partial<GroupPayload>,
+): Promise<Group> {
+  return apiPatch<Group>(`${BASE}/${orgId}/groups/${groupId}/`, payload);
 }
 
 export function deleteGroup(orgId: number, groupId: number): Promise<void> {
@@ -168,9 +194,49 @@ export function addMember(
 export function updateMember(
   orgId: number,
   memberId: number,
-  payload: { group_id?: number | null; is_admin?: boolean },
+  payload: UpdateMemberPayload,
 ): Promise<OrganizationMember> {
   return apiPatch<OrganizationMember>(`${BASE}/${orgId}/members/${memberId}/`, payload);
+}
+
+export interface UpdateMemberPayload {
+  group_id?: number | null;
+  is_admin?: boolean;
+  /** Report 9 #37: tag (or untag) the member as Group Admin of his group. */
+  is_group_admin?: boolean;
+  /** Report 9 #4: Group Admin's "Can view & download members' reports". */
+  can_view_member_reports?: boolean;
+}
+
+export interface CreateGroupAdminPayload {
+  full_name: string;
+  email: string;
+  employee_id?: string;
+  group_id: number;
+  can_view_member_reports: boolean;
+}
+
+/** Report 9 #21: the Corp Admin defines a Group Admin (user + invite email). */
+export function createGroupAdmin(
+  orgId: number,
+  payload: CreateGroupAdminPayload,
+): Promise<OrganizationMember & { invite_email_sent: boolean | null }> {
+  return apiPost<OrganizationMember & { invite_email_sent: boolean | null }>(
+    `${BASE}/${orgId}/group-admins/`,
+    payload,
+  );
+}
+
+/** Report 9 #27: the viewer's own Group Admin set-up. */
+export interface MyOrgAccess {
+  is_group_admin: boolean;
+  organization_ids: number[];
+  group_ids: number[];
+  can_view_member_reports: boolean;
+}
+
+export function getMyOrgAccess(): Promise<MyOrgAccess> {
+  return apiGet<MyOrgAccess>(`${BASE}/my-access/`);
 }
 
 export function removeMember(orgId: number, memberId: number): Promise<void> {
@@ -241,6 +307,9 @@ export interface CorporateWebsite {
   slug: string;
   company_name: string;
   logo_url: string;
+  /** Report 9 #49: where the logo shows from — the uploaded file (an
+   * `/api/...` path) or the typed URL. Resolve with `resolveLogoSrc`. */
+  logo_src: string;
   layout: "classic" | "modern" | "minimal";
   primary_color: string;
   admin_user: number | null;
@@ -251,8 +320,47 @@ export interface CorporateWebsite {
   generated_credentials?: { email: string; temporary_password: string };
 }
 
+/** Public branding of a corporate portal (`/site/<slug>`, Report 9 #48/#95). */
+export interface PublicSite {
+  organization_id: number;
+  slug: string;
+  company_name: string;
+  /** Uploaded logo (`/api/...` path) or a typed URL; "" when none. */
+  logo_url: string;
+  layout: "classic" | "modern" | "minimal";
+  primary_color: string;
+}
+
+/** Turn a logo path served by the API (`/api/organizations/site/<slug>/logo/`)
+ * into a URL the browser can load, wherever the API is hosted. Absolute URLs
+ * (typed logo links) pass through unchanged. */
+export function resolveLogoSrc(src: string | null | undefined): string {
+  if (!src) return "";
+  if (!src.startsWith("/api/")) return src;
+  return API_BASE_URL.replace(/\/api\/?$/, "") + src;
+}
+
 export function getWebsite(orgId: number): Promise<CorporateWebsite | null> {
   return apiGet<CorporateWebsite | null>(`${BASE}/${orgId}/website/`);
+}
+
+type WebsiteFields = {
+  company_name: string;
+  layout: string;
+  primary_color: string;
+  logo_url: string;
+  is_active: boolean;
+};
+
+/** Build a multipart body when a logo file is included, else plain JSON. */
+function websiteBody(payload: Partial<WebsiteFields> & { admin_email?: string; logo?: File }) {
+  if (!payload.logo) return payload;
+  const form = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    form.append(key, value instanceof File ? value : String(value));
+  });
+  return form;
 }
 
 export function createWebsite(
@@ -263,20 +371,25 @@ export function createWebsite(
     primary_color?: string;
     logo_url?: string;
     admin_email?: string;
+    logo?: File;
   },
 ): Promise<CorporateWebsite> {
-  return apiPost<CorporateWebsite>(`${BASE}/${orgId}/website/`, payload);
+  return apiPost<CorporateWebsite>(`${BASE}/${orgId}/website/`, websiteBody(payload));
 }
 
 export function updateWebsite(
   orgId: number,
-  payload: Partial<{
-    company_name: string;
-    layout: string;
-    primary_color: string;
-    logo_url: string;
-    is_active: boolean;
-  }>,
+  payload: Partial<WebsiteFields> & { logo?: File },
 ): Promise<CorporateWebsite> {
-  return apiPatch<CorporateWebsite>(`${BASE}/${orgId}/website/`, payload);
+  return apiPatch<CorporateWebsite>(`${BASE}/${orgId}/website/`, websiteBody(payload));
+}
+
+/** Public, no login: the branding of an active portal by its slug. */
+export function getPublicSite(slug: string): Promise<PublicSite> {
+  return apiGet<PublicSite>(`${BASE}/site/${encodeURIComponent(slug)}/`);
+}
+
+/** The signed-in member's own organization portal branding, or null. */
+export function getMySite(): Promise<PublicSite | null> {
+  return apiGet<PublicSite | null>(`${BASE}/my-site/`);
 }

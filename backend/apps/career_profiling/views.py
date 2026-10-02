@@ -83,6 +83,17 @@ class ProfilingSolutionViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated, HasProfilingPermission]
     serializer_class = ProfilingSolutionSerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Report 9 #76: only the authors (CJ Admin, Psychometrician) work with
+        # draft/archived solutions. Everyone else — individuals included —
+        # lists and opens PUBLISHED solutions only.
+        user = self.request.user
+        role = user.role.name if user.role_id else None
+        if not (user.is_superuser or role in ("cj_admin", "psychometrician")):
+            qs = qs.filter(status="published")
+        return qs
+
     def get_serializer_class(self):
         if self.action == "list":
             return ProfilingSolutionListSerializer
@@ -782,6 +793,12 @@ class ProfilingSolutionViewSet(ModelViewSet):
         """List match indices computed for this solution."""
         solution = self.get_object()
         indices = solution.match_indices.select_related("candidate").all()
+        # Report 9 review: candidates hold 'view' now (#76) — they see only
+        # their own results; authors (CJ Admin, Psychometrician) see all.
+        user = request.user
+        role = user.role.name if getattr(user, "role", None) else None
+        if not (user.is_superuser or role in ("cj_admin", "psychometrician")):
+            indices = indices.filter(candidate=user)
         serializer = MatchIndexSerializer(indices, many=True)
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
 

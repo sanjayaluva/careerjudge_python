@@ -46,8 +46,10 @@ import QuestionDetailPage from "@/pages/question-bank/QuestionDetailPage";
 import QuestionEditorPage from "@/pages/question-bank/QuestionEditorPage";
 import AssessmentsPage from "@/pages/assessment/AssessmentsPage";
 import AssessmentDetailPage from "@/pages/assessment/AssessmentDetailPage";
+import AssessmentStartPage from "@/pages/assessment/AssessmentStartPage";
 import SessionPlayerPage from "@/pages/assessment/SessionPlayerPage";
 import SessionResultsPage from "@/pages/assessment/SessionResultsPage";
+import CorporatePortalPage from "@/pages/site/CorporatePortalPage";
 import { useAuthStore } from "@/stores/auth";
 
 const queryClient = new QueryClient({
@@ -160,6 +162,8 @@ export default function App() {
                 <Route path="question-bank/:id" element={<QuestionDetailPage />} />
                 <Route path="assessments" element={<AssessmentsPage />} />
                 <Route path="assessments/:id" element={<AssessmentDetailPage />} />
+                {/* Report 9 #75: assessment description page before the session starts. */}
+                <Route path="assessments/:id/start" element={<AssessmentStartPage />} />
                 <Route
                   path="assessments/sessions/:sessionId/results"
                   element={<SessionResultsPage />}
@@ -202,6 +206,9 @@ export default function App() {
 
               {/* Public homepage (landing page) */}
               <Route path="/" element={<PublicHomepage />} />
+
+              {/* Corporate branded portal, no login (Report 9 #48/#95). */}
+              <Route path="/site/:slug" element={<CorporatePortalPage />} />
 
               {/* CMS page catch-all — tries to render a CMS page by slug
                   before falling back to 404. This makes /about-us work

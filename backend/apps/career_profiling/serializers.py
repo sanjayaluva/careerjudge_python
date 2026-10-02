@@ -222,6 +222,10 @@ class ProfilingSolutionListSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "purpose",
+            # Report 9 #76: the candidate view shows each published solution
+            # with its description and image.
+            "description",
+            "image",
             "status",
             "has_polar_assessment",
             "created_by",

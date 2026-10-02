@@ -296,6 +296,26 @@ class TestCategoryCRUD:
         dr.refresh_from_db()
         assert dr.status == "rejected"
 
+    def test_admin_deletion_request_list_is_plain_list(
+        self, admin_client, psy_client, psychometrician_user
+    ):
+        """Report 9 #108: the CJ Admin queue reads this list — it must carry
+        every pending request as a plain list in `data` (not a page)."""
+        from apps.question_bank.models import QuestionBankDeletionRequest
+
+        QuestionBankDeletionRequest.objects.create(
+            target_type="question",
+            target_id=999,
+            target_label="Q to drop",
+            requester=psychometrician_user,
+            reason="Duplicate",
+        )
+        resp = admin_client.get("/api/question-bank/deletion-requests/")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert isinstance(data, list)
+        assert [(r["target_type"], r["status"]) for r in data] == [("question", "pending")]
+
     def test_non_admin_cannot_approve_deletion_request(self, psy_client):
         from apps.question_bank.models import QuestionBankDeletionRequest
 

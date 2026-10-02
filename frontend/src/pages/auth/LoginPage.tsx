@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -9,6 +9,8 @@ import { AuthLayout } from "@/components/layout/AuthLayout";
 import { Alert, AlertDescription, Button, Input, Label } from "@/components/ui";
 import { login as apiLogin } from "@/api/auth";
 import { extractApiError } from "@/api/client";
+import { getPublicSite } from "@/api/organizations";
+import { PortalLogo, textOn } from "@/pages/site/PortalLogo";
 import { useAuthStore } from "@/stores/auth";
 import { isEmail } from "@/lib/utils";
 
@@ -30,6 +32,15 @@ export default function LoginPage() {
 
   const sessionExpired = searchParams.get("reason") === "session_expired";
   const from = searchParams.get("from");
+  // Report 9 #48/#51: arriving from a corporate portal (/site/<slug>) — show
+  // the company's logo and name on the login card.
+  const siteSlug = searchParams.get("site");
+  const { data: site } = useQuery({
+    queryKey: ["public-site", siteSlug],
+    queryFn: () => getPublicSite(siteSlug as string),
+    enabled: Boolean(siteSlug),
+    retry: false,
+  });
 
   const {
     register,
@@ -62,17 +73,41 @@ export default function LoginPage() {
 
   return (
     <AuthLayout
-      title="Welcome back"
-      description="Sign in to your CareerJudge account."
+      title={site ? `Sign in to ${site.company_name}` : "Welcome back"}
+      description={
+        site
+          ? "Use the account your organization gave you."
+          : "Sign in to your CareerJudge account."
+      }
       footer={
-        <>
-          Don&apos;t have an account?{" "}
-          <Link to="/signup" className="font-medium text-primary-600 hover:underline">
-            Sign up
+        site ? (
+          <Link
+            to={`/site/${encodeURIComponent(site.slug)}`}
+            className="font-medium text-primary-600 hover:underline"
+          >
+            Back to the {site.company_name} portal
           </Link>
-        </>
+        ) : (
+          <>
+            Don&apos;t have an account?{" "}
+            <Link to="/signup" className="font-medium text-primary-600 hover:underline">
+              Sign up
+            </Link>
+          </>
+        )
       }
     >
+      {site && (
+        <div
+          className="mb-6 flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4"
+          style={{ borderTopColor: site.primary_color, borderTopWidth: 4 }}
+          data-testid="portal-brand"
+        >
+          <PortalLogo src={site.logo_url} name={site.company_name} color={site.primary_color} />
+          <span className="font-semibold text-slate-900">{site.company_name}</span>
+        </div>
+      )}
+
       {sessionExpired && (
         <Alert variant="warning" className="mb-4">
           <AlertDescription>
@@ -136,7 +171,16 @@ export default function LoginPage() {
           )}
         </div>
 
-        <Button type="submit" className="w-full" loading={submitting}>
+        <Button
+          type="submit"
+          className="w-full"
+          loading={submitting}
+          style={
+            site
+              ? { backgroundColor: site.primary_color, color: textOn(site.primary_color) }
+              : undefined
+          }
+        >
           Sign in
         </Button>
       </form>

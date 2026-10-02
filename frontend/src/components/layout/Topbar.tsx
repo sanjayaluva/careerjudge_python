@@ -26,6 +26,8 @@ import {
   type AppNotification,
 } from "@/api/notifications";
 
+import { PortalTopbarBrand } from "./PortalTopbarBrand";
+
 export interface TopbarProps {
   /** Mobile: open the sidebar. */
   onOpenSidebar: () => void;
@@ -154,6 +156,8 @@ export function Topbar({ onOpenSidebar, title, subtitle }: TopbarProps) {
           />
         </svg>
       </button>
+
+      <PortalTopbarBrand />
 
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-lg font-semibold text-slate-900">{title}</h1>

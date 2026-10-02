@@ -28,6 +28,7 @@ from apps.notifications.models import notify_user
 
 from .models import Concern, Task, TaskExtensionRequest, TaskProgressUpdate
 from .serializers import (
+    CONCERNS_LINK,
     ConcernSerializer,
     TaskDetailSerializer,
     TaskExtensionRequestSerializer,
@@ -619,7 +620,9 @@ class ConcernViewSet(ModelViewSet):
             f"Concern resolved: {concern.subject}",
             f"Your concern has been resolved by {request.user.full_name or request.user.email}.",
             "success",
-            link=f"/tasks/concerns/{concern.id}",
+            # Report 9 #20/#50: the requester's concerns live on the Contact
+            # Admin page; /tasks/concerns/<id> does not exist ("Not Found").
+            link=CONCERNS_LINK,
         )
         return Response(
             {"message": "Concern resolved.", "data": ConcernSerializer(concern).data},

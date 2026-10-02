@@ -74,10 +74,22 @@ class Organization(models.Model):
 
 
 class Group(models.Model):
-    """Sub-group within an organization — managed by group_admin role."""
+    """Sub-group within an organization — managed by group_admin role.
+
+    Report 9 #23: groups can nest — a Group Admin adds, edits and deletes
+    sub-groups (``parent``) inside his own group.
+    """
 
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="groups")
     name = models.CharField(_("name"), max_length=255)
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        related_name="children",
+        null=True,
+        blank=True,
+        help_text=_("Parent group; empty for a top-level group (Report 9 #23)."),
+    )
     # CJ_UC052: a corporate group carries a Region/Division.
     region_division = models.CharField(
         _("region/division"),
@@ -118,6 +130,13 @@ class OrganizationMember(models.Model):
         _("is admin"),
         default=False,
         help_text=_("Whether this member is an admin of the organization."),
+    )
+    # Report 9 #4/#13/#38: set by the Corp Admin / Corp Exclusive Admin for a
+    # Group Admin — may he view and download his group members' reports?
+    can_view_member_reports = models.BooleanField(
+        _("can view & download members' reports"),
+        default=False,
+        help_text=_("Group Admin only: may view and download his group members' reports."),
     )
     joined_at = models.DateTimeField(auto_now_add=True)
 
@@ -314,6 +333,9 @@ class CorporateWebsite(models.Model):
     slug = models.SlugField(_("slug"), max_length=63, unique=True)
     company_name = models.CharField(_("company name"), max_length=255)
     logo_url = models.CharField(_("logo URL"), max_length=1000, blank=True)
+    # Report 9 #49: CJ_UC054 lists the logo as an "Upload" field. An uploaded
+    # file takes the place of a typed ``logo_url`` (kept for older records).
+    logo = models.ImageField(_("logo"), upload_to="corporate_logos/", null=True, blank=True)
     layout = models.CharField(_("layout"), max_length=20, choices=LAYOUT_CHOICES, default="classic")
     primary_color = models.CharField(_("primary color"), max_length=9, default="#4f46e5")
     admin_user = models.ForeignKey(
@@ -335,3 +357,12 @@ class CorporateWebsite(models.Model):
 
     def __str__(self) -> str:
         return f"{self.company_name} ({self.slug})"
+
+    @property
+    def logo_src(self) -> str:
+        """Where the portal shows the logo from: the uploaded file (served by
+        the public API so it works behind the /api/* proxy) or the typed URL."""
+        if self.logo:
+            version = int(self.updated_at.timestamp()) if self.updated_at else 0
+            return f"/api/organizations/site/{self.slug}/logo/?v={version}"
+        return self.logo_url or ""

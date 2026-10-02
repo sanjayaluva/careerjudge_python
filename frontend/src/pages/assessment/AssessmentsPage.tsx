@@ -19,6 +19,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  WysiwygEditor,
   useToast,
 } from "@/components/ui";
 import {
@@ -35,9 +36,11 @@ import {
   publishAssessment,
   startSession,
 } from "@/api/assessment";
-import { extractApiError, extractApiErrorCode } from "@/api/client";
-import { createCheckout, openRazorpayCheckout } from "@/api/payments";
+import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
+
+import { fromEditorHtml } from "./richDefinition";
+import { useTakeAssessment } from "./useTakeAssessment";
 
 const ASSESS_KEY = ["assessments"];
 
@@ -118,48 +121,19 @@ export default function AssessmentsPage() {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
-  // Start/resume session mutation — used by individual users (candidates)
-  // to take an assessment. On success, navigate to the session player.
+  // Resume an in-flight session (no payment needed — it was paid to begin).
   const startSessionMutation = useMutation({
     mutationFn: (assessmentId: number) => startSession(assessmentId),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["my-sessions"] });
       navigate(`/assessments/sessions/${data.id}`);
     },
-    onError: async (err, assessmentId) => {
-      // PLT-3 pay-for-test gate — a priced assessment 402s until paid.
-      if (extractApiErrorCode(err) === "payment_required") {
-        const a = (data?.results ?? []).find((x) => x.id === assessmentId);
-        try {
-          const res = await createCheckout({
-            module: "assessment",
-            item_id: assessmentId,
-            amount: a?.price ?? "0",
-            description: `Assessment: ${a?.title ?? ""}`,
-          });
-          if (res.order) {
-            const paid = await openRazorpayCheckout(res.order);
-            if (paid) startSessionMutation.mutate(assessmentId);
-            else toast.error("Payment not completed. Start again once it has cleared.");
-            return;
-          }
-          if (res.checkout_url) {
-            window.location.href = res.checkout_url;
-            return;
-          }
-          if (res.status === "paid" || res.status === "free") {
-            startSessionMutation.mutate(assessmentId);
-            return;
-          }
-          toast.error("Payment is pending confirmation. Please start again once it has cleared.");
-        } catch (e) {
-          toast.error(extractApiError(e));
-        }
-        return;
-      }
-      toast.error(extractApiError(err));
-    },
+    onError: (err) => toast.error(extractApiError(err)),
   });
+
+  // Report 9 #73/#75: Take Assessment → pay prompt with the price for a paid
+  // assessment → the assessment description page, whose Start begins it.
+  const take = useTakeAssessment();
 
   const assessments = data?.results ?? [];
 
@@ -286,8 +260,8 @@ export default function AssessmentsPage() {
                             return (
                               <Button
                                 size="sm"
-                                loading={startSessionMutation.isPending}
-                                onClick={() => startSessionMutation.mutate(a.id)}
+                                loading={take.checkingId === a.id}
+                                onClick={() => take.begin(a)}
                               >
                                 Take Assessment
                               </Button>
@@ -328,6 +302,8 @@ export default function AssessmentsPage() {
         )}
       </PageCard>
 
+      {take.prompt}
+
       <CreateAssessmentModal
         open={createOpen}
         loading={createMutation.isPending}
@@ -354,6 +330,7 @@ function CreateAssessmentModal({
   const [title, setTitle] = useState("");
   const [assessmentType, setAssessmentType] = useState<"normal" | "psychometric">("normal");
   const [objective, setObjective] = useState("");
+  const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
   const [duration, setDuration] = useState("");
   const [navigationRule, setNavigationRule] = useState("FREE");
@@ -379,7 +356,8 @@ function CreateAssessmentModal({
             title,
             assessment_type: assessmentType,
             objective,
-            instructions,
+            description: fromEditorHtml(description),
+            instructions: fromEditorHtml(instructions),
             total_duration_seconds: durationMinutes !== null ? durationMinutes * 60 : null,
             navigation_rule: navigationRule,
             attempt_rule: attemptRule,
@@ -445,16 +423,16 @@ function CreateAssessmentModal({
             placeholder="What this assessment measures..."
           />
         </div>
+        {/* Report 9 #75 (Doc 3 §2.1.2): Description and Instructions are
+            formatted text with images, shown on the assessment description
+            page before the test begins. */}
         <div>
-          <Label htmlFor="instructions">Instructions (shown to candidates)</Label>
-          <textarea
-            id="instructions"
-            rows={3}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            placeholder="Instructions displayed before the test begins..."
-          />
+          <Label>Description (shown to candidates)</Label>
+          <WysiwygEditor value={description} onChange={setDescription} minHeight={120} />
+        </div>
+        <div>
+          <Label>Instructions (shown to candidates)</Label>
+          <WysiwygEditor value={instructions} onChange={setInstructions} minHeight={120} />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>

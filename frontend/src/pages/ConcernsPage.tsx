@@ -35,7 +35,9 @@ export default function ConcernsPage() {
   const { user } = useAuth();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const isAdmin = user?.role === "cj_admin";
+  // Report 9 #20/#50: concern alerts for CJ Admin AND Help Desk open this
+  // page, and the server gives both the full inbox and the right to resolve.
+  const isAdmin = user?.role === "cj_admin" || user?.role === "helpdesk";
 
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");

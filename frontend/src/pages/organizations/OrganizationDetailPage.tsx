@@ -21,11 +21,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  useToast,
 } from "@/components/ui";
 import {
   addMember,
   createAssignment,
   createGroup,
+  createGroupAdmin,
   createSchedule,
   createWebsite,
   deleteAssignment,
@@ -38,14 +40,19 @@ import {
   removeMember,
   rescheduleSchedule,
   retrieveOrganization,
+  updateGroup,
   updateMember,
   updateWebsite,
+  type Group,
+  type OrganizationMember,
+  type UpdateMemberPayload,
 } from "@/api/organizations";
 import { listAssessments } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
 import { BulkUploadModal } from "@/components/users/BulkUploadModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ROLE_LABELS } from "@/lib/constants";
+import { PortalLogo } from "@/pages/site/PortalLogo";
 
 const ORG_KEY = (id: number) => ["organizations", id];
 
@@ -58,11 +65,34 @@ function useOrgAccess() {
   const isGroupAdmin = role === "group_admin";
   return {
     isCJAdmin: isSuperAdmin,
+    isGroupAdmin,
     canManageMembers: canManage,
-    canManageGroups: canManage && !isGroupAdmin,
+    // Report 9 #23: a Group Admin adds/edits/deletes the sub-groups inside
+    // his own group (each group's ``can_manage`` says which ones).
+    canManageGroups: canManage,
+    // Report 9 #21/#37/#4: the organization's admin (or CJ Admin) defines
+    // Group Admins and their report permission; a Group Admin does not.
+    canSetUpGroupAdmins:
+      canManage && (isSuperAdmin || role === "corp_admin" || role === "corp_exclusive"),
     canSchedule: canManage,
     canCustomizeWebsite: canManage && !isGroupAdmin,
   };
+}
+
+/** Ids of ``groupId`` and every group nested below it (Report 9 #23). */
+function subtreeIds(groups: Group[], groupId: number): Set<number> {
+  const ids = new Set([groupId]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const g of groups) {
+      if (g.parent !== null && ids.has(g.parent) && !ids.has(g.id)) {
+        ids.add(g.id);
+        grew = true;
+      }
+    }
+  }
+  return ids;
 }
 
 export default function OrganizationDetailPage() {
@@ -70,7 +100,9 @@ export default function OrganizationDetailPage() {
   const orgId = Number(id);
 
   const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [memberModalOpen, setMemberModalOpen] = useState(false);
+  const [groupAdminModalOpen, setGroupAdminModalOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const access = useOrgAccess();
 
@@ -127,9 +159,15 @@ export default function OrganizationDetailPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Groups</CardTitle>
-            {access.canManageGroups && (
-              <Button size="sm" onClick={() => setGroupModalOpen(true)}>
-                Add group
+            {access.canManageGroups && (!access.isGroupAdmin || org.groups.length > 0) && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingGroup(null);
+                  setGroupModalOpen(true);
+                }}
+              >
+                {access.isGroupAdmin ? "Add sub-group" : "Add group"}
               </Button>
             )}
           </div>
@@ -142,6 +180,7 @@ export default function OrganizationDetailPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Parent group</TableHead>
                   <TableHead>Region / Division</TableHead>
                   <TableHead>Members</TableHead>
                   <TableHead>Created</TableHead>
@@ -150,7 +189,16 @@ export default function OrganizationDetailPage() {
               </TableHeader>
               <TableBody>
                 {org.groups.map((g) => (
-                  <GroupRow key={g.id} orgId={orgId} group={g} canDelete={access.canManageGroups} />
+                  <GroupRow
+                    key={g.id}
+                    orgId={orgId}
+                    group={g}
+                    canChange={access.canManageGroups && g.can_manage}
+                    onEdit={() => {
+                      setEditingGroup(g);
+                      setGroupModalOpen(true);
+                    }}
+                  />
                 ))}
               </TableBody>
             </Table>
@@ -165,6 +213,11 @@ export default function OrganizationDetailPage() {
             <CardTitle>Members</CardTitle>
             {access.canManageMembers && (
               <div className="flex gap-2">
+                {access.canSetUpGroupAdmins && org.type !== "channel_partner" && (
+                  <Button size="sm" variant="outline" onClick={() => setGroupAdminModalOpen(true)}>
+                    Add Group Admin
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" onClick={() => setBulkOpen(true)}>
                   Bulk upload
                 </Button>
@@ -188,6 +241,8 @@ export default function OrganizationDetailPage() {
                   <TableHead>Role</TableHead>
                   <TableHead>Group</TableHead>
                   <TableHead>Admin</TableHead>
+                  <TableHead>Group Admin</TableHead>
+                  <TableHead>Members&apos; reports</TableHead>
                   <TableHead>Joined</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -200,6 +255,10 @@ export default function OrganizationDetailPage() {
                     member={m}
                     groups={org.groups}
                     canEdit={access.canManageMembers}
+                    canEditAdmin={access.canManageMembers && !access.isGroupAdmin}
+                    canSetUpGroupAdmins={
+                      access.canSetUpGroupAdmins && org.type !== "channel_partner"
+                    }
                   />
                 ))}
               </TableBody>
@@ -231,38 +290,47 @@ export default function OrganizationDetailPage() {
         invalidateKeys={[[...ORG_KEY(orgId), "members"], [...ORG_KEY(orgId)]]}
       />
 
-      <CreateGroupModal
+      <GroupModal
+        key={editingGroup ? `edit-${editingGroup.id}` : "new"}
         orgId={orgId}
         open={groupModalOpen}
-        onClose={() => setGroupModalOpen(false)}
+        group={editingGroup}
+        groups={org.groups}
+        requireParent={access.isGroupAdmin}
+        onClose={() => {
+          setGroupModalOpen(false);
+          setEditingGroup(null);
+        }}
       />
       <AddMemberModal
         orgId={orgId}
         open={memberModalOpen}
         onClose={() => setMemberModalOpen(false)}
       />
+      <AddGroupAdminModal
+        orgId={orgId}
+        open={groupAdminModalOpen}
+        groups={org.groups}
+        onClose={() => setGroupAdminModalOpen(false)}
+      />
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Group row with delete
+// Group row with edit / delete
 // ---------------------------------------------------------------------------
 
 function GroupRow({
   orgId,
   group,
-  canDelete,
+  canChange,
+  onEdit,
 }: {
   orgId: number;
-  canDelete: boolean;
-  group: {
-    id: number;
-    name: string;
-    region_division?: string;
-    member_count: number;
-    created_at: string;
-  };
+  group: Group;
+  canChange: boolean;
+  onEdit: () => void;
 }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -278,6 +346,7 @@ function GroupRow({
   return (
     <TableRow>
       <TableCell className="font-medium text-slate-900">{group.name}</TableCell>
+      <TableCell className="text-slate-500">{group.parent_name || "—"}</TableCell>
       <TableCell className="text-slate-500">{group.region_division || "—"}</TableCell>
       <TableCell className="text-slate-500">{group.member_count}</TableCell>
       <TableCell className="text-slate-500">
@@ -286,16 +355,29 @@ function GroupRow({
       <TableCell>
         <div className="flex items-center justify-end gap-2">
           {error && <span className="text-xs text-danger">{error}</span>}
-          {canDelete && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-danger hover:bg-danger-50"
-              loading={deleteMutation.isPending}
-              onClick={() => deleteMutation.mutate()}
-            >
-              Delete
-            </Button>
+          {canChange && (
+            <>
+              <Button variant="ghost" size="sm" onClick={onEdit}>
+                Edit
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-danger hover:bg-danger-50"
+                loading={deleteMutation.isPending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Delete group "${group.name}"? Its sub-groups are deleted too; members stay in the organization without a group.`,
+                    )
+                  ) {
+                    deleteMutation.mutate();
+                  }
+                }}
+              >
+                Delete
+              </Button>
+            </>
           )}
         </div>
       </TableCell>
@@ -304,7 +386,7 @@ function GroupRow({
 }
 
 // ---------------------------------------------------------------------------
-// Member row with remove
+// Member row: group, admin, Group Admin + report permission, remove
 // ---------------------------------------------------------------------------
 
 function MemberRow({
@@ -312,18 +394,15 @@ function MemberRow({
   member,
   groups,
   canEdit,
+  canEditAdmin,
+  canSetUpGroupAdmins,
 }: {
   orgId: number;
+  member: OrganizationMember;
+  groups: Group[];
   canEdit: boolean;
-  member: {
-    id: number;
-    user: { id: number; email: string; full_name: string; role: string | null };
-    group: number | null;
-    employee_id?: string;
-    is_admin: boolean;
-    joined_at: string;
-  };
-  groups: { id: number; name: string }[];
+  canEditAdmin: boolean;
+  canSetUpGroupAdmins: boolean;
 }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -337,14 +416,22 @@ function MemberRow({
   });
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { group_id?: number | null; is_admin?: boolean }) =>
-      updateMember(orgId, member.id, payload),
+    mutationFn: (payload: UpdateMemberPayload) => updateMember(orgId, member.id, payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: [...ORG_KEY(orgId), "members"] });
       void queryClient.invalidateQueries({ queryKey: ORG_KEY(orgId) });
     },
     onError: (err) => setError(extractApiError(err)),
   });
+
+  const update = (payload: UpdateMemberPayload) => {
+    setError(null);
+    updateMutation.mutate(payload);
+  };
+  // Report 9 #37: only a corporate individual (or a Group Admin) can be
+  // tagged/untagged as Group Admin of his group.
+  const canToggleGroupAdmin =
+    canSetUpGroupAdmins && (member.user.role === "individual" || member.is_group_admin);
 
   return (
     <TableRow>
@@ -362,20 +449,19 @@ function MemberRow({
       </TableCell>
       <TableCell>
         <select
+          aria-label={`Group of ${member.user.email}`}
           className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-600"
           value={member.group ?? ""}
-          onChange={(e) => {
-            setError(null);
-            updateMutation.mutate({
-              group_id: e.target.value ? Number(e.target.value) : null,
-            });
-          }}
+          onChange={(e) => update({ group_id: e.target.value ? Number(e.target.value) : null })}
           disabled={!canEdit || updateMutation.isPending}
         >
           <option value="">No group</option>
+          {member.group !== null && !groups.some((g) => g.id === member.group) && (
+            <option value={member.group}>{member.group_name ?? `#${member.group}`}</option>
+          )}
           {groups.map((g) => (
             <option key={g.id} value={g.id}>
-              {g.name}
+              {g.parent_name ? `${g.parent_name} › ${g.name}` : g.name}
             </option>
           ))}
         </select>
@@ -383,14 +469,55 @@ function MemberRow({
       <TableCell>
         <input
           type="checkbox"
+          aria-label={`Admin: ${member.user.email}`}
           checked={member.is_admin}
-          onChange={(e) => {
-            setError(null);
-            updateMutation.mutate({ is_admin: e.target.checked });
-          }}
-          disabled={!canEdit || updateMutation.isPending}
+          onChange={(e) => update({ is_admin: e.target.checked })}
+          disabled={!canEditAdmin || updateMutation.isPending}
           className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
         />
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-2">
+          {member.is_group_admin && (
+            <Badge variant="primary">
+              Group Admin{member.group_name ? ` · ${member.group_name}` : ""}
+            </Badge>
+          )}
+          {canToggleGroupAdmin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={updateMutation.isPending || (!member.is_group_admin && !member.group)}
+              title={
+                !member.is_group_admin && !member.group
+                  ? "Choose the member's group first."
+                  : undefined
+              }
+              onClick={() => update({ is_group_admin: !member.is_group_admin })}
+            >
+              {member.is_group_admin ? "Remove Group Admin" : "Make Group Admin"}
+            </Button>
+          )}
+          {!member.is_group_admin && !canToggleGroupAdmin && (
+            <span className="text-slate-400">—</span>
+          )}
+        </div>
+      </TableCell>
+      <TableCell>
+        {member.is_group_admin ? (
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              checked={member.can_view_member_reports}
+              onChange={(e) => update({ can_view_member_reports: e.target.checked })}
+              disabled={!canSetUpGroupAdmins || updateMutation.isPending}
+              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+            />
+            Can view &amp; download
+          </label>
+        ) : (
+          <span className="text-slate-400">—</span>
+        )}
       </TableCell>
       <TableCell className="text-slate-500">
         {new Date(member.joined_at).toLocaleDateString()}
@@ -758,6 +885,16 @@ function SchedulesCard({
 // Branded portal / website (CJ_UC054 customization + CJ_UC055 create)
 // ---------------------------------------------------------------------------
 
+const LOGO_ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Report 9 #49: client-side check matching the server's (PNG/JPG/GIF/WebP, 2 MB). */
+function logoFileError(file: File): string | null {
+  if (!/\.(png|jpe?g|gif|webp)$/i.test(file.name)) return "Upload a PNG, JPG, GIF or WebP image.";
+  if (file.size > LOGO_MAX_BYTES) return "The logo must be 2 MB or smaller.";
+  return null;
+}
+
 function WebsiteCard({
   orgId,
   defaultName,
@@ -775,9 +912,12 @@ function WebsiteCard({
   const [layout, setLayout] = useState("classic");
   const [color, setColor] = useState("#4f46e5");
   const [logoUrl, setLogoUrl] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [adminEmail, setAdminEmail] = useState("");
   const [creds, setCreds] = useState<{ email: string; temporary_password: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const { data: website } = useQuery({
     queryKey: KEY,
@@ -791,7 +931,7 @@ function WebsiteCard({
         company_name: companyName,
         layout,
         primary_color: color,
-        logo_url: logoUrl,
+        ...(logoFile ? { logo: logoFile } : { logo_url: logoUrl }),
         ...(adminEmail ? { admin_email: adminEmail } : {}),
       }),
     onSuccess: (w) => {
@@ -803,11 +943,39 @@ function WebsiteCard({
   });
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { layout?: string; primary_color?: string; logo_url?: string }) =>
-      updateWebsite(orgId, payload),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: KEY }),
-    onError: (err) => setError(extractApiError(err)),
+    mutationFn: (payload: Parameters<typeof updateWebsite>[1]) => updateWebsite(orgId, payload),
+    onSuccess: (w) => {
+      queryClient.setQueryData(KEY, w);
+      setError(null);
+      setSaved(true);
+    },
+    onError: (err) => {
+      setSaved(false);
+      setError(extractApiError(err));
+    },
   });
+
+  // Report 9 #48: the portal's full address, to share and demo.
+  const link = website ? `${window.location.origin}/site/${website.slug}` : "";
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Could not copy the link — select it and copy it manually.");
+    }
+  };
+
+  const uploadLogo = (file: File | undefined) => {
+    if (!file) return;
+    const problem = logoFileError(file);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    updateMutation.mutate({ logo: file });
+  };
 
   return (
     <Card>
@@ -829,12 +997,55 @@ function WebsiteCard({
           </Alert>
         )}
         {website ? (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">
-              Live at slug <code className="rounded bg-slate-100 px-1">{website.slug}</code>
-              {website.admin_email ? ` · admin ${website.admin_email}` : ""}
-            </p>
+          <div className="space-y-4">
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+              <Label htmlFor="w-link">Portal link</Label>
+              <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+                <Input
+                  id="w-link"
+                  readOnly
+                  value={link}
+                  onFocus={(e) => e.target.select()}
+                  className="bg-white"
+                />
+                <div className="flex shrink-0 gap-2">
+                  <Button variant="outline" onClick={() => void copyLink()}>
+                    {copied ? "Copied" : "Copy"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open(link, "_blank", "noopener,noreferrer")}
+                  >
+                    Open
+                  </Button>
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Employees open this link and sign in to take their assessments and training.
+                {website.admin_email ? ` Portal admin: ${website.admin_email}.` : ""}
+                {website.is_active ? "" : " The portal is currently switched off."}
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <Label htmlFor="w-company">Company name</Label>
+                <Input
+                  key={`name-${website.company_name}`}
+                  id="w-company"
+                  defaultValue={website.company_name}
+                  disabled={!canCustomize}
+                  onBlur={(e) => {
+                    const value = e.target.value.trim();
+                    if (!value) {
+                      e.target.value = website.company_name;
+                      setError("Company name is required.");
+                    } else if (value !== website.company_name) {
+                      updateMutation.mutate({ company_name: value });
+                    }
+                  }}
+                />
+              </div>
               <div>
                 <Label htmlFor="w-layout">Layout</Label>
                 <select
@@ -852,25 +1063,85 @@ function WebsiteCard({
               <div>
                 <Label htmlFor="w-color">Primary color</Label>
                 <input
+                  key={`color-${website.primary_color}`}
                   id="w-color"
                   type="color"
                   className="h-10 w-full rounded-md border border-slate-200 bg-white px-1"
-                  value={website.primary_color}
+                  defaultValue={website.primary_color}
                   disabled={!canCustomize}
-                  onChange={(e) => updateMutation.mutate({ primary_color: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="w-logo">Logo URL</Label>
-                <Input
-                  id="w-logo"
-                  defaultValue={website.logo_url}
-                  disabled={!canCustomize}
-                  onBlur={(e) => updateMutation.mutate({ logo_url: e.target.value })}
-                  placeholder="https://…/logo.png"
+                  onBlur={(e) => {
+                    if (e.target.value !== website.primary_color) {
+                      updateMutation.mutate({ primary_color: e.target.value });
+                    }
+                  }}
                 />
               </div>
             </div>
+
+            <div>
+              <Label htmlFor="w-logo-file">Logo</Label>
+              <div className="mt-1 flex flex-wrap items-center gap-3">
+                <span className="flex h-14 min-w-[3.5rem] items-center justify-center rounded-md border border-slate-200 bg-white p-1">
+                  <PortalLogo
+                    src={website.logo_src}
+                    name={website.company_name}
+                    color={website.primary_color}
+                    size={44}
+                  />
+                </span>
+                {canCustomize && (
+                  <>
+                    <input
+                      id="w-logo-file"
+                      type="file"
+                      accept={LOGO_ACCEPT}
+                      className="max-w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-slate-200"
+                      onChange={(e) => {
+                        uploadLogo(e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                    {website.logo_src && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => updateMutation.mutate({ logo_url: "" })}
+                      >
+                        Remove logo
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">PNG, JPG, GIF or WebP, up to 2 MB.</p>
+              {canCustomize && (
+                <div className="mt-2 max-w-xl">
+                  <Label htmlFor="w-logo">…or use a logo link</Label>
+                  <Input
+                    key={`logo-${website.logo_url}`}
+                    id="w-logo"
+                    defaultValue={website.logo_url}
+                    onBlur={(e) => {
+                      const value = e.target.value.trim();
+                      if (value && value !== website.logo_url) {
+                        updateMutation.mutate({ logo_url: value });
+                      }
+                    }}
+                    placeholder="https://…/logo.png"
+                  />
+                </div>
+              )}
+            </div>
+
+            {canCustomize && (
+              <p className="text-xs text-slate-500" aria-live="polite">
+                {updateMutation.isPending
+                  ? "Saving…"
+                  : saved
+                    ? "Changes saved — open the portal link to see them."
+                    : "Changes save as you make them."}
+              </p>
+            )}
           </div>
         ) : !canCreate ? (
           <p className="text-sm text-slate-500">
@@ -880,7 +1151,7 @@ function WebsiteCard({
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-slate-500">
-              Create a branded portal for this corporate — its own URL slug, branding, and a
+              Create a branded portal for this corporate — its own web address, branding, and a
               generated admin login.
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -927,11 +1198,28 @@ function WebsiteCard({
                   onChange={(e) => setColor(e.target.value)}
                 />
               </div>
-              <div className="sm:col-span-2">
-                <Label htmlFor="w-new-logo">Logo URL</Label>
+              <div>
+                <Label htmlFor="w-new-logo-file">Logo (optional)</Label>
+                <input
+                  id="w-new-logo-file"
+                  type="file"
+                  accept={LOGO_ACCEPT}
+                  className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-slate-200"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    const problem = file ? logoFileError(file) : null;
+                    setError(problem);
+                    setLogoFile(problem ? null : file);
+                    if (problem) e.target.value = "";
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="w-new-logo">…or a logo link</Label>
                 <Input
                   id="w-new-logo"
                   value={logoUrl}
+                  disabled={Boolean(logoFile)}
                   onChange={(e) => setLogoUrl(e.target.value)}
                   placeholder="https://…/logo.png"
                 />
@@ -952,26 +1240,49 @@ function WebsiteCard({
 }
 
 // ---------------------------------------------------------------------------
-// Create Group Modal
+// Group Modal — add or edit a group / sub-group (Report 9 #23)
 // ---------------------------------------------------------------------------
 
-function CreateGroupModal({
+function GroupModal({
   orgId,
   open,
+  group,
+  groups,
+  requireParent,
   onClose,
 }: {
   orgId: number;
   open: boolean;
+  /** The group being edited; null to add a new one. */
+  group: Group | null;
+  groups: Group[];
+  /** A Group Admin only builds sub-groups inside his own group. */
+  requireParent: boolean;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [name, setName] = useState("");
-  const [regionDivision, setRegionDivision] = useState("");
-  const [description, setDescription] = useState("");
+  const [name, setName] = useState(group?.name ?? "");
+  const [regionDivision, setRegionDivision] = useState(group?.region_division ?? "");
+  const [description, setDescription] = useState(group?.description ?? "");
+  const [parent, setParent] = useState(
+    group?.parent ? String(group.parent) : requireParent && groups[0] ? String(groups[0].id) : "",
+  );
   const [error, setError] = useState<string | null>(null);
 
+  // A group cannot be placed under itself or one of its own sub-groups.
+  const excluded = group ? subtreeIds(groups, group.id) : new Set<number>();
+  const parentOptions = groups.filter((g) => !excluded.has(g.id));
+
   const mutation = useMutation({
-    mutationFn: () => createGroup(orgId, { name, region_division: regionDivision, description }),
+    mutationFn: () => {
+      const payload = {
+        name,
+        region_division: regionDivision,
+        description,
+        parent: parent ? Number(parent) : null,
+      };
+      return group ? updateGroup(orgId, group.id, payload) : createGroup(orgId, payload);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ORG_KEY(orgId) });
       setName("");
@@ -983,12 +1294,19 @@ function CreateGroupModal({
     onError: (err) => setError(extractApiError(err)),
   });
 
+  const noun = requireParent ? "sub-group" : "group";
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Add group"
-      description="Create a new group within this organization."
+      title={group ? `Edit ${noun}` : `Add ${noun}`}
+      description={
+        requireParent
+          ? "Sub-groups are created within your own group."
+          : group
+            ? "Change the group's name, region/division or parent group."
+            : "Create a new group within this organization. Choose a parent to make it a sub-group."
+      }
       size="sm"
     >
       {error && (
@@ -1004,6 +1322,10 @@ function CreateGroupModal({
             setError("Group name is required.");
             return;
           }
+          if (requireParent && !parent) {
+            setError("Choose the group this sub-group belongs to.");
+            return;
+          }
           mutation.mutate();
         }}
         className="space-y-4"
@@ -1013,6 +1335,24 @@ function CreateGroupModal({
             Group name
           </Label>
           <Input id="grp-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        </div>
+        <div>
+          <Label htmlFor="grp-parent" required={requireParent}>
+            Parent group
+          </Label>
+          <select
+            id="grp-parent"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            value={parent}
+            onChange={(e) => setParent(e.target.value)}
+          >
+            {!requireParent && <option value="">None (top-level group)</option>}
+            {parentOptions.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.parent_name ? `${g.parent_name} › ${g.name}` : g.name}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <Label htmlFor="grp-region">Region / Division</Label>
@@ -1036,10 +1376,184 @@ function CreateGroupModal({
             Cancel
           </Button>
           <Button type="submit" loading={mutation.isPending}>
-            Create group
+            {group ? "Save changes" : `Create ${noun}`}
           </Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Add Group Admin Modal (Report 9 #21; SRS p.18 "Group Admins by corporate
+// Admin": Name, Email, Employee ID, Division/Region, Permissions)
+// ---------------------------------------------------------------------------
+
+function AddGroupAdminModal({
+  orgId,
+  open,
+  groups,
+  onClose,
+}: {
+  orgId: number;
+  open: boolean;
+  groups: Group[];
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
+  const [groupId, setGroupId] = useState("");
+  const [canViewReports, setCanViewReports] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const selectedGroup = groups.find((g) => String(g.id) === groupId);
+
+  const reset = () => {
+    setFullName("");
+    setEmail("");
+    setEmployeeId("");
+    setGroupId("");
+    setCanViewReports(false);
+    setError(null);
+  };
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      createGroupAdmin(orgId, {
+        full_name: fullName.trim(),
+        email: email.trim(),
+        employee_id: employeeId.trim(),
+        group_id: Number(groupId),
+        can_view_member_reports: canViewReports,
+      }),
+    onSuccess: (created) => {
+      void queryClient.invalidateQueries({ queryKey: [...ORG_KEY(orgId), "members"] });
+      void queryClient.invalidateQueries({ queryKey: ORG_KEY(orgId) });
+      if (created.invite_email_sent === false) {
+        toast.warning(
+          "Group Admin created, but the verification email could not be sent. Please try again later or contact CJ Admin.",
+        );
+      } else {
+        toast.success("Group Admin created. A verification email has been sent.");
+      }
+      reset();
+      onClose();
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Add Group Admin"
+      description="Create a Group Admin for one of this organization's groups. They receive an email to verify their account and set a password."
+      size="sm"
+    >
+      {error && (
+        <Alert variant="error" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      {groups.length === 0 ? (
+        <p className="text-sm text-slate-500">Add a group first — a Group Admin manages a group.</p>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError(null);
+            if (!fullName.trim() || !email.trim()) {
+              setError("Name and official email are required.");
+              return;
+            }
+            if (!groupId) {
+              setError("Choose the group this Group Admin manages.");
+              return;
+            }
+            mutation.mutate();
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <Label htmlFor="ga-name" required>
+              Name
+            </Label>
+            <Input
+              id="ga-name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div>
+            <Label htmlFor="ga-email" required>
+              Official email
+            </Label>
+            <Input
+              id="ga-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@company.com"
+            />
+          </div>
+          <div>
+            <Label htmlFor="ga-empid">Employee ID</Label>
+            <Input
+              id="ga-empid"
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
+              placeholder="e.g. EMP001"
+            />
+          </div>
+          <div>
+            <Label htmlFor="ga-group" required>
+              Group
+            </Label>
+            <select
+              id="ga-group"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              value={groupId}
+              onChange={(e) => setGroupId(e.target.value)}
+            >
+              <option value="">Select a group…</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.parent_name ? `${g.parent_name} › ${g.name}` : g.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Region / Division: {selectedGroup?.region_division || "—"}
+            </p>
+          </div>
+          <fieldset>
+            <legend className="mb-1 text-sm font-medium text-slate-700">Permissions</legend>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={canViewReports}
+                onChange={(e) => setCanViewReports(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+              />
+              Can view &amp; download members&apos; reports
+            </label>
+            <p className="mt-1 text-xs text-slate-500">
+              You can change this later from the member list.
+            </p>
+          </fieldset>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={mutation.isPending}>
+              Create Group Admin
+            </Button>
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }
