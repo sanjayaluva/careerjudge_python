@@ -180,10 +180,16 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         # Works inside his own group only (scoped in the viewsets): members
         # and assessment schedules for his group (Report 9 #26).
         ("accounts", "view"),
+        # Report 9 #24: adds (and bulk-uploads) Corporate Individuals into
+        # his own group only.
+        ("accounts", "add"),
         ("assessment", "view"),
         ("assessment", "assign"),
         ("organizations", "view"),
         ("organizations", "change"),
+        # Report 9 #27: views/downloads his group members' reports when the
+        # Corp Admin permits it (the permission is checked in the views).
+        ("reporting", "view"),
     ],
     "counsellor": [
         ("counseling", "view"),
@@ -212,6 +218,8 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
     ],
     "individual": [
         ("assessment", "view"),  # can take assessments
+        # Report 9 #76: browses PUBLISHED profiling solutions (scoped in the view).
+        ("career_profiling", "view"),
         ("reporting", "view"),  # can view own reports
         ("training", "view"),  # can browse + register for courses
         ("training", "add"),  # can register (register action = 'add')
