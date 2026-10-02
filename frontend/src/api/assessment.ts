@@ -152,8 +152,14 @@ export interface AssessmentModificationRequest {
   created_at: string;
 }
 
-export function listModificationRequests(): Promise<AssessmentModificationRequest[]> {
-  return apiGetPaged<AssessmentModificationRequest>(`${MR_BASE}/`).then((r) => r.results);
+// Report 9 #107: the endpoint returns a plain list ({message, data: [...]}),
+// not a page. Reading `.results` off it left the CJ Admin panel always
+// empty, so accept either shape.
+export async function listModificationRequests(): Promise<AssessmentModificationRequest[]> {
+  const body = await apiGet<
+    AssessmentModificationRequest[] | { results?: AssessmentModificationRequest[] }
+  >(`${MR_BASE}/`);
+  return Array.isArray(body) ? body : (body?.results ?? []);
 }
 
 /** Request an admin-approved title change on a published assessment. */

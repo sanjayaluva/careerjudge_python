@@ -170,6 +170,13 @@ class TaskLifecycleTests(TaskBaseTestCase):
         self.assertEqual(resp.status_code, 201, resp.content)
         self.assertEqual(helpdesk_user.notifications.count(), 1)
         self.assertEqual(self.admin.notifications.count(), 1)
+        # Report 9 #20/#50 link check: admin and the assignee can open the
+        # task page; help desk cannot (it would show "Not Found"), so its
+        # copy carries no link.
+        task_id = resp.json()["data"]["id"]
+        self.assertEqual(self.admin.notifications.get().link, f"/tasks/{task_id}")
+        self.assertEqual(self.sme.notifications.get().link, f"/tasks/{task_id}")
+        self.assertEqual(helpdesk_user.notifications.get().link, "")
 
     def test_non_admin_cannot_create_task(self):
         self.client.force_authenticate(self.sme)
@@ -750,6 +757,29 @@ class ConcernTests(TaskBaseTestCase):
                 recipient=self.helpdesk, title__icontains="Concern raised"
             ).exists()
         )
+
+    def test_concern_notifications_link_to_contact_admin_page(self):
+        """Report 9 #20/#50: the bell links pointed at /tasks/concerns/<id>,
+        which does not exist ("Not Found"). Both the admin/help-desk alert
+        and the requester's resolution alert open the Contact Admin page."""
+        self.client.force_authenticate(self.sme)
+        resp = self.client.post(
+            "/api/tasks/concerns/",
+            {"subject": "Lost", "message": "Where did it go?"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        concern_id = resp.json()["data"]["id"]
+        for recipient in (self.admin, self.helpdesk):
+            n = Notification.objects.get(recipient=recipient, title__icontains="Concern raised")
+            self.assertEqual(n.link, "/concerns")
+
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(f"/api/tasks/concerns/{concern_id}/resolve/", {}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        n = Notification.objects.get(recipient=self.sme, title__icontains="resolved")
+        self.assertEqual(n.link, "/concerns")
+        self.assertFalse(Notification.objects.filter(link__startswith="/tasks/concerns").exists())
 
     def test_concern_can_reference_a_task(self):
         task = Task.objects.create(

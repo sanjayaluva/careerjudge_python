@@ -21,8 +21,12 @@ def notify_on_question_status_change(sender, instance, created, **kwargs):
 
     from .models import notify_role, notify_user
 
-    # Question submitted for review → notify reviewers
+    # Question submitted for review → notify reviewers. Report 9 #71: a
+    # question routed to one reviewer (submit_for_review notifies them) is
+    # not announced to every other reviewer.
     if instance.status == "pending_content_review":
+        if instance.assigned_reviewer_id:
+            return
         notify_role(
             "reviewer",
             "Question pending review",

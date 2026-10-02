@@ -374,7 +374,7 @@ function AssignTaskModal({
       assignee_role: assigneeRole,
       priority,
       due_date: dueDate ? new Date(dueDate).toISOString() : null,
-      ...(parentTaskId ? { parent_task_id: parentTaskId } : {}),
+      ...(parentTaskId && assigneeRole !== "sme" ? { parent_task_id: parentTaskId } : {}),
       ...(assigneeRole === "sme"
         ? {
             specs: specRows.map((row) => ({
@@ -488,37 +488,41 @@ function AssignTaskModal({
           </div>
         </div>
 
-        <div>
-          <Label htmlFor="parent_task_id">
-            {needsParentPicklist ? "Parent task" : "Parent Task ID (optional)"}
-          </Label>
-          {needsParentPicklist ? (
-            <select
-              id="parent_task_id"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={parentTaskId}
-              onChange={(e) => setParentTaskId(e.target.value)}
-            >
-              <option value="">
-                {parentTaskOptions.length
-                  ? "Select an unassigned upstream task…"
-                  : "No unassigned upstream tasks available"}
-              </option>
-              {parentTaskOptions.map((t) => (
-                <option key={t.id} value={t.task_id ?? ""}>
-                  {t.task_id} — {t.title} ({ROLE_LABEL[t.assignee_role]})
+        {/* Report 9 #109: an SME task has no parent (Doc 9 §3.1.2), so the
+            free-text parent box is not shown for it. */}
+        {assigneeRole !== "sme" && (
+          <div>
+            <Label htmlFor="parent_task_id">
+              {needsParentPicklist ? "Parent task" : "Parent Task ID (optional)"}
+            </Label>
+            {needsParentPicklist ? (
+              <select
+                id="parent_task_id"
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                value={parentTaskId}
+                onChange={(e) => setParentTaskId(e.target.value)}
+              >
+                <option value="">
+                  {parentTaskOptions.length
+                    ? "Select an unassigned upstream task…"
+                    : "No unassigned upstream tasks available"}
                 </option>
-              ))}
-            </select>
-          ) : (
-            <Input
-              id="parent_task_id"
-              value={parentTaskId}
-              onChange={(e) => setParentTaskId(e.target.value)}
-              placeholder="e.g. TSK-2026-AB12CD — links this task to a parent"
-            />
-          )}
-        </div>
+                {parentTaskOptions.map((t) => (
+                  <option key={t.id} value={t.task_id ?? ""}>
+                    {t.task_id} — {t.title} ({ROLE_LABEL[t.assignee_role]})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <Input
+                id="parent_task_id"
+                value={parentTaskId}
+                onChange={(e) => setParentTaskId(e.target.value)}
+                placeholder="e.g. TSK-2026-AB12CD — links this task to a parent"
+              />
+            )}
+          </div>
+        )}
 
         {assigneeRole === "sme" && (
           <Card>
