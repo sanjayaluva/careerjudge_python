@@ -1,5 +1,8 @@
 """Serializers for the Counseling module."""
 
+import re
+
+from django.utils.text import slugify
 from rest_framework import serializers
 
 from .models import (
@@ -13,12 +16,88 @@ from .models import (
     TimeSlot,
 )
 
+# Lowercase letters/digits/underscores, not digits only (set-categories reads
+# an all-digit value as a category id).
+_CODE_RE = re.compile(r"^(?!\d+$)[a-z0-9_]+$")
+
 
 class CounselingCategorySerializer(serializers.ModelSerializer):
+    """Report 9 #105: CJ Admin adds / renames / (de)activates categories.
+
+    ``name`` is the stable code: optional on create (made from the label) and
+    fixed afterwards, so existing tags, filters and links keep working.
+    ``counsellor_count`` / ``session_count`` tell the admin screen whether a
+    category is in use (in use → deactivate rather than delete)."""
+
+    name = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    label = serializers.CharField(max_length=100, required=False)
+    counsellor_count = serializers.IntegerField(read_only=True, default=0)
+    session_count = serializers.IntegerField(read_only=True, default=0)
+
     class Meta:
         model = CounselingCategory
-        fields = ["id", "name", "description", "is_active"]
+        fields = [
+            "id",
+            "name",
+            "label",
+            "description",
+            "is_active",
+            "counsellor_count",
+            "session_count",
+        ]
         read_only_fields = ["id"]
+
+    def validate_label(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Enter the category name.")
+        clash = CounselingCategory.objects.filter(label__iexact=value)
+        if self.instance is not None:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise serializers.ValidationError("A category with this name already exists.")
+        return value
+
+    def validate_name(self, value):
+        value = (value or "").strip().lower()
+        if self.instance is not None:
+            if value and value != self.instance.name:
+                raise serializers.ValidationError("The category code cannot be changed.")
+            return self.instance.name
+        if value and not _CODE_RE.match(value):
+            raise serializers.ValidationError(
+                "Use lowercase letters, digits and underscores (not digits only) for the code."
+            )
+        if value and CounselingCategory.objects.filter(name=value).exists():
+            raise serializers.ValidationError("A category with this code already exists.")
+        return value
+
+    def validate(self, attrs):
+        if self.instance is None:
+            label = attrs.get("label") or ""
+            if not label:
+                # Older clients sent only the code; use it as the label.
+                label = (attrs.get("name") or "").strip()
+                if not label:
+                    raise serializers.ValidationError({"label": "Enter the category name."})
+                attrs["label"] = self.validate_label(label)
+            if not attrs.get("name"):
+                attrs["name"] = _unique_code(attrs["label"])
+        return attrs
+
+
+def _unique_code(label: str) -> str:
+    base = (slugify(label).replace("-", "_") or "category")[:40]
+    if base.isdigit():
+        base = f"category_{base}"
+    code, n = base, 2
+    while CounselingCategory.objects.filter(name=code).exists():
+        code, n = f"{base}_{n}", n + 1
+    return code
+
+
+def category_label(category) -> str | None:
+    return (category.label or category.name) if category is not None else None
 
 
 class CounsellorProfileSerializer(serializers.ModelSerializer):
@@ -116,7 +195,9 @@ class CounsellorProfileSerializer(serializers.ModelSerializer):
         ]
 
     def get_category_names(self, obj):
-        return [c.get_name_display() for c in obj.categories.all()]
+        # Report 9 #105: the admin-managed label (inactive ones included —
+        # they stay on the counsellors already tagged with them).
+        return [category_label(c) for c in obj.categories.all()]
 
     def get_upcoming_slot_count(self, obj):
         from django.utils import timezone
@@ -147,13 +228,24 @@ class CounselingSessionSerializer(serializers.ModelSerializer):
     )
     counselee_email = serializers.CharField(source="counselee.email", read_only=True)
     counsellor_name = serializers.CharField(source="counsellor.full_name", read_only=True)
-    category_name = serializers.CharField(source="category.name", read_only=True, default=None)
+    category_name = serializers.SerializerMethodField()
     timeslot_detail = TimeSlotSerializer(source="timeslot", read_only=True)
 
     # Report 8 #49: who cancelled (and why) so the counselee can rebook when
     # the counsellor cancelled.
     cancelled_by = serializers.SerializerMethodField()
     cancellation_reason = serializers.SerializerMethodField()
+
+    def get_category_name(self, obj):
+        return category_label(obj.category)
+
+    def validate_category(self, value):
+        # Report 9 #105: an inactive category is hidden from new bookings; a
+        # session that already has it keeps it.
+        is_new = self.instance is None or self.instance.category_id != getattr(value, "id", None)
+        if value is not None and not value.is_active and is_new:
+            raise serializers.ValidationError("This counselling category is not available.")
+        return value
 
     def get_cancelled_by(self, obj):
         c = getattr(obj, "cancellation", None) if obj.status == "cancelled" else None

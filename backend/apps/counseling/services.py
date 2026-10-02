@@ -60,6 +60,9 @@ def book_session(
     from apps.notifications.models import notify_role, notify_user
     from apps.payments.services import create_stripe_checkout_session, get_or_create_payment
 
+    # Report 9 #105: a deactivated category is hidden from new bookings.
+    if category is not None and not category.is_active:
+        raise BookingError("This counselling category is not available.")
     with transaction.atomic():
         slot = _claim_slot(timeslot.id, counsellor)
         # Fee captured at booking time; licensed counselling costs the member

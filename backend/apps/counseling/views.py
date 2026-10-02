@@ -2,6 +2,7 @@
 
 Endpoints:
   GET/POST  /api/counseling/categories/                  — list/create categories
+  PATCH/DELETE /api/counseling/categories/<id>/           — rename/(de)activate/delete (CJ Admin)
   GET/POST  /api/counseling/counsellors/                  — list counsellors
   GET/PATCH /api/counseling/counsellors/<id>/             — retrieve/update profile
   GET/POST  /api/counseling/timeslots/                    — list/create timeslots
@@ -20,6 +21,7 @@ Endpoints:
 
 from datetime import timedelta
 
+from django.db.models import Count
 from django.utils import timezone
 from rest_framework import filters, serializers, status
 from rest_framework.decorators import action
@@ -27,6 +29,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, ViewSet
 
+from apps.organizations.scoping import is_cj_admin
 from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
 
@@ -99,11 +102,34 @@ def _person(session) -> str:
 
 
 class CounselingCategoryViewSet(ActionSerializerMixin, ModelViewSet):
+    """Counselling ("domain") categories (Report 9 #105).
+
+    Everyone with counselling access lists the ACTIVE categories (category
+    filter, booking); CJ Admin sees them all, with how many counsellors and
+    sessions use each, and adds / renames / (de)activates / deletes them.
+    A category still in use cannot be deleted — deactivate it instead."""
+
     queryset = CounselingCategory.objects.all()
     permission_classes = [IsAuthenticated, HasCounselingPermission]
     serializer_class = CounselingCategorySerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ["name", "description"]
+    search_fields = ["name", "label", "description"]
+    # A short, admin-managed list: return it whole.
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = CounselingCategory.objects.annotate(
+            counsellor_count=Count("counsellors", distinct=True),
+            session_count=Count("counselingsession", distinct=True),
+        )
+        if not is_cj_admin(self.request.user) or self.request.query_params.get("active") == "true":
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if self.action not in ("list", "retrieve") and not is_cj_admin(request.user):
+            self.permission_denied(request, message="Only CJ Admin can manage categories.")
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -124,6 +150,36 @@ class CounselingCategoryViewSet(ActionSerializerMixin, ModelViewSet):
             {"message": "Category created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
         )
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {"message": "Category updated.", "data": self.get_serializer(self.get_object()).data},
+            status=status.HTTP_200_OK,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        category = self.get_object()
+        if category.counsellor_count or category.session_count:
+            return Response(
+                {
+                    "error": {
+                        "code": "in_use",
+                        "message": (
+                            f"'{category}' is used by {category.counsellor_count} counsellor(s) "
+                            f"and {category.session_count} session(s), so it cannot be "
+                            "deleted. Deactivate it instead."
+                        ),
+                    }
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        category.delete()
+        return Response({"message": "Category deleted.", "data": {}}, status=status.HTTP_200_OK)
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +202,12 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
         qs = super().get_queryset()
         params = self.request.query_params
         if category := params.get("category"):
-            qs = qs.filter(categories__name=category)
+            # Report 9 #105: the filter sends the category id; the code
+            # ("career") still works for older links.
+            if str(category).isdigit():
+                qs = qs.filter(categories__id=int(category)).distinct()
+            else:
+                qs = qs.filter(categories__name=category).distinct()
         if available := params.get("available"):
             qs = qs.filter(is_available=available == "true")
         return qs
@@ -246,7 +307,10 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
         possible only when creating the counsellor's account, so existing
         counsellors showed "—" and could not be filtered by expertise.
 
-        Body: {"categories": ["career", "learning", ...]} (Doc 8 category keys)
+        Body: {"categories": [1, 2, ...]} — category ids, or their codes
+        ("career", ...) as before. Report 9 #105: the categories are the
+        admin-managed list; an inactive one can stay on a counsellor who
+        already has it but cannot be newly given.
         """
         role = request.user.role.name if request.user.role_id else None
         if role != "cj_admin" and not request.user.is_superuser:
@@ -254,21 +318,34 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
                 {"error": {"code": "forbidden", "message": "Only CJ Admin can tag counsellors."}},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        names = request.data.get("categories") or []
-        valid = {key for key, _label in CounselingCategory.CATEGORY_CHOICES}
-        unknown = [n for n in names if n not in valid]
-        if unknown:
+        profile = self.get_object()
+        keys = request.data.get("categories") or []
+        if not isinstance(keys, list):
+            keys = [keys]
+        by_id = {c.id: c for c in CounselingCategory.objects.all()}
+        by_code = {c.name: c for c in by_id.values()}
+        cats, unknown = [], []
+        for key in keys:
+            if isinstance(key, int) or (isinstance(key, str) and key.isdigit()):
+                cat = by_id.get(int(key))
+            else:
+                cat = by_code.get(key)
+            if cat is None:
+                unknown.append(key)
+            else:
+                cats.append(cat)
+        current = set(profile.categories.values_list("id", flat=True))
+        newly_inactive = [str(c) for c in cats if not c.is_active and c.id not in current]
+        if unknown or newly_inactive:
+            message = (
+                f"Unknown categories: {', '.join(map(str, unknown))}"
+                if unknown
+                else f"Inactive categories cannot be given: {', '.join(newly_inactive)}"
+            )
             return Response(
-                {
-                    "error": {
-                        "code": "validation_error",
-                        "message": f"Unknown categories: {', '.join(map(str, unknown))}",
-                    }
-                },
+                {"error": {"code": "validation_error", "message": message}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        profile = self.get_object()
-        cats = [CounselingCategory.objects.get_or_create(name=n)[0] for n in names]
         profile.categories.set(cats)
         return Response(
             {"message": "Categories updated.", "data": CounsellorProfileSerializer(profile).data},

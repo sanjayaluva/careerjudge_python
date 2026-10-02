@@ -414,3 +414,35 @@ def test_channel_partner_books_counselling_for_his_user(world, counsellor):
     assert _book(c, world["cp_org"], world["emp"], profile, slots[1]).status_code == 403
     # The same slot cannot be booked twice.
     assert _book(c, world["cp_org"], world["cp_user"], profile, slots[0]).status_code == 400
+
+
+def test_cj_admin_licenses_counselling_to_a_channel_partner(world, counsellor):
+    """Report 9 #104 (check): CJ Admin licenses counselling to a CHANNEL
+    PARTNER organization through the same Licensed content card (assignments
+    API) as for corporates; the partner then books for his users, and loses
+    that when the licence is withdrawn."""
+    profile, slots = counsellor
+    org = world["cp_org"]
+    url = f"/api/organizations/{org.id}/assignments/"
+    partner = _auth(world["partner"])
+    # Not licensed yet: the partner cannot see counsellors or book.
+    assert partner.get(f"/api/organizations/{org.id}/counsellors/").status_code == 403
+    assert _book(partner, org, world["cp_user"], profile, slots[0]).status_code == 403
+    # Only CJ Admin licenses it.
+    assert partner.post(url, {"item_type": "counseling"}, format="json").status_code == 403
+
+    cj = _auth(world["cj"])
+    licensed = cj.post(url, {"item_type": "counseling"}, format="json")
+    assert licensed.status_code == 201, licensed.data
+    # The partner reads it on his organization's Licensed content card.
+    assert [a["item_title"] for a in _data(partner.get(url))] == ["Counselling services"]
+    counsellors = _data(partner.get(f"/api/organizations/{org.id}/counsellors/"))
+    assert [c["id"] for c in counsellors] == [profile.id]
+    booked = _book(partner, org, world["cp_user"], profile, slots[0])
+    assert booked.status_code == 201, booked.data
+    session = CounselingSession.objects.get()
+    assert session.organization_id == org.id and float(session.fee) == 0
+
+    removed = cj.delete(f"{url}{licensed.data['data']['id']}/")
+    assert removed.status_code == 200
+    assert _book(partner, org, world["cp_user"], profile, slots[1]).status_code == 403
