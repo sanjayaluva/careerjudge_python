@@ -1917,3 +1917,23 @@ def test_first_progress_records_start_for_self_paced(student_client, individual_
     reg.refresh_from_db()
     assert reg.started_at is not None
     assert reg.completion_status == "in_progress"
+
+
+def test_trainer_cannot_edit_another_trainers_draft_items(trainer_client, roles):
+    """Report 9 #84: a trainer edits only his own courses' structure — not a
+    colleague's draft lessons (item-level routes are guarded too)."""
+    from apps.training.models import CourseLesson
+
+    other = UserFactory(role=roles["trainer"], email="other.trainer@test.com")
+    course = TrainingCourse.objects.create(title="Theirs", created_by=other, status="draft")
+    lesson = CourseLesson.objects.create(course=course, title="L1", order=1)
+    resp = trainer_client.patch(
+        f"/api/training/lessons/{lesson.id}/", {"title": "hacked"}, format="json"
+    )
+    assert resp.status_code in (403, 404)
+    lesson.refresh_from_db()
+    assert lesson.title == "L1"
+    resp = trainer_client.post(
+        f"/api/training/courses/{course.id}/lessons/", {"title": "New", "order": 2}, format="json"
+    )
+    assert resp.status_code in (403, 404)

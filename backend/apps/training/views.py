@@ -307,6 +307,17 @@ def _require_course_edit_allowed(request, course):
             },
             status=status.HTTP_403_FORBIDDEN,
         )
+    # Report 9 #84: a trainer edits only his own courses (and their items).
+    if course.created_by_id != user.id:
+        return Response(
+            {
+                "error": {
+                    "code": "forbidden",
+                    "message": "You can only edit your own courses.",
+                }
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
     if course.status == "draft":
         return None
     cur = (
