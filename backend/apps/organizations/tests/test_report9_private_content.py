@@ -668,3 +668,25 @@ def test_course_parts_follow_the_course_space(world):
     assert req.id in _ids(_get(world, "excl_a", "/api/training/live-session-requests/"))
     for who in ("cj_admin", "trainer"):
         assert req.id not in _ids(_get(world, who, "/api/training/live-session-requests/"))
+
+
+def test_priced_private_assessment_is_free_for_its_members(world):
+    """Report 9 #51: an exclusive organization's own assessments are not CJ
+    products — its members start them without paying CJ."""
+    from decimal import Decimal
+
+    asm = world["a"]["asm"]
+    asm.price = Decimal("250.00")
+    asm.save(update_fields=["price"])
+    resp = _auth(world["u"]["member_a"]).post(f"/api/assessments/{asm.id}/start_session/")
+    assert resp.status_code in (200, 201), resp.data
+
+
+def test_live_session_request_cannot_target_an_unseen_private_course(world):
+    """A user cannot file a live-session request against another
+    organization's private course."""
+    course_b = world["b"]["course"]
+    resp = _auth(world["u"]["individual"]).post(
+        "/api/training/live-session-requests/", {"course": course_b.id}, format="json"
+    )
+    assert resp.status_code == 404

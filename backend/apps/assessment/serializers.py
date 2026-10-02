@@ -205,6 +205,19 @@ def unlocked_assessment_ids(user) -> set[int]:
     )
     if is_licensed_member(user):
         ids |= assigned_item_ids(user, "assessment")
+    # Report 9 #51: an exclusive organization's own private assessments are
+    # free for its members — they are not CJ products sold through CJ.
+    from apps.organizations.scoping import user_org_ids
+
+    from .models import Assessment
+
+    org_ids = user_org_ids(user)
+    if org_ids:
+        ids |= set(
+            Assessment.objects.filter(owner_organization_id__in=org_ids).values_list(
+                "id", flat=True
+            )
+        )
     return ids
 
 

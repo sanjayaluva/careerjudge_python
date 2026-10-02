@@ -2459,6 +2459,17 @@ class LiveSessionRequestViewSet(ModelViewSet):
                 {"error": {"code": "validation_error", "message": "course is required."}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # The course must be one this user can see (same rules as the course
+        # list) — keeps organizations' private courses out of reach.
+        course_view = TrainingCourseViewSet()
+        course_view.request = request
+        course_view.kwargs = {}
+        course_view.format_kwarg = None
+        if not course_view.get_queryset().filter(id=course_id).exists():
+            return Response(
+                {"error": {"code": "not_found", "message": "Course not found."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         live_session_id = request.data.get("live_session")
         if (
             live_session_id
