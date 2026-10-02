@@ -2,6 +2,7 @@
  * Question Bank API functions.
  */
 import { apiClient, apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { withPrivateOwner } from "@/lib/privateSpace";
 
 const BASE = "/question-bank";
 
@@ -10,6 +11,8 @@ const BASE = "/question-bank";
 // ---------------------------------------------------------------------------
 
 export interface Category {
+  /** Report 9 #39-#47: owning exclusive organization (private content); null = CareerJudge's. */
+  owner_organization?: number | null;
   id: number;
   name: string;
   parent: number | null;
@@ -21,6 +24,8 @@ export interface Category {
 }
 
 export interface QuestionListItem {
+  /** Report 9 #39-#47: owning exclusive organization (private content); null = CareerJudge's. */
+  owner_organization?: number | null;
   id: number;
   question_type: string;
   question_type_label: string;
@@ -175,7 +180,7 @@ export function createCategory(payload: {
   parent?: number | null;
   description?: string;
 }): Promise<Category> {
-  return apiPost<Category>(`${BASE}/categories/`, payload);
+  return apiPost<Category>(`${BASE}/categories/`, withPrivateOwner(payload));
 }
 
 export function updateCategory(
@@ -239,7 +244,7 @@ export function retrieveQuestion(id: number): Promise<QuestionDetail> {
 }
 
 export function createQuestion(payload: Record<string, unknown>): Promise<QuestionDetail> {
-  return apiPost<QuestionDetail>(`${BASE}/questions/`, payload);
+  return apiPost<QuestionDetail>(`${BASE}/questions/`, withPrivateOwner(payload));
 }
 
 export interface BulkImportResult {
@@ -253,7 +258,10 @@ export interface BulkImportResult {
 export function bulkImportQuestions(
   questions: Record<string, unknown>[],
 ): Promise<BulkImportResult> {
-  return apiPost<BulkImportResult>(`${BASE}/questions/bulk-import/`, { questions });
+  return apiPost<BulkImportResult>(
+    `${BASE}/questions/bulk-import/`,
+    withPrivateOwner({ questions }),
+  );
 }
 
 export function updateQuestion(

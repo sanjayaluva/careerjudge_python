@@ -15,14 +15,22 @@ Endpoints:
   GET       /api/reporting/generated/<id>/pdf/          — download PDF
 """
 
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.organizations.private_content import (
+    member_exclusive_org_ids,
+    require_same_space,
+    resolve_owner_org_id,
+    space_filter,
+)
 from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
 
@@ -114,8 +122,39 @@ class ReportViewSet(ActionSerializerMixin, ModelViewSet):
         "list": ReportListSerializer,
     }
 
+    def get_queryset(self):
+        # Report 9 #43/#44 / Report 4 §3 (Issue 13): CJ's report designs and
+        # each exclusive organization's private ones never mix.
+        return space_filter(super().get_queryset(), self.request.user)
+
+    @staticmethod
+    def _check_links(serializer, owner_id):
+        """A report is designed on assessments of its own space; profiling
+        solutions are CJ-only (Report 4 §3 excludes profiling)."""
+        data = serializer.validated_data
+        for field in ("assessment", "pmi_d_first_assessment", "pmi_d_second_assessment"):
+            assessment = data.get(field)
+            if assessment is not None:
+                require_same_space(owner_id, assessment.owner_organization_id, "assessment")
+        if owner_id and data.get("profiling_solution") is not None:
+            raise ValidationError(
+                {
+                    "profiling_solution": "Profiling reports are not available in your organization's space."
+                }
+            )
+
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        # Report 9 #43: a Corporate Exclusive Admin's report designs belong to
+        # his organization's private space.
+        owner_id = resolve_owner_org_id(
+            self.request.user, self.request.data.get("owner_organization")
+        )
+        self._check_links(serializer, owner_id)
+        serializer.save(created_by=self.request.user, owner_organization_id=owner_id)
+
+    def perform_update(self, serializer):
+        self._check_links(serializer, serializer.instance.owner_organization_id)
+        serializer.save()
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -671,6 +710,13 @@ class GeneratedReportViewSet(ModelViewSet):
         # members' reports and every other user ONLY his own; CJ Admin and
         # the Psychometrician see all. ?mine=1 limits anyone to his own.
         qs = scope_to_visible_candidates(super().get_queryset(), self.request.user)
+        if not self.request.user.is_superuser:
+            # Report 4 §3: reports from an exclusive organization's private
+            # report designs stay inside that organization.
+            qs = qs.filter(
+                Q(report__owner_organization__isnull=True)
+                | Q(report__owner_organization_id__in=member_exclusive_org_ids(self.request.user))
+            )
         if self.request.query_params.get("mine"):
             qs = qs.filter(candidate=self.request.user)
         return qs

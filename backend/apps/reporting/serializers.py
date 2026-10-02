@@ -163,6 +163,7 @@ class ReportSerializer(serializers.ModelSerializer):
             "footer_text",
             "logo",
             "created_by",
+            "owner_organization",
             "created_by_name",
             "sections",
             "cutoffs",
@@ -175,6 +176,7 @@ class ReportSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "created_by",
+            "owner_organization",
             "created_at",
             "updated_at",
             "sections",
@@ -207,11 +209,12 @@ class ReportListSerializer(serializers.ModelSerializer):
             "data_input_level",
             "stat_conversion",
             "created_by",
+            "owner_organization",
             "created_by_name",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_by", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_by", "owner_organization", "created_at", "updated_at"]
 
 
 class GeneratedReportSerializer(serializers.ModelSerializer):

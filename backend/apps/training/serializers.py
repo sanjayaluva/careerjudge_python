@@ -313,12 +313,20 @@ class TrainingCourseListSerializer(serializers.ModelSerializer):
             "status",
             "content_sequencing_enabled",
             "created_by",
+            "owner_organization",
             "created_by_name",
             "registration_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_by", "created_at", "updated_at", "registration_count"]
+        read_only_fields = [
+            "id",
+            "created_by",
+            "owner_organization",
+            "created_at",
+            "updated_at",
+            "registration_count",
+        ]
 
 
 class TrainingCourseSerializer(serializers.ModelSerializer):
@@ -350,6 +358,7 @@ class TrainingCourseSerializer(serializers.ModelSerializer):
             "status",
             "content_sequencing_enabled",
             "created_by",
+            "owner_organization",
             "created_by_name",
             "registration_count",
             "lessons",
@@ -361,6 +370,7 @@ class TrainingCourseSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "created_by",
+            "owner_organization",
             "created_at",
             "updated_at",
             "lessons",

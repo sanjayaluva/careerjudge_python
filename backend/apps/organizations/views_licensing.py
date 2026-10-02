@@ -63,18 +63,32 @@ def _member_ids(user, org_id) -> set[int]:
     return set(qs.values_list("user_id", flat=True))
 
 
-def _licensed_course_ids(org_id) -> set[int]:
-    return set(
+def _licensed_course_ids(org_id, user) -> set[int]:
+    """Courses the organization's members may be given: those CJ Admin
+    licensed to it, plus (Report 9 #47/#52) its own published private
+    courses — the latter only for its own people (Report 4 §3)."""
+    from apps.training.models import TrainingCourse
+
+    from .views import _sees_org_private_content
+
+    ids = set(
         OrganizationAssignment.objects.filter(
             organization_id=org_id, item_type="training_course"
         ).values_list("item_id", flat=True)
     )
+    if _sees_org_private_content(user, org_id):
+        ids |= set(
+            TrainingCourse.objects.filter(
+                owner_organization_id=org_id, status="published"
+            ).values_list("id", flat=True)
+        )
+    return ids
 
 
-def _licensed_course(org_id, course_id):
+def _licensed_course(org_id, course_id, user):
     from apps.training.models import TrainingCourse
 
-    if int(course_id) not in _licensed_course_ids(org_id):
+    if int(course_id) not in _licensed_course_ids(org_id, user):
         raise NotFound("This course is not licensed to the organization.")
     return get_object_or_404(TrainingCourse, id=course_id, status="published")
 
@@ -111,7 +125,7 @@ class OrgCourseViewSet(ManagedOrgMixin, ViewSet):
 
         member_ids = _member_ids(request.user, organization_id)
         courses = TrainingCourse.objects.filter(
-            id__in=_licensed_course_ids(organization_id), status="published"
+            id__in=_licensed_course_ids(organization_id, request.user), status="published"
         ).order_by("title")
         regs = (
             CourseRegistration.objects.filter(course__in=courses, student_id__in=member_ids)
@@ -153,7 +167,7 @@ class OrgCourseViewSet(ManagedOrgMixin, ViewSet):
         from apps.training.services import assign_course_for_organization
 
         org = _organization(self)
-        course = _licensed_course(org.id, pk)
+        course = _licensed_course(org.id, pk, request.user)
         user_ids = _user_ids_from(request.data, "user_ids", "user_id")
         allowed = _member_ids(request.user, org.id)
         if not set(user_ids) <= allowed:
@@ -180,7 +194,7 @@ class OrgCourseViewSet(ManagedOrgMixin, ViewSet):
         from apps.training.services import can_unassign, unassign_course_for_organization
 
         org = _organization(self)
-        course = _licensed_course(org.id, pk)
+        course = _licensed_course(org.id, pk, request.user)
         (user_id,) = _user_ids_from(request.data, "user_id")[:1]
         if user_id not in _member_ids(request.user, org.id):
             raise NotFound("Member not found.")
@@ -218,6 +232,10 @@ class CourseScheduleViewSet(ManagedOrgMixin, ModelViewSet):
     def get_queryset(self):
         org_id = self.kwargs.get("organization_id")
         qs = CourseSchedule.objects.filter(organization_id=org_id).select_related("course", "group")
+        from .views import _sees_org_private_content
+
+        if not _sees_org_private_content(self.request.user, org_id):
+            qs = qs.filter(course__owner_organization__isnull=True)
         group_ids = managed_group_ids(self.request.user)
         if group_ids is not None:
             qs = qs.filter(group_id__in=group_ids)
@@ -228,7 +246,8 @@ class CourseScheduleViewSet(ManagedOrgMixin, ModelViewSet):
         Admin only for his group."""
         org_id = int(self.kwargs.get("organization_id"))
         if course is not None and (
-            course.status != "published" or course.id not in _licensed_course_ids(org_id)
+            course.status != "published"
+            or course.id not in _licensed_course_ids(org_id, self.request.user)
         ):
             raise PermissionDenied(
                 "This course has not been licensed to your organization by CJ Admin."

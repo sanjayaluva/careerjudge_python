@@ -2,6 +2,7 @@
  * Assessment API functions.
  */
 import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { withPrivateOwner } from "@/lib/privateSpace";
 
 const BASE = "/assessments";
 
@@ -12,6 +13,8 @@ const BASE = "/assessments";
 export type AssessmentType = "normal" | "psychometric";
 
 export interface Assessment {
+  /** Report 9 #39-#47: owning exclusive organization (private content); null = CareerJudge's. */
+  owner_organization?: number | null;
   id: number;
   title: string;
   objective: string;
@@ -112,7 +115,7 @@ export function retrieveAssessment(id: number): Promise<AssessmentDetail> {
 }
 
 export function createAssessment(payload: Record<string, unknown>): Promise<AssessmentDetail> {
-  return apiPost<AssessmentDetail>(`${BASE}/`, payload);
+  return apiPost<AssessmentDetail>(`${BASE}/`, withPrivateOwner(payload));
 }
 
 export function updateAssessment(

@@ -203,6 +203,13 @@ class ProfilingSolutionViewSet(ModelViewSet):
             # POST: add an assessment
             serializer = SelectedAssessmentSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
+            # Report 4 §3: profiling solutions are CJ's — they never take an
+            # exclusive organization's private assessment.
+            from apps.organizations.private_content import require_same_space
+
+            require_same_space(
+                None, serializer.validated_data["assessment"].owner_organization_id, "assessment"
+            )
             # Validate max 3 assessments
             if solution.selected_assessments.count() >= 3:
                 return Response(

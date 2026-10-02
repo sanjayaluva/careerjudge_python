@@ -210,7 +210,11 @@ class OrganizationAssignmentSerializer(serializers.ModelSerializer):
         if item_id is None:
             raise serializers.ValidationError({"item_id": "This field is required."})
         model = _licensable_model(item_type)
-        if not model.objects.filter(id=item_id, status="published").exists():
+        # Report 4 §3: an exclusive organization's private content is never
+        # licensed (it is not CJ content).
+        if not model.objects.filter(
+            id=item_id, status="published", owner_organization__isnull=True
+        ).exists():
             raise serializers.ValidationError(
                 {"item_id": "Pick a published item — drafts and archived items can't be licensed."}
             )

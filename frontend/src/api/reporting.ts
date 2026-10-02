@@ -2,10 +2,13 @@
  * Reporting API client.
  */
 import { apiClient, apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { withPrivateOwner } from "@/lib/privateSpace";
 
 const BASE = "/reporting";
 
 export interface Report {
+  /** Report 9 #39-#47: owning exclusive organization (private content); null = CareerJudge's. */
+  owner_organization?: number | null;
   id: number;
   title: string;
   objective: string;
@@ -73,7 +76,7 @@ export function retrieveReport(id: number): Promise<Report> {
 }
 
 export function createReport(payload: Record<string, unknown>): Promise<Report> {
-  return apiPost<Report>(`${BASE}/reports/`, payload);
+  return apiPost<Report>(`${BASE}/reports/`, withPrivateOwner(payload));
 }
 
 export function updateReport(id: number, payload: Record<string, unknown>): Promise<Report> {

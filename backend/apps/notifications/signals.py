@@ -18,6 +18,8 @@ def notify_on_question_status_change(sender, instance, created, **kwargs):
     """Send notifications when a question's status changes."""
     if created:
         return  # Don't notify on initial creation
+    if instance.owner_organization_id:
+        return  # Report 9 #40: private questions have no CJ review workflow
 
     from .models import notify_role, notify_user
 

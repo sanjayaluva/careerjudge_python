@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
+from apps.organizations.private_content import space_filter
 from core.permissions import HasModulePermission
 
 from .models import (
@@ -41,12 +42,27 @@ class HasQBPermission(HasModulePermission):
     }
 
 
+def _question_in_space(request, question_id):
+    """Report 9 #40 / Report 4 §3: a question's parts are reachable only from
+    the content space the question belongs to (CJ or one exclusive
+    organization's private question bank)."""
+    return get_object_or_404(space_filter(Question.objects.all(), request.user), id=question_id)
+
+
+class QuestionSpaceMixin:
+    """Nested question routes: 404 unless the question is in the user's space."""
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        _question_in_space(request, self.kwargs.get("question_id"))
+
+
 # ---------------------------------------------------------------------------
 # ResponseOption CRUD (nested under Question)
 # ---------------------------------------------------------------------------
 
 
-class ResponseOptionViewSet(ModelViewSet):
+class ResponseOptionViewSet(QuestionSpaceMixin, ModelViewSet):
     """CRUD for response options on a question.
 
     GET    /api/question-bank/questions/<qid>/options/
@@ -137,7 +153,7 @@ class BulkOptionsView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        question = get_object_or_404(Question, id=question_id)
+        question = _question_in_space(request, question_id)
         submitted = request.data.get("options", [])
 
         # Wrap the entire sync operation in a single transaction.
@@ -209,7 +225,7 @@ class BulkOptionsView(APIView):
 # ---------------------------------------------------------------------------
 
 
-class MediaFileViewSet(ModelViewSet):
+class MediaFileViewSet(QuestionSpaceMixin, ModelViewSet):
     """CRUD for media files on a question.
 
     GET    /api/question-bank/questions/<qid>/media/
@@ -253,7 +269,7 @@ class MediaFileViewSet(ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class FlashItemViewSet(ModelViewSet):
+class FlashItemViewSet(QuestionSpaceMixin, ModelViewSet):
     """CRUD for flash items on a question.
 
     GET    /api/question-bank/questions/<qid>/flash-items/
@@ -297,7 +313,7 @@ class FlashItemViewSet(ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class HotspotAreaViewSet(ModelViewSet):
+class HotspotAreaViewSet(QuestionSpaceMixin, ModelViewSet):
     """CRUD for hotspot areas on a question.
 
     GET    /api/question-bank/questions/<qid>/hotspots/

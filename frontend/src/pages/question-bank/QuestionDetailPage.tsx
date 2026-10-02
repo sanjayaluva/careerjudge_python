@@ -252,8 +252,13 @@ export default function QuestionDetailPage() {
     user?.role ?? "",
   );
   // Edit rules: cj_admin can edit ANY question; others can edit only draft/sent_back.
+  // Report 9 #40: the Corporate Exclusive Admin edits his organization's
+  // private questions in any status (they never go through CJ review).
+  const ownsPrivate = user?.role === "corp_exclusive" && Boolean(q.owner_organization);
   const canEdit =
-    isAdmin || (canEditAnyQuestion && (q.status === "draft" || q.status === "sent_back"));
+    isAdmin ||
+    ownsPrivate ||
+    (canEditAnyQuestion && (q.status === "draft" || q.status === "sent_back"));
   const canSubmit =
     (q.status === "draft" || q.status === "sent_back") &&
     ["sme", "cj_admin", "trainer"].includes(user?.role ?? "");

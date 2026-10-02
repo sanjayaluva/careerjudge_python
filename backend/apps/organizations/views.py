@@ -102,6 +102,39 @@ def _require_cj_admin(request, message):
         raise PermissionDenied(message)
 
 
+# Report 9 #34/#53: a Corporate Exclusive Admin / Channel Partner creates his
+# own organizations, always of his own kind.
+OWN_ORG_TYPE_BY_ROLE = {"corp_exclusive": "corp_exclusive", "channel_partner": "channel_partner"}
+# Organization fields that stay CJ Admin's: kind, status and modules (#96).
+CJ_ADMIN_ORG_FIELDS = ("type", "status", "enabled_modules")
+
+
+def _is_own_org_admin(user, organization_id) -> bool:
+    """The organization's own Corporate Exclusive Admin / Channel Partner
+    (tagged to it as admin) — he may edit its details (Report 9 #34/#53)."""
+    return (
+        role_name(user) in OWN_ORG_TYPE_BY_ROLE
+        and OrganizationMember.objects.filter(
+            user=user, organization_id=organization_id, is_admin=True
+        ).exists()
+    )
+
+
+def _manager_org_data(request):
+    data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
+    for field in CJ_ADMIN_ORG_FIELDS:
+        data.pop(field, None)
+    return data
+
+
+def _sees_org_private_content(user, organization_id) -> bool:
+    """Report 4 §3: an exclusive organization's private content is seen only
+    by its own people (and the superuser) — not CJ Admin."""
+    from .private_content import member_exclusive_org_ids
+
+    return user.is_superuser or int(organization_id) in member_exclusive_org_ids(user)
+
+
 class OrganizationViewSet(ActionSerializerMixin, ModelViewSet):
     """CRUD for organizations.
 
@@ -148,9 +181,21 @@ class OrganizationViewSet(ActionSerializerMixin, ModelViewSet):
         )
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        org = serializer.save()
+        org_type = None if is_cj_admin(request.user) else OWN_ORG_TYPE_BY_ROLE.get(
+            role_name(request.user)
+        )
+        if org_type is None:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            org = serializer.save()
+        else:
+            # Report 9 #34/#53: his own organization — its type is forced to
+            # his kind and he is tagged to it as its admin, so it is listed
+            # for him (and CJ Admin) only.
+            serializer = self.get_serializer(data=_manager_org_data(request))
+            serializer.is_valid(raise_exception=True)
+            org = serializer.save(type=org_type)
+            OrganizationMember.objects.create(organization=org, user=request.user, is_admin=True)
         return Response(
             {
                 "message": "Organization created.",
@@ -160,11 +205,18 @@ class OrganizationViewSet(ActionSerializerMixin, ModelViewSet):
         )
 
     def update(self, request, *args, **kwargs):
-        # Doc 9 §2.2: the organization record itself is CJ Admin's.
-        _require_cj_admin(request, "Only CJ Admin can edit organization details.")
+        # Doc 9 §2.2: the organization record itself is CJ Admin's. Report 9
+        # #34/#53: its own Corporate Exclusive Admin / Channel Partner edits
+        # its details (not its type, status or modules).
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if is_cj_admin(request.user):
+            data = request.data
+        elif _is_own_org_admin(request.user, instance.id):
+            data = _manager_org_data(request)
+        else:
+            raise PermissionDenied("Only CJ Admin can edit organization details.")
+        serializer = self.get_serializer(instance, data=data, partial=partial)
         serializer.is_valid(raise_exception=True)
         org = serializer.save()
         return Response(
@@ -644,6 +696,8 @@ class AssessmentScheduleViewSet(ManagedOrgMixin, ModelViewSet):
         qs = AssessmentSchedule.objects.filter(organization_id=org_id).select_related(
             "assessment", "group"
         )
+        if not _sees_org_private_content(self.request.user, org_id):
+            qs = qs.filter(assessment__owner_organization__isnull=True)
         group_ids = managed_group_ids(self.request.user)
         if group_ids is not None:
             qs = qs.filter(group_id__in=group_ids)
@@ -653,7 +707,16 @@ class AssessmentScheduleViewSet(ManagedOrgMixin, ModelViewSet):
         """Report 9 #8/#26: a manager schedules only assessments CJ Admin
         assigned to his organization, and a Group Admin only for his group."""
         org_id = int(self.kwargs.get("organization_id"))
-        if managed_org_ids(self.request.user) is not None and assessment is not None:
+        if assessment is not None and assessment.owner_organization_id is not None:
+            # Report 9 #46/#51: an exclusive organization schedules its own
+            # private (published) assessments; nobody else reaches them.
+            if not _sees_org_private_content(self.request.user, org_id) or (
+                assessment.owner_organization_id != org_id
+            ):
+                raise PermissionDenied("This assessment does not belong to your organization.")
+            if assessment.status != "published":
+                raise PermissionDenied("Publish the assessment before scheduling it.")
+        elif managed_org_ids(self.request.user) is not None and assessment is not None:
             assigned = OrganizationAssignment.objects.filter(
                 organization_id=org_id, item_type="assessment", item_id=assessment.id
             ).exists()

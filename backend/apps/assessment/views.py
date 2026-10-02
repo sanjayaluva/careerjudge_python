@@ -36,10 +36,19 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.organizations.private_content import (
+    author_org_ids,
+    can_author_private,
+    is_private_author,
+    member_exclusive_org_ids,
+    require_same_space,
+    resolve_owner_org_id,
+)
 from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
 
@@ -309,6 +318,75 @@ def _is_assessment_admin(user) -> bool:
     return bool(user.is_superuser or (user.role and user.role.name == "cj_admin"))
 
 
+def scope_assessments(qs, user):
+    """The assessments ``user`` may see.
+
+    CJ assessments: authors (CJ Admin, Psychometrician) see all, a trainer his
+    own, everyone else published ones; organization managers and members
+    only those CJ Admin licensed to their organization (CJ_UC030, Report 9
+    #8/#25/#57/#102).
+
+    Private assessments (Report 9 #41/#42/#51, Report 4 §3): only inside the
+    owning Corporate Exclusive organization — its admin sees them in every
+    status, its other members once published. Nobody else, CJ Admin
+    included (the superuser keeps access for support).
+    """
+    from apps.organizations.scoping import assigned_item_ids, is_licence_scoped
+
+    if user.is_superuser:
+        return qs
+    role_name = user.role.name if user.role else None
+    cj = qs.filter(owner_organization__isnull=True)
+    if role_name == "trainer":
+        # Report 3 §4.2 / Report 8 #30: trainers author their own course
+        # assessments and see ONLY those — not the rest of the CJ pool.
+        cj = cj.filter(created_by=user)
+    elif role_name not in ("cj_admin", "psychometrician"):
+        # Report 9 #10: corporate admins are not authors — published only.
+        cj = cj.filter(status="published")
+    if is_licence_scoped(user):
+        cj = cj.filter(id__in=assigned_item_ids(user, "assessment"))
+    private = qs.filter(owner_organization_id__in=author_org_ids(user)) | qs.filter(
+        owner_organization_id__in=member_exclusive_org_ids(user), status="published"
+    )
+    return cj | private
+
+
+def _can_author(user, assessment) -> bool:
+    """A private assessment is changed only by its organization's Corporate
+    Exclusive Admin; he in turn cannot change CJ assessments licensed to him
+    (Report 9 #41/#42). CJ roles keep their existing rules for CJ content."""
+    if assessment.owner_organization_id:
+        return can_author_private(user, assessment.owner_organization_id)
+    return not is_private_author(user)
+
+
+def _require_author(user, assessment) -> None:
+    if not _can_author(user, assessment):
+        raise PermissionDenied(
+            "This assessment is licensed to your organization by CareerJudge and "
+            "cannot be changed."
+        )
+
+
+class AssessmentSpaceMixin:
+    """Nested assessment routes (sections, questions, psychometric groups):
+    reachable only for an assessment the user may see, and changed only by
+    whoever may author it (Report 9 #42 / Report 4 §3). CJ roles working on
+    CJ assessments are unaffected."""
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        assessment = get_object_or_404(Assessment, id=self.kwargs.get("assessment_id"))
+        user = request.user
+        if assessment.owner_organization_id is None and not is_private_author(user):
+            return
+        if not scope_assessments(Assessment.objects.filter(id=assessment.id), user).exists():
+            raise NotFound("Assessment not found.")
+        if request.method not in SAFE_METHODS:
+            _require_author(user, assessment)
+
+
 class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
     """CRUD for assessments.
 
@@ -345,43 +423,18 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         if qstatus:
             qs = qs.filter(status=qstatus)
 
-        # Role-based visibility: only assessment authors (cj_admin,
-        # psychometrician) can see non-published assessments. All other roles
-        # only see published ones. This applies to list + retrieve —
-        # candidates shouldn't be able to open a draft assessment by ID either.
-        # Report 9 #10: corporate admins are not authors, so they no longer
-        # see drafts.
-        if self.request.user.is_authenticated:
-            role_name = self.request.user.role.name if self.request.user.role else None
-            is_manager = (
-                role_name in ("cj_admin", "psychometrician") or self.request.user.is_superuser
-            )
-            if not is_manager:
-                if role_name == "trainer":
-                    # Report 3 §4.2 / Report 8 #30: trainers author their own
-                    # course assessments and see ONLY those — not the rest of
-                    # the CJ assessment pool (published or not).
-                    qs = qs.filter(created_by=self.request.user)
-                else:
-                    qs = qs.filter(status="published")
-
-        # CJ_UC030: a corporate individual (an employee of a corporate/
-        # corp-exclusive org) sees ONLY the assessments assigned to their
-        # organization — not the whole published catalogue. Non-corporate users
-        # (plain individuals with no membership, staff, admins) are unaffected.
-        from apps.organizations.scoping import assigned_item_ids, is_licence_scoped
-
-        # Report 9 #8/#25/#57: likewise an organization manager (Corp Admin,
-        # Corp Exclusive, Group Admin, Channel Partner) works only with the
-        # assessments CJ Admin assigned to his organization. Report 9 #102:
-        # the users a channel partner adds are limited the same way.
-        if is_licence_scoped(self.request.user):
-            qs = qs.filter(id__in=assigned_item_ids(self.request.user, "assessment"))
-
-        return qs
+        # Role-based visibility (drafts for authors only — list + retrieve),
+        # organization licensing, and each exclusive organization's private
+        # assessments: see scope_assessments.
+        return scope_assessments(qs, self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        # Report 9 #41: a Corporate Exclusive Admin's assessments belong to his
+        # organization's private space.
+        owner_id = resolve_owner_org_id(
+            self.request.user, self.request.data.get("owner_organization")
+        )
+        serializer.save(created_by=self.request.user, owner_organization_id=owner_id)
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -407,6 +460,7 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
+        _require_author(request.user, instance)
         # Per SRS 03_assessment_configuration.json §2.2: "After going live,
         # user cannot directly edit Assessment Title. An edit request is sent
         # to Admin for approval."
@@ -416,7 +470,11 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         # assessment regardless of status — this is the "Admin approval"
         # path described in the SRS. Archiving is always allowed directly —
         # it is the designated escape hatch, not a title/content edit.
-        is_admin = _is_assessment_admin(request.user)
+        # Report 9 #41: CJ's approval does not apply to an organization's own
+        # private assessments — its Corporate Exclusive Admin is their admin.
+        is_admin = _is_assessment_admin(request.user) or can_author_private(
+            request.user, instance.owner_organization_id
+        )
         title_change = "title" in request.data and request.data.get("title") != instance.title
         if (
             instance.status == "published"
@@ -474,10 +532,13 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
+        _require_author(request.user, instance)
         # Same admin-override rule as update(): cj_admin can delete a
         # published assessment directly. Everyone else's delete on a
         # published assessment goes through admin approval instead (§2.3).
-        is_admin = _is_assessment_admin(request.user)
+        is_admin = _is_assessment_admin(request.user) or can_author_private(
+            request.user, instance.owner_organization_id
+        )
         if instance.status == "published" and not is_admin:
             reason = (request.data.get("reason") or "").strip()
             if not reason:
@@ -521,6 +582,7 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         author knows exactly what to fix.
         """
         assessment = self.get_object()
+        _require_author(request.user, assessment)
         if assessment.status != "draft":
             return Response(
                 {
@@ -585,15 +647,31 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         assessment.save(update_fields=["status", "updated_at"])
 
         # Notify all individual users (candidates) that a new assessment is available
-        from apps.notifications.models import notify_role
+        from apps.notifications.models import notify_role, notify_user
 
-        notify_role(
-            "individual",
-            "New assessment available",
-            f"'{assessment.title}' is now available for you to take.",
-            "assessment",
-            f"/assessments/{assessment.id}",
-        )
+        if assessment.owner_organization_id:
+            # Report 9 #51: a private assessment is announced only to its
+            # organization's members.
+            from apps.organizations.models import OrganizationMember
+
+            for member in OrganizationMember.objects.filter(
+                organization_id=assessment.owner_organization_id, is_admin=False
+            ).select_related("user"):
+                notify_user(
+                    member.user,
+                    "New assessment available",
+                    f"'{assessment.title}' is now available for you to take.",
+                    "assessment",
+                    f"/assessments/{assessment.id}",
+                )
+        else:
+            notify_role(
+                "individual",
+                "New assessment available",
+                f"'{assessment.title}' is now available for you to take.",
+                "assessment",
+                f"/assessments/{assessment.id}",
+            )
 
         return Response(
             {
@@ -613,6 +691,7 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         attempt. Completed sessions are historical and don't block.
         """
         assessment = self.get_object()
+        _require_author(request.user, assessment)
         if assessment.status != "published":
             return Response(
                 {
@@ -704,6 +783,7 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
     def sessions(self, request, pk=None):
         """List all sessions for this assessment."""
         assessment = self.get_object()
+        _require_author(request.user, assessment)
         sessions = assessment.sessions.select_related("candidate").all()
         serializer = AssessmentSessionSerializer(sessions, many=True)
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
@@ -870,7 +950,7 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class AssessmentSectionViewSet(ModelViewSet):
+class AssessmentSectionViewSet(AssessmentSpaceMixin, ModelViewSet):
     """CRUD for assessment sections (variable structure).
 
     GET    /api/assessments/<aid>/sections/
@@ -982,7 +1062,7 @@ class AssessmentSectionViewSet(ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class AssessmentQuestionViewSet(ModelViewSet):
+class AssessmentQuestionViewSet(AssessmentSpaceMixin, ModelViewSet):
     """CRUD for assigning questions to sections.
 
     GET    /api/assessments/<aid>/sections/<sid>/questions/
@@ -1069,6 +1149,11 @@ class AssessmentQuestionViewSet(ModelViewSet):
             )
 
         question = get_object_or_404(Question, id=question_id)
+        # Report 9 #42 / Report 4 §3: a private assessment takes only its own
+        # organization's questions, a CJ assessment only CJ questions.
+        require_same_space(
+            assessment.owner_organization_id, question.owner_organization_id, "question"
+        )
 
         # ASM-8 / Report 5 §3.4: a question can be assigned to an assessment
         # ONLY ONCE — across all of its sections, not just the current one.
@@ -1175,8 +1260,12 @@ class SessionViewSet(ModelViewSet):
         # and for admin oversight of candidate activity).
         qs = AssessmentSession.objects.select_related("assessment", "candidate")
         role_name = self.request.user.role.name if self.request.user.role else None
-        if role_name == "cj_admin" or self.request.user.is_superuser:
+        if self.request.user.is_superuser:
             return qs
+        if role_name == "cj_admin":
+            # Report 4 §3: not the sessions of exclusive organizations'
+            # private assessments.
+            return qs.filter(assessment__owner_organization__isnull=True)
         return qs.filter(candidate=self.request.user)
 
     def list(self, request, *args, **kwargs):
@@ -2012,7 +2101,7 @@ class AssessmentModificationRequestViewSet(ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class PsychometricGroupViewSet(ModelViewSet):
+class PsychometricGroupViewSet(AssessmentSpaceMixin, ModelViewSet):
     """Rank groups / forced-choice pairs of Question-Bank statements.
 
     GET/POST  /api/assessments/<assessment_id>/psychometric-groups/
@@ -2055,6 +2144,12 @@ class PsychometricGroupViewSet(ModelViewSet):
                 )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        for item in serializer.validated_data.get("items", []):
+            require_same_space(
+                assessment.owner_organization_id,
+                item["statement"].owner_organization_id,
+                "statement",
+            )
         serializer.save(assessment=assessment)
         return Response(
             {"message": "Psychometric group created.", "data": serializer.data},

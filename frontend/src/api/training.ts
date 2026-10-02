@@ -2,6 +2,7 @@
  * Training API client.
  */
 import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { withPrivateOwner } from "@/lib/privateSpace";
 
 const BASE = "/training";
 
@@ -126,6 +127,8 @@ export interface LiveSession {
 }
 
 export interface TrainingCourse {
+  /** Report 9 #39-#47: owning exclusive organization (private content); null = CareerJudge's. */
+  owner_organization?: number | null;
   id: number;
   title: string;
   objective: string;
@@ -361,7 +364,7 @@ export function retrieveCourse(id: number): Promise<TrainingCourse> {
 }
 
 export function createCourse(payload: Record<string, unknown>): Promise<TrainingCourse> {
-  return apiPost<TrainingCourse>(`${BASE}/courses/`, payload);
+  return apiPost<TrainingCourse>(`${BASE}/courses/`, withPrivateOwner(payload));
 }
 
 export function updateCourse(

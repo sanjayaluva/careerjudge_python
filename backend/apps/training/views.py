@@ -21,10 +21,18 @@ Endpoints:
 
 from rest_framework import filters, status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.organizations.private_content import (
+    author_org_ids,
+    can_author_private,
+    is_private_author,
+    member_exclusive_org_ids,
+    require_same_space,
+    resolve_owner_org_id,
+)
 from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
 
@@ -218,7 +226,57 @@ def _can_run_course(user, course) -> bool:
     Creator-only checks refused a trainer working on a course CJ Admin had
     created, although the screen offered them the actions (Report 8 #32)."""
     role = user.role.name if user.role_id else None
-    return role in ("cj_admin", "trainer") or course.created_by_id == user.id
+    return (
+        role in ("cj_admin", "trainer")
+        or course.created_by_id == user.id
+        or can_author_private(user, course.owner_organization_id)
+    )
+
+
+def _private_space_denied(request, course):
+    """Report 9 #47 / Report 4 §3: an organization's private course is built
+    only by its Corporate Exclusive Admin (no CJ approval applies — he is the
+    admin of his environment), who in turn cannot change CJ courses licensed
+    to his organization. Returns a Response when refused, else None; CJ roles
+    on CJ courses are not affected (None)."""
+    user = request.user
+    if not (course.owner_organization_id or is_private_author(user)):
+        return None
+    if can_author_private(user, course.owner_organization_id):
+        return None
+    return Response(
+        {
+            "error": {
+                "code": "forbidden",
+                "message": "This course is licensed to your organization by CareerJudge "
+                "and cannot be changed.",
+            }
+        },
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
+
+def scope_courses_by_space(qs, user, course_path="course"):
+    """Course parts (lessons, topics, contents, live sessions, …) of an
+    exclusive organization's private course are reachable only by that
+    organization's people (Report 4 §3)."""
+    from django.db.models import Q
+
+    if user.is_superuser:
+        return qs
+    return qs.filter(
+        Q(**{f"{course_path}__owner_organization__isnull": True})
+        | Q(**{f"{course_path}__owner_organization_id__in": member_exclusive_org_ids(user)})
+    )
+
+
+class CourseSpaceMixin:
+    """Nested course routes see only course parts of the user's spaces."""
+
+    course_path = "course"
+
+    def get_queryset(self):
+        return scope_courses_by_space(super().get_queryset(), self.request.user, self.course_path)
 
 
 class HasTrainingPermission(HasModulePermission):
@@ -293,6 +351,8 @@ def _require_course_edit_allowed(request, course):
     Returns a Response to short-circuit with if not allowed, else None.
     """
     user = request.user
+    if course.owner_organization_id or is_private_author(user):
+        return _private_space_denied(request, course)
     if _is_training_admin(user):
         return None
     if not (user.role_id and user.role.name == "trainer"):
@@ -369,6 +429,16 @@ class TrainingCategoryViewSet(ActionSerializerMixin, ModelViewSet):
         serializer = self.get_serializer(instance)
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
 
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        # Training categories are CJ's shared list; an exclusive organization
+        # files its private courses under them but does not change them
+        # (Report 4 §3: no new content leaks into CJ's lists).
+        if request.method not in SAFE_METHODS and is_private_author(request.user):
+            from rest_framework.exceptions import PermissionDenied
+
+            raise PermissionDenied("Training categories are managed by CareerJudge.")
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -417,7 +487,16 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         # see published courses only (drafts were visible to everyone).
         user = self.request.user
         role = user.role.name if getattr(user, "role", None) else None
-        if user.is_superuser or role == "cj_admin":
+        if user.is_superuser:
+            return qs
+        # Report 9 #47/#52 / Report 4 §3: an exclusive organization's private
+        # courses — all of them for its Corporate Exclusive Admin, published
+        # ones for its members; nobody else (CJ Admin included) sees them.
+        private = qs.filter(owner_organization_id__in=author_org_ids(user)) | qs.filter(
+            owner_organization_id__in=member_exclusive_org_ids(user), status="published"
+        )
+        qs = qs.filter(owner_organization__isnull=True)
+        if role == "cj_admin":
             return qs
         if role == "trainer":
             return qs.filter(created_by=user)
@@ -434,12 +513,17 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         if is_licence_scoped(user):
             qs = qs.filter(
                 Q(id__in=assigned_item_ids(user, "training_course"))
-                | Q(registrations__student=user)
-            ).distinct()
-        return qs
+                | Q(id__in=CourseRegistration.objects.filter(student=user).values("course_id"))
+            )
+        return qs | private
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        # Report 9 #47: a Corporate Exclusive Admin's courses belong to his
+        # organization's private space.
+        owner_id = resolve_owner_org_id(
+            self.request.user, self.request.data.get("owner_organization")
+        )
+        serializer.save(created_by=self.request.user, owner_organization_id=owner_id)
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -483,8 +567,12 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         change request Report 8 #35: a trainer may delete their OWN course
         while it is still a draft."""
         user_role_name = request.user.role.name if request.user.role_id else None
-        is_admin = user_role_name == "cj_admin"
         course = self.get_object()
+        # Report 9 #47: the Corporate Exclusive Admin deletes his own
+        # organization's courses; a CJ course is never his to delete.
+        is_admin = (
+            user_role_name == "cj_admin" and not course.owner_organization_id
+        ) or can_author_private(request.user, course.owner_organization_id)
         own_draft = (
             user_role_name == "trainer"
             and course.created_by_id == request.user.id
@@ -509,6 +597,9 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
     def publish(self, request, pk=None):
         """Publish a draft course so students can register."""
         course = self.get_object()
+        denied = _private_space_denied(request, course)
+        if denied:
+            return denied
         if course.status != "draft":
             return Response(
                 {
@@ -568,6 +659,9 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 },
                 status=status.HTTP_200_OK,
             )
+        denied = _private_space_denied(request, course)
+        if denied:
+            return denied
         serializer = LiveSessionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(course=course)
@@ -593,6 +687,7 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
             return denied
         serializer = CourseAssessmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        _require_same_space_assessment(course, serializer.validated_data.get("assessment"))
         serializer.save(course=course)
         return Response(
             {"message": "Assessment added.", "data": serializer.data},
@@ -629,6 +724,9 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
                 status=status.HTTP_200_OK,
             )
         # POST: replace the full set
+        denied = _private_space_denied(request, course)
+        if denied:
+            return denied
         parameters = request.data.get("parameters", [])
         if not isinstance(parameters, list):
             return Response(
@@ -733,9 +831,14 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         # organization is paid for by the organization, so it is free for him.
         from apps.organizations.scoping import assigned_item_ids, is_licensed_member
 
-        is_free = float(course.price) == 0 or (
-            is_licensed_member(request.user)
-            and course.id in assigned_item_ids(request.user, "training_course")
+        is_free = (
+            float(course.price) == 0
+            or (
+                is_licensed_member(request.user)
+                and course.id in assigned_item_ids(request.user, "training_course")
+            )
+            # Report 9 #52: his organization's own private course.
+            or course.owner_organization_id in member_exclusive_org_ids(request.user)
         )
         payment_status = "paid" if is_free else "pending"
         # Report 8.1 #62: "not started" until the learner opens the course
@@ -968,8 +1071,11 @@ class CourseRegistrationViewSet(ModelViewSet):
         # Students see only their own registrations; trainers/admins see all
         user = self.request.user
         user_role_name = user.role.name if user.role_id else None
-        if user_role_name in ("cj_admin", "trainer"):
+        if user.is_superuser:
             return super().get_queryset()
+        if user_role_name in ("cj_admin", "trainer"):
+            # Report 4 §3: not the registrations of private courses.
+            return super().get_queryset().filter(course__owner_organization__isnull=True)
         return super().get_queryset().filter(student=user)
 
     def retrieve(self, request, *args, **kwargs):
@@ -1618,7 +1724,7 @@ class _CourseStructureEditGuardMixin:
         return super().destroy(request, *args, **kwargs)
 
 
-class CourseLessonViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
+class CourseLessonViewSet(CourseSpaceMixin, _CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for lessons within a course."""
 
     queryset = CourseLesson.objects.select_related("course")
@@ -1653,12 +1759,14 @@ class CourseLessonViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
         )
 
 
-class LessonTopicViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
+class LessonTopicViewSet(CourseSpaceMixin, _CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for topics within a lesson."""
 
     queryset = LessonTopic.objects.select_related("lesson")
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = LessonTopicSerializer
+
+    course_path = "lesson__course"
 
     def _course_for(self, obj):
         return obj.lesson.course
@@ -1687,12 +1795,14 @@ class LessonTopicViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
         )
 
 
-class TopicSessionViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
+class TopicSessionViewSet(CourseSpaceMixin, _CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for sessions within a topic."""
 
     queryset = TopicSession.objects.select_related("topic")
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = TopicSessionSerializer
+
+    course_path = "topic__lesson__course"
 
     def _course_for(self, obj):
         return obj.topic.lesson.course
@@ -1749,7 +1859,7 @@ class TopicSessionViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class LiveSessionViewSet(ModelViewSet):
+class LiveSessionViewSet(CourseSpaceMixin, ModelViewSet):
     """CRUD for live sessions + consent tracking (SRS §5).
 
     Per SRS §5 scheduler_process: trainer schedules a Zoom/classroom
@@ -1761,6 +1871,12 @@ class LiveSessionViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = LiveSessionSerializer
     http_method_names = ["get", "head", "options", "patch", "post"]
+
+    def partial_update(self, request, *args, **kwargs):
+        denied = _private_space_denied(request, self.get_object().course)
+        if denied:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
 
     @action(detail=True, methods=["post"])
     def consent(self, request, pk=None):
@@ -1949,12 +2065,16 @@ class LiveSessionViewSet(ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class SessionContentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
+class SessionContentViewSet(CourseSpaceMixin, _CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for session content + interactive questions (Timeliner)."""
 
     queryset = SessionContent.objects.select_related("session")
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = SessionContentSerializer
+
+    course_path = "session__topic__lesson__course"
+
+    course_path = "session__topic__lesson__course"
 
     def _course_for(self, obj):
         return obj.session.topic.lesson.course
@@ -1986,6 +2106,9 @@ class SessionContentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
                 {"message": "OK", "data": InteractiveQuestionSerializer(questions, many=True).data},
                 status=status.HTTP_200_OK,
             )
+        denied = _private_space_denied(request, content.session.topic.lesson.course)
+        if denied:
+            return denied
         serializer = InteractiveQuestionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(session_content=content)
@@ -2000,7 +2123,7 @@ class SessionContentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class AssignmentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
+class AssignmentViewSet(CourseSpaceMixin, _CourseStructureEditGuardMixin, ModelViewSet):
     """Edit/delete a session's assignments (SRS §2.3.2). Report 8.1 #61: the
     app sent edits and deletes to /sessions/<id>/assignments/<id>/, which
     does not exist; assignments are now addressed as /assignments/<id>/,
@@ -2012,6 +2135,10 @@ class AssignmentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
     serializer_class = AssignmentSerializer
     http_method_names = ["get", "head", "options", "patch", "delete"]
 
+    course_path = "session__topic__lesson__course"
+
+    course_path = "session__topic__lesson__course"
+
     def _course_for(self, obj):
         return obj.session.topic.lesson.course
 
@@ -2021,7 +2148,7 @@ class AssignmentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-class CourseAssessmentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
+class CourseAssessmentViewSet(CourseSpaceMixin, _CourseStructureEditGuardMixin, ModelViewSet):
     """CRUD for course assessments (SRS §2.4).
 
     Allows trainers to update and delete linked assessments, not just
@@ -2035,6 +2162,32 @@ class CourseAssessmentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
 
     def _course_for(self, obj):
         return obj.course
+
+    def perform_create(self, serializer):
+        course = serializer.validated_data.get("course")
+        if course is not None:
+            denied = _private_space_denied(self.request, course)
+            if denied:
+                from rest_framework.exceptions import PermissionDenied
+
+                raise PermissionDenied(denied.data["error"]["message"])
+            _require_same_space_assessment(course, serializer.validated_data.get("assessment"))
+        serializer.save()
+
+    def perform_update(self, serializer):
+        _require_same_space_assessment(
+            serializer.instance.course, serializer.validated_data.get("assessment")
+        )
+        serializer.save()
+
+
+def _require_same_space_assessment(course, assessment):
+    """Report 9 #47 / Report 4 §3: a private course links only its own
+    organization's assessments, a CJ course only CJ assessments."""
+    if assessment is not None:
+        require_same_space(
+            course.owner_organization_id, assessment.owner_organization_id, "assessment"
+        )
 
 
 # ---------------------------------------------------------------------------

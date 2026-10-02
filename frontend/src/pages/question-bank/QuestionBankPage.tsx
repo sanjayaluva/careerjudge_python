@@ -40,6 +40,7 @@ import {
   type BulkImportResult,
 } from "@/api/questionBank";
 import { extractApiError } from "@/api/client";
+import { PrivateSpaceNote } from "@/components/PrivateSpaceNote";
 import { useAuth } from "@/hooks/useAuth";
 import { CategoryManagerModal } from "./CategoryManager";
 
@@ -109,7 +110,7 @@ export default function QuestionBankPage() {
       // QB-1: a non-admin's delete creates a request for admin approval; an
       // admin deletes directly.
       toast.success(
-        user?.role === "cj_admin"
+        deletesDirectly
           ? "Question deleted."
           : "Deletion request submitted — an admin will review it.",
       );
@@ -132,10 +133,18 @@ export default function QuestionBankPage() {
 
   // Report 8 #29 / Report 3 §4.1: trainers author questions for their course
   // assessments (backend grants question_bank add/change, scoped to their own).
-  const canCreate = ["sme", "psychometrician", "cj_admin", "trainer"].includes(user?.role ?? "");
-  const canDelete = ["sme", "cj_admin"].includes(user?.role ?? "");
+  // Report 9 #39/#40: the Corporate Exclusive Admin runs his organization's
+  // private question bank — he is its admin: no CJ review, direct deletes.
+  const isPrivateAuthor = user?.role === "corp_exclusive";
+  const canCreate = ["sme", "psychometrician", "cj_admin", "trainer", "corp_exclusive"].includes(
+    user?.role ?? "",
+  );
+  const canDelete = ["sme", "cj_admin", "corp_exclusive"].includes(user?.role ?? "");
   const isAdmin = user?.role === "cj_admin";
-  const canManageCategories = ["psychometrician", "cj_admin"].includes(user?.role ?? "");
+  const deletesDirectly = isAdmin || isPrivateAuthor;
+  const canManageCategories = ["psychometrician", "cj_admin", "corp_exclusive"].includes(
+    user?.role ?? "",
+  );
 
   // Review permissions — Reviewer reviews content, Psychometrician reviews psychometric,
   // cj_admin can review both. Used to show the Review button on the list and to power
@@ -209,7 +218,7 @@ export default function QuestionBankPage() {
   // - cj_admin: can edit ANY question regardless of status
   // - sme / custom roles with change permission: can edit only draft or sent_back
   const canEditQuestion = (status: string) =>
-    isAdmin || (canCreate && (status === "draft" || status === "sent_back"));
+    deletesDirectly || (canCreate && (status === "draft" || status === "sent_back"));
 
   const openCreateEditor = () => {
     navigate("/question-bank/new");
@@ -253,6 +262,9 @@ export default function QuestionBankPage() {
           </div>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 empty:hidden">
+            <PrivateSpaceNote what="question bank" />
+          </div>
           {error && (
             <Alert variant="error" className="mb-4">
               <AlertDescription>{error}</AlertDescription>
@@ -555,7 +567,9 @@ export default function QuestionBankPage() {
                               Edit
                             </Button>
                           )}
-                          {(q.status === "draft" || q.status === "sent_back") && canCreate && (
+                          {(q.status === "draft" || q.status === "sent_back") &&
+                            canCreate &&
+                            !isPrivateAuthor && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -631,7 +645,7 @@ export default function QuestionBankPage() {
       <DeleteQuestionModal
         question={deleteQ}
         loading={deleteMutation.isPending}
-        isAdmin={isAdmin}
+        isAdmin={deletesDirectly}
         onClose={() => setDeleteQ(null)}
         onConfirm={(reason) => deleteQ && deleteMutation.mutate({ id: deleteQ.id, reason })}
       />

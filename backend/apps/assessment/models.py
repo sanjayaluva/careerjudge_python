@@ -147,6 +147,16 @@ class Assessment(models.Model):
         null=True,
         blank=True,
     )
+    # Report 9 #39-#47 (Report 4 §3): a Corporate Exclusive organization's
+    # PRIVATE assessment — seen and used only inside that organization. NULL =
+    # CareerJudge's own content.
+    owner_organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="private_assessments",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -36,10 +36,11 @@ class CategorySerializer(serializers.ModelSerializer):
             "subcategory_count",
             "full_path",
             "created_by",
+            "owner_organization",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_by", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_by", "owner_organization", "created_at", "updated_at"]
 
 
 class CategoryTreeSerializer(serializers.ModelSerializer):
@@ -195,6 +196,7 @@ class QuestionListSerializer(serializers.ModelSerializer):
             "difficulty_level",
             "cognitive_level",
             "created_by",
+            "owner_organization",
             "created_by_name",
             "created_at",
             "updated_at",
@@ -208,6 +210,7 @@ class QuestionListSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "created_by",
+            "owner_organization",
             "created_at",
             "updated_at",
             "exposure_count",
@@ -301,6 +304,7 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
             "is_psychometric",
             "question_category",
             "created_by",
+            "owner_organization",
             "created_by_name",
             "created_at",
             "updated_at",
@@ -316,6 +320,7 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "created_by",
+            "owner_organization",
             "created_at",
             "updated_at",
             "exposure_count",

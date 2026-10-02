@@ -41,6 +41,8 @@ import { useAuth } from "@/hooks/useAuth";
 
 import { fromEditorHtml } from "./richDefinition";
 import { useTakeAssessment } from "./useTakeAssessment";
+import { PrivateSpaceNote } from "@/components/PrivateSpaceNote";
+import { usePrivateSpace } from "@/hooks/usePrivateSpace";
 
 const ASSESS_KEY = ["assessments"];
 
@@ -67,6 +69,11 @@ export default function AssessmentsPage() {
   // Report 9 #10: corporate admins do not author assessments — they see and
   // schedule only what CJ Admin assigned to their organization.
   const canManage = ["cj_admin", "psychometrician", "trainer"].includes(user?.role ?? "");
+  // Report 9 #41/#42: the Corporate Exclusive Admin authors his organization's
+  // private assessments; CJ assessments licensed to him stay read-only.
+  const { isPrivateAuthor, ownsItem } = usePrivateSpace();
+  const canCreate = canManage || isPrivateAuthor;
+  const canManageRow = (a: { owner_organization?: number | null }) => canManage || ownsItem(a);
 
   const { data, isLoading } = useQuery({
     queryKey: [...ASSESS_KEY, debouncedSearch, statusFilter],
@@ -147,7 +154,10 @@ export default function AssessmentsPage() {
               {data?.count ?? 0} assessment{(data?.count ?? 0) !== 1 ? "s" : ""}
             </p>
           </div>
-          {canManage && <Button onClick={() => setCreateOpen(true)}>Create assessment</Button>}
+          {canCreate && <Button onClick={() => setCreateOpen(true)}>Create assessment</Button>}
+        </div>
+        <div className="px-6 pb-4 empty:hidden">
+          <PrivateSpaceNote what="assessments" />
         </div>
 
         <div className="flex flex-wrap items-center gap-2 px-6 pb-4">
@@ -162,7 +172,7 @@ export default function AssessmentsPage() {
             className="max-w-sm"
           />
           {/* Report 9 #74: only authors see drafts, so only they filter by status. */}
-          {canManage && (
+          {canCreate && (
             <select
               className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
               value={statusFilter}
@@ -184,7 +194,7 @@ export default function AssessmentsPage() {
           </div>
         ) : assessments.length === 0 ? (
           <p className="py-8 text-center text-sm text-slate-500">
-            {canManage
+            {canCreate
               ? "No assessments yet. Create one to get started."
               : "No assessments are available to you yet."}
           </p>
@@ -231,7 +241,7 @@ export default function AssessmentsPage() {
                   <TableCell>
                     <div className="flex justify-end gap-1">
                       {/* Manager actions: Publish + Delete (draft only) */}
-                      {a.status === "draft" && canManage && (
+                      {a.status === "draft" && canManageRow(a) && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -241,7 +251,7 @@ export default function AssessmentsPage() {
                           Publish
                         </Button>
                       )}
-                      {a.status === "draft" && canManage && (
+                      {a.status === "draft" && canManageRow(a) && (
                         <Button
                           variant="ghost"
                           size="sm"

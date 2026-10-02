@@ -117,6 +117,16 @@ class TrainingCourse(models.Model):
         blank=True,
         related_name="created_training_courses",
     )
+    # Report 9 #39-#47 (Report 4 §3): a Corporate Exclusive organization's
+    # PRIVATE course — seen and used only inside that organization. NULL =
+    # CareerJudge's own content.
+    owner_organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="private_training_courses",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

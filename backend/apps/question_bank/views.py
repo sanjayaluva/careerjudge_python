@@ -9,11 +9,20 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
+from apps.organizations.private_content import (
+    can_author_private,
+    in_space,
+    is_private_author,
+    require_same_space,
+    resolve_owner_org_id,
+    space_filter,
+)
 from core.mixins import ActionSerializerMixin
 from core.permissions import HasModulePermission
 
@@ -63,6 +72,23 @@ def _is_qb_admin(user) -> bool:
     """cj_admin (or superuser) bypasses the deletion-request workflow."""
     role_name = user.role.name if user.role_id else None
     return bool(user.is_superuser or role_name == "cj_admin")
+
+
+def _deletes_directly(user, instance) -> bool:
+    """CJ Admin deletes directly; so does a Corporate Exclusive Admin in his
+    own organization's private question bank — he is the admin of that
+    environment (Report 9 #39/#40), so no CJ deletion request applies."""
+    return _is_qb_admin(user) or can_author_private(user, instance.owner_organization_id)
+
+
+def _private_owner_for(request, category) -> int | None:
+    """Owner organization for a new category / question: its parent category's
+    space, else the author's own space (Report 9 #39/#40)."""
+    if category is not None:
+        if not in_space(request.user, category.owner_organization_id):
+            raise ValidationError({"category": "Category not found."})
+        return category.owner_organization_id
+    return resolve_owner_org_id(request.user, request.data.get("owner_organization"))
 
 
 def _domain_category_ids(root: Category) -> list[int]:
@@ -174,7 +200,9 @@ class CategoryViewSet(ActionSerializerMixin, ModelViewSet):
     }
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        # Report 9 #39 / Report 4 §3: CJ's categories and each exclusive
+        # organization's private categories never mix.
+        qs = space_filter(super().get_queryset(), self.request.user)
         parent = self.request.query_params.get("parent")
         if parent == "root":
             qs = qs.filter(parent__isnull=True)
@@ -183,7 +211,8 @@ class CategoryViewSet(ActionSerializerMixin, ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        owner_id = _private_owner_for(self.request, serializer.validated_data.get("parent"))
+        serializer.save(created_by=self.request.user, owner_organization_id=owner_id)
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -208,6 +237,11 @@ class CategoryViewSet(ActionSerializerMixin, ModelViewSet):
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
+        parent = serializer.validated_data.get("parent")
+        if parent is not None:
+            require_same_space(
+                instance.owner_organization_id, parent.owner_organization_id, "category"
+            )
         serializer.save()
         return Response(
             {"message": "Category updated.", "data": CategorySerializer(instance).data},
@@ -219,7 +253,7 @@ class CategoryViewSet(ActionSerializerMixin, ModelViewSet):
         # D1 §2.2: a non-admin's delete is NOT applied immediately — it
         # creates a pending QuestionBankDeletionRequest for CJ Admin to
         # review. cj_admin deletes directly (override).
-        if not _is_qb_admin(request.user):
+        if not _deletes_directly(request.user, instance):
             reason = (request.data.get("reason") or "").strip()
             if not reason:
                 return Response(
@@ -253,7 +287,9 @@ class CategoryViewSet(ActionSerializerMixin, ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def tree(self, request):
-        roots = Category.objects.filter(parent__isnull=True, is_active=True).order_by("name")
+        roots = space_filter(
+            Category.objects.filter(parent__isnull=True, is_active=True), request.user
+        ).order_by("name")
         serializer = CategoryTreeSerializer(roots, many=True)
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
 
@@ -289,7 +325,9 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
     }
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        # Report 9 #40 / Report 4 §3: CJ's question bank and each exclusive
+        # organization's private question bank never mix.
+        qs = space_filter(super().get_queryset(), self.request.user)
         params = self.request.query_params
 
         # Filter by category (includes subcategories)
@@ -347,7 +385,17 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        serializer.save(created_by=self.request.user, **self._private_fields(serializer))
+
+    def _private_fields(self, serializer) -> dict:
+        """Report 9 #40: a question goes into its category's space (else the
+        author's). A private question skips CJ's SME → Reviewer →
+        Psychometrician workflow: it is in the organization's question bank
+        ('confirmed') as soon as it is saved, ready for its assessments."""
+        owner_id = _private_owner_for(self.request, serializer.validated_data.get("category"))
+        if owner_id is None:
+            return {}
+        return {"owner_organization_id": owner_id, "status": "confirmed"}
 
     def list(self, request, *args, **kwargs):
         resp = super().list(request, *args, **kwargs)
@@ -398,7 +446,7 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         for idx, payload in enumerate(items):
             serializer = QuestionCreateSerializer(data=payload, context={"request": request})
             if serializer.is_valid():
-                serializer.save(created_by=request.user)
+                serializer.save(created_by=request.user, **self._private_fields(serializer))
                 created.append(serializer.instance.id)
             else:
                 errors.append({"index": idx, "errors": serializer.errors})
@@ -427,7 +475,11 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         #   question is submitted for review or confirmed/added to the
         #   question bank, it is locked for non-admin users.
         user_role_name = request.user.role.name if request.user.role_id else None
-        is_admin = user_role_name == "cj_admin"
+        # Report 9 #40: the Corporate Exclusive Admin edits his private
+        # questions in any status — he is the admin of that environment.
+        is_admin = user_role_name == "cj_admin" or can_author_private(
+            request.user, instance.owner_organization_id
+        )
         if not is_admin and not instance.can_be_edited:
             return Response(
                 {
@@ -443,6 +495,11 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
             )
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
+        category = serializer.validated_data.get("category")
+        if category is not None:
+            require_same_space(
+                instance.owner_organization_id, category.owner_organization_id, "category"
+            )
         serializer.save()
         return Response(
             {"message": "Question updated.", "data": QuestionDetailSerializer(instance).data},
@@ -456,7 +513,7 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         # and even then the delete is NOT applied immediately — it creates
         # a pending QuestionBankDeletionRequest for CJ Admin to review
         # (D1 §2.2/§4.3).
-        is_admin = _is_qb_admin(request.user)
+        is_admin = _deletes_directly(request.user, instance)
         if not is_admin:
             if not instance.can_be_edited:
                 return Response(
@@ -510,6 +567,19 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         from .validation import validate_question_config
 
         question = self.get_object()
+        if question.owner_organization_id:
+            # Report 9 #40: private questions never enter CJ's review workflow.
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Your organization's questions are not sent for CJ review; "
+                        "they are in your question bank as soon as they are saved.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if question.status not in ("draft", "sent_back"):
             return Response(
                 {
@@ -637,7 +707,7 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
             )
         is_active = bool(request.data.get("is_active"))
 
-        qs = Question.objects.filter(id__in=question_ids)
+        qs = space_filter(Question.objects.filter(id__in=question_ids), request.user)
         found_ids = set(qs.values_list("id", flat=True))
         missing = set(question_ids) - found_ids
         updated = qs.update(is_active=is_active, updated_at=timezone.now())
@@ -717,7 +787,7 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        qs = Question.objects.filter(id__in=question_ids)
+        qs = space_filter(Question.objects.filter(id__in=question_ids), request.user)
         found_ids = set(qs.values_list("id", flat=True))
         missing = set(question_ids) - found_ids
         updated = qs.update(exposure_limit=exposure_limit, updated_at=timezone.now())
@@ -765,13 +835,19 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
                 ),
             )
 
+        if is_private_author(self.request.user):
+            # Report 4 §3: psychometric analysis is not one of the exclusive
+            # environment's rights.
+            return _invalid("Psychometric analysis is not available in your organization's space.")
+
         if question_ids and not isinstance(question_ids, list):
             return _invalid("question_ids must be a list of ints.")
 
         if not question_ids and not category_id and not question_ref:
             return _invalid("question_ids (list of ints), category_id or question_ref is required.")
 
-        qs = Question.objects.select_related("category")
+        # Report 4 §3: CJ's analysis never reaches an organization's private questions.
+        qs = space_filter(Question.objects.select_related("category"), self.request.user)
         if question_ids:
             qs = qs.filter(id__in=question_ids)
             found_ids = set(qs.values_list("id", flat=True))
@@ -783,7 +859,9 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
             # D2 "Category" filter. Report 9 #88: a main category covers the
             # questions in all of its subcategories, not only those filed
             # directly under it.
-            category = Category.objects.filter(id=category_id).first()
+            category = space_filter(
+                Category.objects.filter(id=category_id), self.request.user
+            ).first()
             if category is None:
                 return _invalid(f"Category {category_id} not found.")
             qs = qs.filter(category_id__in=_domain_category_ids(category))
@@ -1038,6 +1116,17 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         Each row must include question_id and at least one index field.
         """
         results = request.data.get("results")
+        if is_private_author(request.user):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Psychometric analysis is not available in your "
+                        "organization's space.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if not results or not isinstance(results, list):
             return Response(
                 {
@@ -1064,7 +1153,9 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
             if not isinstance(row, dict) or "question_id" not in row:
                 errors.append({"index": i, "error": "question_id is required."})
                 continue
-            question = Question.objects.filter(id=row["question_id"]).first()
+            question = space_filter(
+                Question.objects.filter(id=row["question_id"]), request.user
+            ).first()
             if question is None:
                 errors.append(
                     {"index": i, "question_id": row["question_id"], "error": "Not found."}
@@ -1123,7 +1214,9 @@ class QuestionReviewView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, question_id):
-        question = get_object_or_404(Question, id=question_id)
+        question = get_object_or_404(
+            space_filter(Question.objects.all(), request.user), id=question_id
+        )
 
         # Check permissions based on review_type
         review_type = request.data.get("review_type")
@@ -1222,7 +1315,9 @@ class QuestionReviewListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, question_id):
-        question = get_object_or_404(Question, id=question_id)
+        question = get_object_or_404(
+            space_filter(Question.objects.all(), request.user), id=question_id
+        )
         reviews = question.reviews.select_related("reviewer").all()
         serializer = QuestionReviewSerializer(reviews, many=True)
         return Response(

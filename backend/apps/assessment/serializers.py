@@ -114,6 +114,7 @@ class AssessmentSerializer(serializers.ModelSerializer):
             "attempt_rule",
             "price",
             "created_by",
+            "owner_organization",
             "created_at",
             "updated_at",
             "section_count",
@@ -124,6 +125,7 @@ class AssessmentSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "created_by",
+            "owner_organization",
             "created_at",
             "updated_at",
             "section_count",
@@ -160,13 +162,14 @@ class AssessmentListSerializer(serializers.ModelSerializer):
             "attempt_rule",
             "price",
             "created_by",
+            "owner_organization",
             "created_by_name",
             "section_count",
             "session_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_by", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_by", "owner_organization", "created_at", "updated_at"]
 
 
 class AssessmentSessionSerializer(serializers.ModelSerializer):

@@ -87,6 +87,16 @@ class Report(models.Model):
         blank=True,
         help_text=_("For general reports: the assessment this report is based on."),
     )
+    # Report 9 #39-#47 (Report 4 §3): a Corporate Exclusive organization's
+    # PRIVATE report — seen and used only inside that organization. NULL =
+    # CareerJudge's own content.
+    owner_organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="private_reports",
+    )
     profiling_solution = models.ForeignKey(
         "career_profiling.ProfilingSolution",
         on_delete=models.CASCADE,
