@@ -43,8 +43,40 @@ DEMO_USERS = [
     ("counsellor", "counsellor@demo.careerjudge.pp.ua", "Counsellor", "Demo@1234"),
     ("channel_partner", "channel.partner@demo.careerjudge.pp.ua", "Channel Partner", "Demo@1234"),
     ("individual", "individual@demo.careerjudge.pp.ua", "Individual User", "Demo@1234"),
+    # Report 9: a corporate employee, so organization-limited behaviour can be
+    # tested (the plain "individual" stays a non-corporate user).
+    ("individual", "employee@demo.careerjudge.pp.ua", "Demo Employee", "Demo@1234"),
     # Report 3: helpdesk receives counselling booking/slot/followup notifications
 ]
+
+# Report 9: the demo organization managers belonged to no organization, so
+# nothing organization-limited could be shown. Each is tagged to a demo
+# organization of the right type (created once; client data is untouched).
+# (organization name, type, [(user email, is_admin, group name or None)])
+DEMO_ORGANIZATIONS = [
+    (
+        "Demo Corporate Ltd",
+        "corporate",
+        [
+            ("corp.admin@demo.careerjudge.pp.ua", True, None),
+            ("group.admin@demo.careerjudge.pp.ua", True, "Demo Group A"),
+            ("employee@demo.careerjudge.pp.ua", False, "Demo Group A"),
+        ],
+    ),
+    (
+        "Demo Exclusive Ltd",
+        "corp_exclusive",
+        [("corp.exclusive@demo.careerjudge.pp.ua", True, None)],
+    ),
+    (
+        "Demo Channel Partner Agency",
+        "channel_partner",
+        [("channel.partner@demo.careerjudge.pp.ua", True, None)],
+    ),
+]
+
+SAMPLE_REPORT_TITLE = "Sample Descriptive Report"
+SAMPLE_SOLUTION_TITLE = "Sample Career Profiling Solution"
 
 
 # Role rights live in apps.accounts.role_rights (single source of truth).
@@ -145,7 +177,116 @@ class Command(BaseCommand):
         else:
             self.stdout.write("  → Superuser exists (password reset).")
 
+        self._seed_demo_organizations()
+        self._seed_sample_reporting_content()
+
         self.stdout.write(self.style.SUCCESS("\n✓ Demo seed complete."))
         self.stdout.write("\nDemo login credentials:")
         for role_name, email, _, password in DEMO_USERS:
             self.stdout.write(f"  {role_name:<18} → {email} / {password}")
+
+    def _seed_demo_organizations(self):
+        """Tag each demo organization manager to a demo organization (Report 9)
+        and give the demo organizations the first published assessment, so
+        schedules and members' views can be tried. Never touches client data."""
+        from apps.assessment.models import Assessment
+        from apps.organizations.models import (
+            Group,
+            Organization,
+            OrganizationAssignment,
+            OrganizationMember,
+        )
+
+        self.stdout.write(self.style.MIGRATE_HEADING("→ Demo organizations…"))
+        first_published = Assessment.objects.filter(status="published").order_by("id").first()
+        for name, org_type, members in DEMO_ORGANIZATIONS:
+            org, created = Organization.objects.get_or_create(
+                name=name, defaults={"type": org_type, "status": "active"}
+            )
+            for email, is_admin, group_name in members:
+                user = User.objects.filter(email=email).first()
+                if user is None:
+                    continue
+                group = None
+                if group_name:
+                    group, _ = Group.objects.get_or_create(organization=org, name=group_name)
+                OrganizationMember.objects.update_or_create(
+                    organization=org,
+                    user=user,
+                    defaults={"is_admin": is_admin, "group": group},
+                )
+            if first_published is not None:
+                OrganizationAssignment.objects.get_or_create(
+                    organization=org, item_type="assessment", item_id=first_published.id
+                )
+            self.stdout.write(f"  {'✓ Created' if created else '→ Exists'}: {name}")
+
+    def _seed_sample_reporting_content(self):
+        """Report 9 #118/#119: give Reports and Profiling something to review —
+        a published sample report (with reports generated for the demo users'
+        completed attempts) and a draft sample profiling solution. Created once
+        and only when a published assessment exists."""
+        from apps.assessment.models import Assessment, AssessmentSession
+        from apps.career_profiling.models import ProfilingSolution, SelectedAssessment
+        from apps.reporting.generation import generate_report_data
+        from apps.reporting.models import GeneratedReport, Report
+
+        self.stdout.write(self.style.MIGRATE_HEADING("→ Sample report and profiling content…"))
+        demo_emails = [email for _, email, _, _ in DEMO_USERS]
+        completed = AssessmentSession.objects.filter(
+            status="completed", assessment__status="published"
+        )
+        preferred = completed.filter(candidate__email__in=demo_emails).order_by("-id").first()
+        assessment = (
+            preferred.assessment
+            if preferred
+            else Assessment.objects.filter(status="published").order_by("id").first()
+        )
+        if assessment is None:
+            self.stdout.write("  → No published assessment yet; skipped.")
+            return
+        admin = User.objects.filter(email="cj.admin@demo.careerjudge.pp.ua").first()
+
+        report, created = Report.objects.get_or_create(
+            title=SAMPLE_REPORT_TITLE,
+            defaults={
+                "objective": "A ready-made example to explore report set-up and generation.",
+                "report_type": "descriptive",
+                "scope": "general",
+                "assessment": assessment,
+                "status": "published",
+                "created_by": admin,
+            },
+        )
+        self.stdout.write(f"  {'✓ Created' if created else '→ Exists'}: {SAMPLE_REPORT_TITLE}")
+        if report.status == "published" and report.assessment_id:
+            for session in completed.filter(
+                assessment_id=report.assessment_id, candidate__email__in=demo_emails
+            ).select_related("assessment", "candidate"):
+                if GeneratedReport.objects.filter(report=report, session=session).exists():
+                    continue
+                try:
+                    data = generate_report_data(report, session)
+                except Exception as exc:  # demo data must never break a deploy
+                    self.stdout.write(f"  ! Could not generate for session {session.id}: {exc}")
+                    continue
+                GeneratedReport.objects.create(
+                    report=report,
+                    session=session,
+                    candidate=session.candidate,
+                    rendered_data=data,
+                    status="generated",
+                )
+                self.stdout.write(f"  ✓ Generated sample report for {session.candidate.email}")
+
+        solution, created = ProfilingSolution.objects.get_or_create(
+            title=SAMPLE_SOLUTION_TITLE,
+            defaults={
+                "purpose": "A ready-made draft to explore profiling set-up.",
+                "description": "Edit or duplicate this draft to try bands, mapping rules and criteria.",
+                "created_by": admin,
+            },
+        )
+        if created:
+            SelectedAssessment.objects.get_or_create(solution=solution, assessment=assessment)
+        self.stdout.write(f"  {'✓ Created' if created else '→ Exists'}: {SAMPLE_SOLUTION_TITLE}")

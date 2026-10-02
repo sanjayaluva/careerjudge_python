@@ -21,7 +21,7 @@ class TestSeedDemoCommand:
         out = StringIO()
         call_command("seed_demo", stdout=out)
         # 10 demo users + 1 superuser
-        assert User.objects.count() == 13  # 12 demo users + superuser
+        assert User.objects.count() == 14  # 13 demo users (incl. demo employee) + superuser
         assert User.objects.filter(email="cj.admin@demo.careerjudge.pp.ua").exists()
         assert User.objects.filter(email="sme@demo.careerjudge.pp.ua").exists()
         assert User.objects.filter(email="reviewer@demo.careerjudge.pp.ua").exists()
@@ -51,7 +51,7 @@ class TestSeedDemoCommand:
         # Run again — should not duplicate
         call_command("seed_demo", stdout=out)
         assert Role.objects.count() == 12
-        assert User.objects.count() == 13  # 12 demo users + superuser
+        assert User.objects.count() == 14  # 13 demo users (incl. demo employee) + superuser
 
     def test_demo_user_can_login(self):
         out = StringIO()
@@ -91,3 +91,34 @@ class TestSeedDemoCommand:
         call_command("seed_demo", stdout=out)
         superuser.refresh_from_db()
         assert superuser.check_password("Su@12345678") is True
+
+
+@pytest.mark.django_db
+def test_seed_tags_demo_managers_and_creates_sample_content():
+    """Report 9: demo managers belong to demo organizations; with a published
+    assessment and a completed demo attempt, sample report/profiling content
+    is created (once)."""
+    from apps.assessment.models import Assessment, AssessmentSession
+    from apps.career_profiling.models import ProfilingSolution
+    from apps.organizations.models import OrganizationMember
+    from apps.reporting.models import GeneratedReport, Report
+
+    call_command("seed_demo", stdout=StringIO())
+    for email, org_type in (
+        ("corp.admin@demo.careerjudge.pp.ua", "corporate"),
+        ("corp.exclusive@demo.careerjudge.pp.ua", "corp_exclusive"),
+        ("channel.partner@demo.careerjudge.pp.ua", "channel_partner"),
+    ):
+        assert OrganizationMember.objects.filter(
+            user__email=email, is_admin=True, organization__type=org_type
+        ).exists()
+    assert OrganizationMember.objects.get(user__email="group.admin@demo.careerjudge.pp.ua").group
+
+    individual = User.objects.get(email="individual@demo.careerjudge.pp.ua")
+    a = Assessment.objects.create(title="Pub", status="published")
+    AssessmentSession.objects.create(assessment=a, candidate=individual, status="completed")
+    call_command("seed_demo", stdout=StringIO())
+    call_command("seed_demo", stdout=StringIO())
+    assert Report.objects.filter(title="Sample Descriptive Report").count() == 1
+    assert ProfilingSolution.objects.filter(title="Sample Career Profiling Solution").count() == 1
+    assert GeneratedReport.objects.filter(candidate=individual, status="generated").count() == 1
