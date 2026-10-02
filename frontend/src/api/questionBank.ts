@@ -288,10 +288,14 @@ export interface QuestionBankDeletionRequest {
   created_at: string;
 }
 
-export function listDeletionRequests(): Promise<QuestionBankDeletionRequest[]> {
-  return apiGetPaged<QuestionBankDeletionRequest>(`${BASE}/deletion-requests/`).then(
-    (r) => r.results,
-  );
+// Report 9 #108: the endpoint returns a plain list ({message, data: [...]}),
+// not a page. Reading `.results` off it left the CJ Admin queue always
+// empty, so accept either shape.
+export async function listDeletionRequests(): Promise<QuestionBankDeletionRequest[]> {
+  const body = await apiGet<
+    QuestionBankDeletionRequest[] | { results?: QuestionBankDeletionRequest[] }
+  >(`${BASE}/deletion-requests/`);
+  return Array.isArray(body) ? body : (body?.results ?? []);
 }
 
 export function approveDeletionRequest(id: number): Promise<QuestionBankDeletionRequest> {
@@ -338,7 +342,7 @@ export function batchSetExposureLimit(payload: {
 export interface PsychometricAnalysisFilters {
   /** Required unless category_id is given. */
   question_ids?: number[];
-  /** Auto-extracts all questions in the category when question_ids is omitted. */
+  /** Auto-extracts all questions in the category (and its subcategories) when question_ids is omitted. */
   category_id?: number;
   date_from?: string;
   date_to?: string;
@@ -346,6 +350,39 @@ export interface PsychometricAnalysisFilters {
   region?: string;
   age_min?: number;
   age_max?: number;
+  /** Doc 1 §4.1.1 "Question ID" filter: ids or display labels, comma/space separated. */
+  question_ref?: string;
+}
+
+/** A question listed by the Extract step (Report 9 #87). */
+export interface PsychometricExtractRow {
+  id: number;
+  question_id_label: string;
+  question_title: string;
+  question_type: string;
+  question_type_label: string;
+  category_path: string;
+  status: string;
+  status_label: string;
+  is_active: boolean;
+  difficulty_level: string;
+  /** Candidates whose responses fall within the data filters. */
+  n_candidates: number;
+  item_difficulty_index: number | null;
+  discrimination_index: number | null;
+  item_total_correlation: number | null;
+  psychometric_analyzed_at: string | null;
+}
+
+/**
+ * Extract step of psychometric analysis (Report 9 #87, Doc 1 §4.1.1): lists
+ * the questions matching the filters so the user can pick which to analyse.
+ * Computes and stores nothing.
+ */
+export function extractPsychometricQuestions(
+  filters: PsychometricAnalysisFilters,
+): Promise<PsychometricExtractRow[]> {
+  return apiPost(`${BASE}/questions/psychometric-extract/`, filters);
 }
 
 export interface PsychometricAnalysisResult {

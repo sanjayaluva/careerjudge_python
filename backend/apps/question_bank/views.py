@@ -46,6 +46,7 @@ class HasQuestionBankPermission(HasModulePermission):
         "submit_for_review": "change",
         "validate_config": "view",
         "psychometric_analysis": "change",  # psychometrician-only: computes indices
+        "psychometric_extract": "change",  # Report 9 #87: extract/list step before a run
         # Manual psychometric-analysis path (D2) + filters (D2)
         "psychometric_data_download": "view",
         "psychometric_upload": "change",
@@ -113,6 +114,37 @@ def _pick_domain_reviewer(question):
             assigned_reviewer=r, status="pending_content_review"
         ).count(),
     )
+
+
+def _previous_reviewer(question):
+    """Reviewer to route a resubmitted (sent-back) question to (Report 9 #71).
+
+    Prefers the reviewer who last sent the question back at content review,
+    then the reviewer it is still assigned to. Returns None when neither is an
+    active Reviewer (other than the author), so the caller re-routes it.
+    """
+    from .models import QuestionReview
+
+    def usable(user):
+        return (
+            user is not None
+            and user.is_active
+            and user.role_id is not None
+            and user.role.name == "reviewer"
+            and user.id != question.created_by_id
+        )
+
+    last = (
+        QuestionReview.objects.filter(question=question, review_type="content", action="send_back")
+        .select_related("reviewer__role")
+        .order_by("-created_at", "-id")
+        .first()
+    )
+    if last and usable(last.reviewer):
+        return last.reviewer
+    if usable(question.assigned_reviewer):
+        return question.assigned_reviewer
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -505,9 +537,15 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        was_sent_back = question.status == "sent_back"
         question.status = "pending_content_review"
-        # E-X3: route to a Reviewer in the same domain (category tree root).
-        reviewer = _pick_domain_reviewer(question)
+        # Report 9 #71: a sent-back question goes back to the SAME reviewer
+        # who sent it back. Only first submissions (or when that reviewer is
+        # no longer available) are routed afresh.
+        reviewer = _previous_reviewer(question) if was_sent_back else None
+        if reviewer is None:
+            # E-X3: route to a Reviewer in the same domain (category tree root).
+            reviewer = _pick_domain_reviewer(question)
         question.assigned_reviewer = reviewer
         question.save(update_fields=["status", "assigned_reviewer", "updated_at"])
 
@@ -712,64 +750,53 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
 
         question_ids = data.get("question_ids") or []
         category_id = data.get("category_id")
+        # Report 9 #87: Doc 1 §4.1.1 "Question ID" filter — free text of one
+        # or more ids / display labels separated by commas or spaces.
+        question_ref = str(data.get("question_ref") or "").strip()
 
-        if question_ids and not isinstance(question_ids, list):
+        def _invalid(message):
             return (
                 None,
                 None,
                 Response(
-                    {
-                        "error": {
-                            "code": "validation_error",
-                            "message": "question_ids must be a list of ints.",
-                        }
-                    },
+                    {"error": {"code": "validation_error", "message": message}},
                     status=status.HTTP_400_BAD_REQUEST,
                 ),
             )
 
-        if not question_ids:
-            # D2 "Category" filter: when no explicit question_ids are given,
-            # auto-extract all questions in the category (mirrors the SRS
-            # Automatic/Manual Analysis "User specifies filter criteria and
-            # clicks 'Extract'" step).
-            if not category_id:
-                return (
-                    None,
-                    None,
-                    Response(
-                        {
-                            "error": {
-                                "code": "validation_error",
-                                "message": "question_ids (list of ints) or category_id is required.",
-                            }
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    ),
-                )
-            questions = list(Question.objects.filter(category_id=category_id))
-        else:
-            questions = list(
-                Question.objects.filter(id__in=question_ids).select_related("category")
-            )
-            found_ids = {q.id for q in questions}
+        if question_ids and not isinstance(question_ids, list):
+            return _invalid("question_ids must be a list of ints.")
+
+        if not question_ids and not category_id and not question_ref:
+            return _invalid("question_ids (list of ints), category_id or question_ref is required.")
+
+        qs = Question.objects.select_related("category")
+        if question_ids:
+            qs = qs.filter(id__in=question_ids)
+            found_ids = set(qs.values_list("id", flat=True))
             missing = set(question_ids) - found_ids
             if missing:
-                return (
-                    None,
-                    None,
-                    Response(
-                        {
-                            "error": {
-                                "code": "validation_error",
-                                "message": f"Question IDs not found: {sorted(missing)}",
-                            }
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    ),
-                )
-            if category_id:
-                questions = [q for q in questions if q.category_id == int(category_id)]
+                return _invalid(f"Question IDs not found: {sorted(missing)}")
+
+        if category_id:
+            # D2 "Category" filter. Report 9 #88: a main category covers the
+            # questions in all of its subcategories, not only those filed
+            # directly under it.
+            category = Category.objects.filter(id=category_id).first()
+            if category is None:
+                return _invalid(f"Category {category_id} not found.")
+            qs = qs.filter(category_id__in=_domain_category_ids(category))
+
+        if question_ref:
+            tokens = [t for t in question_ref.replace(",", " ").split() if t]
+            ref_q = Q()
+            for token in tokens:
+                ref_q |= Q(question_id_label__iexact=token)
+                if token.lstrip("#").isdigit():
+                    ref_q |= Q(id=int(token.lstrip("#")))
+            qs = qs.filter(ref_q)
+
+        questions = list(qs.order_by("id"))
 
         date_from = data.get("date_from")
         date_to = data.get("date_to")
@@ -788,6 +815,62 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         }
         return questions, filters, None
 
+    @action(detail=False, methods=["post"], url_path="psychometric-extract")
+    def psychometric_extract(self, request):
+        """Extract step of psychometric analysis (Report 9 #87/#88, Doc 1
+        §4.1.1: "User specifies filter criteria and clicks 'Extract' … System
+        extracts questions … and lists them").
+
+        Takes the same filter payload as psychometric_analysis, computes
+        nothing and stores nothing: it lists the matching questions with the
+        key facts the Psychometrician needs to choose which ones to analyse,
+        including how many candidates' responses fall within the data
+        filters (time period, assessment, region, age range).
+        """
+        from .psychometrics import extract_response_rows
+
+        questions, filters, error = self._resolve_psychometric_filters(request.data)
+        if error is not None:
+            return error
+
+        rows = []
+        for q in questions:
+            n = len(
+                extract_response_rows(
+                    q,
+                    date_from=filters["date_from"],
+                    date_to=filters["date_to"],
+                    assessment_id=filters["assessment_id"],
+                    region=filters["region"],
+                    age_min=filters["age_min"],
+                    age_max=filters["age_max"],
+                )
+            )
+            rows.append(
+                {
+                    "id": q.id,
+                    "question_id_label": q.question_id_label,
+                    "question_title": q.question_title,
+                    "question_type": q.question_type,
+                    "question_type_label": q.get_question_type_display(),
+                    "category_path": q.category.full_path if q.category_id else "",
+                    "status": q.status,
+                    "status_label": q.get_status_display(),
+                    "is_active": q.is_active,
+                    "difficulty_level": q.difficulty_level,
+                    "n_candidates": n,
+                    "item_difficulty_index": q.item_difficulty_index,
+                    "discrimination_index": q.discrimination_index,
+                    "item_total_correlation": q.item_total_correlation,
+                    "psychometric_analyzed_at": q.psychometric_analyzed_at,
+                }
+            )
+
+        return Response(
+            {"message": f"Extracted {len(rows)} question(s).", "data": rows},
+            status=status.HTTP_200_OK,
+        )
+
     @action(detail=False, methods=["post"])
     def psychometric_analysis(self, request):
         """Run psychometric analysis on one or more questions (SRS 02).
@@ -805,7 +888,10 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
                 "question_ids": [1, 2, 3],         # required unless category_id given
                 "category_id": 7,                  # optional (D2 "Category" filter) —
                                                      # auto-extracts all questions in the
-                                                     # category when question_ids is omitted
+                                                     # category (and its subcategories)
+                                                     # when question_ids is omitted
+                "question_ref": "12, QB-0007",     # optional Question ID filter (ids or
+                                                     # display labels)
                 "date_from": "2026-01-01",         # optional, ISO date
                 "date_to": "2026-12-31",           # optional, ISO date
                 "assessment_id": 42,               # optional, filter by assessment

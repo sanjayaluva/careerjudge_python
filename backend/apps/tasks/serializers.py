@@ -2,10 +2,14 @@
 
 from rest_framework import serializers
 
-from apps.notifications.models import notify_user
+from apps.notifications.models import notify_role, notify_user
 from apps.notifications.signals import _notify_admin_and_helpdesk
 
 from .models import Concern, Task, TaskExtensionRequest, TaskProgressUpdate, TaskSpec
+
+# Frontend route of the Contact Admin page: CJ Admin / help desk see the
+# Inbox there, every other user sees "My concerns" (Report 9 #20/#50).
+CONCERNS_LINK = "/concerns"
 
 
 class TaskSpecSerializer(serializers.ModelSerializer):
@@ -186,13 +190,17 @@ class TaskDetailSerializer(TaskListSerializer):
             "info",
             link=f"/tasks/{task.id}",
         )
-        # Also notify admin + helpdesk (D9 §3.1)
-        _notify_admin_and_helpdesk(
-            f"Task assigned: {task.title}",
-            f"Task {task.task_id} was assigned to {task.assigned_to.full_name or task.assigned_to.email}.",
-            "info",
-            f"/tasks/{task.id}",
+        # Also notify admin + helpdesk (D9 §3.1). Report 9 #20/#50 link
+        # check: help desk cannot open a task's detail page (only CJ Admin
+        # and the people on the task can), so its copy carries no link
+        # rather than one that opens "Not Found".
+        title = f"Task assigned: {task.title}"
+        body = (
+            f"Task {task.task_id} was assigned to "
+            f"{task.assigned_to.full_name or task.assigned_to.email}."
         )
+        notify_role("cj_admin", title, body, "info", f"/tasks/{task.id}")
+        notify_role("helpdesk", title, body, "info", "")
         return task
 
     def update(self, instance, validated_data):
@@ -260,6 +268,8 @@ class ConcernSerializer(serializers.ModelSerializer):
             f"{concern.raised_by.full_name or concern.raised_by.email} raised a concern{task_ref}: "
             f"{concern.message}",
             "warning",
-            f"/tasks/concerns/{concern.id}",
+            # Report 9 #20/#50: admins/help desk read concerns in the Contact
+            # Admin inbox; /tasks/concerns/<id> does not exist ("Not Found").
+            CONCERNS_LINK,
         )
         return concern
