@@ -353,8 +353,10 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         # see drafts.
         if self.request.user.is_authenticated:
             role_name = self.request.user.role.name if self.request.user.role else None
+            # Report 9 #113: Help Desk views (only) every assessment.
             is_manager = (
-                role_name in ("cj_admin", "psychometrician") or self.request.user.is_superuser
+                role_name in ("cj_admin", "psychometrician", "helpdesk")
+                or self.request.user.is_superuser
             )
             if not is_manager:
                 if role_name == "trainer":
@@ -712,6 +714,18 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
     def start_session(self, request, pk=None):
         """Start a new assessment session for the current user."""
         assessment = self.get_object()
+        # Report 9 #113: Help Desk's access to assessments is view-only.
+        if request.user.role_id and request.user.role.name == "helpdesk":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Help Desk can view assessments but not take them.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if assessment.status != "published":
             return Response(
                 {

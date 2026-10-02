@@ -90,7 +90,8 @@ class ProfilingSolutionViewSet(ModelViewSet):
         # lists and opens PUBLISHED solutions only.
         user = self.request.user
         role = user.role.name if user.role_id else None
-        if not (user.is_superuser or role in ("cj_admin", "psychometrician")):
+        # Report 9 #114: Help Desk views (only) every solution.
+        if not (user.is_superuser or role in ("cj_admin", "psychometrician", "helpdesk")):
             qs = qs.filter(status="published")
         return qs
 

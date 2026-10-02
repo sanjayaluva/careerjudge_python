@@ -70,6 +70,8 @@ export default function AssessmentsPage() {
   const canManage = ["cj_admin", "psychometrician", "trainer"].includes(user?.role ?? "");
   // Report 9 #72: the individual sees My Assessments apart from Browse.
   const isCandidate = user?.role === "individual";
+  // Report 9 #113: Help Desk views every assessment, read-only.
+  const viewOnly = user?.role === "helpdesk";
 
   const { data, isLoading } = useQuery({
     queryKey: [...ASSESS_KEY, debouncedSearch, statusFilter],
@@ -165,7 +167,7 @@ export default function AssessmentsPage() {
             className="max-w-sm"
           />
           {/* Report 9 #74: only authors see drafts, so only they filter by status. */}
-          {canManage && (
+          {(canManage || viewOnly) && (
             <select
               className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
               value={statusFilter}
@@ -265,6 +267,7 @@ export default function AssessmentsPage() {
                       {/* Candidate actions: Take / Resume / View Results.
                           Available to all users on published assessments. */}
                       {a.status === "published" &&
+                        !viewOnly &&
                         (() => {
                           const session = sessionByAssessment.get(a.id);
                           if (!session) {

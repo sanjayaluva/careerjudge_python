@@ -55,9 +55,11 @@ export default function CareerProfilingPage() {
   const [createOpen, setCreateOpen] = useState(false);
 
   const canManage = ["cj_admin", "psychometrician"].includes(user?.role ?? "");
+  // Report 9 #114: Help Desk views every solution (read-only author list).
+  const canBrowseAll = canManage || user?.role === "helpdesk";
 
   const { data, isLoading } = useQuery({
-    enabled: canManage,
+    enabled: canBrowseAll,
     queryKey: [...CP_KEY, debouncedSearch, statusFilter],
     queryFn: () =>
       listSolutions({
@@ -81,7 +83,7 @@ export default function CareerProfilingPage() {
   // Report 9 #76: a candidate (individual or any non-author) is not an
   // author — no status filter or Create button; the server returns only
   // published solutions.
-  if (!canManage) return <PublishedSolutionsView />;
+  if (!canBrowseAll) return <PublishedSolutionsView />;
 
   return (
     <div className="space-y-6">
