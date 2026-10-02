@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('organizations', '0004_assessmentschedule_corporatewebsite'),
+        ('organizations', '0005_group_parent_member_report_permission'),
     ]
 
     operations = [
