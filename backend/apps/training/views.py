@@ -14,6 +14,8 @@ Endpoints:
   POST      /api/training/courses/<id>/register/        — student registers
   GET       /api/training/courses/<id>/registrations/   — trainer views registrations
   GET/POST  /api/training/registrations/<id>/progress/  — list/add progress
+  POST      /api/training/registrations/<id>/start/     — learner opened the course
+  PATCH/DEL /api/training/assignments/<id>/             — edit/delete an assignment
   GET       /api/training/my-courses/                   — student's own registrations
 """
 
@@ -176,11 +178,34 @@ def _sync_completion_status(reg) -> None:
     records = list(reg.progress_records.all())
     pct, _done, total = _course_completion(reg, records)
     fields = []
+    if not reg.started_at and (records or (total and pct >= 100)):
+        # Report 8.1 #62: progress means the learner has started — record
+        # when (self-paced courses showed "Started: —" for good).
+        reg.started_at = timezone.now()
+        fields.append("started_at")
     if total and pct >= 100 and reg.completion_status != "completed":
         reg.completion_status = "completed"
         reg.completed_at = timezone.now()
         fields += ["completion_status", "completed_at"]
     elif records and reg.completion_status == "not_started":
+        reg.completion_status = "in_progress"
+        fields.append("completion_status")
+    if fields:
+        reg.save(update_fields=fields)
+
+
+def _mark_started(reg) -> None:
+    """Report 8.1 #62: a registration becomes 'in progress' when the learner
+    actually starts the course (opens it / records progress), not when the
+    payment clears. Self-paced courses also get their start time recorded
+    here; a scheduled course keeps the countdown start set at payment."""
+    from django.utils import timezone
+
+    fields = []
+    if not reg.started_at:
+        reg.started_at = timezone.now()
+        fields.append("started_at")
+    if reg.completion_status == "not_started":
         reg.completion_status = "in_progress"
         fields.append("completion_status")
     if fields:
@@ -213,6 +238,7 @@ class HasTrainingPermission(HasModulePermission):
         "register": "add",
         "registrations": "view",
         "progress": "change",
+        "start": "change",
         "my_courses": "view",
         "progress_summary": "view",
         "messages": "add",
@@ -267,7 +293,21 @@ def _require_course_edit_allowed(request, course):
     Returns a Response to short-circuit with if not allowed, else None.
     """
     user = request.user
-    if _is_training_admin(user) or course.status == "draft":
+    if _is_training_admin(user):
+        return None
+    if not (user.role_id and user.role.name == "trainer"):
+        # Report 8.1 #61: learners hold the training 'change' right (for
+        # progress), which let them edit a draft course's structure.
+        return Response(
+            {
+                "error": {
+                    "code": "forbidden",
+                    "message": "Only trainers and admins can edit course structure.",
+                }
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if course.status == "draft":
         return None
     cur = (
         CourseModificationRequest.objects.filter(
@@ -665,7 +705,9 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         # Free courses (price == 0) are auto-paid — no payment gateway needed
         is_free = float(course.price) == 0
         payment_status = "paid" if is_free else "pending"
-        completion_status = "in_progress" if is_free else "not_started"
+        # Report 8.1 #62: "not started" until the learner opens the course
+        # (see the `start` action), free or paid.
+        completion_status = "not_started"
 
         reg, created = CourseRegistration.objects.get_or_create(
             course=course,
@@ -949,6 +991,40 @@ class CourseRegistrationViewSet(ModelViewSet):
         _sync_completion_status(reg)
         return Response(
             {"message": "Progress updated.", "data": CourseProgressSerializer(progress).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"])
+    def start(self, request, pk=None):
+        """POST /registrations/<id>/start/ — the learner opened the course
+        player (Report 8.1 #62). Records the start time (if not yet set) and
+        moves 'not started' to 'in progress'. Idempotent; only the learner
+        whose registration it is, and only once the course is paid (or free).
+        """
+        reg = self.get_object()
+        if reg.student_id != request.user.id:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the registered learner can start this course.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if reg.payment_status != "paid" and float(reg.course.price) != 0:
+            return Response(
+                {
+                    "error": {
+                        "code": "payment_required",
+                        "message": "Complete payment to start the course.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        _mark_started(reg)
+        return Response(
+            {"message": "Course started.", "data": CourseRegistrationSerializer(reg).data},
             status=status.HTTP_200_OK,
         )
 
@@ -1884,6 +1960,27 @@ class SessionContentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
             {"message": "Interactive question created.", "data": serializer.data},
             status=status.HTTP_201_CREATED,
         )
+
+
+# ---------------------------------------------------------------------------
+# Assignment ViewSet (edit/delete assignments — Report 8.1 #61)
+# ---------------------------------------------------------------------------
+
+
+class AssignmentViewSet(_CourseStructureEditGuardMixin, ModelViewSet):
+    """Edit/delete a session's assignments (SRS §2.3.2). Report 8.1 #61: the
+    app sent edits and deletes to /sessions/<id>/assignments/<id>/, which
+    does not exist; assignments are now addressed as /assignments/<id>/,
+    like contents. Created via POST /sessions/<id>/assignments/. Edits to a
+    published course go through the same Admin-approval gate (Doc 7 §5)."""
+
+    queryset = Assignment.objects.select_related("session__topic__lesson__course")
+    permission_classes = [IsAuthenticated, HasTrainingPermission]
+    serializer_class = AssignmentSerializer
+    http_method_names = ["get", "head", "options", "patch", "delete"]
+
+    def _course_for(self, obj):
+        return obj.session.topic.lesson.course
 
 
 # ---------------------------------------------------------------------------

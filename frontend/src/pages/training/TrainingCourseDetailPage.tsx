@@ -42,6 +42,8 @@ import {
   addCourseAssessment,
   addLiveSession,
   COURSE_TYPES,
+  completionStatusLabel,
+  completionStatusVariant,
   createZoomMeeting,
   deleteCourseAssessment,
   deleteLiveSession,
@@ -617,8 +619,8 @@ function RegistrationsTab({ courseId }: { courseId: number }) {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={r.completion_status === "completed" ? "success" : "default"}>
-                      {r.completion_status.replace(/_/g, " ")}
+                    <Badge variant={completionStatusVariant(r.completion_status)}>
+                      {completionStatusLabel(r.completion_status)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-slate-500">
@@ -760,7 +762,7 @@ function ReportsReviewModal({
           </div>
           <p className="mt-2 text-xs text-slate-500">
             Course completion: {summary.completion_percentage}% · status{" "}
-            {summary.completion_status.replace(/_/g, " ")}
+            {completionStatusLabel(summary.completion_status).toLowerCase()}
           </p>
         </div>
       )}

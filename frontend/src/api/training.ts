@@ -656,22 +656,53 @@ export function updateContent(
   return apiPatch<SessionContent>(`${BASE}/contents/${contentId}/`, payload);
 }
 
+/**
+ * Report 8.1 #61: replace an audio/video item's media with an uploaded file
+ * (multipart PATCH). The link is cleared so the new file is what plays; the
+ * item's Timeliner questions stay attached.
+ */
+export function updateContentWithFile(
+  contentId: number,
+  payload: { title?: string; media_file: File; duration_seconds?: number | null },
+): Promise<SessionContent> {
+  const form = new FormData();
+  if (payload.title != null) form.append("title", payload.title);
+  form.append("media_file", payload.media_file);
+  form.append("content_url", "");
+  if (payload.duration_seconds != null) {
+    form.append("duration_seconds", String(payload.duration_seconds));
+  }
+  return apiPatch<SessionContent>(`${BASE}/contents/${contentId}/`, form);
+}
+
 export function deleteContent(contentId: number): Promise<void> {
   return apiDelete(`${BASE}/contents/${contentId}/`);
 }
 
+/**
+ * Report 8.1 #61: assignments are edited/deleted at /assignments/<id>/ —
+ * the old /sessions/<id>/assignments/<id>/ address did not exist (404).
+ */
 export function updateAssignment(
   assignmentId: number,
-  payload: Record<string, unknown>,
+  payload: Partial<
+    Pick<
+      Assignment,
+      | "title"
+      | "description"
+      | "resource_url"
+      | "report_submission_enabled"
+      | "is_mandatory"
+      | "submission_deadline"
+      | "report_instructions"
+    >
+  >,
 ): Promise<Assignment> {
-  return apiPatch<Assignment>(
-    `${BASE}/sessions/${assignmentId}/assignments/${assignmentId}/`,
-    payload,
-  );
+  return apiPatch<Assignment>(`${BASE}/assignments/${assignmentId}/`, payload);
 }
 
 export function deleteAssignment(assignmentId: number): Promise<void> {
-  return apiDelete(`${BASE}/sessions/${assignmentId}/assignments/${assignmentId}/`);
+  return apiDelete(`${BASE}/assignments/${assignmentId}/`);
 }
 
 export function updateLiveSession(
@@ -769,6 +800,14 @@ export function updateProgress(
   },
 ): Promise<CourseProgress> {
   return apiPost<CourseProgress>(`${BASE}/registrations/${registrationId}/progress/`, payload);
+}
+
+/**
+ * Report 8.1 #62: the learner opened the course — records the start date and
+ * moves "not started" to "in progress" (payment alone no longer does).
+ */
+export function startCourse(registrationId: number): Promise<CourseRegistration> {
+  return apiPost<CourseRegistration>(`${BASE}/registrations/${registrationId}/start/`);
 }
 
 export function getProgressSummary(registrationId: number): Promise<ProgressSummary> {
@@ -940,6 +979,28 @@ export const COURSE_STATUSES = [
   { value: "published", label: "Published" },
   { value: "archived", label: "Archived" },
 ];
+
+/** Report 8.1 #62: one wording for a registration's progress status on the
+ * learner's pages and the trainer's Registrations tab. */
+export const COMPLETION_STATUS_LABELS: Record<string, string> = {
+  not_started: "Not started",
+  in_progress: "In progress",
+  completed: "Completed",
+  expired: "Expired",
+};
+
+export function completionStatusLabel(status: string): string {
+  return COMPLETION_STATUS_LABELS[status] ?? status.replace(/_/g, " ");
+}
+
+export function completionStatusVariant(
+  status: string,
+): "success" | "primary" | "danger" | "default" {
+  if (status === "completed") return "success";
+  if (status === "in_progress") return "primary";
+  if (status === "expired") return "danger";
+  return "default";
+}
 
 export const LIVE_SESSION_MODES = [
   { value: "online", label: "Online (Zoom)" },

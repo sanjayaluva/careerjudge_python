@@ -915,7 +915,8 @@ def test_free_course_auto_paid_on_register(student_client, individual_user, trai
     assert resp.status_code == 201
     reg = CourseRegistration.objects.get(course=course, student=individual_user)
     assert reg.payment_status == "paid"
-    assert reg.completion_status == "in_progress"
+    # Report 8.1 #62: not "in progress" until the learner opens the course.
+    assert reg.completion_status == "not_started"
 
 
 def test_paid_course_stays_pending(student_client, individual_user, trainer_user):
@@ -1661,3 +1662,258 @@ def test_trainer_sees_only_own_courses_and_learner_only_published(
     learner = ids(student_client)
     assert admins.id in learner
     assert draft.id not in learner and mine.id not in learner
+
+
+# ---------------------------------------------------------------------------
+# Report 8.1 #61 — edit/delete content items and assignments
+# ---------------------------------------------------------------------------
+
+
+def _assignment(course_status, trainer_user):
+    from apps.training.models import Assignment, CourseLesson, LessonTopic, TopicSession
+
+    course = TrainingCourse.objects.create(title="C", created_by=trainer_user, status=course_status)
+    lesson = CourseLesson.objects.create(course=course, title="L")
+    topic = LessonTopic.objects.create(lesson=lesson, title="T")
+    session = TopicSession.objects.create(topic=topic, title="S")
+    return Assignment.objects.create(session=session, title="A1", description="old")
+
+
+def test_trainer_edits_every_assignment_field_on_draft_course(trainer_client, trainer_user):
+    """Report 8.1 #61: assignments are editable at /assignments/<id>/ (the app
+    used a non-existent nested URL)."""
+    a = _assignment("draft", trainer_user)
+    resp = trainer_client.patch(
+        f"/api/training/assignments/{a.id}/",
+        {
+            "title": "A1 v2",
+            "description": "<p>new</p>",
+            "resource_url": "https://example.com/doc",
+            "report_submission_enabled": True,
+            "is_mandatory": True,
+            "submission_deadline": "2026-12-31T18:00:00Z",
+            "report_instructions": "Max 2 pages",
+        },
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    a.refresh_from_db()
+    assert a.title == "A1 v2"
+    assert a.resource_url == "https://example.com/doc"
+    assert a.report_submission_enabled and a.is_mandatory
+    assert a.submission_deadline is not None
+    assert a.report_instructions == "Max 2 pages"
+
+
+def test_trainer_deletes_assignment(trainer_client, trainer_user):
+    from apps.training.models import Assignment
+
+    a = _assignment("draft", trainer_user)
+    resp = trainer_client.delete(f"/api/training/assignments/{a.id}/")
+    assert resp.status_code in (200, 204)
+    assert not Assignment.objects.filter(id=a.id).exists()
+
+
+def test_assignment_edit_on_published_course_needs_admin_approval(
+    admin_client, trainer_client, trainer_user
+):
+    """Doc 7 §5: same approval gate as the other structure edits."""
+    from apps.training.models import Assignment, CourseModificationRequest
+
+    a = _assignment("published", trainer_user)
+    url = f"/api/training/assignments/{a.id}/"
+    resp = trainer_client.patch(url, {"title": "X"}, format="json")
+    assert resp.status_code == 403
+    assert resp.data["error"]["code"] == "approval_required"
+    assert trainer_client.delete(url).status_code == 403
+    assert Assignment.objects.filter(id=a.id, title="A1").exists()
+
+    course = a.session.topic.lesson.course
+    trainer_client.post(
+        f"/api/training/courses/{course.id}/request-update/",
+        {"request_type": "update", "reason": "fix typo"},
+        format="json",
+    )
+    cur = CourseModificationRequest.objects.get(course=course, status="pending")
+    admin_client.post(f"/api/training/course-update-requests/{cur.id}/approve/", format="json")
+    assert trainer_client.patch(url, {"title": "A1 fixed"}, format="json").status_code == 200
+    a.refresh_from_db()
+    assert a.title == "A1 fixed"
+
+
+def test_admin_edits_assignment_on_published_course(admin_client, trainer_user):
+    a = _assignment("published", trainer_user)
+    resp = admin_client.patch(
+        f"/api/training/assignments/{a.id}/", {"title": "By admin"}, format="json"
+    )
+    assert resp.status_code == 200
+
+
+def test_student_cannot_edit_assignment(student_client, trainer_user):
+    a = _assignment("draft", trainer_user)
+    resp = student_client.patch(f"/api/training/assignments/{a.id}/", {"title": "X"}, format="json")
+    assert resp.status_code == 403
+
+
+def test_editing_media_content_keeps_timeliner_questions(trainer_client, trainer_user):
+    """Report 8.1 #61: replacing a video's title/link keeps its Timeliner
+    questions attached; switching from an uploaded file to a link clears the
+    file so the new link is played."""
+    from django.core.files.base import ContentFile
+
+    from apps.training.models import InteractiveQuestion
+
+    course, contents = _course_with_contents(trainer_user, 1)
+    course.status = "draft"
+    course.save()
+    c = contents[0]
+    c.content_format = "video"
+    c.media_file.save("v.mp4", ContentFile(b"00"), save=True)
+    InteractiveQuestion.objects.create(
+        session_content=c,
+        question_text="Q?",
+        trigger_timestamp=5,
+        options=[{"id": 1, "text": "a", "is_correct": True}],
+        correct_jump_to=10,
+        incorrect_jump_to=0,
+    )
+    resp = trainer_client.patch(
+        f"/api/training/contents/{c.id}/",
+        {"title": "Intro v2", "content_url": "https://example.com/v2.mp4", "media_file": None},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.data
+    c.refresh_from_db()
+    assert c.title == "Intro v2"
+    assert c.content_url == "https://example.com/v2.mp4"
+    assert not c.media_file
+    assert c.interactive_questions.count() == 1
+
+
+def test_content_media_file_can_be_replaced_by_upload(trainer_client, trainer_user):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    course, contents = _course_with_contents(trainer_user, 1)
+    course.status = "draft"
+    course.save()
+    c = contents[0]
+    c.content_format = "audio"
+    c.content_url = "https://example.com/old.mp3"
+    c.save()
+    resp = trainer_client.patch(
+        f"/api/training/contents/{c.id}/",
+        {
+            "content_url": "",
+            "media_file": SimpleUploadedFile("new.mp3", b"ID3", content_type="audio/mpeg"),
+        },
+        format="multipart",
+    )
+    assert resp.status_code == 200, resp.data
+    c.refresh_from_db()
+    assert c.content_url == ""
+    assert c.media_file.name.endswith(".mp3")
+
+
+# ---------------------------------------------------------------------------
+# Report 8.1 #62 — start date + status follow the learner, not the payment
+# ---------------------------------------------------------------------------
+
+
+def _paid_payment(user, course):
+    from decimal import Decimal
+
+    from apps.payments.models import Payment
+
+    return Payment.objects.create(
+        user=user, module="training", item_id=course.id, amount=Decimal(course.price)
+    )
+
+
+def test_payment_does_not_start_the_course(individual_user, trainer_user):
+    from apps.payments.services import _update_module_payment_status
+
+    course = TrainingCourse.objects.create(
+        title="Paid", created_by=trainer_user, status="published", price="50"
+    )
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    _update_module_payment_status(_paid_payment(individual_user, course))
+    reg.refresh_from_db()
+    assert reg.payment_status == "paid"
+    assert reg.completion_status == "not_started"
+    assert reg.started_at is None  # self-paced: nothing started yet
+
+
+def test_payment_starts_countdown_but_not_status_for_scheduled(individual_user, trainer_user):
+    """SRS §6: the countdown of a scheduled course still begins at payment."""
+    from apps.payments.services import _update_module_payment_status
+
+    course = TrainingCourse.objects.create(
+        title="Sched",
+        created_by=trainer_user,
+        status="published",
+        price="50",
+        schedule_type="scheduled",
+        duration_days=10,
+    )
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    _update_module_payment_status(_paid_payment(individual_user, course))
+    reg.refresh_from_db()
+    assert reg.started_at is not None
+    assert reg.completion_status == "not_started"
+
+
+def test_learner_opening_course_records_start(student_client, individual_user, trainer_user):
+    course, _ = _course_with_contents(trainer_user, 2)
+    reg = CourseRegistration.objects.create(
+        course=course, student=individual_user, payment_status="paid"
+    )
+    resp = student_client.post(f"/api/training/registrations/{reg.id}/start/")
+    assert resp.status_code == 200, resp.data
+    reg.refresh_from_db()
+    first = reg.started_at
+    assert first is not None
+    assert reg.completion_status == "in_progress"
+    assert resp.data["data"]["started_at"] is not None
+    # Idempotent: opening again keeps the first start time.
+    student_client.post(f"/api/training/registrations/{reg.id}/start/")
+    reg.refresh_from_db()
+    assert reg.started_at == first
+
+
+def test_start_refused_before_payment(student_client, individual_user, trainer_user):
+    course = TrainingCourse.objects.create(
+        title="Paid", created_by=trainer_user, status="published", price="50"
+    )
+    reg = CourseRegistration.objects.create(course=course, student=individual_user)
+    resp = student_client.post(f"/api/training/registrations/{reg.id}/start/")
+    assert resp.status_code == 400
+    reg.refresh_from_db()
+    assert reg.completion_status == "not_started" and reg.started_at is None
+
+
+def test_trainer_cannot_start_a_learners_course(trainer_client, individual_user, trainer_user):
+    course, _ = _course_with_contents(trainer_user, 1)
+    reg = CourseRegistration.objects.create(
+        course=course, student=individual_user, payment_status="paid"
+    )
+    resp = trainer_client.post(f"/api/training/registrations/{reg.id}/start/")
+    assert resp.status_code == 403
+    reg.refresh_from_db()
+    assert reg.started_at is None
+
+
+def test_first_progress_records_start_for_self_paced(student_client, individual_user, trainer_user):
+    """The Registrations tab's "Started" column was always "—" for
+    self-paced courses."""
+    course, contents = _course_with_contents(trainer_user, 2)
+    reg = CourseRegistration.objects.create(
+        course=course, student=individual_user, payment_status="paid"
+    )
+    student_client.post(
+        f"/api/training/registrations/{reg.id}/progress/",
+        {"content_type": "session_content", "content_id": contents[0].id, "is_completed": True},
+        format="json",
+    )
+    reg.refresh_from_db()
+    assert reg.started_at is not None
+    assert reg.completion_status == "in_progress"
