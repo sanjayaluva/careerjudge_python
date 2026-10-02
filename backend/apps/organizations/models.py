@@ -245,6 +245,50 @@ class AssessmentSchedule(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# CourseSchedule (Report 9 #16/#29/#60) — the training counterpart of
+# AssessmentSchedule: a manager schedules a licensed course for his
+# organization (or one group) at a date/time; members are notified on
+# create, reschedule and cancel.
+# ---------------------------------------------------------------------------
+
+
+class CourseSchedule(models.Model):
+    """A scheduled training course for an organization's members."""
+
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="course_schedules"
+    )
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.SET_NULL,
+        related_name="course_schedules",
+        null=True,
+        blank=True,
+        help_text=_("Optional — schedule for one group only; NULL = whole organization."),
+    )
+    course = models.ForeignKey(
+        "training.TrainingCourse", on_delete=models.CASCADE, related_name="org_schedules"
+    )
+    scheduled_at = models.DateTimeField(_("scheduled at"))
+    created_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_course_schedules",
+    )
+    notified = models.BooleanField(_("members notified"), default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-scheduled_at"]
+        verbose_name = _("course schedule")
+        verbose_name_plural = _("course schedules")
+
+    def __str__(self) -> str:
+        return f"{self.organization.name} → course#{self.course_id} @ {self.scheduled_at}"
+
+
+# ---------------------------------------------------------------------------
 # CorporateWebsite (CJ_UC054 + CJ_UC055) — a per-corporate branded portal.
 #
 # Logical multi-tenancy (Option B, see docs/compliance/corporate_exclusive_scope

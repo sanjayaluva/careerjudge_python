@@ -15,6 +15,13 @@ staff roles, admins) are never scoped by these helpers.
 from .models import OrganizationAssignment, OrganizationMember
 
 CORPORATE_ORG_TYPES = ("corporate", "corp_exclusive")
+# Report 9 #57/#102: content is licensed to channel-partner organizations too,
+# and the users a channel partner adds (members of his organization) are
+# limited to what was licensed, exactly like corporate employees.
+LICENSED_ORG_TYPES = (*CORPORATE_ORG_TYPES, "channel_partner")
+# Counselling is licensed per organization as an on/off service: a
+# ``counseling`` OrganizationAssignment always carries this item id.
+COUNSELING_LICENCE_ITEM_ID = 0
 
 
 def user_org_ids(user) -> list[int]:
@@ -54,6 +61,34 @@ def is_corporate_individual(user) -> bool:
         user=user,
         is_admin=False,
         organization__type__in=CORPORATE_ORG_TYPES,
+    ).exists()
+
+
+def is_licensed_member(user) -> bool:
+    """True for a plain individual who belongs (not as admin) to a corporate,
+    corp-exclusive or channel-partner organization (Report 9 #14/#52/#57/#102).
+
+    Such a user sees only the content licensed to his organization."""
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if role_name(user) != "individual":
+        return False
+    return OrganizationMember.objects.filter(
+        user=user, is_admin=False, organization__type__in=LICENSED_ORG_TYPES
+    ).exists()
+
+
+def is_licence_scoped(user) -> bool:
+    """Members and managers of an organization work only with the content CJ
+    Admin licensed to it; everyone else (staff, plain individuals) is not
+    restricted by licensing."""
+    return is_licensed_member(user) or is_org_manager(user)
+
+
+def org_has_counseling(organization_id) -> bool:
+    """Report 9 #101: is counselling licensed to this organization?"""
+    return OrganizationAssignment.objects.filter(
+        organization_id=organization_id, item_type="counseling"
     ).exists()
 
 

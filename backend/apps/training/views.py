@@ -421,7 +421,22 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
             return qs
         if role == "trainer":
             return qs.filter(created_by=user)
-        return qs.filter(status="published")
+        qs = qs.filter(status="published")
+        # Report 9 #14/#28/#52/#59: members and managers of a corporate,
+        # corp-exclusive or channel-partner organization see only the courses
+        # CJ Admin licensed to it (plus any they are already registered in).
+        # Plain individuals with no organization still see every published
+        # course.
+        from django.db.models import Q
+
+        from apps.organizations.scoping import assigned_item_ids, is_licence_scoped
+
+        if is_licence_scoped(user):
+            qs = qs.filter(
+                Q(id__in=assigned_item_ids(user, "training_course"))
+                | Q(registrations__student=user)
+            ).distinct()
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -713,8 +728,15 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
             "extra_answers": request.data.get("extra_answers", {}),
         }
 
-        # Free courses (price == 0) are auto-paid — no payment gateway needed
-        is_free = float(course.price) == 0
+        # Free courses (price == 0) are auto-paid — no payment gateway needed.
+        # Report 9 #14/#52: a course CJ Admin licensed to the learner's
+        # organization is paid for by the organization, so it is free for him.
+        from apps.organizations.scoping import assigned_item_ids, is_licensed_member
+
+        is_free = float(course.price) == 0 or (
+            is_licensed_member(request.user)
+            and course.id in assigned_item_ids(request.user, "training_course")
+        )
         payment_status = "paid" if is_free else "pending"
         # Report 8.1 #62: "not started" until the learner opens the course
         # (see the `start` action), free or paid.
@@ -749,7 +771,7 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
             request.user,
             module="training",
             item_id=course.id,
-            amount=course.price,
+            amount=0 if is_free else course.price,
             description=f"Registration: {course.title}",
         )
         checkout_url = None

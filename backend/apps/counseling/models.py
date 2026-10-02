@@ -234,6 +234,23 @@ class CounselingSession(models.Model):
     actual_start_at = models.DateTimeField(_("actual start time"), null=True, blank=True)
     actual_end_at = models.DateTimeField(_("actual end time"), null=True, blank=True)
 
+    # Report 9 #18/#19/#30/#31/#61: set when an organization manager booked
+    # the session for one of his members (counselling licensed → no fee).
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="counseling_sessions",
+    )
+    booked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="booked_counseling_sessions",
+    )
+
     class Meta:
         ordering = ["-booked_at"]
         verbose_name = _("counseling session")
@@ -260,6 +277,8 @@ class SessionCancellation(models.Model):
     CANCELLATION_REASON_CHOICES = [
         ("counselee", "Cancelled by counselee"),
         ("counsellor", "Cancelled by counsellor"),
+        # Report 9 #19/#31/#61: the member's organization manager cancelled.
+        ("organization", "Cancelled by the organization"),
     ]
 
     session = models.OneToOneField(

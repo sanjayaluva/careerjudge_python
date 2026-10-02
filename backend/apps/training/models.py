@@ -505,6 +505,22 @@ class CourseRegistration(models.Model):
     started_at = models.DateTimeField(_("started at"), null=True, blank=True)
     completed_at = models.DateTimeField(_("completed at"), null=True, blank=True)
     registered_at = models.DateTimeField(auto_now_add=True)
+    # Report 9 #15/#28/#59: set when an organization manager assigned this
+    # licensed course to the learner (a registration made on his behalf).
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="course_registrations",
+    )
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_course_registrations",
+    )
 
     class Meta:
         ordering = ["-registered_at"]

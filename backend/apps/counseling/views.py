@@ -570,76 +570,29 @@ class CounselingSessionViewSet(ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Validate the timeslot is available
-        timeslot = serializer.validated_data["timeslot"]
-        if timeslot.status != "available":
+        # Report 9: booking rules (slot availability, fee, notifications,
+        # payment) live in counseling.services so an organization manager
+        # booking for a member follows the same flow.
+        from .services import BookingError, book_session
+
+        data = serializer.validated_data
+        try:
+            session, checkout_url = book_session(
+                counselee=request.user,
+                counsellor=data["counsellor"],
+                timeslot=data["timeslot"],
+                category=data.get("category"),
+                topic=data["topic"],
+                description=data.get("description", ""),
+                mode=data.get("mode", "online"),
+                request=request,
+            )
+        except BookingError as exc:
             return Response(
-                {
-                    "error": {
-                        "code": "validation_error",
-                        "message": "This time slot is no longer available.",
-                    }
-                },
+                {"error": {"code": "validation_error", "message": str(exc)}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        counsellor = serializer.validated_data["counsellor"]
-        # Capture the fee at booking time
-        fee = counsellor.hourly_rate
-        # H15/D8 §2.1: a session is only 'paid' once the gateway/webhook says
-        # so — free sessions (fee=0) are the one exception, auto-marked paid
-        # exactly like free training courses (apps/training/views.py register()).
-        is_free = float(fee) == 0
-        session = serializer.save(
-            counselee=request.user,
-            fee=fee,
-            status="pending",
-            payment_status="paid" if is_free else "pending",
-            terms_accepted=True,
-        )
-        # Mark the timeslot as booked
-        timeslot.status = "booked"
-        timeslot.save(update_fields=["status"])
-
-        # Report 3 §1.10: notify the counsellor + helpdesk of the new booking.
-        from apps.notifications.models import notify_role, notify_user
-
-        counselee_name = request.user.full_name or request.user.email
-        slot_str = timeslot.start_time.strftime("%Y-%m-%d %H:%M")
-        notify_user(
-            counsellor.user,
-            f"New booking: {counselee_name}",
-            f"{counselee_name} booked a session for {slot_str}. "
-            f"Topic: {session.topic}. Please confirm within the confirm window.",
-            "session",
-            f"/counseling?session={session.id}",
-        )
-        notify_role(
-            "helpdesk",
-            f"New counselling booking: {counselee_name}",
-            f"{counselee_name} booked a session with {counsellor.full_name} on {slot_str}.",
-            "session",
-        )
-
-        # H15/D8 §2.1/§3.3: route payment through the gateway — same pattern
-        # as apps/training/views.py CourseViewSet.register(). The webhook
-        # (apps/payments/services.py _update_module_payment_status) flips
-        # session.payment_status to 'paid'; nothing here assumes payment done.
-        from apps.payments.services import create_stripe_checkout_session, get_or_create_payment
-
-        payment = get_or_create_payment(
-            request.user,
-            module="counseling",
-            item_id=session.id,
-            amount=fee,
-            description=f"Counselling session with {counsellor.full_name}",
-        )
-        checkout_url = None
-        if not is_free:
-            success_url = request.build_absolute_uri("/counseling?payment=success")
-            cancel_url = request.build_absolute_uri("/counseling?payment=cancelled")
-            checkout_url = create_stripe_checkout_session(payment, success_url, cancel_url)
-
+        is_free = float(session.fee) == 0
         if is_free:
             message = "Session booked. Awaiting counsellor confirmation."
         elif checkout_url is None:
@@ -650,7 +603,10 @@ class CounselingSessionViewSet(ModelViewSet):
         return Response(
             {
                 "message": message,
-                "data": {**serializer.data, "checkout_url": checkout_url},
+                "data": {
+                    **CounselingSessionSerializer(session).data,
+                    "checkout_url": checkout_url,
+                },
             },
             status=status.HTTP_201_CREATED,
         )
@@ -689,6 +645,8 @@ class CounselingSessionViewSet(ModelViewSet):
         Body: {"reason": "...", "cancelled_by": "counselee" | "counsellor"}
         Only the session's counselee, its counsellor, or an admin may cancel.
         """
+        from .services import BookingError, cancel_session
+
         session = self.get_object()
         if session.status in ("cancelled", "completed"):
             return Response(
@@ -720,79 +678,24 @@ class CounselingSessionViewSet(ModelViewSet):
         # Infer cancelled_by from the caller when not explicitly provided.
         default_by = "counsellor" if is_counsellor and not is_counselee else "counselee"
         cancelled_by = request.data.get("cancelled_by", default_by)
-        reason = request.data.get("reason", "")
-
-        # Report 3 §1.16: reason is required for cancellations.
-        if not reason.strip():
+        if cancelled_by not in ("counselee", "counsellor"):
+            cancelled_by = default_by
+        try:
+            cancellation = cancel_session(
+                session, cancelled_by=cancelled_by, reason=request.data.get("reason", "")
+            )
+        except BookingError as exc:
             return Response(
-                {
-                    "error": {
-                        "code": "validation_error",
-                        "message": "A reason is required to cancel.",
-                    }
-                },
+                {"error": {"code": "validation_error", "message": str(exc)}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Compute refund tier based on time until session (admin-configurable).
-        settings = CounselingSettings.get()
-        now = timezone.now()
-        session_time = session.timeslot.start_time
-        hours_until = (session_time - now).total_seconds() / 3600
-
-        if hours_until >= settings.full_refund_within_hours:
-            refund_tier = "full"
-            refund_amount = session.fee
-        elif hours_until >= settings.half_refund_within_hours:
-            refund_tier = "half"
-            refund_amount = session.fee / 2
-        else:
-            refund_tier = "none"
-            refund_amount = 0
-
-        # Dossier gap D8: execute the refund through the payments module
-        # rather than only recording it here. A full Stripe gateway refund
-        # is attempted when configured; either way, the Payment record is
-        # flipped to 'refunded' so it's reflected in the system of record.
-        refund_executed = False
-        if refund_amount and float(refund_amount) > 0:
-            from apps.payments.models import Payment
-            from apps.payments.services import refund_payment
-
-            payment = Payment.objects.filter(module="counseling", item_id=session.id).first()
-            if payment:
-                refund_executed = refund_payment(payment, amount=refund_amount)
-
-        # Create cancellation record
-        cancellation = SessionCancellation.objects.create(
-            session=session,
-            cancelled_by=cancelled_by,
-            reason=reason,
-            refund_tier=refund_tier,
-            refund_amount=refund_amount,
-            refund_executed=refund_executed,
-        )
-
-        # Update session status
-        session.status = "cancelled"
-        session.payment_status = f"refunded_{refund_tier}"
-        session.save(update_fields=["status", "payment_status"])
-
-        # Free up the timeslot
-        timeslot = session.timeslot
-        timeslot.status = "available"
-        timeslot.save(update_fields=["status"])
-
-        # Track counsellor cancellation frequency (SRS §3.2 note)
-        if cancelled_by == "counsellor":
-            # cancellation_count lives on UserProfile now
-            profile = session.counsellor.user.profile
-            profile.cancellation_count += 1
-            profile.save(update_fields=["cancellation_count"])
-
         return Response(
             {
-                "message": f"Session cancelled. Refund tier: {refund_tier} (${refund_amount}).",
+                "message": (
+                    f"Session cancelled. Refund tier: {cancellation.refund_tier} "
+                    f"(${cancellation.refund_amount})."
+                ),
                 "data": {
                     "session": CounselingSessionSerializer(session).data,
                     "cancellation": SessionCancellationSerializer(cancellation).data,

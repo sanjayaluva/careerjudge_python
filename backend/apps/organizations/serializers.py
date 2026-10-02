@@ -8,6 +8,7 @@ from apps.accounts.serializers import UserSerializer
 from .models import (
     AssessmentSchedule,
     CorporateWebsite,
+    CourseSchedule,
     Group,
     Organization,
     OrganizationAssignment,
@@ -121,6 +122,11 @@ class OrganizationAssignmentSerializer(serializers.ModelSerializer):
     assigned_by_name = serializers.CharField(
         source="assigned_by.full_name", read_only=True, default=None
     )
+    # Counselling is licensed as a whole service, so its item id is optional.
+    item_id = serializers.IntegerField(required=False, min_value=0)
+    # Report 9 #98/#100-#103: the licensed item's title, so the organization's
+    # managers can read the list without rights on the content modules.
+    item_title = serializers.SerializerMethodField()
 
     class Meta:
         model = OrganizationAssignment
@@ -129,11 +135,44 @@ class OrganizationAssignmentSerializer(serializers.ModelSerializer):
             "organization",
             "item_type",
             "item_id",
+            "item_title",
             "assigned_by",
             "assigned_by_name",
             "assigned_at",
         ]
         read_only_fields = ["id", "organization", "assigned_by", "assigned_by_name", "assigned_at"]
+
+    def validate(self, attrs):
+        """Report 9 #98/#100-#103: only PUBLISHED assessments and courses can
+        be licensed; counselling is an on/off service per organization."""
+        from .scoping import COUNSELING_LICENCE_ITEM_ID
+
+        item_type = attrs.get("item_type")
+        if item_type == "counseling":
+            attrs["item_id"] = COUNSELING_LICENCE_ITEM_ID
+            return attrs
+        item_id = attrs.get("item_id")
+        if item_id is None:
+            raise serializers.ValidationError({"item_id": "This field is required."})
+        model = _licensable_model(item_type)
+        if not model.objects.filter(id=item_id, status="published").exists():
+            raise serializers.ValidationError(
+                {"item_id": "Pick a published item — drafts and archived items can't be licensed."}
+            )
+        return attrs
+
+    def get_item_title(self, obj):
+        if obj.item_type == "counseling":
+            return "Counselling services"
+        item = _licensable_model(obj.item_type).objects.filter(id=obj.item_id).first()
+        return item.title if item else f"#{obj.item_id}"
+
+
+def _licensable_model(item_type):
+    from apps.assessment.models import Assessment
+    from apps.training.models import TrainingCourse
+
+    return TrainingCourse if item_type == "training_course" else Assessment
 
 
 class AssessmentScheduleSerializer(serializers.ModelSerializer):
@@ -160,6 +199,37 @@ class AssessmentScheduleSerializer(serializers.ModelSerializer):
             "id",
             "organization",
             "assessment_title",
+            "group_name",
+            "created_by",
+            "notified",
+            "created_at",
+        ]
+
+
+class CourseScheduleSerializer(serializers.ModelSerializer):
+    """Report 9 #16/#29/#60: a manager schedules a licensed course."""
+
+    course_title = serializers.CharField(source="course.title", read_only=True)
+    group_name = serializers.CharField(source="group.name", read_only=True, default=None)
+
+    class Meta:
+        model = CourseSchedule
+        fields = [
+            "id",
+            "organization",
+            "group",
+            "course",
+            "course_title",
+            "group_name",
+            "scheduled_at",
+            "created_by",
+            "notified",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "organization",
+            "course_title",
             "group_name",
             "created_by",
             "notified",

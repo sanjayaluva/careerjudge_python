@@ -369,16 +369,13 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
         # corp-exclusive org) sees ONLY the assessments assigned to their
         # organization — not the whole published catalogue. Non-corporate users
         # (plain individuals with no membership, staff, admins) are unaffected.
-        from apps.organizations.scoping import (
-            assigned_item_ids,
-            is_corporate_individual,
-            is_org_manager,
-        )
+        from apps.organizations.scoping import assigned_item_ids, is_licence_scoped
 
         # Report 9 #8/#25/#57: likewise an organization manager (Corp Admin,
         # Corp Exclusive, Group Admin, Channel Partner) works only with the
-        # assessments CJ Admin assigned to his organization.
-        if is_corporate_individual(self.request.user) or is_org_manager(self.request.user):
+        # assessments CJ Admin assigned to his organization. Report 9 #102:
+        # the users a channel partner adds are limited the same way.
+        if is_licence_scoped(self.request.user):
             qs = qs.filter(id__in=assigned_item_ids(self.request.user, "assessment"))
 
         return qs
