@@ -59,6 +59,8 @@ export interface AuthUser {
   /** Effective ModuleRights for the user's role. Absent on the slim login
    *  response — populated once /api/me/ resolves (see useAuth.ts). */
   module_rights?: ModuleRightGrant[];
+  /** Report 9 #96: backend modules switched off for the user's organization. */
+  disabled_modules?: string[];
 }
 
 export interface LoginResponse {
@@ -148,6 +150,8 @@ export interface User {
   is_staff: boolean;
   role: RoleName | null;
   module_rights: ModuleRightGrant[];
+  /** Report 9 #96: backend modules CJ Admin switched off for the user's organization. */
+  disabled_modules?: string[];
   profile: UserProfile | null;
   created_at: string;
   updated_at: string;

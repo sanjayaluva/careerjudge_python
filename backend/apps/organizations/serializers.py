@@ -381,6 +381,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "state",
             "country",
             "postal_code",
+            "enabled_modules",
             "member_count",
             "group_count",
             "groups",
@@ -388,6 +389,20 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_enabled_modules(self, value):
+        """Report 9 #96: only switchable module codes; an empty list or null
+        means every module is allowed."""
+        from .models import ORG_SWITCHABLE_MODULES
+
+        if value in (None, []):
+            return None
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise serializers.ValidationError("Send a list of module codes.")
+        unknown = sorted(set(value) - set(ORG_SWITCHABLE_MODULES))
+        if unknown:
+            raise serializers.ValidationError(f"Unknown module(s): {', '.join(unknown)}.")
+        return sorted(set(value))
 
     def get_groups(self, obj):
         # Report 9 #23: a Group Admin sees only his group and its sub-groups.

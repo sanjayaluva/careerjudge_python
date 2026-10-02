@@ -47,6 +47,7 @@ export function useAuth(): UseAuthResult {
         is_superuser: query.data.is_superuser,
         is_staff: query.data.is_staff,
         module_rights: query.data.module_rights,
+        disabled_modules: query.data.disabled_modules,
       };
       // Only update if the snapshot changed (avoid render loop).
       const cur = useAuthStore.getState().user;
@@ -56,7 +57,8 @@ export function useAuth(): UseAuthResult {
         cur.full_name !== next.full_name ||
         cur.role !== next.role ||
         cur.is_email_verified !== next.is_email_verified ||
-        JSON.stringify(cur.module_rights) !== JSON.stringify(next.module_rights)
+        JSON.stringify(cur.module_rights) !== JSON.stringify(next.module_rights) ||
+        JSON.stringify(cur.disabled_modules) !== JSON.stringify(next.disabled_modules)
       ) {
         setUser(next);
       }

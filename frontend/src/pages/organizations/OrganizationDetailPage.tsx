@@ -58,6 +58,7 @@ import {
   LicensedCoursesCard,
   MemberCounsellingCard,
 } from "./LicensedContentCards";
+import { OrganizationModulesCard } from "./OrganizationModulesCard";
 
 const ORG_KEY = (id: number) => ["organizations", id];
 
@@ -274,6 +275,9 @@ export default function OrganizationDetailPage() {
 
       {/* Licensed content (CJ_UC030; Report 9 #98/#100-#103): members and
           managers see only the assessments and courses licensed here. */}
+      {/* Report 9 #96: CJ Admin chooses the modules this organization may use. */}
+      {access.isCJAdmin && <OrganizationModulesCard org={org} />}
+
       <LicensedContentCard orgId={orgId} canLicense={access.isCJAdmin} />
 
       {/* Report 9 #15/#28/#59: assign licensed courses to members. */}

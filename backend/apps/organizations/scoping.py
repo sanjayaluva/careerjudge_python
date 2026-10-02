@@ -241,3 +241,23 @@ def creatable_role_names(user) -> tuple[str, ...] | None:
     if not is_org_manager(user):
         return None
     return _CREATABLE_ROLES.get(role_name(user), ())
+
+
+def org_disabled_modules(user) -> set[str]:
+    """Report 9 #96: modules switched off for the user's organization(s) by
+    CJ Admin. A module stays usable if ANY of the user's organizations allows
+    it; users outside organizations are never affected."""
+    from .models import ORG_SWITCHABLE_MODULES, Organization
+
+    if not getattr(user, "is_authenticated", False) or user.is_superuser:
+        return set()
+    org_ids = user_org_ids(user)
+    if not org_ids:
+        return set()
+    disabled: set[str] | None = None
+    for enabled in Organization.objects.filter(id__in=org_ids).values_list(
+        "enabled_modules", flat=True
+    ):
+        off = set(ORG_SWITCHABLE_MODULES) - set(enabled) if enabled else set()
+        disabled = off if disabled is None else disabled & off
+    return disabled or set()

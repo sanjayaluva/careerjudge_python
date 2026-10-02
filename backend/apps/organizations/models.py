@@ -13,6 +13,9 @@ Groups are sub-entities within an organization (managed by group_admin).
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+# Modules CJ Admin can switch on/off per organization (Report 9 #96).
+ORG_SWITCHABLE_MODULES = ("assessment", "career_profiling", "reporting", "training", "counseling")
+
 
 class Organization(models.Model):
     """Corporate entity — a company or organization that uses CareerJudge.
@@ -61,6 +64,14 @@ class Organization(models.Model):
     state = models.CharField(_("state"), max_length=100, blank=True)
     country = models.CharField(_("country"), max_length=100, blank=True)
     postal_code = models.CharField(_("postal code"), max_length=20, blank=True)
+    # Report 9 #96: CJ Admin chooses which modules this organization's admins
+    # and members may use. Empty/None = every module (the default).
+    enabled_modules = models.JSONField(
+        _("enabled modules"),
+        null=True,
+        blank=True,
+        help_text=_("Module codes this organization may use; empty means all."),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

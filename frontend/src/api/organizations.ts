@@ -24,6 +24,8 @@ export interface Organization {
   state: string;
   country: string;
   postal_code: string;
+  /** Report 9 #96: modules this organization may use; null = all. */
+  enabled_modules: string[] | null;
   member_count: number;
   group_count: number;
   groups: Group[];
@@ -135,6 +137,14 @@ export function retrieveOrganization(id: number): Promise<Organization> {
 
 export function createOrganization(payload: CreateOrganizationPayload): Promise<Organization> {
   return apiPost<Organization>(`${BASE}/`, payload);
+}
+
+/** Report 9 #96: CJ Admin sets the modules an organization may use (null = all). */
+export function setOrganizationModules(
+  id: number,
+  enabledModules: string[] | null,
+): Promise<Organization> {
+  return apiPatch<Organization>(`${BASE}/${id}/`, { enabled_modules: enabledModules });
 }
 
 export function updateOrganization(

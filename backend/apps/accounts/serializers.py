@@ -260,6 +260,7 @@ class UserSerializer(serializers.ModelSerializer):
     profile = UserProfileSerializer(read_only=True)
     role = serializers.SlugRelatedField(slug_field="name", read_only=True)
     module_rights = serializers.SerializerMethodField()
+    disabled_modules = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -275,6 +276,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_staff",
             "role",
             "module_rights",
+            "disabled_modules",
             "profile",
             "created_at",
             "updated_at",
@@ -288,6 +290,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_staff",
             "role",
             "module_rights",
+            "disabled_modules",
             "profile",
             "created_at",
             "updated_at",
@@ -303,7 +306,16 @@ class UserSerializer(serializers.ModelSerializer):
         """
         if not obj.role_id:
             return []
-        return [{"module": r.module, "action": r.action} for r in obj.role.effective_rights]
+        disabled = obj.org_disabled_modules()
+        return [
+            {"module": r.module, "action": r.action}
+            for r in obj.role.effective_rights
+            if r.module not in disabled
+        ]
+
+    def get_disabled_modules(self, obj) -> list[str]:
+        """Report 9 #96: modules switched off for the user's organization."""
+        return sorted(obj.org_disabled_modules())
 
 
 class UserWriteSerializer(serializers.ModelSerializer):

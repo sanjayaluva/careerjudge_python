@@ -280,3 +280,34 @@ def test_psychometrician_can_create_profiling_solution_and_report(roles):
     assert sol.status_code in (200, 201), sol.data
     rep = c.post("/api/reporting/reports/", {"title": "General"}, format="json")
     assert rep.status_code in (200, 201), rep.data
+
+
+def test_cj_admin_switches_modules_off_for_an_organization(world):
+    """Report 9 #96: CJ Admin chooses the modules an organization may use;
+    its admins and members lose the others (server + /api/me)."""
+    c = _auth(world["cj"])
+    bad = c.patch(
+        f"/api/organizations/{world['own'].id}/", {"enabled_modules": ["nope"]}, format="json"
+    )
+    assert bad.status_code == 400
+    ok = c.patch(
+        f"/api/organizations/{world['own'].id}/",
+        {"enabled_modules": ["assessment"]},
+        format="json",
+    )
+    assert ok.status_code == 200, ok.data
+    emp = _auth(world["emp"])
+    assert emp.get("/api/reporting/generated/").status_code == 403
+    assert emp.get("/api/assessments/").status_code == 200
+    me = emp.get("/api/me/").data["data"]
+    assert "reporting" in me["disabled_modules"]
+    assert all(r["module"] != "reporting" for r in me["module_rights"])
+    # A user outside the organization is unaffected.
+    assert _auth(world["stranger"]).get("/api/reporting/generated/").status_code == 200
+    # Managers cannot change the switch themselves.
+    assert (
+        _auth(world["manager"])
+        .patch(f"/api/organizations/{world['own'].id}/", {"enabled_modules": None}, format="json")
+        .status_code
+        == 403
+    )

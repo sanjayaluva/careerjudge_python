@@ -54,8 +54,12 @@ function isModuleVisible(
   module: ModuleKey,
   role: RoleName,
   moduleRights: ModuleRightGrant[] | undefined,
+  disabledModules: string[] = [],
 ): boolean {
   if (ALWAYS_VISIBLE_MODULES.includes(module)) return true;
+  // Report 9 #96: CJ Admin switched this module off for the user's organization.
+  const backend = MODULE_KEY_BACKEND_MODULE[module];
+  if (backend && disabledModules.includes(backend)) return false;
   // Built-in roles: the signed role map above is authoritative. Deriving
   // menus from rights showed tabs a role must not have (e.g. Users for any
   // role with "view users", Assessments from a leftover right — Report 9).
@@ -73,6 +77,7 @@ export function usePermissions(): UsePermissionsResult {
   const user = useAuthStore((s) => s.user);
   const role = user?.role ?? null;
   const moduleRights = user?.module_rights;
+  const disabledModules = user?.disabled_modules;
 
   return useMemo(() => {
     if (!role) {
@@ -85,14 +90,16 @@ export function usePermissions(): UsePermissionsResult {
         moduleRights,
       };
     }
-    const visible = EVERY_MODULE_KEY.filter((m) => isModuleVisible(m, role, moduleRights));
+    const visible = EVERY_MODULE_KEY.filter((m) =>
+      isModuleVisible(m, role, moduleRights, disabledModules),
+    );
     return {
       role,
-      can: (module: ModuleKey) => isModuleVisible(module, role, moduleRights),
+      can: (module: ModuleKey) => isModuleVisible(module, role, moduleRights, disabledModules),
       canPerform: (module: ModuleKey, action: ModuleAction) => {
-        if (!moduleRights) return isModuleVisible(module, role, moduleRights);
+        if (!moduleRights) return isModuleVisible(module, role, moduleRights, disabledModules);
         const backendModule = MODULE_KEY_BACKEND_MODULE[module];
-        if (!backendModule) return isModuleVisible(module, role, moduleRights);
+        if (!backendModule) return isModuleVisible(module, role, moduleRights, disabledModules);
         return moduleRights.some(
           (right) => right.module === backendModule && right.action === action,
         );
@@ -101,7 +108,7 @@ export function usePermissions(): UsePermissionsResult {
       visibleModules: visible,
       moduleRights,
     };
-  }, [role, moduleRights]);
+  }, [role, moduleRights, disabledModules]);
 }
 
 /** Module-level helpers — convenient for protecting entire routes. */

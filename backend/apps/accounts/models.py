@@ -285,9 +285,20 @@ class User(AbstractUser):
 
     # --- Permission helpers ---
 
+    def org_disabled_modules(self) -> set[str]:
+        """Modules CJ Admin switched off for this user's organization (Report
+        9 #96); cached on the instance (one request)."""
+        if not hasattr(self, "_org_disabled_modules"):
+            from apps.organizations.scoping import org_disabled_modules
+
+            self._org_disabled_modules = org_disabled_modules(self)
+        return self._org_disabled_modules
+
     def has_module_right(self, module: str, action: str) -> bool:
         """Check if user has a specific module right via their role."""
         if not self.role_id:
+            return False
+        if module in self.org_disabled_modules():
             return False
         return ModuleRight.objects.filter(
             role_id=self.role_id, module=module, action=action
