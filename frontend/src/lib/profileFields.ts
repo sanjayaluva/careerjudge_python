@@ -156,6 +156,19 @@ export const PROFESSIONAL_FIELDS: ProfileFieldConfig[] = [
   { name: "bio", label: "User Bio", type: "textarea", max_length: 1000 },
 ];
 
+// SME / Reviewer (Report 9 #66/#68, client change request): professional
+// fields plus the subject domains they are expert in, which CJ Admin uses to
+// choose the SME for a task and the reviewer for it.
+export const SME_REVIEWER_FIELDS: ProfileFieldConfig[] = [
+  ...PROFESSIONAL_FIELDS,
+  {
+    name: "domains_of_expertise",
+    label: "Domains of expertise (comma-separated, e.g. Quantitative Aptitude, Verbal Reasoning)",
+    type: "text",
+    max_length: 500,
+  },
+];
+
 // Channel Partner fields (SRS page 13 + dossier gap: agency_name/allocated_region)
 export const CHANNEL_PARTNER_FIELDS: ProfileFieldConfig[] = [
   { name: "current_position", label: "Current position", type: "text", max_length: 50 },
@@ -224,9 +237,10 @@ export function getRoleSpecificFields(role: RoleName | null): ProfileFieldConfig
   switch (role) {
     case "individual":
       return INDIVIDUAL_FIELDS;
-    case "psychometrician":
     case "sme":
     case "reviewer":
+      return SME_REVIEWER_FIELDS;
+    case "psychometrician":
     case "trainer":
       return PROFESSIONAL_FIELDS;
     case "counsellor":
@@ -239,4 +253,23 @@ export function getRoleSpecificFields(role: RoleName | null): ProfileFieldConfig
     default:
       return [];
   }
+}
+
+/** Domains of expertise as a list (the API stores a list; forms send text). */
+export function expertiseList(value: string[] | string | null | undefined): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean);
+  return value
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+/** "Name — Domain A, Domain B" for user pickers (Report 9 #67/#69). */
+export function nameWithExpertise(
+  name: string,
+  domains: string[] | string | null | undefined,
+): string {
+  const list = expertiseList(domains);
+  return list.length ? `${name} — ${list.join(", ")}` : name;
 }

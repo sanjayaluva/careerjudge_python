@@ -83,6 +83,10 @@ export interface Task {
   extension_requests?: TaskExtensionRequest[];
   parent_task?: number | null;
   parent_task_id?: string | null;
+  /** Report 9 #65: SME task — the Reviewer the SME sends the questions to. */
+  reviewer?: number | null;
+  reviewer_name?: string | null;
+  reviewer_domains?: string[];
 }
 
 export interface TaskCreateInput {
@@ -93,6 +97,8 @@ export interface TaskCreateInput {
   priority?: TaskPriority;
   due_date?: string | null;
   parent_task_id?: string;
+  /** Report 9 #65: SME task — the Reviewer the SME sends the questions to. */
+  reviewer?: number | null;
   /** Multi-row SME task spec — one entry per category/difficulty/type
    * combination. A single entry is equivalent to the legacy `spec` shape. */
   specs?: TaskSpec[];

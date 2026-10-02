@@ -306,8 +306,39 @@ export function declineDeletionRequest(id: number): Promise<QuestionBankDeletion
   return apiPost<QuestionBankDeletionRequest>(`${BASE}/deletion-requests/${id}/decline/`, {});
 }
 
-export function submitForReview(id: number): Promise<{ id: number; status: string }> {
-  return apiPost(`${BASE}/questions/${id}/submit_for_review/`);
+/**
+ * Submit a question for content review. Report 9 #65: `reviewer` is the
+ * Reviewer the SME chose; without it the backend uses the reviewer named on
+ * the SME's task, else routes automatically.
+ */
+export function submitForReview(
+  id: number,
+  reviewer?: number | null,
+): Promise<{ id: number; status: string; assigned_reviewer: number | null }> {
+  return apiPost(`${BASE}/questions/${id}/submit_for_review/`, reviewer ? { reviewer } : undefined);
+}
+
+/** A Reviewer in a picker, with his domains of expertise (Report 9 #67/#69). */
+export interface ReviewerOption {
+  id: number;
+  full_name: string;
+  email: string;
+  domains_of_expertise: string[];
+}
+
+export interface ReviewerOptions {
+  reviewers: ReviewerOption[];
+  /** Pre-selected reviewer: the one who sent it back, else the task's. */
+  default_reviewer: number | null;
+  /** Reviewer named by CJ Admin on the SME's task, if any. */
+  task_reviewer: number | null;
+  /** Sent back: the resubmission returns to the same reviewer (#71). */
+  locked: boolean;
+}
+
+/** Reviewer picker for "Submit for review" (Report 9 #65). */
+export function getReviewerOptions(id: number): Promise<ReviewerOptions> {
+  return apiGet(`${BASE}/questions/${id}/reviewer-options/`);
 }
 
 // ---------------------------------------------------------------------------
@@ -385,6 +416,15 @@ export function extractPsychometricQuestions(
   return apiPost(`${BASE}/questions/psychometric-extract/`, filters);
 }
 
+/** Doc 1 §4.1.1: the analyses the psychometrician can choose to run. */
+export type PsychometricAnalysisKind = "difficulty" | "discrimination" | "item_total";
+
+export const PSYCHOMETRIC_ANALYSES: { value: PsychometricAnalysisKind; label: string }[] = [
+  { value: "difficulty", label: "Item difficulty" },
+  { value: "discrimination", label: "Item discrimination" },
+  { value: "item_total", label: "Item total correlation" },
+];
+
 export interface PsychometricAnalysisResult {
   question_id: number;
   n_candidates: number;
@@ -397,9 +437,13 @@ export interface PsychometricAnalysisResult {
   error: string | null;
 }
 
-/** Automatic psychometric analysis (SRS 02). */
+/**
+ * Automatic psychometric analysis (SRS 02). Doc 1 §4.1.1: computes the
+ * chosen analyses and returns them for inspection only — nothing is stored
+ * until the results are submitted (uploadPsychometricResults).
+ */
 export function runPsychometricAnalysis(
-  filters: PsychometricAnalysisFilters,
+  filters: PsychometricAnalysisFilters & { analyses?: PsychometricAnalysisKind[] },
 ): Promise<PsychometricAnalysisResult[]> {
   return apiPost(`${BASE}/questions/psychometric_analysis/`, filters);
 }

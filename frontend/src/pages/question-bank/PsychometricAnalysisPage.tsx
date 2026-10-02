@@ -4,10 +4,11 @@
  * Doc 1 §4.1.1 (Report 9 #87/#88): the psychometrician sets filter criteria
  * (category, question ID, time period, region, age range) and clicks
  * "Extract"; the matching questions are listed with their key details, the
- * psychometrician ticks the ones to analyse (or "select all") and runs the
- * analysis on just those. The per-question indices (difficulty, top/bottom-
- * group difficulty, difference, discrimination, item-total correlation) are
- * shown in a table.
+ * psychometrician ticks the ones to analyse (or "select all"), chooses the
+ * analyses to run (item difficulty, item discrimination, item total
+ * correlation) and runs them on just those. The outputs are shown for
+ * inspection first: Submit stores them against the questions, Cancel discards
+ * them and goes back to filtering/selecting (Doc 1 §4.1.1).
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -35,16 +36,36 @@ import {
 } from "@/components/ui";
 import { extractApiError } from "@/api/client";
 import {
+  PSYCHOMETRIC_ANALYSES,
   type PsychometricAnalysisFilters,
+  type PsychometricAnalysisKind,
+  type PsychometricAnalysisResult,
   type PsychometricExtractRow,
+  type PsychometricUploadRow,
   extractPsychometricQuestions,
   listCategories,
   runPsychometricAnalysis,
+  uploadPsychometricResults,
 } from "@/api/questionBank";
 
 function fmt(n: number | null): string {
   return n === null || n === undefined ? "—" : Number(n).toFixed(3);
 }
+
+// The result fields each analysis produces (mirrors the backend).
+const ANALYSIS_FIELDS: Record<
+  PsychometricAnalysisKind,
+  { key: keyof PsychometricUploadRow; label: string }[]
+> = {
+  difficulty: [
+    { key: "item_difficulty_index", label: "IDI" },
+    { key: "top_group_difficulty_index", label: "Top DI" },
+    { key: "bottom_group_difficulty_index", label: "Bottom DI" },
+    { key: "difference_difficulty_index", label: "Diff DI" },
+  ],
+  discrimination: [{ key: "discrimination_index", label: "Discrim." }],
+  item_total: [{ key: "item_total_correlation", label: "Item-total r" }],
+};
 
 export default function PsychometricAnalysisPage() {
   const toast = useToast();
@@ -60,6 +81,10 @@ export default function PsychometricAnalysisPage() {
   // filters so the analysis matches the response counts shown in the list.
   const [extractedWith, setExtractedWith] = useState<PsychometricAnalysisFilters | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  // Doc 1 §4.1.1: "User selects relevant analyses" — all three by default.
+  const [analyses, setAnalyses] = useState<Set<PsychometricAnalysisKind>>(
+    new Set(PSYCHOMETRIC_ANALYSES.map((a) => a.value)),
+  );
 
   const { data: categories } = useQuery({
     queryKey: ["question-bank", "categories", "all"],
@@ -67,7 +92,8 @@ export default function PsychometricAnalysisPage() {
   });
 
   const runMutation = useMutation({
-    mutationFn: (filters: PsychometricAnalysisFilters) => runPsychometricAnalysis(filters),
+    mutationFn: (filters: PsychometricAnalysisFilters & { analyses: PsychometricAnalysisKind[] }) =>
+      runPsychometricAnalysis(filters),
     onError: (err) => toast.error(extractApiError(err)),
   });
 
@@ -81,8 +107,25 @@ export default function PsychometricAnalysisPage() {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  // Submit: store the inspected outputs against their questions.
+  const saveMutation = useMutation({
+    mutationFn: (rows: PsychometricUploadRow[]) => uploadPsychometricResults(rows),
+    onSuccess: (res) => {
+      toast.success(`Results saved for ${res.updated_ids.length} question(s).`);
+      runMutation.reset();
+      // Refresh the list so "Last analysed" shows the new date.
+      if (extractedWith) extractMutation.mutate(extractedWith);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   const extracted: PsychometricExtractRow[] = extractMutation.data ?? [];
-  const results = runMutation.data ?? [];
+  const results: PsychometricAnalysisResult[] = runMutation.data ?? [];
+  // The analyses of the run being inspected, and their result columns.
+  const ranAnalyses = runMutation.variables?.analyses ?? [];
+  const resultColumns = ranAnalyses.flatMap((a) => ANALYSIS_FIELDS[a]);
+  // While outputs await Submit/Cancel, the inputs stay as they were run.
+  const awaitingDecision = results.length > 0;
   const titles = new Map(extracted.map((q) => [q.id, q.question_title]));
   const allSelected = extracted.length > 0 && selected.size === extracted.length;
 
@@ -107,6 +150,10 @@ export default function PsychometricAnalysisPage() {
       toast.error("Select at least one question to analyse.");
       return;
     }
+    if (analyses.size === 0) {
+      toast.error("Select at least one analysis to run.");
+      return;
+    }
     // Run on the ticked questions only, with the same data filters
     // (time period, region, age range) used for the extraction.
     runMutation.mutate({
@@ -116,6 +163,47 @@ export default function PsychometricAnalysisPage() {
       age_min: extractedWith.age_min,
       age_max: extractedWith.age_max,
       question_ids: extracted.filter((q) => selected.has(q.id)).map((q) => q.id),
+      analyses: PSYCHOMETRIC_ANALYSES.map((a) => a.value).filter((a) => analyses.has(a)),
+    });
+  }
+
+  function handleSubmitResults() {
+    // Store only the chosen analyses' values that could be computed; rows
+    // with an error (e.g. too few candidates) are left untouched.
+    const rows: PsychometricUploadRow[] = [];
+    for (const r of results) {
+      if (r.error) continue;
+      const row: PsychometricUploadRow = { question_id: r.question_id };
+      let any = false;
+      for (const col of resultColumns) {
+        const value = r[col.key as keyof PsychometricAnalysisResult] as number | null;
+        if (value !== null && value !== undefined) {
+          (row as unknown as Record<string, number>)[col.key] = value;
+          any = true;
+        }
+      }
+      if (any) rows.push(row);
+    }
+    if (rows.length === 0) {
+      toast.error("There are no computed values to save.");
+      return;
+    }
+    saveMutation.mutate(rows);
+  }
+
+  function handleCancelResults() {
+    // Doc 1 §4.1.1: cancelling discards the outputs and returns to filtering
+    // and selecting questions.
+    runMutation.reset();
+    toast.info("Results discarded. Adjust the filters or selection and run again.");
+  }
+
+  function toggleAnalysis(kind: PsychometricAnalysisKind) {
+    setAnalyses((prev) => {
+      const next = new Set(prev);
+      if (next.has(kind)) next.delete(kind);
+      else next.add(kind);
+      return next;
     });
   }
 
@@ -138,8 +226,8 @@ export default function PsychometricAnalysisPage() {
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Psychometric Analysis</h1>
           <p className="text-sm text-slate-500">
-            Set the filter criteria and extract the questions, select the ones to analyse, then run
-            the analysis.
+            Set the filter criteria and extract the questions, select the ones to analyse, choose
+            the analyses and run them. Inspect the results, then submit them to save or cancel.
           </p>
         </div>
         <Link to="/question-bank" className="text-sm text-primary-600 hover:underline">
@@ -230,7 +318,11 @@ export default function PsychometricAnalysisPage() {
             </div>
           </div>
           <div className="mt-4">
-            <Button onClick={handleExtract} loading={extractMutation.isPending}>
+            <Button
+              onClick={handleExtract}
+              loading={extractMutation.isPending}
+              disabled={awaitingDecision}
+            >
               Extract
             </Button>
           </div>
@@ -243,13 +335,6 @@ export default function PsychometricAnalysisPage() {
             <CardTitle>
               2. Select questions ({selected.size} of {extracted.length} selected)
             </CardTitle>
-            <Button
-              onClick={handleRun}
-              loading={runMutation.isPending}
-              disabled={selected.size === 0}
-            >
-              Run analysis on selected
-            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -267,7 +352,7 @@ export default function PsychometricAnalysisPage() {
                         type="checkbox"
                         aria-label="Select all questions"
                         checked={allSelected}
-                        disabled={extracted.length === 0}
+                        disabled={extracted.length === 0 || awaitingDecision}
                         onChange={toggleAll}
                       />
                     </TableHead>
@@ -295,6 +380,7 @@ export default function PsychometricAnalysisPage() {
                             type="checkbox"
                             aria-label={`Select question ${q.id}`}
                             checked={selected.has(q.id)}
+                            disabled={awaitingDecision}
                             onChange={() => toggle(q.id)}
                           />
                         </TableCell>
@@ -337,7 +423,65 @@ export default function PsychometricAnalysisPage() {
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>3. Results ({results.length})</CardTitle>
+          <CardTitle>3. Choose analyses</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            {PSYCHOMETRIC_ANALYSES.map((a) => (
+              <label key={a.value} className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={analyses.has(a.value)}
+                  disabled={awaitingDecision}
+                  onChange={() => toggleAnalysis(a.value)}
+                />
+                {a.label}
+              </label>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Item discrimination applies to MCQ questions; item total correlation to the other
+            question types.
+          </p>
+          <div className="mt-4">
+            <Button
+              onClick={handleRun}
+              loading={runMutation.isPending}
+              disabled={selected.size === 0 || analyses.size === 0 || awaitingDecision}
+            >
+              Run analysis on selected
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle>4. Results ({results.length})</CardTitle>
+              {awaitingDecision && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Not saved yet — inspect the results, then submit them to store them against the
+                  questions, or cancel to discard them.
+                </p>
+              )}
+            </div>
+            {awaitingDecision && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleCancelResults}
+                  disabled={saveMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmitResults} loading={saveMutation.isPending}>
+                  Submit
+                </Button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {runMutation.isPending ? (
@@ -351,18 +495,15 @@ export default function PsychometricAnalysisPage() {
                   <TableRow>
                     <TableHead>Question</TableHead>
                     <TableHead>N</TableHead>
-                    <TableHead>IDI</TableHead>
-                    <TableHead>Top DI</TableHead>
-                    <TableHead>Bottom DI</TableHead>
-                    <TableHead>Diff DI</TableHead>
-                    <TableHead>Discrim.</TableHead>
-                    <TableHead>Item-total r</TableHead>
+                    {resultColumns.map((c) => (
+                      <TableHead key={c.key}>{c.label}</TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {results.length === 0 ? (
-                    <TableEmpty colSpan={8}>
-                      Select questions above and run the analysis to see results.
+                    <TableEmpty colSpan={2 + resultColumns.length}>
+                      Select questions and analyses above and run the analysis to see results.
                     </TableEmpty>
                   ) : (
                     results.map((r) => (
@@ -378,18 +519,18 @@ export default function PsychometricAnalysisPage() {
                         </TableCell>
                         <TableCell className="text-slate-500">{r.n_candidates}</TableCell>
                         {r.error ? (
-                          <TableCell colSpan={6} className="text-xs text-danger">
+                          <TableCell
+                            colSpan={Math.max(resultColumns.length, 1)}
+                            className="text-xs text-danger"
+                          >
                             {r.error}
                           </TableCell>
                         ) : (
-                          <>
-                            <TableCell>{fmt(r.item_difficulty_index)}</TableCell>
-                            <TableCell>{fmt(r.top_group_difficulty_index)}</TableCell>
-                            <TableCell>{fmt(r.bottom_group_difficulty_index)}</TableCell>
-                            <TableCell>{fmt(r.difference_difficulty_index)}</TableCell>
-                            <TableCell>{fmt(r.discrimination_index)}</TableCell>
-                            <TableCell>{fmt(r.item_total_correlation)}</TableCell>
-                          </>
+                          resultColumns.map((c) => (
+                            <TableCell key={c.key}>
+                              {fmt(r[c.key as keyof PsychometricAnalysisResult] as number | null)}
+                            </TableCell>
+                          ))
                         )}
                       </TableRow>
                     ))

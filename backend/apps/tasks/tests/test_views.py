@@ -329,6 +329,74 @@ class TaskLifecycleTests(TaskBaseTestCase):
         self.assertEqual(resp.status_code, 403, resp.content)
 
 
+class SmeTaskReviewerTests(TaskBaseTestCase):
+    """Report 9 #65: CJ Admin names, on an SME task, the reviewer the SME
+    sends the completed questions to."""
+
+    def _create(self, **extra):
+        self.client.force_authenticate(self.admin)
+        payload = {
+            "title": "Create MCQs",
+            "description": "d",
+            "assigned_to": self.sme.id,
+            "assignee_role": "sme",
+            **extra,
+        }
+        return self.client.post("/api/tasks/", payload, format="json")
+
+    def test_admin_names_reviewer_on_sme_task(self):
+        from apps.accounts.models import UserProfile
+
+        self.reviewer.full_name = "Rita Reviewer"
+        self.reviewer.save(update_fields=["full_name"])
+        UserProfile.objects.update_or_create(
+            user=self.reviewer, defaults={"domains_of_expertise": ["Quant"]}
+        )
+        resp = self._create(reviewer=self.reviewer.id)
+        self.assertEqual(resp.status_code, 201, resp.content)
+        data = resp.json()["data"]
+        self.assertEqual(data["reviewer"], self.reviewer.id)
+        self.assertEqual(data["reviewer_name"], "Rita Reviewer")
+        self.assertEqual(data["reviewer_domains"], ["Quant"])
+        task = Task.objects.get(task_id=data["task_id"])
+        self.assertEqual(task.reviewer, self.reviewer)
+        # The SME sees it on his task.
+        self.client.force_authenticate(self.sme)
+        detail = self.client.get(f"/api/tasks/{task.id}/").json()
+        self.assertEqual(detail["reviewer_name"], "Rita Reviewer")
+
+    def test_reviewer_is_optional(self):
+        resp = self._create()
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertIsNone(resp.json()["data"]["reviewer"])
+
+    def test_named_reviewer_must_be_an_active_reviewer(self):
+        resp = self._create(reviewer=self.sme.id)
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.reviewer.is_active = False
+        self.reviewer.save(update_fields=["is_active"])
+        resp = self._create(reviewer=self.reviewer.id)
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+    def test_reviewer_only_on_sme_tasks(self):
+        self.client.force_authenticate(self.admin)
+        other_reviewer = User.objects.create_user(
+            email="rev2@test.com", password="pw12345", is_active=True, role=self.reviewer_role
+        )
+        resp = self.client.post(
+            "/api/tasks/",
+            {
+                "title": "Review",
+                "description": "d",
+                "assigned_to": self.reviewer.id,
+                "assignee_role": "reviewer",
+                "reviewer": other_reviewer.id,
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+
 class CancelledTaskNoLongerActionableTests(TaskBaseTestCase):
     """D9: a cancelled task should no longer be actionable, even though it
     stays visible/readable for record-keeping."""
