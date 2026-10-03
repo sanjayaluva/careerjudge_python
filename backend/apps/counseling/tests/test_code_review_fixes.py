@@ -226,3 +226,42 @@ def test_patch_cannot_move_a_session_to_another_slot(counselee_client, counsello
     assert session.topic == "new"  # other fields stay editable
     slot2.refresh_from_db()
     assert slot2.status == "available"
+
+
+def test_counselee_cannot_propose_his_own_followup(followup, counselee_client, counsellor_client):
+    """Verification pass: only the session's counsellor proposes follow-ups."""
+    sid = followup.original_session_id
+    when = (timezone.now() + timedelta(days=9)).isoformat()
+    r = counselee_client.post(
+        f"/api/counseling/sessions/{sid}/followups/", {"proposed_time": when}, format="json"
+    )
+    assert r.status_code == 403
+    r = counsellor_client.post(
+        f"/api/counseling/sessions/{sid}/followups/", {"proposed_time": when}, format="json"
+    )
+    assert r.status_code == 201, r.data
+
+
+def test_confirming_a_followup_reuses_the_counsellors_open_slot(followup, counselee_client):
+    """Verification pass: the counsellor usually proposes a time he already
+    has open — confirming must book that slot, not crash on the one-live-slot
+    rule."""
+    open_slot = TimeSlot.objects.create(
+        counsellor=followup.counsellor,
+        start_time=followup.proposed_time,
+        end_time=followup.proposed_time + timedelta(hours=1),
+        status="available",
+    )
+    r = counselee_client.post(f"/api/counseling/followups/{followup.id}/confirm/", format="json")
+    assert r.status_code in (200, 201), r.data
+    open_slot.refresh_from_db()
+    assert open_slot.status == "booked"
+    assert CounselingSession.objects.filter(timeslot=open_slot).exists()
+
+
+def test_empty_media_file_range_is_unsatisfiable(settings):
+    from core.media import _byte_range
+
+    assert _byte_range("bytes=-5", 0) is False
+    assert _byte_range("bytes=0-", 0) is False
+    assert _byte_range("bytes=-5", 10) == (5, 9)

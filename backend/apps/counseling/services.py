@@ -185,6 +185,7 @@ def reschedule_session(session, new_timeslot):
     return session
 
 
+@transaction.atomic
 def cancel_session(session, *, cancelled_by, reason):
     """Cancel a session with refund logic (SRS §2.2, Report 3 §1.15/§1.16).
 
@@ -251,7 +252,9 @@ def cancel_session(session, *, cancelled_by, reason):
 
     # Track counsellor cancellation frequency (SRS §3.2 note)
     if cancelled_by == "counsellor":
-        profile = session.counsellor.user.profile
+        from apps.accounts.models import UserProfile
+
+        profile, _ = UserProfile.objects.get_or_create(user=session.counsellor.user)
         profile.cancellation_count += 1
         profile.save(update_fields=["cancellation_count"])
     elif cancelled_by == "organization":

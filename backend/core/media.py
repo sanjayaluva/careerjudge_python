@@ -97,6 +97,8 @@ def _byte_range(header: str | None, size: int):
     first, last = match.groups()
     if not first and not last:
         return None
+    if size == 0:  # nothing to slice: any range is unsatisfiable (416)
+        return False
     if not first:  # suffix range: the last N bytes
         length = int(last)
         if length == 0:

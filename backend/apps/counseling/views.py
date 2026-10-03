@@ -21,6 +21,7 @@ Endpoints:
 
 from datetime import timedelta
 
+from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import filters, serializers, status
@@ -988,7 +989,20 @@ class CounselingSessionViewSet(ModelViewSet):
                 {"message": "OK", "data": FollowupSessionSerializer(followups, many=True).data},
                 status=status.HTTP_200_OK,
             )
-        # POST: counsellor proposes a follow-up
+        # POST: counsellor proposes a follow-up (SRS §3.3) — only the session's
+        # counsellor (or CJ Admin), never the counselee himself.
+        user = request.user
+        is_admin = user.is_superuser or (user.role_id and user.role.name == "cj_admin")
+        if not is_admin and session.counsellor.user_id != user.id:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the session's counsellor can propose a follow-up.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         proposed_time = request.data.get("proposed_time")
         if not proposed_time:
             return Response(
@@ -1190,6 +1204,7 @@ class FollowupSessionViewSet(ModelViewSet):
         )
 
     @action(detail=True, methods=["post"])
+    @transaction.atomic
     def confirm(self, request, pk=None):
         """Counselee confirms a follow-up session (SRS §3.3).
 
@@ -1209,13 +1224,45 @@ class FollowupSessionViewSet(ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
-        # Create a timeslot for the follow-up
-        timeslot = TimeSlot.objects.create(
-            counsellor=followup.counsellor,
-            start_time=followup.proposed_time,
-            end_time=followup.proposed_time + timedelta(hours=1),
-            status="booked",
+        # Book the follow-up time: reuse the counsellor's open slot at that
+        # time if he has one (only one live slot per start time is allowed),
+        # otherwise create it.
+        timeslot = (
+            TimeSlot.objects.select_for_update()
+            .filter(
+                counsellor=followup.counsellor,
+                start_time=followup.proposed_time,
+                status="available",
+                session__isnull=True,
+            )
+            .first()
         )
+        if timeslot is not None:
+            timeslot.status = "booked"
+            timeslot.save(update_fields=["status"])
+        elif (
+            TimeSlot.objects.filter(
+                counsellor=followup.counsellor, start_time=followup.proposed_time
+            )
+            .exclude(status="cancelled")
+            .exists()
+        ):
+            return Response(
+                {
+                    "error": {
+                        "code": "conflict",
+                        "message": "The counsellor is not free at the proposed time.",
+                    }
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        else:
+            timeslot = TimeSlot.objects.create(
+                counsellor=followup.counsellor,
+                start_time=followup.proposed_time,
+                end_time=followup.proposed_time + timedelta(hours=1),
+                status="booked",
+            )
         # Create the new session. H15/D8 §2.1/§3.3: payment_status must be
         # set by the gateway/webhook, not assumed — mirrors the booking flow
         # in CounselingSessionViewSet.create() above.

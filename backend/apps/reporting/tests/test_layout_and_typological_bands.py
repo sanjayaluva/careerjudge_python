@@ -169,7 +169,7 @@ def test_section_description_and_image_surface_in_generation_and_pdf():
     rendered = generate_report_data(report, session)
     section = rendered["sections"][0]
     assert section["description"] == "This report was prepared by the psychometrics team."
-    assert section["image_url"]
+    assert section["image_name"]
     assert section["image_data_uri"].startswith("data:image/png;base64,")
 
     pdf = render_report_pdf(rendered)

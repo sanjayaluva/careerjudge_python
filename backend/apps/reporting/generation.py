@@ -109,7 +109,9 @@ def generate_report_data(report, session: AssessmentSession) -> dict[str, Any]:
             "title": rs.title,
             "content": rs.content,
             "description": rs.description,
-            "image_url": rs.image.url if rs.image else None,
+            # The stored file name, not a URL: media URLs are signed and
+            # expire, and this data is kept. The PDF embeds image_data_uri.
+            "image_name": rs.image.name if rs.image else None,
             "image_data_uri": _image_data_uri(rs.image),
             "table_graph_config": rs.table_graph_config,
             "order": rs.order,
