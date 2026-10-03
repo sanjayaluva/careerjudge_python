@@ -593,6 +593,23 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
+        # Rights audit V6: the learner's 'add' right is for registering
+        # (Report 9 #79-#83); courses are created by CJ Admin, trainers
+        # (User Details p.9) and an exclusive organization's admin (#47).
+        if not (
+            _is_training_admin(request.user)
+            or (request.user.role_id and request.user.role.name == "trainer")
+            or is_private_author(request.user)
+        ):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only trainers and CJ Admin create courses.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = self.get_serializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -838,6 +855,24 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         from apps.payments.services import create_stripe_checkout_session, get_or_create_payment
 
         course = self.get_object()
+        # Rights audit V4 (Report 4 Trainer-2 "My Courses tab irrelevant";
+        # CA-20 / GA-12): trainers and organization managers hold the
+        # training 'add' right for authoring/assigning, not for registering
+        # themselves as learners.
+        from apps.organizations.scoping import is_org_manager
+
+        if (request.user.role_id and request.user.role.name == "trainer") or is_org_manager(
+            request.user
+        ):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only learners register for courses.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if course.status != "published":
             return Response(
                 {

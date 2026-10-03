@@ -125,7 +125,21 @@ class ReportViewSet(ActionSerializerMixin, ModelViewSet):
     def get_queryset(self):
         # Report 9 #43/#44 / Report 4 §3 (Issue 13): CJ's report designs and
         # each exclusive organization's private ones never mix.
-        return space_filter(super().get_queryset(), self.request.user)
+        qs = space_filter(super().get_queryset(), self.request.user)
+        # Rights audit V10: an organization manager sees only the report
+        # designs relevant to him — his organization's private designs and
+        # the CJ designs of the assessments / profiling solutions licensed to
+        # his organization (generated reports keep their own scoping).
+        from apps.organizations.scoping import assigned_item_ids, is_org_manager, managed_org_ids
+
+        user = self.request.user
+        if is_org_manager(user):
+            qs = qs.filter(
+                Q(owner_organization_id__in=managed_org_ids(user) or [])
+                | Q(assessment_id__in=assigned_item_ids(user, "assessment"))
+                | Q(profiling_solution_id__in=assigned_item_ids(user, "profiling_solution"))
+            )
+        return qs
 
     @staticmethod
     def _check_links(serializer, owner_id):

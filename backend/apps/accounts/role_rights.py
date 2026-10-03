@@ -72,11 +72,12 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("invoicing", "change"),
     ],
     "helpdesk": [
-        # Doc 8 §4: Help Desk is a liaison with the "minimum user role" — it
-        # follows up sessions (change) but never books one (Report 9 #117).
+        # Doc 8 §4: Help Desk is a liaison with the "minimum user role".
+        # Report 9 #115/#117 (rights audit, 3 Oct 2026): booked sessions are
+        # VIEW ONLY — no 'change' (it let him confirm any pending session)
+        # and no booking.
         ("training", "view"),
         ("counseling", "view"),
-        ("counseling", "change"),
         ("notifications", "view"),
         ("accounts", "view"),
         # Report 9 #112-#114: VIEW-ONLY access to every organization,
@@ -92,6 +93,10 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("accounts", "view"),
         ("accounts", "add"),
         ("accounts", "change"),
+        # Doc 9 §2.4 / Report 9 #5 (rights audit, 3 Oct 2026): deletes his
+        # own organization's users — never himself, other managers or staff
+        # (guarded in views_admin.UserViewSet.destroy).
+        ("accounts", "delete"),
         ("organizations", "view"),
         ("organizations", "change"),
         ("assessment", "view"),
@@ -106,6 +111,9 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("accounts", "view"),
         ("accounts", "add"),
         ("accounts", "change"),
+        # Report 4 CE-4 / Report 9 #36 (rights audit, 3 Oct 2026): deletes
+        # his own organization's users (same destroy guard as Corp Admin).
+        ("accounts", "delete"),
         # Report 9 #34: creates his own organizations (visible only to him).
         ("organizations", "view"),
         ("organizations", "add"),
@@ -135,6 +143,11 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("question_bank", "view"),
         ("question_bank", "add"),
         ("question_bank", "change"),
+        # Report 9 #107 (rights audit, 3 Oct 2026): his delete of a question
+        # or category only FILES a deletion request for CJ Admin (the route
+        # needs this right; QuestionViewSet/CategoryViewSet.destroy never
+        # delete directly for him).
+        ("question_bank", "delete"),
         ("question_bank", "review"),
         # Psychometrician is the primary assessment author per SRS UC029
         # "Prepare Assessment Blueprint" — full CRUD on assessments.
@@ -148,6 +161,9 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("career_profiling", "view"),
         ("career_profiling", "add"),
         ("career_profiling", "change"),
+        # Report 9 #107: his delete of a profiling solution files a request
+        # for CJ Admin (ProfilingSolutionViewSet.destroy) — never direct.
+        ("career_profiling", "delete"),
         ("reporting", "view"),
         ("reporting", "add"),
         ("reporting", "change"),
@@ -185,7 +201,8 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("training", "add"),
         ("training", "change"),
         ("training", "delete"),
-        ("accounts", "view"),
+        # Rights audit (3 Oct 2026): no document gives a Trainer user access
+        # — ("accounts", "view") returned the whole CJ user list; removed.
         ("assessment", "view"),
         # Report 3 §4.1: trainers author their own course assessments using
         # the CJ Question Bank (scoped to created_by in the viewsets).
@@ -195,6 +212,9 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("question_bank", "view"),
         ("question_bank", "add"),
         ("question_bank", "change"),
+        # Rights audit (3 Oct 2026, user decision): a trainer deletes his OWN
+        # DRAFT questions only (QuestionViewSet.destroy).
+        ("question_bank", "delete"),
         # H14: empanelled role — bills CJ Admin for training delivery (Doc 4).
         ("invoicing", "view"),
         ("invoicing", "add"),
@@ -218,7 +238,8 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("counseling", "view"),
         ("counseling", "add"),
         ("counseling", "change"),
-        ("accounts", "view"),
+        # Rights audit (3 Oct 2026): no document gives the Counsellor user
+        # access — ("accounts", "view") returned the whole CJ user list; removed.
         # Report 4 Counsellor-1/2 + Report 9 #85/#86: no assessment, profiling
         # or report access.
         # H14: empanelled role — bills CJ Admin for counselling delivery (Doc 4).
@@ -232,6 +253,9 @@ ROLE_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("accounts", "view"),
         ("accounts", "add"),
         ("accounts", "change"),
+        # Report 4 CP-4 / Report 9 #56 (rights audit, 3 Oct 2026): deletes
+        # his own organization's users (same destroy guard as Corp Admin).
+        ("accounts", "delete"),
         # Report 9 #53: creates his own organizations (visible only to him).
         ("organizations", "view"),
         ("organizations", "add"),

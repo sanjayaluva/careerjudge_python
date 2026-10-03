@@ -850,6 +850,23 @@ class AssessmentViewSet(ActionSerializerMixin, ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+        # Rights audit V1 (Report 4 CA-11 / GA-6 / CP-9 / CE-10): organization
+        # managers assign and schedule assessments for their members; they
+        # do not take them (Report 9 #51 gives taking to the members).
+        from apps.organizations.scoping import is_org_manager
+
+        if is_org_manager(request.user):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Organization managers assign assessments to members; "
+                        "they do not take them.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if assessment.status != "published":
             return Response(
                 {

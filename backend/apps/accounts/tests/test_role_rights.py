@@ -17,7 +17,7 @@ from apps.accounts.models import ModuleRight, Role
 from apps.accounts.role_rights import ROLE_PERMISSIONS, sync_role_rights
 from core.permissions import HasModulePermission
 
-LATEST_SYNC_MIGRATION = "apps.accounts.migrations.0015_sync_system_role_rights"
+LATEST_SYNC_MIGRATION = "apps.accounts.migrations.0017_sync_system_role_rights"
 
 
 def _iter_patterns(patterns):

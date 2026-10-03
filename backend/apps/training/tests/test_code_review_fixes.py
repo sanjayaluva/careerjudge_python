@@ -242,10 +242,10 @@ def test_assigning_a_licensed_course_pays_a_pending_self_registration(roles, peo
     assert resp.status_code == 200, resp.data
 
 
-def test_manager_registers_for_a_licensed_course_free(roles, people):
-    """The licence unlock follows the same members + managers predicate as
-    course visibility: a manager who sees a licensed priced course is not
-    sent to payment."""
+def test_manager_does_not_register_for_a_licensed_course(roles, people):
+    """Rights audit V4 (3 Oct 2026; Report 4 CA-20 / GA-12): a manager sees
+    the licensed course to assign it to his members, but never registers for
+    it himself (this used to assert a free registration)."""
     from apps.accounts.models import UserProfile
     from apps.training.tests.test_training import REGISTRATION_FORM
 
@@ -258,8 +258,7 @@ def test_manager_registers_for_a_licensed_course_free(roles, people):
         organization=org, item_type="training_course", item_id=course.id
     )
     resp = _auth(manager).post(f"/api/training/courses/{course.id}/register/", {}, format="json")
-    assert resp.status_code == 201, resp.data
-    assert resp.data["data"]["payment_status"] == "paid"
+    assert resp.status_code == 403, resp.data
 
 
 # --- #7: the named trainer hears about his course ---------------------------

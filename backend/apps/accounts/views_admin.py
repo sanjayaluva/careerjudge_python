@@ -312,6 +312,21 @@ class UserViewSet(ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
 
+        # Rights audit (3 Oct 2026): an organization manager (Corp Admin,
+        # Corp Exclusive Admin, Channel Partner — Group Admin holds no
+        # delete right, Report 9 #23/#24) deletes only his own members
+        # (get_queryset limits him to them and himself) whose role he may
+        # create (Doc 9 §2.3: individuals; Group Admins for corporate
+        # admins, Report 4 CA-4) — never himself, another manager or staff.
+        from apps.organizations.scoping import creatable_role_names, is_org_manager
+
+        if is_org_manager(request.user):
+            if instance.id == request.user.id:
+                return _forbidden("You cannot delete your own account.")
+            target_role = instance.role.name if instance.role_id else None
+            if target_role not in (creatable_role_names(request.user) or ()):
+                return _forbidden("You can delete only your organization's members.")
+
         # Individual user deletion rules (per client clarification):
         # - CJ Admin (superuser or has accounts.delete) → can delete ANY individual user
         # - Corp Admin / Corp Exclusive → can delete individual users WITHIN their org only
