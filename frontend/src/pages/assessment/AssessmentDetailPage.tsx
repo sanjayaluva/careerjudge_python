@@ -62,7 +62,6 @@ import {
   listMySessions,
   listSectionQuestions,
   publishAssessment,
-  unpublishAssessment,
   removeQuestion,
   requestAssessmentTitleChange,
   retrieveAssessment,
@@ -124,16 +123,6 @@ export default function AssessmentDetailPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
       void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
-    },
-    onError: (err) => toast.error(extractApiError(err)),
-  });
-
-  const unpublishMutation = useMutation({
-    mutationFn: () => unpublishAssessment(aid),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["assessments", aid] });
-      void queryClient.invalidateQueries({ queryKey: ["assessment-readiness", aid] });
-      toast.success("Assessment returned to draft.");
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -527,16 +516,6 @@ export default function AssessmentDetailPage() {
                     onClick={() => publishMutation.mutate()}
                   >
                     Publish Assessment
-                  </Button>
-                )}
-                {a.status === "published" && canEdit && (
-                  <Button
-                    variant="outline"
-                    loading={unpublishMutation.isPending}
-                    title="Return this assessment to draft to edit it (E-ASM-11)"
-                    onClick={() => unpublishMutation.mutate()}
-                  >
-                    Return to draft
                   </Button>
                 )}
                 {a.status === "published" && canTake && (
