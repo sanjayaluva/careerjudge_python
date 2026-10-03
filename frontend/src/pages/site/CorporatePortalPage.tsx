@@ -78,7 +78,7 @@ function SignInButton({ site, inverted = false }: { site: PublicSite; inverted?:
   return (
     <Link
       to={signedIn ? "/dashboard" : `/login?site=${encodeURIComponent(site.slug)}`}
-      className="inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-md px-5 text-sm font-semibold shadow-sm transition-opacity hover:opacity-90 sm:px-6"
+      className="inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-md px-5 text-sm font-semibold shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/40 focus-visible:ring-offset-2 sm:px-6"
       style={{ backgroundColor: bg, color: fg }}
     >
       {signedIn ? "Go to dashboard" : "Sign in"}
@@ -95,10 +95,10 @@ function ClassicLayout({ site }: { site: PublicSite }) {
   return (
     <div className="flex min-h-screen flex-col bg-slate-50" data-layout="classic">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <PortalLogo src={site.logo_url} name={site.company_name} color={site.primary_color} />
-            <span className="truncate text-lg font-semibold text-slate-900">
+            <span className="truncate text-[17px] font-semibold tracking-tight text-slate-900">
               {site.company_name}
             </span>
           </div>
@@ -106,18 +106,20 @@ function ClassicLayout({ site }: { site: PublicSite }) {
         </div>
       </header>
       <section
-        className="px-4 py-16 sm:py-20"
+        className="px-4 py-16 sm:px-6 sm:py-20"
         style={{ backgroundColor: site.primary_color, color: textOn(site.primary_color) }}
       >
         <div className="mx-auto max-w-5xl">
-          <h1 className="text-3xl font-bold sm:text-4xl">Welcome to {site.company_name}</h1>
-          <p className="mt-3 max-w-2xl text-base opacity-90">{WELCOME}</p>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            Welcome to {site.company_name}
+          </h1>
+          <p className="mt-3 max-w-2xl text-base leading-relaxed opacity-90">{WELCOME}</p>
           <div className="mt-8">
             <SignInButton site={site} inverted />
           </div>
         </div>
       </section>
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <InfoTile title="Assessments" color={site.primary_color}>
             Take the assessments assigned to you.
@@ -145,11 +147,11 @@ function InfoTile({
 }) {
   return (
     <div
-      className="rounded-lg border border-slate-200 bg-white p-5"
+      className="rounded-lg border border-slate-200 bg-white p-5 shadow-card"
       style={{ borderTopColor: color, borderTopWidth: 4 }}
     >
-      <h2 className="font-semibold text-slate-900">{title}</h2>
-      <p className="mt-1 text-sm text-slate-600">{children}</p>
+      <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+      <p className="mt-1 text-sm leading-snug text-slate-600">{children}</p>
     </div>
   );
 }
@@ -164,7 +166,7 @@ function ModernLayout({ site }: { site: PublicSite }) {
         background: `linear-gradient(135deg, ${site.primary_color} 0%, #0f172a 130%)`,
       }}
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-xl">
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-modal sm:p-10">
         <div className="flex justify-center">
           <PortalLogo
             src={site.logo_url}
@@ -173,8 +175,10 @@ function ModernLayout({ site }: { site: PublicSite }) {
             size={72}
           />
         </div>
-        <h1 className="mt-5 text-2xl font-bold text-slate-900">{site.company_name}</h1>
-        <p className="mt-2 text-sm text-slate-600">{WELCOME}</p>
+        <h1 className="mt-5 text-2xl font-bold tracking-tight text-slate-900">
+          {site.company_name}
+        </h1>
+        <p className="mt-2 text-sm leading-snug text-slate-600">{WELCOME}</p>
         <div className="mt-6">
           <SignInButton site={site} />
         </div>

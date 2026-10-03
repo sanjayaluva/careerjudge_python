@@ -65,7 +65,7 @@ export default function ResetPasswordPage() {
         </Alert>
       )}
 
-      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+      <form onSubmit={onSubmit} className="space-y-5" noValidate>
         <div>
           <Label htmlFor="password" required>
             New password
@@ -81,7 +81,7 @@ export default function ResetPasswordPage() {
             aria-describedby={errors.password ? "password-error" : undefined}
           />
           {errors.password && (
-            <p id="password-error" className="mt-1 text-xs text-danger">
+            <p id="password-error" className="mt-1.5 text-xs text-danger-600">
               {errors.password}
             </p>
           )}
@@ -102,7 +102,7 @@ export default function ResetPasswordPage() {
             aria-describedby={errors.confirm ? "confirm-error" : undefined}
           />
           {errors.confirm && (
-            <p id="confirm-error" className="mt-1 text-xs text-danger">
+            <p id="confirm-error" className="mt-1.5 text-xs text-danger-600">
               {errors.confirm}
             </p>
           )}

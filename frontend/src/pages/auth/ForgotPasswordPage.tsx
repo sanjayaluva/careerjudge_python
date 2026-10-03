@@ -52,7 +52,7 @@ export default function ForgotPasswordPage() {
           </AlertDescription>
         </Alert>
       ) : (
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        <form onSubmit={onSubmit} className="space-y-5" noValidate>
           {error && (
             <Alert variant="error">
               <AlertDescription>{error}</AlertDescription>

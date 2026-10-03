@@ -80,7 +80,7 @@ export default function SettingsPage() {
             </Alert>
           )}
 
-          <form onSubmit={onSubmit} className="space-y-4" noValidate>
+          <form onSubmit={onSubmit} className="max-w-lg space-y-5" noValidate>
             <div>
               <Label htmlFor="old_password" required>
                 Current password
@@ -93,7 +93,7 @@ export default function SettingsPage() {
                 onChange={(e) => setOldPassword(e.target.value)}
                 hasError={Boolean(errors.old)}
               />
-              {errors.old && <p className="mt-1 text-xs text-danger">{errors.old}</p>}
+              {errors.old && <p className="mt-1.5 text-xs text-danger-600">{errors.old}</p>}
             </div>
             <div>
               <Label htmlFor="new_password" required>
@@ -107,7 +107,7 @@ export default function SettingsPage() {
                 onChange={(e) => setNewPassword(e.target.value)}
                 hasError={Boolean(errors.new)}
               />
-              {errors.new && <p className="mt-1 text-xs text-danger">{errors.new}</p>}
+              {errors.new && <p className="mt-1.5 text-xs text-danger-600">{errors.new}</p>}
             </div>
             <div>
               <Label htmlFor="confirm_password" required>
@@ -121,7 +121,7 @@ export default function SettingsPage() {
                 onChange={(e) => setConfirm(e.target.value)}
                 hasError={Boolean(errors.confirm)}
               />
-              {errors.confirm && <p className="mt-1 text-xs text-danger">{errors.confirm}</p>}
+              {errors.confirm && <p className="mt-1.5 text-xs text-danger-600">{errors.confirm}</p>}
             </div>
             <div className="flex justify-end">
               <Button type="submit" loading={submitting}>
@@ -132,7 +132,7 @@ export default function SettingsPage() {
         </CardContent>
       </PageCard>
 
-      <Card>
+      <Card className="mx-4 mb-6 sm:mx-6">
         <CardHeader>
           <CardTitle>Email preferences</CardTitle>
           <CardDescription>Manage which emails you receive (coming soon).</CardDescription>

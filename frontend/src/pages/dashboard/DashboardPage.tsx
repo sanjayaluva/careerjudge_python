@@ -83,15 +83,15 @@ export default function DashboardPage() {
 
       <PageCard>
         <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
               <p className="text-sm text-slate-500">Welcome back,</p>
-              <CardTitle className="text-2xl">
+              <CardTitle className="mt-0.5 truncate text-2xl">
                 {me?.full_name || user?.full_name || user?.email}
               </CardTitle>
-              <p className="mt-1 text-sm text-slate-500">{user?.email}</p>
+              <p className="mt-1 truncate text-sm text-slate-500">{user?.email}</p>
             </div>
-            <div className="flex flex-col items-start gap-2 sm:items-end">
+            <div className="flex flex-wrap items-start gap-2 sm:shrink-0 sm:justify-end">
               {roleLabel && (
                 <Badge variant="primary" className="text-xs">
                   {roleLabel}
@@ -111,41 +111,41 @@ export default function DashboardPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm leading-relaxed text-slate-600">
             This is your personalized overview. The cards below show the modules you can access
             based on your role.
           </p>
         </CardContent>
       </PageCard>
 
-      <div className="px-6 pb-6">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+      <div className="px-4 pb-6 sm:px-6">
+        <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
           Your modules
         </h2>
         {visibleModules.length === 0 ? (
-          <Card>
-            <CardContent className="py-8 text-center text-sm text-slate-500">
+          <Card className="border-dashed border-slate-300 bg-slate-50/60 shadow-none">
+            <CardContent className="px-6 py-12 text-center text-sm text-slate-500">
               You don&apos;t have access to any modules yet. Contact an administrator if you believe
               this is an error.
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {visibleModules.map((item) => {
               const Icon = ICONS[item.icon] ?? LayoutDashboard;
               return (
                 <Link
                   key={item.key as ModuleKey}
                   to={item.to}
-                  className="group block rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                  className="group block rounded-lg border border-slate-200 bg-white p-5 shadow-card transition-all hover:border-primary-300 hover:shadow-popover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
                 >
-                  <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary-50 text-primary-600 group-hover:bg-primary-100">
+                  <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary-50 text-primary-600 transition-colors group-hover:bg-primary-100">
                     <Icon className="h-5 w-5" aria-hidden="true" />
                   </div>
-                  <h3 className="text-base font-semibold text-slate-900">
+                  <h3 className="text-base font-semibold tracking-tight text-slate-900">
                     {dashboardCardLabel(userRole, item.key)}
                   </h3>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm leading-snug text-slate-500">
                     {dashboardCardDescription(userRole, item.key)}
                   </p>
                 </Link>

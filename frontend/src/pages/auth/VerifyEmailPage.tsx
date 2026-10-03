@@ -104,12 +104,12 @@ export default function VerifyEmailPage() {
       }
     >
       {status === "form" && (
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600">
+        <div className="space-y-5">
+          <p className="text-sm leading-relaxed text-slate-600">
             You&apos;re verifying your email. Set a password now to finish setting up your account,
             or skip and set one later from the sign-in page.
           </p>
-          <form onSubmit={handleSubmit(onSetPassword)} className="space-y-4" noValidate>
+          <form onSubmit={handleSubmit(onSetPassword)} className="space-y-5" noValidate>
             <div>
               <Label htmlFor="password" required>
                 Password
@@ -124,11 +124,11 @@ export default function VerifyEmailPage() {
                 {...register("password")}
               />
               {errors.password ? (
-                <p id="password-error" className="mt-1 text-xs text-danger">
+                <p id="password-error" className="mt-1.5 text-xs text-danger-600">
                   {errors.password.message}
                 </p>
               ) : (
-                <p id="password-hint" className="mt-1 text-xs text-slate-500">
+                <p id="password-hint" className="mt-1.5 text-xs text-slate-500">
                   Use 8+ characters with a letter, a number, and a special character. Don’t start
                   with a number.
                 </p>
@@ -148,7 +148,7 @@ export default function VerifyEmailPage() {
                 {...register("confirmPassword")}
               />
               {errors.confirmPassword && (
-                <p id="confirmPassword-error" className="mt-1 text-xs text-danger">
+                <p id="confirmPassword-error" className="mt-1.5 text-xs text-danger-600">
                   {errors.confirmPassword.message}
                 </p>
               )}
@@ -189,9 +189,9 @@ export default function VerifyEmailPage() {
             <AlertDescription>{message}</AlertDescription>
           </Alert>
 
-          <div className="rounded-md border border-slate-200 bg-white p-4">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <p className="mb-3 text-sm font-medium text-slate-700">Need a new verification link?</p>
-            <form onSubmit={handleResend} className="space-y-3">
+            <form onSubmit={handleResend} className="space-y-4">
               <div>
                 <Label htmlFor="resendEmail">Email</Label>
                 <Input
@@ -202,9 +202,9 @@ export default function VerifyEmailPage() {
                   onChange={(e) => setResendEmail(e.target.value)}
                   hasError={Boolean(resendError)}
                 />
-                {resendError && <p className="mt-1 text-xs text-danger">{resendError}</p>}
+                {resendError && <p className="mt-1.5 text-xs text-danger-600">{resendError}</p>}
                 {resendSuccess && (
-                  <p className="mt-1 text-xs text-success-700">
+                  <p className="mt-1.5 text-xs text-success-700">
                     If an account exists, a new link has been sent.
                   </p>
                 )}

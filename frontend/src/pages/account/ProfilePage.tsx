@@ -151,7 +151,7 @@ export default function ProfilePage() {
 
   if (isLoadingMe && !me) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
+      <div className="flex items-center justify-center py-16">
         <Spinner size="lg" />
       </div>
     );
@@ -159,9 +159,13 @@ export default function ProfilePage() {
 
   if (meError && !me) {
     return (
-      <Alert variant="error">
-        <AlertDescription>Failed to load your profile. {extractApiError(meError)}</AlertDescription>
-      </Alert>
+      <div className="p-4 sm:p-6">
+        <Alert variant="error">
+          <AlertDescription>
+            Failed to load your profile. {extractApiError(meError)}
+          </AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
@@ -175,10 +179,12 @@ export default function ProfilePage() {
         <CardDescription>Your role and account status in CareerJudge.</CardDescription>
       </CardHeader>
       <CardContent>
-        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <dl className="grid gap-5 sm:grid-cols-3">
           <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Role</dt>
-            <dd className="mt-1">
+            <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Role
+            </dt>
+            <dd className="mt-1.5">
               {me?.role ? (
                 <Badge variant="primary">{ROLE_LABELS[me.role] ?? me.role}</Badge>
               ) : (
@@ -187,10 +193,10 @@ export default function ProfilePage() {
             </dd>
           </div>
           <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Account status
             </dt>
-            <dd className="mt-1 flex flex-wrap gap-1">
+            <dd className="mt-1.5 flex flex-wrap gap-1.5">
               {me?.is_active ? (
                 <Badge variant="success">Active</Badge>
               ) : (
@@ -201,10 +207,10 @@ export default function ProfilePage() {
             </dd>
           </div>
           <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Member since
             </dt>
-            <dd className="mt-1 text-sm text-slate-900">
+            <dd className="mt-1.5 text-sm tabular-nums text-slate-900">
               {me?.created_at ? new Date(me.created_at).toLocaleDateString() : "—"}
             </dd>
           </div>
@@ -245,8 +251,8 @@ export default function ProfilePage() {
           </TabsList>
 
           <TabsContent value="basic">
-            <form onSubmit={basicForm.handleSubmit(onBasicSubmit)} className="space-y-4" noValidate>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <form onSubmit={basicForm.handleSubmit(onBasicSubmit)} className="space-y-5" noValidate>
+              <div className="grid gap-5 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="full_name" required>
                     Full name
@@ -257,7 +263,7 @@ export default function ProfilePage() {
                     {...basicForm.register("full_name")}
                   />
                   {basicForm.formState.errors.full_name && (
-                    <p className="mt-1 text-xs text-danger">
+                    <p className="mt-1.5 text-xs text-danger-600">
                       {basicForm.formState.errors.full_name.message}
                     </p>
                   )}
@@ -269,7 +275,7 @@ export default function ProfilePage() {
                 <div>
                   <Label htmlFor="email">Email</Label>
                   <Input id="email" value={me?.email ?? ""} disabled />
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1.5 text-xs text-slate-500">
                     Email cannot be changed. Contact an admin if needed.
                   </p>
                 </div>
@@ -285,10 +291,10 @@ export default function ProfilePage() {
           <TabsContent value="details">
             <form
               onSubmit={profileForm.handleSubmit(onProfileSubmit)}
-              className="space-y-4"
+              className="space-y-5"
               noValidate
             >
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid gap-5 sm:grid-cols-2">
                 {allProfileFields.map((field) => (
                   <div
                     key={field.name}
@@ -300,7 +306,7 @@ export default function ProfilePage() {
                     {field.type === "select" ? (
                       <select
                         id={`pf-${field.name}`}
-                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                        className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                         {...profileForm.register(field.name)}
                       >
                         {field.options?.map((opt) => (
@@ -313,7 +319,7 @@ export default function ProfilePage() {
                       <textarea
                         id={`pf-${field.name}`}
                         rows={3}
-                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                        className="min-h-[6rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                         {...profileForm.register(field.name)}
                       />
                     ) : (

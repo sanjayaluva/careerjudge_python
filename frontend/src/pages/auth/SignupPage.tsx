@@ -71,7 +71,7 @@ export default function SignupPage() {
             email to verify it and set your password.
           </AlertDescription>
         </Alert>
-        <div className="rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-600">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
           <p className="mb-2 font-medium text-slate-700">Didn&apos;t get the email?</p>
           <Button variant="outline" size="sm" onClick={() => navigate("/login")}>
             Back to sign in
@@ -100,7 +100,7 @@ export default function SignupPage() {
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
         <div>
           <Label htmlFor="full_name" required>
             Full name
@@ -115,7 +115,7 @@ export default function SignupPage() {
             {...register("full_name")}
           />
           {errors.full_name && (
-            <p id="full_name-error" className="mt-1 text-xs text-danger">
+            <p id="full_name-error" className="mt-1.5 text-xs text-danger-600">
               {errors.full_name.message}
             </p>
           )}
@@ -135,7 +135,7 @@ export default function SignupPage() {
             {...register("email")}
           />
           {errors.email && (
-            <p id="email-error" className="mt-1 text-xs text-danger">
+            <p id="email-error" className="mt-1.5 text-xs text-danger-600">
               {errors.email.message}
             </p>
           )}

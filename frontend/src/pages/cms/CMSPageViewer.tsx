@@ -28,28 +28,28 @@ export default function CMSPageViewer() {
   return (
     <PublicLayout>
       {isLoading ? (
-        <div className="flex min-h-[50vh] items-center justify-center">
+        <div className="flex min-h-[50vh] items-center justify-center py-16">
           <Spinner size="lg" />
         </div>
       ) : error || !page ? (
-        <div className="mx-auto max-w-4xl p-6">
+        <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6">
           <Alert variant="error">
             <AlertDescription>
               Page not found.{" "}
-              <Link to="/" className="text-primary-600 hover:underline">
+              <Link to="/" className="font-medium text-primary-600 hover:underline">
                 Go home
               </Link>
             </AlertDescription>
           </Alert>
         </div>
       ) : (
-        <div className="mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold text-slate-900">{page.title}</h1>
+        <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{page.title}</h1>
           {page.meta_description && (
-            <p className="mt-1 text-sm text-slate-500">{page.meta_description}</p>
+            <p className="mt-2 text-sm leading-snug text-slate-500">{page.meta_description}</p>
           )}
           <div
-            className="prose prose-slate mt-6 max-w-none"
+            className="prose prose-slate mt-8 max-w-none break-words"
             dangerouslySetInnerHTML={{ __html: page.body }}
           />
         </div>

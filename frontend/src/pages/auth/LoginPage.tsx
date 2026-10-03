@@ -99,7 +99,7 @@ export default function LoginPage() {
     >
       {site && (
         <div
-          className="mb-6 flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4"
+          className="mb-6 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4"
           style={{ borderTopColor: site.primary_color, borderTopWidth: 4 }}
           data-testid="portal-brand"
         >
@@ -122,7 +122,7 @@ export default function LoginPage() {
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
         <div>
           <Label htmlFor="email" required>
             Email
@@ -137,20 +137,20 @@ export default function LoginPage() {
             {...register("email")}
           />
           {errors.email && (
-            <p id="email-error" className="mt-1 text-xs text-danger">
+            <p id="email-error" className="mt-1.5 text-xs text-danger-600">
               {errors.email.message}
             </p>
           )}
         </div>
 
         <div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <Label htmlFor="password" required>
               Password
             </Label>
             <Link
               to="/forgot-password"
-              className="text-xs font-medium text-primary-600 hover:underline"
+              className="mb-1.5 rounded text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
             >
               Forgot password?
             </Link>
@@ -165,7 +165,7 @@ export default function LoginPage() {
             {...register("password")}
           />
           {errors.password && (
-            <p id="password-error" className="mt-1 text-xs text-danger">
+            <p id="password-error" className="mt-1.5 text-xs text-danger-600">
               {errors.password.message}
             </p>
           )}
