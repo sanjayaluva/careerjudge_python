@@ -250,6 +250,32 @@ export function extractApiError(err: unknown): string {
   return "Unknown error";
 }
 
+/** Read a Blob as text (Blob.text() where available, else FileReader). */
+function blobText(blob: Blob): Promise<string> {
+  if (typeof blob.text === "function") return blob.text();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
+
+/** A download (`responseType: "blob"`) that fails carries its JSON error
+ * body as a Blob, so `extractApiError` could only show a generic message.
+ * Turn such a body back into the parsed JSON (left untouched if it is not
+ * JSON). */
+export async function parseBlobErrorBody(err: unknown): Promise<void> {
+  if (!axios.isAxiosError(err) || !err.response) return;
+  const data: unknown = err.response.data;
+  if (typeof Blob === "undefined" || !(data instanceof Blob)) return;
+  try {
+    err.response.data = JSON.parse(await blobText(data)) as unknown;
+  } catch {
+    // not JSON — keep the Blob
+  }
+}
+
 /** Returns the structured error code from the envelope, or null. */
 export function extractApiErrorCode(err: unknown): string | null {
   if (axios.isAxiosError(err)) {
@@ -354,6 +380,7 @@ apiClient.interceptors.response.use(
       }
     }
 
+    await parseBlobErrorBody(error);
     return Promise.reject(error);
   },
 );
@@ -401,6 +428,28 @@ export async function apiGetPaged<T>(
   return "results" in body ? body : body.data;
 }
 
+/** Largest page the backend serves (core.pagination max_page_size). */
+const MAX_PAGE_SIZE = 100;
+/** Safety stop so a misbehaving `next` link can never loop forever. */
+const MAX_PAGES = 200;
+
+/** GET every page of a paginated list and return all rows. Dropdowns and
+ * "my items" views used to read page 1 only (20 rows) and silently treated it
+ * as the whole list. Pages are requested by number with the largest page
+ * size, following `next` until the last page. */
+export async function apiGetAllPages<T>(url: string, config?: AxiosRequestConfig): Promise<T[]> {
+  const rows: T[] = [];
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const res = await apiGetPaged<T>(url, {
+      ...config,
+      params: { ...(config?.params as object | undefined), page, page_size: MAX_PAGE_SIZE },
+    });
+    rows.push(...(res.results ?? []));
+    if (!res.next) break;
+  }
+  return rows;
+}
+
 /** POST — returns the unwrapped `data`. */
 export async function apiPost<T>(
   url: string,
@@ -427,8 +476,8 @@ export async function apiPut<T>(
   body?: unknown,
   config?: AxiosRequestConfig,
 ): Promise<T> {
-  const res = await apiClient.put<ApiSuccessEnvelope<T>>(url, body, config);
-  return res.data.data;
+  const res = await apiClient.put<ApiSuccessEnvelope<T> | T>(url, body, config);
+  return unwrapEnvelope<T>(res.data);
 }
 
 /** DELETE — returns void (backend sends 200/204). */

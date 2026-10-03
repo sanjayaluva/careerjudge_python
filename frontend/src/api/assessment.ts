@@ -1,7 +1,7 @@
 /**
  * Assessment API functions.
  */
-import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { apiDelete, apiGet, apiGetAllPages, apiGetPaged, apiPatch, apiPost } from "./client";
 import { withPrivateOwner } from "@/lib/privateSpace";
 
 const BASE = "/assessments";
@@ -109,6 +109,20 @@ export function listAssessments(params?: {
   return apiGetPaged<Assessment>(`${BASE}/`, {
     params: {
       page: params?.page ?? 1,
+      ...(params?.search ? { search: params.search } : {}),
+      ...(params?.status ? { status: params.status } : {}),
+    },
+  });
+}
+
+/** Every assessment matching the filters (all pages) — for pickers and the
+ * candidate's own lists, which must not stop at the first page. */
+export function listAllAssessments(params?: {
+  search?: string;
+  status?: string;
+}): Promise<Assessment[]> {
+  return apiGetAllPages<Assessment>(`${BASE}/`, {
+    params: {
       ...(params?.search ? { search: params.search } : {}),
       ...(params?.status ? { status: params.status } : {}),
     },

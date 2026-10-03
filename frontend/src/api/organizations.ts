@@ -4,7 +4,7 @@
  */
 import { API_BASE_URL } from "@/lib/constants";
 
-import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { apiDelete, apiGet, apiGetAllPages, apiGetPaged, apiPatch, apiPost } from "./client";
 import type { CounselingSession, CounsellorProfile, TimeSlot } from "./counseling";
 import type { LearnerProgress } from "./training";
 
@@ -189,8 +189,10 @@ export function deleteGroup(orgId: number, groupId: number): Promise<void> {
 }
 
 // Members
+/** Every member of the organization (all pages — the members card and the
+ * "Assign to" pickers used to see only the first 20). */
 export function listMembers(orgId: number): Promise<OrganizationMember[]> {
-  return apiGetPaged<OrganizationMember>(`${BASE}/${orgId}/members/`).then((r) => r.results);
+  return apiGetAllPages<OrganizationMember>(`${BASE}/${orgId}/members/`);
 }
 
 export function addMember(

@@ -1,6 +1,7 @@
+import { AxiosError } from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { apiClient, apiGetPaged, extractApiError } from "./client";
+import { apiClient, apiGetAllPages, apiGetPaged, apiPut, extractApiError } from "./client";
 import { useAuthStore } from "@/stores/auth";
 import type { LoginResponse } from "@/api/types";
 
@@ -110,6 +111,74 @@ describe("apiGetPaged", () => {
   it("accepts a bare DRF paginated body", async () => {
     respond(page);
     await expect(apiGetPaged("/x/")).resolves.toEqual(page);
+  });
+});
+
+describe("apiGetAllPages", () => {
+  it("follows `next` and returns the rows of every page", async () => {
+    mockAdapter.mockImplementation(async (config) => {
+      const page = Number(config.params.page);
+      const data = {
+        message: "OK",
+        data: {
+          count: 3,
+          next: page < 2 ? "http://x/?page=2" : null,
+          previous: null,
+          results: page === 1 ? [{ id: 1 }, { id: 2 }] : [{ id: 3 }],
+        },
+      };
+      return { data, status: 200, statusText: "OK", headers: {}, config };
+    });
+    await expect(apiGetAllPages("/x/", { params: { status: "published" } })).resolves.toEqual([
+      { id: 1 },
+      { id: 2 },
+      { id: 3 },
+    ]);
+    expect(mockAdapter).toHaveBeenCalledTimes(2);
+    const firstParams = mockAdapter.mock.calls[0]![0].params;
+    expect(firstParams).toEqual({ status: "published", page: 1, page_size: 100 });
+  });
+});
+
+describe("blob download errors", () => {
+  it("parses a JSON error body sent as a Blob so the real message shows", async () => {
+    mockAdapter.mockImplementation(async (config) => {
+      const body = new Blob(
+        [JSON.stringify({ error: { code: "forbidden", message: "Report not released yet." } })],
+        { type: "application/json" },
+      );
+      const err = new AxiosError("Request failed", "ERR_BAD_REQUEST", config, null, {
+        data: body,
+        status: 403,
+        statusText: "Forbidden",
+        headers: {},
+        config,
+      });
+      throw err;
+    });
+    const caught = await apiClient.get("/x/", { responseType: "blob" }).catch((e: unknown) => e);
+    expect(extractApiError(caught)).toBe("Report not released yet.");
+  });
+});
+
+describe("apiPut", () => {
+  const respond = (data: unknown) =>
+    mockAdapter.mockImplementation(async (config) => ({
+      data,
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+    }));
+
+  it("unwraps the {message, data} envelope", async () => {
+    respond({ message: "OK", data: { id: 1 } });
+    await expect(apiPut("/x/", {})).resolves.toEqual({ id: 1 });
+  });
+
+  it("accepts a bare body", async () => {
+    respond({ id: 2 });
+    await expect(apiPut("/x/", {})).resolves.toEqual({ id: 2 });
   });
 });
 

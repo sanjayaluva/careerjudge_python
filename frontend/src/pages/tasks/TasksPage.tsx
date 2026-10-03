@@ -32,7 +32,7 @@ import {
 } from "@/components/ui";
 import { tasksApi, type Task, type TaskCreateInput, type AssigneeRole } from "@/api/tasks";
 import { listCategories, QUESTION_TYPES } from "@/api/questionBank";
-import { listUsers } from "@/api/users";
+import { listAllUsers } from "@/api/users";
 import { extractApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { nameWithExpertise } from "@/lib/profileFields";
@@ -340,19 +340,20 @@ function AssignTaskModal({
   const removeSpecRow = (index: number) =>
     setSpecRows((rows) => (rows.length > 1 ? rows.filter((_, i) => i !== index) : rows));
 
-  // Load users list filtered by role
+  // Load users list filtered by role — every page, so nobody past the first
+  // 100 is missing from the pickers.
   const usersQuery = useQuery({
-    queryKey: ["users", "by-role", assigneeRole],
-    queryFn: () => listUsers({ role: assigneeRole, page_size: 100 }),
+    queryKey: ["users", "by-role", "all", assigneeRole],
+    queryFn: () => listAllUsers({ role: assigneeRole }),
   });
-  const users = usersQuery.data?.results ?? [];
+  const users = usersQuery.data ?? [];
   // Report 9 #65/#69: active reviewers (with domains) for the SME task.
   const reviewersQuery = useQuery({
-    queryKey: ["users", "by-role", "reviewer"],
-    queryFn: () => listUsers({ role: "reviewer", page_size: 100 }),
+    queryKey: ["users", "by-role", "all", "reviewer"],
+    queryFn: () => listAllUsers({ role: "reviewer" }),
     enabled: assigneeRole === "sme",
   });
-  const reviewers = (reviewersQuery.data?.results ?? []).filter((u) => u.is_active);
+  const reviewers = (reviewersQuery.data ?? []).filter((u) => u.is_active);
 
   const createMutation = useMutation({
     mutationFn: (input: TaskCreateInput) => tasksApi.create(input),

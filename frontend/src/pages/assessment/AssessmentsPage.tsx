@@ -23,6 +23,7 @@ import {
   useToast,
 } from "@/components/ui";
 import {
+  type Assessment,
   type AssessmentSession,
   ASSESSMENT_STATUSES,
   ASSESSMENT_TYPES,
@@ -31,6 +32,7 @@ import {
   TIMER_LEVELS,
   createAssessment,
   deleteAssessment,
+  listAllAssessments,
   listAssessments,
   listMySessions,
   publishAssessment,
@@ -81,12 +83,20 @@ export default function AssessmentsPage() {
   const viewOnly = user?.role === "helpdesk";
 
   const { data, isLoading } = useQuery({
-    queryKey: [...ASSESS_KEY, debouncedSearch, statusFilter],
-    queryFn: () =>
-      listAssessments({
+    queryKey: [...ASSESS_KEY, isCandidate ? "all" : "page", debouncedSearch, statusFilter],
+    queryFn: async (): Promise<{ count: number; results: Assessment[] }> => {
+      const params = {
         ...(debouncedSearch ? { search: debouncedSearch } : {}),
         ...(statusFilter ? { status: statusFilter } : {}),
-      }),
+      };
+      // The candidate's My / Browse tabs are built from the whole list, so
+      // they load every page (they used to stop at the first 20).
+      if (isCandidate) {
+        const results = await listAllAssessments(params);
+        return { count: results.length, results };
+      }
+      return listAssessments(params);
+    },
   });
 
   // Fetch the current user's sessions so we can show Take / Resume / View
