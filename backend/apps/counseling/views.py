@@ -1146,7 +1146,21 @@ class FollowupSessionViewSet(ModelViewSet):
     )
     permission_classes = [IsAuthenticated, HasCounselingPermission]
     serializer_class = FollowupSessionSerializer
-    http_method_names = ["get", "head", "options", "post", "patch"]
+    # Code review: follow-ups are proposed via /sessions/<id>/followups/ and
+    # answered via confirm/decline — a plain create or PATCH (status,
+    # confirmed_session) would skip those checks and the payment.
+    http_method_names = ["get", "head", "options", "post"]
+
+    def create(self, request, *args, **kwargs):
+        return Response(
+            {
+                "error": {
+                    "code": "forbidden",
+                    "message": "Propose follow-ups via POST /sessions/<id>/followups/.",
+                }
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
 
     def get_queryset(self):
         # Code review: follow-ups are scoped like their original session

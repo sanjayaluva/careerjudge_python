@@ -187,6 +187,29 @@ def test_counselee_declines_his_followup(followup, counselee_client):
     assert followup.status == "declined"
 
 
+def test_followup_cannot_be_confirmed_by_patch_or_created_directly(
+    followup, counselee_client, counselee_user
+):
+    r = counselee_client.patch(
+        f"/api/counseling/followups/{followup.id}/", {"status": "confirmed"}, format="json"
+    )
+    assert r.status_code == 405
+    followup.refresh_from_db()
+    assert followup.status == "proposed"
+    r = counselee_client.post(
+        "/api/counseling/followups/",
+        {
+            "original_session": followup.original_session_id,
+            "counsellor": followup.counsellor_id,
+            "proposed_time": (timezone.now() + timedelta(days=9)).isoformat(),
+            "status": "confirmed",
+        },
+        format="json",
+    )
+    assert r.status_code == 405
+    assert FollowupSession.objects.count() == 1
+
+
 # --- Session PATCH cannot move the session ----------------------------------
 
 
