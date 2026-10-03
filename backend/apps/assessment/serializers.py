@@ -194,8 +194,13 @@ def unlocked_assessment_ids(user) -> set[int]:
     """Report 9 #72: priced assessments ``user`` may take without paying
     again — the ones he paid for (or got free), and, for a member of a
     corporate / channel-partner organization, the ones CJ Admin licensed to
-    it (the organization's licence pays, as for licensed courses)."""
-    from apps.organizations.scoping import assigned_item_ids, is_licensed_member
+    it (the organization's licence pays, as for licensed courses).
+
+    Code review (3 Oct 2026): the licence covers the organization's managers
+    as well — the same members + managers predicate (``is_licence_scoped``)
+    that decides which CJ assessments they see, so a licensed assessment is
+    never shown to a manager with a Pay button that then answers 402."""
+    from apps.organizations.scoping import assigned_item_ids, is_licence_scoped
     from apps.payments.models import Payment
 
     ids = set(
@@ -203,7 +208,7 @@ def unlocked_assessment_ids(user) -> set[int]:
             user=user, module="assessment", status__in=["paid", "free"]
         ).values_list("item_id", flat=True)
     )
-    if is_licensed_member(user):
+    if is_licence_scoped(user):
         ids |= assigned_item_ids(user, "assessment")
     # Report 9 #51: an exclusive organization's own private assessments are
     # free for its members — they are not CJ products sold through CJ.

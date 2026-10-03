@@ -36,7 +36,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, status
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.exceptions import MethodNotAllowed, NotFound, PermissionDenied
 from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
@@ -318,6 +318,36 @@ def _is_assessment_admin(user) -> bool:
     return bool(user.is_superuser or (user.role and user.role.name == "cj_admin"))
 
 
+# CareerJudge staff roles: never members of an exclusive organization's
+# private space, even if tagged to one (Report 4 §3).
+_CJ_STAFF_ROLES = (
+    "cj_admin",
+    "helpdesk",
+    "psychometrician",
+    "sme",
+    "reviewer",
+    "trainer",
+    "counsellor",
+)
+
+# Roles that may read an assessment's question-level configuration (its
+# assigned questions with their full text/options, psychometric groups):
+# authors, Help Desk (views every CJ assessment, Report 9 #113) and
+# organization managers. Candidates get their questions only through their
+# own session (SessionViewSet.questions) — never by browsing the nested
+# routes before taking the test.
+_CONFIG_READER_ROLES = ("cj_admin", "psychometrician", "trainer", "helpdesk")
+
+
+def _may_read_configuration(user) -> bool:
+    from apps.organizations.scoping import is_org_manager
+
+    if user.is_superuser:
+        return True
+    role_name = user.role.name if user.role else None
+    return role_name in _CONFIG_READER_ROLES or is_org_manager(user)
+
+
 def scope_assessments(qs, user):
     """The assessments ``user`` may see.
 
@@ -347,8 +377,12 @@ def scope_assessments(qs, user):
         cj = cj.filter(status="published")
     if is_licence_scoped(user):
         cj = cj.filter(id__in=assigned_item_ids(user, "assessment"))
+    # Code review (3 Oct 2026): CJ staff tagged to an exclusive organization
+    # (seeded / mis-tagged) must not reach its private assessments through
+    # the member branch — "no one, including CJ Admin" (Report 4 §3).
+    member_org_ids = [] if role_name in _CJ_STAFF_ROLES else member_exclusive_org_ids(user)
     private = qs.filter(owner_organization_id__in=author_org_ids(user)) | qs.filter(
-        owner_organization_id__in=member_exclusive_org_ids(user), status="published"
+        owner_organization_id__in=member_org_ids, status="published"
     )
     return cj | private
 
@@ -373,18 +407,29 @@ def _require_author(user, assessment) -> None:
 class AssessmentSpaceMixin:
     """Nested assessment routes (sections, questions, psychometric groups):
     reachable only for an assessment the user may see, and changed only by
-    whoever may author it (Report 9 #42 / Report 4 §3). CJ roles working on
-    CJ assessments are unaffected."""
+    whoever may author it (Report 9 #42 / Report 4 §3).
+
+    Code review (3 Oct 2026): the visibility check applies to EVERY nested
+    route — CJ content included (a plain individual could list a draft's
+    sections, a corporate employee an unlicensed assessment's questions).
+    Question-level reads are further limited to authors / Help Desk /
+    managers (``config_read_open`` = False)."""
+
+    #: May anyone who sees the assessment read this route? Sections are the
+    #: variable structure the retrieve already returns; assigned questions
+    #: and psychometric groups are the test content itself.
+    config_read_open = False
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
         assessment = get_object_or_404(Assessment, id=self.kwargs.get("assessment_id"))
         user = request.user
-        if assessment.owner_organization_id is None and not is_private_author(user):
-            return
         if not scope_assessments(Assessment.objects.filter(id=assessment.id), user).exists():
             raise NotFound("Assessment not found.")
-        if request.method not in SAFE_METHODS:
+        if request.method in SAFE_METHODS:
+            if not self.config_read_open and not _may_read_configuration(user):
+                raise PermissionDenied("You cannot view this assessment's questions.")
+        else:
             _require_author(user, assessment)
 
 
@@ -971,6 +1016,7 @@ class AssessmentSectionViewSet(AssessmentSpaceMixin, ModelViewSet):
 
     serializer_class = AssessmentSectionSerializer
     permission_classes = [IsAuthenticated, HasAssessmentPermission]
+    config_read_open = True
 
     def get_queryset(self):
         aid = self.kwargs.get("assessment_id")
@@ -1085,7 +1131,11 @@ class AssessmentQuestionViewSet(AssessmentSpaceMixin, ModelViewSet):
 
     def get_queryset(self):
         sid = self.kwargs.get("section_id")
-        return AssessmentQuestion.objects.filter(section_id=sid)
+        # The section must belong to the assessment in the URL (whose
+        # visibility AssessmentSpaceMixin checked).
+        return AssessmentQuestion.objects.filter(
+            section_id=sid, section__assessment_id=self.kwargs.get("assessment_id")
+        )
 
     def perform_update(self, serializer):
         if "duration_seconds" in serializer.validated_data:
@@ -1098,7 +1148,9 @@ class AssessmentQuestionViewSet(AssessmentSpaceMixin, ModelViewSet):
 
     def perform_create(self, serializer):
         sid = self.kwargs.get("section_id")
-        section = get_object_or_404(AssessmentSection, id=sid)
+        section = get_object_or_404(
+            AssessmentSection, id=sid, assessment_id=self.kwargs.get("assessment_id")
+        )
         extra = {}
         if "order" not in self.request.data:
             # Assigned order = assignment sequence (Report 7 #4/#34: questions
@@ -1121,7 +1173,9 @@ class AssessmentQuestionViewSet(AssessmentSpaceMixin, ModelViewSet):
         from apps.question_bank.models import Question
 
         sid = self.kwargs.get("section_id")
-        section = get_object_or_404(AssessmentSection, id=sid)
+        section = get_object_or_404(
+            AssessmentSection, id=sid, assessment_id=self.kwargs.get("assessment_id")
+        )
         assessment = section.assessment
 
         # ASM-8 Rule 2 (Doc 3 §3): questions attach only at the last (leaf)
@@ -1263,6 +1317,15 @@ class SessionViewSet(ModelViewSet):
 
     serializer_class = AssessmentSessionSerializer
     permission_classes = [IsAuthenticated]
+    # Code review (3 Oct 2026): sessions are created only by
+    # POST /api/assessments/<id>/start_session/ (visibility, attempt rule and
+    # payment gates) and changed only through the actions below. The default
+    # create crashed (500) and PUT/PATCH/DELETE let a candidate rewrite or
+    # delete his own session.
+    http_method_names = ["get", "head", "options", "post"]
+
+    def create(self, request, *args, **kwargs):
+        raise MethodNotAllowed(request.method)
 
     def get_queryset(self):
         # Candidates see only their own sessions.

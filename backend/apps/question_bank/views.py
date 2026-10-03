@@ -106,6 +106,18 @@ def _private_owner_for(request, category) -> int | None:
     return resolve_owner_org_id(request.user, request.data.get("owner_organization"))
 
 
+def _int_param(params, name: str) -> int | None:
+    """An integer query parameter (None when absent). A non-integer value is
+    a 400, not a 500 (code review, 3 Oct 2026)."""
+    raw = params.get(name)
+    if raw in (None, ""):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError({name: "Must be an integer."}) from exc
+
+
 def _domain_category_ids(root: Category) -> list[int]:
     """All category ids in a domain: the root and every descendant."""
     ids = [root.id]
@@ -296,7 +308,7 @@ class CategoryViewSet(ActionSerializerMixin, ModelViewSet):
         if parent == "root":
             qs = qs.filter(parent__isnull=True)
         elif parent:
-            qs = qs.filter(parent_id=parent)
+            qs = qs.filter(parent_id=_int_param(self.request.query_params, "parent"))
         return qs
 
     def perform_create(self, serializer):
@@ -420,8 +432,8 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         params = self.request.query_params
 
         # Filter by category (includes subcategories)
-        category = params.get("category")
-        if category:
+        category = _int_param(params, "category")
+        if category is not None:
             root = Category.objects.filter(id=category).first()
             qs = qs.filter(category_id__in=_domain_category_ids(root) if root else [category])
 
@@ -460,7 +472,10 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         if params.get("assigned") == "me" and self.request.user.is_authenticated:
             user = self.request.user
             if user.role_id and user.role.name == "psychometrician":
-                qs = qs.filter(assigned_psychometrician=user)
+                # Code review (3 Oct 2026): only while it is actually with him
+                # - not while the SME revises it (sent_back) or after his
+                # decision.
+                qs = qs.filter(assigned_psychometrician=user, status="pending_psychometric_review")
             else:
                 qs = qs.filter(assigned_reviewer=user)
 
@@ -784,6 +799,21 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         from apps.accounts.models import User
 
         question = self.get_object()
+        if question.owner_organization_id or is_private_author(request.user):
+            # Code review (3 Oct 2026): private questions never enter CJ's
+            # review workflow (Report 9 #40), so CJ's reviewers (names,
+            # e-mails, domains) are not listed to an exclusive organization.
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Your organization's questions are not sent for CJ review; "
+                        "they are in your question bank as soon as they are saved.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         pool = (
             User.objects.filter(is_active=True, role__name="reviewer")
             .exclude(id=question.created_by_id)
@@ -1496,6 +1526,17 @@ class QuestionReviewView(APIView):
                     )
                 except Exception as e:  # pragma: no cover - notification is best-effort
                     logger.warning("Psychometrician notification failed: %s", e)
+
+        # Code review (3 Oct 2026): once the psychometrician decides
+        # (approve / reject) the question is no longer with him - clear the
+        # Report 9 #92 routing so it leaves his "Assigned to me" queue.
+        if (
+            review_type == "psychometric"
+            and review.action != "send_back"
+            and question.assigned_psychometrician_id is not None
+        ):
+            question.assigned_psychometrician = None
+            question.save(update_fields=["assigned_psychometrician", "updated_at"])
 
         # If psychometric review approved with exposure limit, set it
         if review.action == "approve" and review_type == "psychometric":
