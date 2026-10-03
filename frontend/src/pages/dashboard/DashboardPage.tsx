@@ -25,15 +25,13 @@ import {
   CardTitle,
   PageCard,
 } from "@/components/ui";
-import {
-  MODULE_DESCRIPTIONS,
-  NAV_ITEMS,
-  ROLE_LABELS,
-  type ModuleKey,
-  type RoleName,
-} from "@/lib/constants";
+import { NAV_ITEMS, ROLE_LABELS, type ModuleKey, type RoleName } from "@/lib/constants";
 import { useAuth } from "@/hooks/useAuth";
-import { dashboardCardLabel, orderDashboardModules } from "./dashboardCards";
+import {
+  dashboardCardDescription,
+  dashboardCardLabel,
+  orderDashboardModules,
+} from "./dashboardCards";
 import { UpcomingCounselingCard } from "./UpcomingCounselingCard";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -113,7 +111,7 @@ export default function DashboardPage() {
         <CardContent>
           <p className="text-sm text-slate-600">
             This is your personalized overview. The cards below show the modules you can access
-            based on your role. More detailed dashboards will be available in Phase 2.
+            based on your role.
           </p>
         </CardContent>
       </PageCard>
@@ -145,7 +143,9 @@ export default function DashboardPage() {
                   <h3 className="text-base font-semibold text-slate-900">
                     {dashboardCardLabel(userRole, item.key)}
                   </h3>
-                  <p className="mt-1 text-sm text-slate-500">{MODULE_DESCRIPTIONS[item.key]}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {dashboardCardDescription(userRole, item.key)}
+                  </p>
                 </Link>
               );
             })}

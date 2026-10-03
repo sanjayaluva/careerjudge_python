@@ -1,4 +1,4 @@
-import { MODULE_LABELS, type ModuleKey, type RoleName } from "@/lib/constants";
+import { MODULE_DESCRIPTIONS, MODULE_LABELS, type ModuleKey, type RoleName } from "@/lib/constants";
 
 /**
  * Report 9 #82: the individual's dashboard cards read My Assessments » My
@@ -29,4 +29,18 @@ export function orderDashboardModules<T extends { key: ModuleKey }>(
     return i === -1 ? INDIVIDUAL_CARD_ORDER.length : i;
   };
   return [...items].sort((a, b) => rank(a.key) - rank(b.key));
+}
+
+/** Candidate-facing card descriptions for the individual's dashboard (the
+ * defaults describe the author screens). */
+const INDIVIDUAL_CARD_DESCRIPTIONS: Partial<Record<ModuleKey, string>> = {
+  assessments: "Take, resume and review your assessments.",
+  career_profiling: "See your profiling solutions and their progress.",
+  reports: "View and download your assessment reports.",
+  training: "Begin, resume and complete your courses.",
+  counseling: "Book and follow your counselling sessions.",
+};
+
+export function dashboardCardDescription(role: RoleName, key: ModuleKey): string {
+  return (role === "individual" && INDIVIDUAL_CARD_DESCRIPTIONS[key]) || MODULE_DESCRIPTIONS[key];
 }
