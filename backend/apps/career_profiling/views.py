@@ -29,6 +29,7 @@ from .models import (
     BandDefinition,
     MappingCriterion,
     ProfilingSolution,
+    ProfilingSolutionModificationRequest,
 )
 from .serializers import (
     BandDefinitionSerializer,
@@ -38,6 +39,7 @@ from .serializers import (
     MatchIndexSerializer,
     PolarMatchRuleSerializer,
     ProfilingSolutionListSerializer,
+    ProfilingSolutionModificationRequestSerializer,
     ProfilingSolutionSerializer,
     RankDefinitionSerializer,
     SelectedAssessmentSerializer,
@@ -71,7 +73,15 @@ class HasProfilingPermission(HasModulePermission):
         # the psychometrician role). Added while wiring the band-dropdown
         # validation (D5 item 6) since that endpoint needs to be reachable.
         "criteria": "change",
+        # ProfilingSolutionModificationRequestViewSet (Report 9 #107)
+        "approve": "change",
+        "decline": "change",
     }
+
+
+def _is_profiling_admin(user) -> bool:
+    """cj_admin (or superuser) bypasses the modification-request workflow."""
+    return bool(user.is_superuser or (user.role_id and user.role.name == "cj_admin"))
 
 
 class ProfilingSolutionViewSet(ModelViewSet):
@@ -93,6 +103,12 @@ class ProfilingSolutionViewSet(ModelViewSet):
         # Report 9 #114: Help Desk views (only) every solution.
         if not (user.is_superuser or role in ("cj_admin", "psychometrician", "helpdesk")):
             qs = qs.filter(status="published")
+        # Report 9 #97/#99/#102 (rights audit, 3 Oct 2026): members of an
+        # organization see only the solutions CJ Admin licensed to it.
+        from apps.organizations.scoping import assigned_item_ids, is_licence_scoped
+
+        if is_licence_scoped(user):
+            qs = qs.filter(id__in=assigned_item_ids(user, "profiling_solution"))
         return qs
 
     def get_serializer_class(self):
@@ -123,6 +139,96 @@ class ProfilingSolutionViewSet(ModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        # Report 9 #107 (rights audit, 3 Oct 2026): like a published
+        # assessment (SRS §2.2), a published solution is not edited directly
+        # by the Psychometrician — a title change becomes a request for CJ
+        # Admin; any other edit is refused. CJ Admin edits directly.
+        if instance.status == "published" and not _is_profiling_admin(request.user):
+            title = request.data.get("title")
+            if "title" not in request.data or title == instance.title:
+                return Response(
+                    {
+                        "error": {
+                            "code": "forbidden",
+                            "message": "Cannot edit a published solution. Ask CJ Admin to make "
+                            "the edit, or request a title change.",
+                        }
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            reason = (request.data.get("reason") or "").strip()
+            if not reason:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "reason is required to request a title change.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            pmr = ProfilingSolutionModificationRequest.objects.create(
+                solution=instance,
+                solution_title=instance.title,
+                requester=request.user,
+                action="edit",
+                proposed_title=title,
+                reason=reason,
+            )
+            _notify_profiling_admins(pmr)
+            return Response(
+                {
+                    "message": "Title change request submitted. An admin will review it.",
+                    "data": ProfilingSolutionModificationRequestSerializer(pmr).data,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {"message": "Solution updated.", "data": ProfilingSolutionSerializer(instance).data},
+            status=status.HTTP_200_OK,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # Report 9 #107 (rights audit, 3 Oct 2026): only CJ Admin deletes a
+        # solution. Anyone else's delete (the Psychometrician's) FILES a
+        # deletion request for CJ Admin — nothing is deleted directly.
+        if not _is_profiling_admin(request.user):
+            reason = (request.data.get("reason") or "").strip()
+            if not reason:
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "reason is required to request deletion.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            pmr = ProfilingSolutionModificationRequest.objects.create(
+                solution=instance,
+                solution_title=instance.title,
+                requester=request.user,
+                action="delete",
+                reason=reason,
+            )
+            _notify_profiling_admins(pmr)
+            return Response(
+                {
+                    "message": "Deletion request submitted. An admin will review it.",
+                    "data": ProfilingSolutionModificationRequestSerializer(pmr).data,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        instance.delete()
+        return Response({"message": "Solution deleted.", "data": {}}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
     def publish(self, request, pk=None):
@@ -872,3 +978,147 @@ class ProfilingSolutionViewSet(ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+
+def _notify_profiling_admins(pmr) -> None:
+    """Tell every CJ Admin a profiling-solution request awaits review."""
+    try:
+        from apps.accounts.models import User
+        from apps.notifications.models import notify_user
+
+        verb = "delete" if pmr.action == "delete" else "rename"
+        for admin in User.objects.filter(role__name="cj_admin", is_active=True):
+            notify_user(
+                admin,
+                f"Profiling solution {verb} request",
+                f"{pmr.requester.full_name or pmr.requester.email} asked to {verb} "
+                f"'{pmr.solution_title}': {pmr.reason}",
+                "info",
+                "/career-profiling",
+            )
+    except Exception:  # pragma: no cover - notification is best-effort
+        pass
+
+
+class ProfilingSolutionModificationRequestViewSet(ModelViewSet):
+    """Report 9 #107: list profiling-solution edit/delete requests + CJ Admin
+    approve/decline. Requesters see only their own requests; admins see all.
+
+    GET  /api/career-profiling/modification-requests/
+    POST /api/career-profiling/modification-requests/<id>/approve/
+    POST /api/career-profiling/modification-requests/<id>/decline/
+    """
+
+    queryset = ProfilingSolutionModificationRequest.objects.select_related(
+        "solution", "requester", "reviewed_by"
+    )
+    permission_classes = [IsAuthenticated, HasProfilingPermission]
+    serializer_class = ProfilingSolutionModificationRequestSerializer
+    http_method_names = ["get", "head", "options", "post"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if _is_profiling_admin(self.request.user):
+            return qs
+        return qs.filter(requester=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        # A plain list in the envelope, like the assessment / question-bank
+        # queues the CJ Admin panels read.
+        qs = self.filter_queryset(self.get_queryset())
+        return Response(
+            {"message": "OK", "data": self.get_serializer(qs, many=True).data},
+            status=status.HTTP_200_OK,
+        )
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        return Response(
+            {"message": "OK", "data": self.get_serializer(instance).data},
+            status=status.HTTP_200_OK,
+        )
+
+    def create(self, request, *args, **kwargs):
+        # Requests are filed by PATCH / DELETE on the solution itself.
+        return Response(
+            {
+                "error": {
+                    "code": "forbidden",
+                    "message": "Submit requests via PATCH or DELETE /career-profiling/solutions/<id>/.",
+                }
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def _review(self, request, approve: bool):
+        from django.utils import timezone
+
+        pmr = self.get_object()
+        if not _is_profiling_admin(request.user):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": f"Only CJ Admin can {'approve' if approve else 'decline'}.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if pmr.status != "pending":
+            return Response(
+                {
+                    "error": {
+                        "code": "invalid_state",
+                        "message": f"Request is already {pmr.status}.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        pmr.status = "approved" if approve else "rejected"
+        pmr.reviewed_by = request.user
+        pmr.reviewed_at = timezone.now()
+        pmr.review_comment = request.data.get("admin_note", "")
+        pmr.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_comment"])
+        # Snapshot before applying — a delete cascades to this request.
+        data = ProfilingSolutionModificationRequestSerializer(pmr).data
+        if approve:
+            if pmr.action == "edit":
+                pmr.solution.title = pmr.proposed_title or pmr.solution.title
+                pmr.solution.save(update_fields=["title", "updated_at"])
+            else:
+                pmr.solution.delete()
+        try:
+            from apps.notifications.models import notify_user
+
+            if approve:
+                done = "deleted" if pmr.action == "delete" else "renamed"
+                notify_user(
+                    pmr.requester,
+                    f"Profiling solution {pmr.action} approved",
+                    f"Your request was approved. '{pmr.solution_title}' has been {done}.",
+                    "success",
+                    "/career-profiling",
+                )
+            else:
+                notify_user(
+                    pmr.requester,
+                    f"Profiling solution {pmr.action} request declined",
+                    f"Your request to {pmr.action} '{pmr.solution_title}' was declined. "
+                    f"{pmr.review_comment}",
+                    "warning",
+                    f"/career-profiling/{pmr.solution_id}",
+                )
+        except Exception:  # pragma: no cover
+            pass
+        return Response(
+            {"message": "Request approved." if approve else "Request declined.", "data": data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve(self, request, pk=None):
+        return self._review(request, approve=True)
+
+    @action(detail=True, methods=["post"], url_path="decline")
+    def decline(self, request, pk=None):
+        return self._review(request, approve=False)

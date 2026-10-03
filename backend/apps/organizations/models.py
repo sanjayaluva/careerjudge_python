@@ -208,6 +208,9 @@ class OrganizationAssignment(models.Model):
         ("assessment", "Assessment"),
         ("training_course", "Training Course"),
         ("counseling", "Counseling Service"),
+        # Report 9 #97/#99/#102: CJ Admin licenses PUBLISHED profiling
+        # "Solutions" to organizations too (rights audit, 3 Oct 2026).
+        ("profiling_solution", "Profiling Solution"),
     ]
 
     organization = models.ForeignKey(

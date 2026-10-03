@@ -325,6 +325,26 @@ class CategoryViewSet(ActionSerializerMixin, ModelViewSet):
         return Response({"message": "OK", "data": serializer.data}, status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
+        # Rights audit V2 (Report 4 SME-2): the 'add' right is for questions;
+        # CJ's categories are set up by CJ Admin and the Psychometrician
+        # (User Details p.10 "add/edit sections"), an exclusive
+        # organization's by its own admin (Report 9 #39).
+        role_name = request.user.role.name if request.user.role_id else None
+        if not (
+            _is_qb_admin(request.user)
+            or role_name == "psychometrician"
+            or is_private_author(request.user)
+        ):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only CJ Admin and the Psychometrician create categories.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -490,7 +510,13 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
             if role_name in ("trainer", "sme"):
                 qs = qs.filter(created_by=self.request.user)
             elif role_name == "reviewer":
-                qs = qs.filter(Q(created_by=self.request.user) | ~Q(status="draft"))
+                # Rights audit V9 (Report 4 Rev-1 "only those questions he
+                # has been assigned"; Report 9 #65/#71 route each question
+                # to a chosen reviewer): his own questions plus the ones
+                # assigned to him for review.
+                qs = qs.filter(
+                    Q(created_by=self.request.user) | Q(assigned_reviewer=self.request.user)
+                )
 
         return qs
 
@@ -624,6 +650,23 @@ class QuestionViewSet(ActionSerializerMixin, ModelViewSet):
         # a pending QuestionBankDeletionRequest for CJ Admin to review
         # (D1 §2.2/§4.3).
         is_admin = _deletes_directly(request.user, instance)
+        role_name = request.user.role.name if request.user.role_id else None
+        if role_name == "trainer" and not is_admin:
+            # Rights audit (3 Oct 2026, user decision): a trainer deletes his
+            # OWN DRAFT questions directly (like his own draft courses,
+            # Report 8 #35) — nothing else.
+            if instance.created_by_id != request.user.id or instance.status != "draft":
+                return Response(
+                    {
+                        "error": {
+                            "code": "forbidden",
+                            "message": "Trainers can delete only their own draft questions.",
+                            "details": {"current_status": instance.status},
+                        }
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            is_admin = True
         if not is_admin:
             if not instance.can_be_edited:
                 return Response(
@@ -1475,6 +1518,27 @@ class QuestionReviewView(APIView):
                     "error": {
                         "code": "forbidden",
                         "message": "You do not have permission to review questions.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        # Rights audit V3 (Doc 1 §3.2/§3.3; User Details pp.7/10): the content
+        # review is the Reviewer's stage, the psychometric review the
+        # Psychometrician's. CJ Admin may do either.
+        reviewer_role = {"content": "reviewer", "psychometric": "psychometrician"}.get(review_type)
+        role_name = request.user.role.name if request.user.role_id else None
+        if not _is_qb_admin(request.user) and role_name != reviewer_role:
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": (
+                            f"Only the {reviewer_role or 'assigned role'} submits a "
+                            f"{review_type} review."
+                            if reviewer_role
+                            else "review_type must be 'content' or 'psychometric'."
+                        ),
                         "details": {},
                     }
                 },

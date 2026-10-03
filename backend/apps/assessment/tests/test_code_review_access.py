@@ -180,10 +180,9 @@ def test_corp_admin_licensed_priced_assessment_is_unlocked(roles):
     client = _c(ca)
     rows = client.get("/api/assessments/").data["data"]["results"]
     assert [(r["id"], r["is_unlocked"]) for r in rows] == [(licensed.id, True)]
-    assert client.post(f"/api/assessments/{licensed.id}/start_session/").status_code in (
-        200,
-        201,
-    )
+    # Rights audit V1 (3 Oct 2026; Report 4 CA-11): the licence unlocks the
+    # assessment for his members — the manager himself never takes it.
+    assert client.post(f"/api/assessments/{licensed.id}/start_session/").status_code == 403
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ from .models import (
     PolarMatchRule,
     PolarRankValue,
     ProfilingSolution,
+    ProfilingSolutionModificationRequest,
     RankDefinition,
     RankValue,
     SelectedAssessment,
@@ -394,3 +395,35 @@ class MatchIndexSerializer(serializers.ModelSerializer):
             "computed_at",
             "candidate_name",
         ]
+
+
+class ProfilingSolutionModificationRequestSerializer(serializers.ModelSerializer):
+    """Report 9 #107: a Psychometrician's request to rename / delete a
+    profiling solution, reviewed by CJ Admin."""
+
+    requester_name = serializers.CharField(
+        source="requester.full_name", read_only=True, default=None
+    )
+    reviewed_by_name = serializers.CharField(
+        source="reviewed_by.full_name", read_only=True, default=None
+    )
+
+    class Meta:
+        model = ProfilingSolutionModificationRequest
+        fields = [
+            "id",
+            "solution",
+            "solution_title",
+            "requester",
+            "requester_name",
+            "action",
+            "proposed_title",
+            "reason",
+            "status",
+            "review_comment",
+            "reviewed_by",
+            "reviewed_by_name",
+            "reviewed_at",
+            "created_at",
+        ]
+        read_only_fields = fields

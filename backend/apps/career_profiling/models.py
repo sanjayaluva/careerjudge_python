@@ -548,3 +548,70 @@ class MatchIndex(models.Model):
             f"{self.candidate.email} - {self.career_title} "
             f"(FMI: {self.final_match_index or '?'})"
         )
+
+
+# ---------------------------------------------------------------------------
+# ProfilingSolutionModificationRequest — Report 9 #107 (rights audit, 3 Oct
+# 2026): the Psychometrician never edits the title of, or deletes, a
+# profiling solution directly; he files a request that CJ Admin approves or
+# declines, mirroring AssessmentModificationRequest / QuestionBankDeletionRequest.
+# ---------------------------------------------------------------------------
+
+
+class ProfilingSolutionModificationRequest(models.Model):
+    """Non-admin's request to rename a PUBLISHED profiling solution or to
+    delete a solution (any status)."""
+
+    ACTION_CHOICES = [
+        ("edit", "Edit Title"),
+        ("delete", "Delete Solution"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending Admin Review"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    solution = models.ForeignKey(
+        ProfilingSolution, on_delete=models.CASCADE, related_name="modification_requests"
+    )
+    solution_title = models.CharField(
+        _("solution title"),
+        max_length=255,
+        blank=True,
+        default="",
+        help_text=_("Snapshot of the solution's title, kept for the audit trail."),
+    )
+    requester = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="profiling_modification_requests",
+    )
+    action = models.CharField(_("action"), max_length=10, choices=ACTION_CHOICES)
+    proposed_title = models.CharField(
+        _("proposed title"),
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text=_("New title requested (only for action='edit')."),
+    )
+    reason = models.TextField(_("reason"), help_text=_("Reason for the edit/delete request"))
+    status = models.CharField(_("status"), max_length=10, choices=STATUS_CHOICES, default="pending")
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="profiling_modification_reviews",
+    )
+    review_comment = models.TextField(_("review comment"), blank=True, default="")
+    reviewed_at = models.DateTimeField(_("reviewed at"), null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("profiling solution modification request")
+        verbose_name_plural = _("profiling solution modification requests")
+
+    def __str__(self) -> str:
+        return f"{self.action} request for '{self.solution_title}' ({self.status})"

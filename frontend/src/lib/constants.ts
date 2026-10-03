@@ -160,7 +160,16 @@ export const MODULE_VISIBILITY: Record<RoleName, ModuleKey[]> = {
   // report access.
   counsellor: ["dashboard", "profile", "counseling", "tasks", "invoicing"],
   // Report 9 #56/#58: no CJ user list and no access to users' reports.
-  channel_partner: ["dashboard", "profile", "organizations", "assessments", "invoicing"],
+  // Live Chat is signed for the Channel Partner (User Details p.5; Report 4
+  // CP-17) — rights audit, 3 Oct 2026.
+  channel_partner: [
+    "dashboard",
+    "profile",
+    "organizations",
+    "assessments",
+    "invoicing",
+    "live_chat",
+  ],
   individual: [
     "dashboard",
     "profile",

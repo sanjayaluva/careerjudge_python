@@ -228,6 +228,20 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
         )
 
     def create(self, request, *args, **kwargs):
+        # Rights audit V7 (Doc 8 §3: counsellors are empanelled by CJ): the
+        # learner's 'add' right is for booking — only a Counsellor (or CJ
+        # Admin) sets up a counsellor profile.
+        role = request.user.role.name if request.user.role_id else None
+        if role != "counsellor" and not is_cj_admin(request.user):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only counsellors have a counsellor profile.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = self.get_serializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -675,6 +689,19 @@ class CounselingSessionViewSet(ModelViewSet):
         counselee must accept the terms; per §1.10 the counsellor + helpdesk
         are notified of the new booking.
         """
+        # Rights audit V5 (Report 4 Couns-6/-11 "My Sessions irrelevant"):
+        # a counsellor's 'add' right is for his profile and timeslots — he
+        # never books a session as a counselee.
+        if request.user.role_id and request.user.role.name == "counsellor":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Counsellors do not book counselling sessions.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         # Report 3 §1.8: terms must be explicitly accepted.
         if not request.data.get("terms_accepted"):
             return Response(
@@ -734,6 +761,19 @@ class CounselingSessionViewSet(ModelViewSet):
     def confirm(self, request, pk=None):
         """Counsellor confirms a pending session (SRS §3.2)."""
         session = self.get_object()
+        # Rights audit V8 (Doc 8 §3.2): confirmation is the session's
+        # counsellor's (or CJ Admin's) — the counselee holds 'change' for
+        # feedback and follow-ups, not to confirm his own booking.
+        if session.counsellor.user_id != request.user.id and not is_cj_admin(request.user):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the session's counsellor or CJ Admin can confirm it.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if session.status != "pending":
             return Response(
                 {

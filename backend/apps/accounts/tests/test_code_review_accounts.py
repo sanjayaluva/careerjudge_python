@@ -4,7 +4,7 @@
 #3  a manager cannot give the Group Admin role through the user form.
 #7  non-numeric organization / group ids are a 4xx, not a 500.
 #8  listing users does not resolve organization modules per row.
-#11 accounts/0015 creates the system roles on a fresh database.
+#11 the latest role-rights sync migration creates the system roles on a fresh database.
 """
 
 import importlib
@@ -201,7 +201,7 @@ def test_me_still_reports_org_disabled_modules(org_world):
 
 
 def test_sync_migration_creates_missing_system_roles():
-    migration = importlib.import_module("apps.accounts.migrations.0015_sync_system_role_rights")
+    migration = importlib.import_module("apps.accounts.migrations.0017_sync_system_role_rights")
     ModuleRight.objects.all().delete()
     Role.objects.all().delete()
 

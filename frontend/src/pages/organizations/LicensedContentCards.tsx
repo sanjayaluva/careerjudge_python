@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import { listAllAssessments } from "@/api/assessment";
+import { listAllSolutions } from "@/api/careerProfiling";
 import { extractApiError } from "@/api/client";
 import type { CounselingSession } from "@/api/counseling";
 import {
@@ -107,6 +108,12 @@ export function LicensedContentCard({ orgId, canLicense }: { orgId: number; canL
     queryFn: () => listAllCourses({ status: "published" }),
     enabled: canLicense,
   });
+  // Report 9 #97/#99/#102: published profiling solutions are licensed too.
+  const { data: catalogueSolutions = [] } = useQuery({
+    queryKey: ["career-profiling", "solutions", "published", "all"],
+    queryFn: () => listAllSolutions({ status: "published" }),
+    enabled: canLicense,
+  });
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ORG_KEY(orgId) });
@@ -133,7 +140,7 @@ export function LicensedContentCard({ orgId, canLicense }: { orgId: number; canL
       <CardContent className="space-y-6">
         <p className="text-sm text-slate-500">
           {canLicense
-            ? "Members and managers of this organization see only the assessments and courses licensed here. Licensed courses and counselling cost the members nothing."
+            ? "Members and managers of this organization see only the assessments, courses and profiling solutions licensed here. Licensed courses and counselling cost the members nothing."
             : "What CJ Admin has licensed to your organization. You can assign and schedule these for your members below."}
         </p>
         <ErrorNote error={error} />
@@ -157,6 +164,16 @@ export function LicensedContentCard({ orgId, canLicense }: { orgId: number; canL
           onAssign={(id) => assignMutation.mutate({ item_type: "training_course", item_id: id })}
           onRemove={(id) => removeMutation.mutate(id)}
         />
+        <LicenceSection
+          heading="Profiling solutions"
+          noun="profiling solution"
+          rows={assignments.filter((a) => a.item_type === "profiling_solution")}
+          options={catalogueSolutions.map((s) => ({ id: s.id, title: s.title }))}
+          canLicense={canLicense}
+          busy={assignMutation.isPending || removeMutation.isPending}
+          onAssign={(id) => assignMutation.mutate({ item_type: "profiling_solution", item_id: id })}
+          onRemove={(id) => removeMutation.mutate(id)}
+        />
         <div>
           <h3 className="mb-2 text-sm font-semibold text-slate-900">Counselling</h3>
           <div className="flex flex-wrap items-center gap-3">
@@ -175,7 +192,7 @@ export function LicensedContentCard({ orgId, canLicense }: { orgId: number; canL
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-danger hover:bg-danger-50"
+                  className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                   loading={removeMutation.isPending}
                   onClick={() => removeMutation.mutate(counselling.id)}
                 >
@@ -270,7 +287,7 @@ function LicenceSection({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-danger hover:bg-danger-50"
+                      className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                       disabled={busy}
                       onClick={() => onRemove(a.id)}
                     >
@@ -393,7 +410,7 @@ export function LicensedCoursesCard({
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="text-danger hover:bg-danger-50"
+                                  className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                                   disabled={unassignMutation.isPending}
                                   onClick={() =>
                                     unassignMutation.mutate({ courseId: c.id, userId: m.user_id })
@@ -684,7 +701,7 @@ export function CourseSchedulesCard({
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-danger hover:bg-danger-50"
+                            className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                             loading={cancelMutation.isPending}
                             onClick={() => cancelMutation.mutate(s.id)}
                           >
@@ -1036,7 +1053,7 @@ function MemberSessionRow({
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-danger hover:bg-danger-50"
+                className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                 onClick={() => setMode("cancel")}
               >
                 Cancel
