@@ -234,10 +234,20 @@ def cancel_session(session, *, cancelled_by, reason):
     session.payment_status = f"refunded_{refund_tier}"
     session.save(update_fields=["status", "payment_status"])
 
-    # Free up the timeslot
+    # Free up the time. Code review: the slot itself stays with the cancelled
+    # session (one session per slot, and deleting it would wipe the
+    # cancellation/refund record), so it is marked 'cancelled' and a fresh
+    # available slot is opened for the same time if that is still ahead.
     timeslot = session.timeslot
-    timeslot.status = "available"
+    timeslot.status = "cancelled"
     timeslot.save(update_fields=["status"])
+    if timeslot.start_time > timezone.now():
+        TimeSlot.objects.create(
+            counsellor_id=timeslot.counsellor_id,
+            start_time=timeslot.start_time,
+            end_time=timeslot.end_time,
+            status="available",
+        )
 
     # Track counsellor cancellation frequency (SRS §3.2 note)
     if cancelled_by == "counsellor":

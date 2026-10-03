@@ -37,20 +37,31 @@ def _is_payments_admin(user) -> bool:
     return user.role_id is not None and user.role.name == "cj_admin"
 
 
-def _server_price(module: str, item_id: int):
-    """Price of a payable item as stored on the item, or None when the item
-    is unknown or must be paid through its own flow (e.g. a counselling
-    booking creates its payment when the session is booked)."""
+def _server_price(module: str, item_id: int, user):
+    """Price ``user`` pays for a payable item as stored on the item, or None
+    when the item is unknown or must be paid through its own flow (e.g. a
+    counselling booking creates its payment when the session is booked).
+
+    Code review: an item the user's organization has unlocked for him (CJ
+    Admin licensed it to the organization, or it is his exclusive
+    organization's own private item) costs him nothing — the same rules the
+    assessment start and course registration apply."""
     if module == "assessment":
         from apps.assessment.models import Assessment
+        from apps.assessment.serializers import unlocked_assessment_ids
 
         item = Assessment.objects.filter(id=item_id, status="published").first()
-        return item.price if item else None
+        if item is None:
+            return None
+        return 0 if item.id in unlocked_assessment_ids(user) else item.price
     if module == "training":
         from apps.training.models import TrainingCourse
+        from apps.training.services import is_course_unlocked
 
         item = TrainingCourse.objects.filter(id=item_id, status="published").first()
-        return item.price if item else None
+        if item is None:
+            return None
+        return 0 if is_course_unlocked(user, item) else item.price
     return None
 
 
@@ -132,7 +143,7 @@ class PaymentViewSet(ModelViewSet):
             user=request.user, module=module, item_id=int(item_id)
         ).first()
         if payment is None:
-            amount = _server_price(module, int(item_id))
+            amount = _server_price(module, int(item_id), request.user)
             if amount is None:
                 return Response(
                     {

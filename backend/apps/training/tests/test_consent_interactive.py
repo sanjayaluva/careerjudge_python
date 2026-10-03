@@ -353,9 +353,12 @@ def test_meeting_link_withheld_until_registered_and_paid(
     assert link(trainer_client) == ("https://zoom.us/j/123", False)
 
 
-def test_trainer_sees_and_reviews_reports_on_admin_created_course(trainer_client, student_user):
+def test_trainer_sees_and_reviews_reports_on_admin_created_course(
+    trainer_client, trainer_user, student_user
+):
     """Report 8 #25-#27: submitted assignment reports were invisible to a
-    trainer who hadn't created the course (403 -> empty Reports modal)."""
+    trainer who hadn't created the course (403 -> empty Reports modal). Since
+    Report 9 #83/#84 (code review) that is the trainer CJ Admin named on it."""
     from apps.accounts.models import Role, User
     from apps.training.models import (
         Assignment,
@@ -369,7 +372,9 @@ def test_trainer_sees_and_reviews_reports_on_admin_created_course(trainer_client
     admin = User.objects.create_user(
         email="cja@t.com", password="pw", is_active=True, role=admin_role
     )
-    course = TrainingCourse.objects.create(title="C", created_by=admin, status="published")
+    course = TrainingCourse.objects.create(
+        title="C", created_by=admin, trainer=trainer_user, status="published"
+    )
     session = TopicSession.objects.create(
         topic=LessonTopic.objects.create(
             lesson=CourseLesson.objects.create(course=course, title="L"), title="T"

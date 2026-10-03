@@ -534,6 +534,18 @@ class ReportViewSet(ActionSerializerMixin, ModelViewSet):
 
         from apps.career_profiling.models import MatchIndex
 
+        # Code review: a user may only pull the match indices of candidates
+        # whose reports he may see (himself / his members), like ``generate``.
+        try:
+            candidate_id = int(candidate_id)
+        except (TypeError, ValueError):
+            candidate_id = None
+        visible = visible_candidate_ids(request.user)
+        if candidate_id is None or (visible is not None and candidate_id not in visible):
+            return Response(
+                {"error": {"code": "not_found", "message": "Candidate not found."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         match_indices = list(
             MatchIndex.objects.filter(
                 solution=report.profiling_solution,

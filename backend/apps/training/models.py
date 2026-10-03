@@ -22,8 +22,11 @@ Models:
   - CourseProgress: per-content progress tracking (completed, time-spent, last-accessed)
 """
 
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 
@@ -148,6 +151,15 @@ class TrainingCourse(models.Model):
 
     def __str__(self) -> str:
         return self.title
+
+    def staff_users(self) -> list:
+        """Who runs the course and hears about its learners: the named
+        trainer (Report 9 #83) and the creator, once each."""
+        people = []
+        for person in (self.trainer, self.created_by):
+            if person is not None and person not in people:
+                people.append(person)
+        return people
 
 
 class CourseLesson(models.Model):
@@ -900,7 +912,13 @@ class CourseModificationRequest(models.Model):
     )
     review_comment = models.TextField(_("review comment"), blank=True, default="")
     reviewed_at = models.DateTimeField(_("reviewed at"), null=True, blank=True)
+    # Report 8.1 #61: an approved update request opens an editing window
+    # (EDIT_WINDOW after approval) that the trainer closes with "Finish
+    # editing"; closed_at records when he did.
+    closed_at = models.DateTimeField(_("editing finished at"), null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    EDIT_WINDOW = timedelta(days=7)
 
     class Meta:
         ordering = ["-created_at"]
@@ -909,6 +927,19 @@ class CourseModificationRequest(models.Model):
 
     def __str__(self) -> str:
         return f"{self.request_type} request for '{self.course.title}' ({self.status})"
+
+    @property
+    def edit_until(self):
+        """End of the editing window of an approved update request (None if
+        the request does not grant one)."""
+        if self.request_type != "update" or self.status != "approved" or not self.reviewed_at:
+            return None
+        return self.reviewed_at + self.EDIT_WINDOW
+
+    @property
+    def edit_window_open(self) -> bool:
+        until = self.edit_until
+        return bool(until and self.closed_at is None and timezone.now() < until)
 
 
 # ---------------------------------------------------------------------------

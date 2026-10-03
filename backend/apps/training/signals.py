@@ -63,17 +63,15 @@ def notify_trainer_of_consent(sender, instance, created, **kwargs):
     if not created:
         return  # Only notify on first consent, not updates
 
-    trainer = instance.live_session.course.created_by
-    if not trainer:
-        return
-
     student_name = instance.student.full_name or instance.student.email
     status_label = "consented to attend" if instance.status == "consented" else "declined"
     scheduled = _parse_datetime(instance.live_session.scheduled_at)
-    notify_user(
-        trainer,
-        f"{student_name} {status_label}",
-        f"Live session: {instance.live_session.title} on " f"{scheduled:%Y-%m-%d %H:%M}",
-        "session",
-        f"/training/{instance.live_session.course_id}",
-    )
+    # Code review: the named trainer (Report 9 #83) and the creator.
+    for trainer in instance.live_session.course.staff_users():
+        notify_user(
+            trainer,
+            f"{student_name} {status_label}",
+            f"Live session: {instance.live_session.title} on " f"{scheduled:%Y-%m-%d %H:%M}",
+            "session",
+            f"/training/{instance.live_session.course_id}",
+        )

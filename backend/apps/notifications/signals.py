@@ -120,10 +120,10 @@ def notify_on_course_registration(sender, instance, created, **kwargs):
         "info",
         f"/training/{course.id}",
     )
-    # Notify trainer
-    if course.created_by:
+    # Notify the trainer (the named one and the creator — code review)
+    for trainer in course.staff_users():
         notify_user(
-            course.created_by,
+            trainer,
             "New course registration",
             f"User {instance.student.email} registered for your course '{course.title}'.",
             "info",
@@ -139,8 +139,8 @@ def notify_on_assignment_report_submitted(sender, instance, created, **kwargs):
     from .models import notify_user
 
     assignment = instance.assignment
-    trainer = assignment.session.topic.lesson.course.created_by
-    if trainer:
+    # Code review: the named trainer and the creator.
+    for trainer in assignment.session.topic.lesson.course.staff_users():
         notify_user(
             trainer,
             "Assignment report submitted",

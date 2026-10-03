@@ -182,12 +182,20 @@ def _completion_requirements(reg, progress_records) -> list[dict]:
 def _sync_completion_status(reg) -> None:
     """Keep the registration's status in step with progress (Report 8 #15:
     100% complete but still 'Not started')."""
-    from django.utils import timezone
-
     records = list(reg.progress_records.all())
     pct, _done, total = _course_completion(reg, records)
+    fields = _apply_completion_status(reg, bool(records), pct, total)
+    if fields:
+        reg.save(update_fields=fields)
+
+
+def _apply_completion_status(reg, has_records, pct, total) -> list[str]:
+    """Bring ``reg``'s status/start/completion in step with its progress, in
+    memory; returns the changed field names for the caller to save."""
+    from django.utils import timezone
+
     fields = []
-    if not reg.started_at and (records or (total and pct >= 100)):
+    if not reg.started_at and (has_records or (total and pct >= 100)):
         # Report 8.1 #62: progress means the learner has started — record
         # when (self-paced courses showed "Started: —" for good).
         reg.started_at = timezone.now()
@@ -196,11 +204,10 @@ def _sync_completion_status(reg) -> None:
         reg.completion_status = "completed"
         reg.completed_at = timezone.now()
         fields += ["completion_status", "completed_at"]
-    elif records and reg.completion_status == "not_started":
+    elif has_records and reg.completion_status == "not_started":
         reg.completion_status = "in_progress"
         fields.append("completion_status")
-    if fields:
-        reg.save(update_fields=fields)
+    return fields
 
 
 def _mark_started(reg) -> None:
@@ -319,6 +326,7 @@ class HasTrainingPermission(HasModulePermission):
         # CourseModificationRequestViewSet + LiveSessionRequestViewSet custom actions
         "approve": "change",
         "decline": "change",
+        "finish_editing": "change",
         "zoom_config": "view",
         "zoom_create_meeting": "change",
         # Nested resource actions (CourseLessonViewSet, LessonTopicViewSet, etc.)
@@ -342,12 +350,18 @@ def _is_training_admin(user) -> bool:
     return bool(user.is_superuser or user_role_name == "cj_admin")
 
 
-def _require_course_staff(request):
+def _require_course_staff(request, course):
     """Report 9 #83: a course's registrations (who registered, their
     progress) are for CJ Admin and the trainer only — "the user doesn't need
-    to know who are all registered". Returns a 403 Response, or None."""
+    to know who are all registered". The Corporate Exclusive Admin is both
+    for his organization's private courses (code review). Returns a 403
+    Response, or None. (Which courses a trainer reaches is get_queryset's.)"""
     user = request.user
-    if _is_training_admin(user) or (user.role_id and user.role.name == "trainer"):
+    if (
+        _is_training_admin(user)
+        or (user.role_id and user.role.name == "trainer")
+        or can_author_private(user, course.owner_organization_id)
+    ):
         return None
     return Response(
         {
@@ -368,9 +382,8 @@ def _require_course_edit_allowed(request, course):
 
     A trainer creating structure for the FIRST time (course still 'draft')
     is never gated. Once published/archived, a trainer may mutate again
-    only if they hold an approved 'update' request that hasn't already
-    been consumed by a prior edit (tracked via course.updated_at, since
-    CourseModificationRequest carries no field-level diff to "apply").
+    only while an approved 'update' request of his keeps its editing window
+    open (see CourseModificationRequest.edit_window_open).
 
     Returns a Response to short-circuit with if not allowed, else None.
     """
@@ -405,14 +418,20 @@ def _require_course_edit_allowed(request, course):
         )
     if course.status == "draft":
         return None
-    cur = (
-        CourseModificationRequest.objects.filter(
-            course=course, trainer=user, request_type="update", status="approved"
-        )
-        .order_by("-reviewed_at")
-        .first()
-    )
-    if cur and cur.reviewed_at and cur.reviewed_at > course.updated_at:
+    # Report 8.1 #61 / code review: an approved update request opens an
+    # editing window — the trainer edits as many items as he needs until he
+    # clicks "Finish editing" or EDIT_WINDOW has passed since approval (it
+    # used to be consumed by the first edit).
+    from django.utils import timezone
+
+    if CourseModificationRequest.objects.filter(
+        course=course,
+        trainer=user,
+        request_type="update",
+        status="approved",
+        closed_at__isnull=True,
+        reviewed_at__gt=timezone.now() - CourseModificationRequest.EDIT_WINDOW,
+    ).exists():
         return None
     return Response(
         {
@@ -479,6 +498,48 @@ class TrainingCategoryViewSet(ActionSerializerMixin, ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
+def visible_courses(user, qs=None, *, keep_registered=False):
+    """Courses ``user`` may see. ``keep_registered``: a learner also reaches
+    the courses he is registered in that are no longer published (archived
+    after an approved delete request)."""
+    if qs is None:
+        qs = TrainingCourse.objects.all()
+    # Report 9 #84: a trainer sees and manages only his own courses (User
+    # Details p.9 "View Assigned Courses"); learners and every other role
+    # see published courses only (drafts were visible to everyone).
+    role = user.role.name if getattr(user, "role", None) else None
+    if user.is_superuser:
+        return qs
+    registered = CourseRegistration.objects.filter(student=user).values("course_id")
+    published = Q(status="published")
+    if keep_registered:
+        published |= Q(id__in=registered)
+    # Report 9 #47/#52 / Report 4 §3: an exclusive organization's private
+    # courses — all of them for its Corporate Exclusive Admin, published
+    # ones for its members; nobody else (CJ Admin included) sees them.
+    private = qs.filter(owner_organization_id__in=author_org_ids(user)) | qs.filter(
+        Q(owner_organization_id__in=member_exclusive_org_ids(user)) & published
+    )
+    qs = qs.filter(owner_organization__isnull=True)
+    if role == "cj_admin":
+        return qs
+    if role == "trainer":
+        # User Details p.9 "View Assigned Courses": courses he created or
+        # that CJ Admin assigned to him as Name of Trainer.
+        return qs.filter(Q(created_by=user) | Q(trainer=user))
+    qs = qs.filter(published)
+    # Report 9 #14/#28/#52/#59: members and managers of a corporate,
+    # corp-exclusive or channel-partner organization see only the courses
+    # CJ Admin licensed to it (plus any they are already registered in).
+    # Plain individuals with no organization still see every published
+    # course.
+    from apps.organizations.scoping import assigned_item_ids, is_licence_scoped
+
+    if is_licence_scoped(user):
+        qs = qs.filter(Q(id__in=assigned_item_ids(user, "training_course")) | Q(id__in=registered))
+    return qs | private
+
+
 class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
     """CRUD for training courses + registration + progress endpoints."""
 
@@ -509,40 +570,10 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
             qs = qs.filter(category_id=category)
         if course_type := params.get("course_type"):
             qs = qs.filter(course_type=course_type)
-        # Report 9 #84: a trainer sees and manages only his own courses (User
-        # Details p.9 "View Assigned Courses"); learners and every other role
-        # see published courses only (drafts were visible to everyone).
-        user = self.request.user
-        role = user.role.name if getattr(user, "role", None) else None
-        if user.is_superuser:
-            return qs
-        # Report 9 #47/#52 / Report 4 §3: an exclusive organization's private
-        # courses — all of them for its Corporate Exclusive Admin, published
-        # ones for its members; nobody else (CJ Admin included) sees them.
-        private = qs.filter(owner_organization_id__in=author_org_ids(user)) | qs.filter(
-            owner_organization_id__in=member_exclusive_org_ids(user), status="published"
-        )
-        qs = qs.filter(owner_organization__isnull=True)
-        if role == "cj_admin":
-            return qs
-        if role == "trainer":
-            # User Details p.9 "View Assigned Courses": courses he created or
-            # that CJ Admin assigned to him as Name of Trainer.
-            return qs.filter(Q(created_by=user) | Q(trainer=user))
-        qs = qs.filter(status="published")
-        # Report 9 #14/#28/#52/#59: members and managers of a corporate,
-        # corp-exclusive or channel-partner organization see only the courses
-        # CJ Admin licensed to it (plus any they are already registered in).
-        # Plain individuals with no organization still see every published
-        # course.
-        from apps.organizations.scoping import assigned_item_ids, is_licence_scoped
-
-        if is_licence_scoped(user):
-            qs = qs.filter(
-                Q(id__in=assigned_item_ids(user, "training_course"))
-                | Q(id__in=CourseRegistration.objects.filter(student=user).values("course_id"))
-            )
-        return qs | private
+        # Code review: a learner keeps opening a course he is registered in
+        # after it was archived (his results stay reachable); the catalogue
+        # list still shows published courses only.
+        return visible_courses(self.request.user, qs, keep_registered=self.action != "list")
 
     def perform_create(self, serializer):
         # Report 9 #47: a Corporate Exclusive Admin's courses belong to his
@@ -856,17 +887,10 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         # Free courses (price == 0) are auto-paid — no payment gateway needed.
         # Report 9 #14/#52: a course CJ Admin licensed to the learner's
         # organization is paid for by the organization, so it is free for him.
-        from apps.organizations.scoping import assigned_item_ids, is_licensed_member
+        # Report 9 #52: his organization's own private course is free too.
+        from .services import is_course_unlocked
 
-        is_free = (
-            float(course.price) == 0
-            or (
-                is_licensed_member(request.user)
-                and course.id in assigned_item_ids(request.user, "training_course")
-            )
-            # Report 9 #52: his organization's own private course.
-            or course.owner_organization_id in member_exclusive_org_ids(request.user)
-        )
+        is_free = float(course.price) == 0 or is_course_unlocked(request.user, course)
         payment_status = "paid" if is_free else "pending"
         # Report 8.1 #62: "not started" until the learner opens the course
         # (see the `start` action), free or paid.
@@ -934,7 +958,7 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
     def registrations(self, request, pk=None):
         """Trainer views all registrations for a course."""
         course = self.get_object()
-        denied = _require_course_staff(request)
+        denied = _require_course_staff(request, course)
         if denied:
             return denied
         regs = course.registrations.select_related("student").all()
@@ -952,7 +976,7 @@ class TrainingCourseViewSet(ActionSerializerMixin, ModelViewSet):
         from .services import registration_progress_rows
 
         course = self.get_object()
-        denied = _require_course_staff(request)
+        denied = _require_course_staff(request, course)
         if denied:
             return denied
         regs = (
@@ -1120,15 +1144,27 @@ class CourseRegistrationViewSet(ModelViewSet):
     http_method_names = ["get", "head", "options", "patch", "post"]
 
     def get_queryset(self):
-        # Students see only their own registrations; trainers/admins see all
+        # Students see only their own registrations; CJ Admin those of every
+        # CJ course; a trainer those of his own courses (code review: he used
+        # to reach every CJ course's learners).
         user = self.request.user
         user_role_name = user.role.name if user.role_id else None
+        qs = super().get_queryset()
         if user.is_superuser:
-            return super().get_queryset()
-        if user_role_name in ("cj_admin", "trainer"):
-            # Report 4 §3: not the registrations of private courses.
-            return super().get_queryset().filter(course__owner_organization__isnull=True)
-        return super().get_queryset().filter(student=user)
+            return qs
+        own = Q(student=user)
+        # Report 4 §3: not the registrations of private courses — except for
+        # their own organization's Corporate Exclusive Admin.
+        cj_course = Q(course__owner_organization__isnull=True)
+        if user_role_name == "cj_admin":
+            return qs.filter(cj_course | own)
+        if user_role_name == "trainer":
+            return qs.filter(
+                (cj_course & (Q(course__created_by=user) | Q(course__trainer=user))) | own
+            )
+        if authored := author_org_ids(user):
+            return qs.filter(Q(course__owner_organization_id__in=authored) | own)
+        return qs.filter(own)
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -2126,8 +2162,6 @@ class SessionContentViewSet(CourseSpaceMixin, _CourseStructureEditGuardMixin, Mo
 
     course_path = "session__topic__lesson__course"
 
-    course_path = "session__topic__lesson__course"
-
     def _course_for(self, obj):
         return obj.session.topic.lesson.course
 
@@ -2186,8 +2220,6 @@ class AssignmentViewSet(CourseSpaceMixin, _CourseStructureEditGuardMixin, ModelV
     permission_classes = [IsAuthenticated, HasTrainingPermission]
     serializer_class = AssignmentSerializer
     http_method_names = ["get", "head", "options", "patch", "delete"]
-
-    course_path = "session__topic__lesson__course"
 
     course_path = "session__topic__lesson__course"
 
@@ -2333,12 +2365,18 @@ class CourseModificationRequestViewSet(ModelViewSet):
         try:
             from apps.notifications.models import notify_user
 
-            action_word = "deleted" if cur.request_type == "delete" else "may now edit"
+            if cur.request_type == "delete":
+                outcome = "The course has been deleted."
+            else:
+                outcome = (
+                    f"You can edit the course for {cur.EDIT_WINDOW.days} days, or until "
+                    "you click 'Finish editing'."
+                )
             notify_user(
                 cur.trainer,
                 f"Course {cur.request_type} approved: {cur.course.title}",
                 f"Your request to {cur.request_type} '{cur.course.title}' was approved. "
-                f"The course {action_word}.",
+                f"{outcome}",
                 "success",
                 f"/training/{cur.course_id}",
             )
@@ -2346,6 +2384,41 @@ class CourseModificationRequestViewSet(ModelViewSet):
             pass
         return Response(
             {"message": "Request approved.", "data": CourseModificationRequestSerializer(cur).data},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="finish-editing")
+    def finish_editing(self, request, pk=None):
+        """POST /course-update-requests/<id>/finish-editing/ — Report 8.1 #61:
+        the trainer closes the editing window his approved update request
+        opened. Later edits need a new request."""
+        cur = self.get_object()
+        if cur.trainer_id != request.user.id and not _is_training_admin(request.user):
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "Only the trainer who requested the update can finish it.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not cur.edit_window_open:
+            return Response(
+                {
+                    "error": {
+                        "code": "invalid_state",
+                        "message": "This request has no open editing window.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from django.utils import timezone
+
+        cur.closed_at = timezone.now()
+        cur.save(update_fields=["closed_at"])
+        return Response(
+            {"message": "Editing finished.", "data": CourseModificationRequestSerializer(cur).data},
             status=status.HTTP_200_OK,
         )
 
@@ -2461,11 +2534,7 @@ class LiveSessionRequestViewSet(ModelViewSet):
             )
         # The course must be one this user can see (same rules as the course
         # list) — keeps organizations' private courses out of reach.
-        course_view = TrainingCourseViewSet()
-        course_view.request = request
-        course_view.kwargs = {}
-        course_view.format_kwarg = None
-        if not course_view.get_queryset().filter(id=course_id).exists():
+        if not visible_courses(request.user).filter(id=course_id).exists():
             return Response(
                 {"error": {"code": "not_found", "message": "Course not found."}},
                 status=status.HTTP_404_NOT_FOUND,
@@ -2491,15 +2560,15 @@ class LiveSessionRequestViewSet(ModelViewSet):
             from apps.notifications.models import notify_user
 
             course = lsr.course
-            if course.created_by:
-                who = request.user.full_name or request.user.email
-                what = (
-                    f"asked to reschedule '{lsr.live_session.title}'"
-                    if lsr.live_session_id
-                    else "requested a live session"
-                )
+            who = request.user.full_name or request.user.email
+            what = (
+                f"asked to reschedule '{lsr.live_session.title}'"
+                if lsr.live_session_id
+                else "requested a live session"
+            )
+            for staff in course.staff_users():
                 notify_user(
-                    course.created_by,
+                    staff,
                     f"Live-session request: {course.title}",
                     f"{who} {what}. Note: {lsr.note}",
                     "session",

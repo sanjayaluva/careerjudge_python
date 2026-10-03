@@ -433,6 +433,12 @@ export interface CourseUpdateRequest {
   reviewed_by_name: string | null;
   reviewed_at: string | null;
   created_at: string;
+  /** Requesting trainer's user id. */
+  trainer: number;
+  /** Report 8.1 #61: an approved update opens an editing window (7 days, or
+   * until the trainer clicks "Finish editing"). */
+  edit_window_open: boolean;
+  edit_until: string | null;
 }
 
 export function requestCourseUpdate(
@@ -456,6 +462,11 @@ export function approveCourseUpdateRequest(
     `${BASE}/course-update-requests/${id}/approve/`,
     adminNote ? { admin_note: adminNote } : {},
   );
+}
+
+/** Report 8.1 #61: the trainer closes the editing window of his approved request. */
+export function finishCourseEditing(id: number): Promise<CourseUpdateRequest> {
+  return apiPost<CourseUpdateRequest>(`${BASE}/course-update-requests/${id}/finish-editing/`, {});
 }
 
 export function declineCourseUpdateRequest(

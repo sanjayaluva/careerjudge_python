@@ -80,7 +80,7 @@ export interface TimeSlot {
   counsellor_name: string;
   start_time: string;
   end_time: string;
-  status: "available" | "booked" | "blocked";
+  status: "available" | "booked" | "blocked" | "cancelled";
   created_at: string;
 }
 

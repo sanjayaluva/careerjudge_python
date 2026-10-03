@@ -539,6 +539,8 @@ class CourseModificationRequestSerializer(serializers.ModelSerializer):
     reviewed_by_name = serializers.CharField(
         source="reviewed_by.full_name", read_only=True, default=None
     )
+    edit_until = serializers.DateTimeField(read_only=True)
+    edit_window_open = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = CourseModificationRequest
@@ -555,6 +557,10 @@ class CourseModificationRequestSerializer(serializers.ModelSerializer):
             "reviewed_by",
             "reviewed_by_name",
             "reviewed_at",
+            # Report 8.1 #61: the editing window an approved update opens.
+            "closed_at",
+            "edit_until",
+            "edit_window_open",
             "created_at",
         ]
         read_only_fields = [
@@ -565,6 +571,9 @@ class CourseModificationRequestSerializer(serializers.ModelSerializer):
             "reviewed_by",
             "reviewed_by_name",
             "reviewed_at",
+            "closed_at",
+            "edit_until",
+            "edit_window_open",
             "created_at",
             "course_title",
         ]

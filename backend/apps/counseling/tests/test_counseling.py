@@ -357,8 +357,13 @@ def test_cancel_24h_before_full_refund(counselee_client, counselee_user, counsel
     assert session.payment_status == "refunded_full"
     assert resp.data["data"]["cancellation"]["refund_tier"] == "full"
     assert resp.data["data"]["cancellation"]["refund_amount"] == "100.00"
+    # Code review: the slot keeps the cancelled session; a fresh slot is
+    # opened for the same time.
     timeslot.refresh_from_db()
-    assert timeslot.status == "available"
+    assert timeslot.status == "cancelled"
+    assert TimeSlot.objects.filter(
+        counsellor=counsellor, start_time=timeslot.start_time, status="available"
+    ).exists()
 
 
 def test_cancel_4h_before_half_refund(counselee_client, counselee_user, counsellor_user):

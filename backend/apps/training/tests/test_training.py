@@ -1290,30 +1290,33 @@ def test_trainer_cannot_edit_published_course_directly(trainer_client, trainer_u
     assert course.title == "Original"
 
 
-def test_trainer_can_edit_after_admin_approval_then_approval_is_consumed(
+def test_trainer_can_edit_after_admin_approval_until_he_finishes_editing(
     admin_client, trainer_client, trainer_user
 ):
-    """Once approved, the trainer's next edit succeeds; a further edit
-    without a fresh approval is blocked again."""
+    """Once approved, the trainer edits freely (Report 8.1 #61 — the approval
+    used to be consumed by the first edit); after "Finish editing" a further
+    edit needs a fresh approval."""
     course = TrainingCourse.objects.create(
         title="Original", created_by=trainer_user, status="published"
     )
-    _approve_update_request(admin_client, course, trainer_client)
+    cur = _approve_update_request(admin_client, course, trainer_client)
 
-    resp = trainer_client.patch(
-        f"/api/training/courses/{course.id}/", {"title": "Updated"}, format="json"
-    )
+    for title in ("Updated", "Updated Again"):
+        resp = trainer_client.patch(
+            f"/api/training/courses/{course.id}/", {"title": title}, format="json"
+        )
+        assert resp.status_code == 200, resp.data
+    course.refresh_from_db()
+    assert course.title == "Updated Again"
+
+    resp = trainer_client.post(f"/api/training/course-update-requests/{cur.id}/finish-editing/")
     assert resp.status_code == 200, resp.data
-    course.refresh_from_db()
-    assert course.title == "Updated"
-
-    # The approval is consumed — a second edit needs a new request.
-    resp2 = trainer_client.patch(
-        f"/api/training/courses/{course.id}/", {"title": "Updated Again"}, format="json"
+    resp = trainer_client.patch(
+        f"/api/training/courses/{course.id}/", {"title": "Too late"}, format="json"
     )
-    assert resp2.status_code == 403
+    assert resp.status_code == 403
     course.refresh_from_db()
-    assert course.title == "Updated"
+    assert course.title == "Updated Again"
 
 
 def test_cj_admin_edits_published_course_directly(admin_client, trainer_user):

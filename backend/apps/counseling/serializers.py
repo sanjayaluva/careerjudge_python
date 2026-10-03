@@ -239,6 +239,16 @@ class CounselingSessionSerializer(serializers.ModelSerializer):
     def get_category_name(self, obj):
         return category_label(obj.category)
 
+    def get_extra_kwargs(self):
+        # Code review: counsellor/slot/category are fixed once booked — a
+        # PATCH used to move the session without any slot bookkeeping (double
+        # booking). Moves go through the reschedule endpoints.
+        extra = super().get_extra_kwargs()
+        if self.instance is not None:
+            for name in ("counsellor", "timeslot", "category"):
+                extra[name] = {**extra.get(name, {}), "read_only": True}
+        return extra
+
     def validate_category(self, value):
         # Report 9 #105: an inactive category is hidden from new bookings; a
         # session that already has it keeps it.

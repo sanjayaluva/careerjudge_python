@@ -7,6 +7,20 @@ from django.utils import timezone
 from .models import CourseRegistration
 
 
+def is_course_unlocked(user, course) -> bool:
+    """Is ``course`` paid for by ``user``'s organization? Report 9 #14/#52:
+    CJ Admin licensed it to his organization — for members and managers
+    alike, the same predicate that decides which CJ courses they see (code
+    review: managers saw licensed priced courses but had to pay) — or it is
+    his exclusive organization's own private course."""
+    from apps.organizations.private_content import member_exclusive_org_ids
+    from apps.organizations.scoping import assigned_item_ids, is_licence_scoped
+
+    if course.owner_organization_id is not None:
+        return course.owner_organization_id in member_exclusive_org_ids(user)
+    return is_licence_scoped(user) and course.id in assigned_item_ids(user, "training_course")
+
+
 def assign_course_for_organization(course, student, organization, assigned_by):
     """Register ``student`` for ``course`` on his behalf, as assigned by his
     organization's manager. Returns ``(registration, created)``.
@@ -16,14 +30,34 @@ def assign_course_for_organization(course, student, organization, assigned_by):
     zero-amount 'free' one (no gateway step). The member is notified.
     """
     from apps.accounts.models import UserProfile
-    from apps.notifications.models import notify_user
     from apps.payments.services import get_or_create_payment
 
     from .views import REGISTRATION_FORM_FIELDS
 
     existing = CourseRegistration.objects.filter(course=course, student=student).first()
-    if existing is not None:
+    if existing is not None and existing.payment_status == "paid":
         return existing, False
+    if existing is not None:
+        # Code review: the member self-registered (payment pending) before
+        # the course was licensed — the organization's licence now pays, so
+        # he can start it.
+        from apps.payments.models import Payment
+
+        existing.payment_status = "paid"
+        existing.organization = organization
+        existing.assigned_by = assigned_by
+        if course.schedule_type == "scheduled" and not existing.started_at:
+            existing.started_at = timezone.now()
+        existing.save(update_fields=["payment_status", "organization", "assigned_by", "started_at"])
+        Payment.objects.filter(
+            user=student, module="training", item_id=course.id, status__in=("pending", "failed")
+        ).update(
+            amount=0,
+            status="free",
+            description=f"Licensed by {organization.name}: {course.title}",
+        )
+        _notify_assigned(student, course, organization)
+        return existing, True
 
     profile, _ = UserProfile.objects.get_or_create(user=student)
     registration_form = {
@@ -50,6 +84,13 @@ def assign_course_for_organization(course, student, organization, assigned_by):
         amount=0,
         description=f"Licensed by {organization.name}: {course.title}",
     )
+    _notify_assigned(student, course, organization)
+    return reg, True
+
+
+def _notify_assigned(student, course, organization):
+    from apps.notifications.models import notify_user
+
     notify_user(
         student,
         f"Course assigned: {course.title}",
@@ -58,7 +99,6 @@ def assign_course_for_organization(course, student, organization, assigned_by):
         "info",
         f"/training/{course.id}",
     )
-    return reg, True
 
 
 def can_unassign(reg) -> bool:
@@ -98,31 +138,89 @@ def registration_progress_rows(registrations) -> list[dict]:
     learner's course progress at a glance — status, completion %, items done
     of total, start, last activity, assessment and assignment scores — in one
     list instead of one ``progress_summary`` call per learner. The caller
-    scopes ``registrations`` (the trainer's course, the manager's members)."""
+    scopes ``registrations`` (the trainer's course, the manager's members).
+
+    Code review: everything is loaded in a fixed number of queries (not a few
+    per learner), and a status that drifted from the progress (assessments
+    complete outside the progress endpoint) is saved in one bulk update — on
+    most reads there is nothing to save."""
+    from collections import defaultdict
+
+    from django.db.models import F
+
     from apps.assessment.models import AssessmentSession
 
-    from .models import AssignmentReport
-    from .views import _course_completion, _sync_completion_status
+    from .models import (
+        AssignmentReport,
+        CourseAssessment,
+        CourseCompletionParameter,
+        SessionContent,
+    )
+    from .views import _apply_completion_status
 
-    rows = []
-    for reg in registrations:
-        # Assessments complete outside the progress endpoint — re-sync first,
-        # exactly as progress_summary does.
-        _sync_completion_status(reg)
+    regs = list(registrations)
+    if not regs:
+        return []
+    course_ids = {reg.course_id for reg in regs}
+    student_ids = {reg.student_id for reg in regs}
+
+    assessments_by_course = defaultdict(list)
+    for ca in CourseAssessment.objects.filter(course_id__in=course_ids):
+        assessments_by_course[ca.course_id].append(ca)
+    mandatory_by_course = defaultdict(list)
+    for mp in CourseCompletionParameter.objects.filter(course_id__in=course_ids, is_mandatory=True):
+        mandatory_by_course[mp.course_id].append((mp.content_type, mp.content_id))
+    contents_by_course = defaultdict(list)
+    for course_id, content_id in SessionContent.objects.filter(
+        session__topic__lesson__course_id__in=course_ids
+    ).values_list("session__topic__lesson__course_id", "id"):
+        contents_by_course[course_id].append(("session_content", content_id))
+
+    # Latest completed session per (candidate, assessment).
+    latest_session = {}
+    assessment_ids = {ca.assessment_id for cas in assessments_by_course.values() for ca in cas}
+    for s in AssessmentSession.objects.filter(
+        candidate_id__in=student_ids, assessment_id__in=assessment_ids, status="completed"
+    ).order_by(F("completed_at").asc(nulls_first=True), "id"):
+        latest_session[(s.candidate_id, s.assessment_id)] = s
+
+    reports_by_reg = defaultdict(list)
+    for ar in (
+        AssignmentReport.objects.filter(
+            assignment__session__topic__lesson__course_id__in=course_ids,
+            student_id__in=student_ids,
+        )
+        .select_related("assignment")
+        .annotate(report_course_id=F("assignment__session__topic__lesson__course_id"))
+    ):
+        reports_by_reg[(ar.report_course_id, ar.student_id)].append(ar)
+
+    rows, changed, changed_fields = [], [], set()
+    for reg in regs:
         records = list(reg.progress_records.all())
-        pct, done, total = _course_completion(reg, records)
+        course_assessments = assessments_by_course[reg.course_id]
+        # Same rules as views._course_completion: done = completed progress
+        # records + course assessments with a completed session; measured
+        # against the mandatory parameters, else every session content.
+        done_keys = {(p.content_type, p.content_id) for p in records if p.is_completed}
+        for ca in course_assessments:
+            if (reg.student_id, ca.assessment_id) in latest_session:
+                done_keys.add(("assessment", ca.id))
+        required = mandatory_by_course[reg.course_id] or contents_by_course[reg.course_id]
+        total = len(required)
+        done = sum(1 for key in required if key in done_keys)
+        pct = round(done / total * 100, 1) if total else 0.0
+        fields = _apply_completion_status(reg, bool(records), pct, total)
+        if fields:
+            changed.append(reg)
+            changed_fields.update(fields)
+
         last_activity = max(
             (p.last_accessed_at for p in records if p.last_accessed_at), default=None
         )
         assessment_scores = []
-        for ca in reg.course.assessments.all():
-            latest = (
-                AssessmentSession.objects.filter(
-                    assessment_id=ca.assessment_id, candidate=reg.student, status="completed"
-                )
-                .order_by("-completed_at")
-                .first()
-            )
+        for ca in course_assessments:
+            latest = latest_session.get((reg.student_id, ca.assessment_id))
             assessment_scores.append(
                 {
                     "course_assessment_id": ca.id,
@@ -146,9 +244,7 @@ def registration_progress_rows(registrations) -> list[dict]:
                 "trainer_score": ar.trainer_score,
                 "submitted_at": ar.submitted_at.isoformat(),
             }
-            for ar in AssignmentReport.objects.filter(
-                assignment__session__topic__lesson__course=reg.course, student=reg.student
-            ).select_related("assignment")
+            for ar in reports_by_reg[(reg.course_id, reg.student_id)]
         ]
         last_activity = last_activity or reg.started_at
         rows.append(
@@ -171,4 +267,6 @@ def registration_progress_rows(registrations) -> list[dict]:
                 "assignment_reports": assignment_reports,
             }
         )
+    if changed:
+        CourseRegistration.objects.bulk_update(changed, sorted(changed_fields))
     return rows

@@ -341,8 +341,9 @@ def _update_module_payment_status(payment: Payment):
                     f"now start the course."
                 )
                 link = f"/training/{reg.course_id}"
-                if reg.course.created_by:
-                    notify_user(reg.course.created_by, title, body, "success", link)
+                # Code review: the named trainer (Report 9 #83) hears too.
+                for staff in reg.course.staff_users():
+                    notify_user(staff, title, body, "success", link)
                 notify_role("cj_admin", title, body, "success", link)
             except Exception as e:
                 logger.warning("Training payment notification failed: %s", e)

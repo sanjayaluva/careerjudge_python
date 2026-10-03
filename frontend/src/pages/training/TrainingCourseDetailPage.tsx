@@ -54,6 +54,7 @@ import {
   listCourseUpdateRequests,
   approveCourseUpdateRequest,
   declineCourseUpdateRequest,
+  finishCourseEditing,
   listMyCourses,
   notifyLiveSessionStudents,
   listLiveSessionConsents,
@@ -1859,6 +1860,16 @@ function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
+  // Report 8.1 #61: the trainer closes the editing window when he is done.
+  const finishMutation = useMutation({
+    mutationFn: (id: number) => finishCourseEditing(id),
+    onSuccess: () => {
+      toast.success("Editing finished.");
+      void queryClient.invalidateQueries({ queryKey: ["training", "course-update-requests"] });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   const requestMutation = useMutation({
     mutationFn: () => requestCourseUpdate(courseId, { request_type: reqType, reason }),
     onSuccess: () => {
@@ -1911,6 +1922,24 @@ function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
                 <p className="mt-1 text-slate-600">{r.reason}</p>
                 {r.admin_note && (
                   <p className="mt-1 text-xs text-slate-500">Admin note: {r.admin_note}</p>
+                )}
+                {r.edit_window_open && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-emerald-700">
+                      Editing open
+                      {r.edit_until ? ` until ${new Date(r.edit_until).toLocaleString()}` : ""}.
+                    </span>
+                    {r.trainer === user?.id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        loading={finishMutation.isPending}
+                        onClick={() => finishMutation.mutate(r.id)}
+                      >
+                        Finish editing
+                      </Button>
+                    )}
+                  </div>
                 )}
                 {isAdmin && r.status === "pending" && (
                   <div className="mt-2 flex gap-2">

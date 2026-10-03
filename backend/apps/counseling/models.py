@@ -142,6 +142,10 @@ class TimeSlot(models.Model):
         ("available", "Available"),
         ("booked", "Booked (session pending)"),
         ("blocked", "Blocked (counsellor unavailable)"),
+        # Code review: the slot of a cancelled session keeps that session
+        # (and its cancellation/refund record); a fresh available slot is
+        # opened for the same time instead.
+        ("cancelled", "Cancelled (session cancelled)"),
     ]
 
     counsellor = models.ForeignKey(
@@ -159,7 +163,15 @@ class TimeSlot(models.Model):
         ordering = ["start_time"]
         verbose_name = _("time slot")
         verbose_name_plural = _("time slots")
-        unique_together = [("counsellor", "start_time")]
+        # One live slot per counsellor and start time; cancelled slots (which
+        # keep their cancelled session) don't count.
+        constraints = [
+            models.UniqueConstraint(
+                fields=["counsellor", "start_time"],
+                condition=~models.Q(status="cancelled"),
+                name="uniq_live_timeslot_per_counsellor_start",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.counsellor.full_name} @ {self.start_time:%Y-%m-%d %H:%M}"

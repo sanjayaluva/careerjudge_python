@@ -21,7 +21,7 @@ Endpoints:
 
 from datetime import timedelta
 
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import filters, serializers, status
 from rest_framework.decorators import action
@@ -394,9 +394,11 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
             weeks = int(request.query_params.get("weeks", 3))
             from_date = now
             to_date = from_date + timedelta(weeks=weeks)
-        slots = counsellor.timeslots.filter(
-            start_time__gte=from_date, start_time__lte=to_date
-        ).order_by("start_time")
+        slots = (
+            _live_slots(counsellor.timeslots.all())
+            .filter(start_time__gte=from_date, start_time__lte=to_date)
+            .order_by("start_time")
+        )
         return Response(
             {
                 "message": "OK",
@@ -413,6 +415,13 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
+def _live_slots(qs):
+    """Code review: slots a counselee can see. The slot of a cancelled session
+    keeps that session (status 'cancelled', a fresh slot is opened for the
+    same time), and a slot is only 'available' while no session holds it."""
+    return qs.exclude(status="cancelled").exclude(Q(status="available") & Q(session__isnull=False))
+
+
 class TimeSlotViewSet(ModelViewSet):
     queryset = TimeSlot.objects.select_related("counsellor")
     permission_classes = [IsAuthenticated, HasCounselingPermission]
@@ -425,6 +434,8 @@ class TimeSlotViewSet(ModelViewSet):
             qs = qs.filter(counsellor_id=counsellor)
         if status_filter := params.get("status"):
             qs = qs.filter(status=status_filter)
+        if self.action == "list" and status_filter != "cancelled":
+            qs = _live_slots(qs)
         return qs
 
     def perform_create(self, serializer):
@@ -507,6 +518,22 @@ class TimeSlotViewSet(ModelViewSet):
         user_role_name = self.request.user.role.name if self.request.user.role_id else None
         return instance.counsellor.user_id == self.request.user.id or user_role_name == "cj_admin"
 
+    def _session_held(self, instance):
+        """Code review: a slot holding a session (booked, or the cancelled
+        session's slot with its refund record) can't be edited or deleted —
+        deleting it would cascade-delete the session."""
+        if CounselingSession.objects.filter(timeslot=instance).exists():
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": "This timeslot holds a session and cannot be changed.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         if not self._check_ownership(instance):
@@ -519,6 +546,8 @@ class TimeSlotViewSet(ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if refused := self._session_held(instance):
+            return refused
         return super().update(request, *args, **kwargs)
 
     def partial_update(self, request, *args, **kwargs):
@@ -533,6 +562,8 @@ class TimeSlotViewSet(ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if refused := self._session_held(instance):
+            return refused
         return super().partial_update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
@@ -558,12 +589,41 @@ class TimeSlotViewSet(ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if refused := self._session_held(instance):
+            return refused
         return super().destroy(request, *args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
 # Session ViewSet (booking + confirm + cancel + complete + summary + feedback)
 # ---------------------------------------------------------------------------
+
+
+def visible_sessions(user, qs, prefix=""):
+    """Sessions ``user`` may see; ``prefix`` points from ``qs``'s model to the
+    session (e.g. ``"original_session__"`` for follow-ups)."""
+    user_role_name = user.role.name if user.role_id else None
+    # Counselees see only their own sessions
+    if user_role_name in ("individual",):
+        return qs.filter(**{f"{prefix}counselee": user})
+    # Counsellors see sessions booked with them
+    if user_role_name == "counsellor":
+        try:
+            profile = user.counsellor_profile
+        except CounsellorProfile.DoesNotExist:
+            return qs.none()
+        return qs.filter(**{f"{prefix}counsellor": profile})
+    # Report 9 #18: organization managers see only their own members'
+    # sessions (they used to see everyone's).
+    from apps.organizations.scoping import managed_user_ids
+
+    member_ids = managed_user_ids(user)
+    if member_ids is not None:
+        return qs.filter(**{f"{prefix}counselee_id__in": member_ids})
+    # Only CJ Admin and Help Desk see all; any other role sees his own.
+    if user.is_superuser or user_role_name in ("cj_admin", "helpdesk"):
+        return qs
+    return qs.filter(**{f"{prefix}counselee": user})
 
 
 class CounselingSessionViewSet(ModelViewSet):
@@ -575,30 +635,7 @@ class CounselingSessionViewSet(ModelViewSet):
     http_method_names = ["get", "head", "options", "post", "patch"]
 
     def get_queryset(self):
-        user = self.request.user
-        user_role_name = user.role.name if user.role_id else None
-        qs = super().get_queryset()
-        # Counselees see only their own sessions
-        if user_role_name in ("individual",):
-            return qs.filter(counselee=user)
-        # Counsellors see sessions booked with them
-        if user_role_name == "counsellor":
-            try:
-                profile = user.counsellor_profile
-                return qs.filter(counsellor=profile)
-            except CounsellorProfile.DoesNotExist:
-                return qs.none()
-        # Report 9 #18: organization managers see only their own members'
-        # sessions (they used to see everyone's).
-        from apps.organizations.scoping import managed_user_ids
-
-        member_ids = managed_user_ids(user)
-        if member_ids is not None:
-            return qs.filter(counselee_id__in=member_ids)
-        # Only CJ Admin and Help Desk see all; any other role sees his own.
-        if user.is_superuser or user_role_name in ("cj_admin", "helpdesk"):
-            return qs
-        return qs.filter(counselee=user)
+        return visible_sessions(self.request.user, super().get_queryset())
 
     def list(self, request, *args, **kwargs):
         # Report 8 #41: wrap in the standard envelope like every other list
@@ -1111,6 +1148,29 @@ class FollowupSessionViewSet(ModelViewSet):
     serializer_class = FollowupSessionSerializer
     http_method_names = ["get", "head", "options", "post", "patch"]
 
+    def get_queryset(self):
+        # Code review: follow-ups are scoped like their original session
+        # (counselee / counsellor own, managers their members, admin + Help
+        # Desk all) — they used to be listed to everyone.
+        return visible_sessions(
+            self.request.user, super().get_queryset(), prefix="original_session__"
+        )
+
+    def _counselee_only(self, followup):
+        """Only the original session's counselee confirms/declines (the
+        'decline' right is shared by counsellors and Help Desk)."""
+        if followup.original_session.counselee_id == self.request.user.id:
+            return None
+        return Response(
+            {
+                "error": {
+                    "code": "forbidden",
+                    "message": "Only the counselee can respond to this follow-up.",
+                }
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     @action(detail=True, methods=["post"])
     def confirm(self, request, pk=None):
         """Counselee confirms a follow-up session (SRS §3.3).
@@ -1119,6 +1179,8 @@ class FollowupSessionViewSet(ModelViewSet):
         Creates a new CounselingSession with status='confirmed'.
         """
         followup = self.get_object()
+        if refused := self._counselee_only(followup):
+            return refused
         if followup.status != "proposed":
             return Response(
                 {
@@ -1198,6 +1260,18 @@ class FollowupSessionViewSet(ModelViewSet):
     def decline(self, request, pk=None):
         """Counselee declines a follow-up session."""
         followup = self.get_object()
+        if refused := self._counselee_only(followup):
+            return refused
+        if followup.status != "proposed":
+            return Response(
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": f"Cannot decline a follow-up with status '{followup.status}'.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         followup.status = "declined"
         followup.save(update_fields=["status"])
         return Response(
