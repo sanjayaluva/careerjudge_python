@@ -247,9 +247,11 @@ class AssessmentSchedule(models.Model):
     organization = models.ForeignKey(
         Organization, on_delete=models.CASCADE, related_name="assessment_schedules"
     )
+    # Code review (3 Oct 2026): NULL means the whole organization, so a
+    # group's schedules go with the group (SET_NULL widened them to everyone).
     group = models.ForeignKey(
         Group,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         related_name="assessment_schedules",
         null=True,
         blank=True,
@@ -288,9 +290,11 @@ class CourseSchedule(models.Model):
     organization = models.ForeignKey(
         Organization, on_delete=models.CASCADE, related_name="course_schedules"
     )
+    # Code review (3 Oct 2026): NULL means the whole organization, so a
+    # group's schedules go with the group (SET_NULL widened them to everyone).
     group = models.ForeignKey(
         Group,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         related_name="course_schedules",
         null=True,
         blank=True,

@@ -6,7 +6,6 @@ import re
 from rest_framework import serializers
 
 from apps.accounts.models import User
-from apps.accounts.serializers import UserSerializer
 
 from .models import (
     AssessmentSchedule,
@@ -59,8 +58,21 @@ class GroupSerializer(serializers.ModelSerializer):
         return obj.id in self.context["_ga_editable"]
 
 
+class MemberUserSerializer(serializers.ModelSerializer):
+    """Code review (3 Oct 2026): the member list shows who the member is —
+    not his PAN, bank details or other profile data (the full UserSerializer
+    used to be embedded)."""
+
+    role = serializers.SlugRelatedField(slug_field="name", read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "email", "full_name", "role", "phone", "is_active"]
+        read_only_fields = fields
+
+
 class OrganizationMemberSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = MemberUserSerializer(read_only=True)
     user_email = serializers.EmailField(write_only=True, required=True)
     group_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     # Doc 9 §2.3: when a corporate admin onboards a NEW corporate individual,
@@ -223,8 +235,33 @@ class OrganizationAssignmentSerializer(serializers.ModelSerializer):
     def get_item_title(self, obj):
         if obj.item_type == "counseling":
             return "Counselling services"
-        item = _licensable_model(obj.item_type).objects.filter(id=obj.item_id).first()
-        return item.title if item else f"#{obj.item_id}"
+        title = self._titles(obj).get((obj.item_type, obj.item_id))
+        return title if title is not None else f"#{obj.item_id}"
+
+    def _titles(self, obj) -> dict:
+        """Code review (3 Oct 2026): titles of every listed item, read with one
+        query per item type (was one query per row)."""
+        cache = self.context.get("_item_titles")
+        if cache is not None and (obj.item_type, obj.item_id) in cache:
+            return cache
+        parent = getattr(self, "parent", None)
+        rows = getattr(parent, "instance", None) if parent is not None else None
+        rows = list(rows) if rows is not None else [obj]
+        if all(r is not obj for r in rows):
+            rows.append(obj)
+        cache = {} if cache is None else cache
+        by_type: dict[str, set[int]] = {}
+        for row in rows:
+            if row.item_type != "counseling":
+                by_type.setdefault(row.item_type, set()).add(row.item_id)
+        for item_type, ids in by_type.items():
+            cache.update({(item_type, pk): None for pk in ids})  # deleted items
+            for pk, title in (
+                _licensable_model(item_type).objects.filter(id__in=ids).values_list("id", "title")
+            ):
+                cache[(item_type, pk)] = title
+        self.context["_item_titles"] = cache
+        return cache
 
 
 def _licensable_model(item_type):
@@ -343,6 +380,28 @@ class CorporateWebsiteSerializer(serializers.ModelSerializer):
         value = (value or "").strip()
         if not value:
             raise serializers.ValidationError("Company name is required.")
+        return value
+
+    def validate_is_active(self, value):
+        """Code review (3 Oct 2026): switching the portal on/off is CJ Admin's
+        (CJ_UC055), not the organization admin's."""
+        from .scoping import is_cj_admin
+
+        request = self.context.get("request")
+        if request is not None and not is_cj_admin(request.user):
+            current = self.instance.is_active if self.instance is not None else True
+            if value != current:
+                raise serializers.ValidationError("Only CJ Admin can switch the website on or off.")
+        return value
+
+    def validate_logo_url(self, value):
+        """Code review (3 Oct 2026): a typed logo address must be a web link
+        (http/https) — never ``javascript:`` / ``data:``."""
+        value = (value or "").strip()
+        if value and not re.match(r"^https?://[^\s]+$", value, re.IGNORECASE):
+            raise serializers.ValidationError(
+                "Enter the logo's web address starting with http:// or https://."
+            )
         return value
 
     def validate_primary_color(self, value):

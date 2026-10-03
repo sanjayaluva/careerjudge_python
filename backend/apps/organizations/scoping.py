@@ -132,6 +132,28 @@ def role_name(user) -> str | None:
     return user.role.name if getattr(user, "role", None) else None
 
 
+# CareerJudge's own staff roles (Report 4 §3: none of them — CJ Admin
+# included — reach an exclusive organization's private content, even when
+# tagged to that organization).
+CJ_STAFF_ROLES = (
+    "cj_admin",
+    "helpdesk",
+    "psychometrician",
+    "sme",
+    "reviewer",
+    "trainer",
+    "counsellor",
+)
+
+
+def is_cj_staff(user) -> bool:
+    """A user holding a CareerJudge staff role. The superuser is not counted:
+    he keeps access to private content for support (private_content.py)."""
+    if not getattr(user, "is_authenticated", False):
+        return False
+    return role_name(user) in CJ_STAFF_ROLES
+
+
 def is_cj_admin(user) -> bool:
     """CJ Admin or superuser — the only users who manage roles and licensing."""
     if not getattr(user, "is_authenticated", False):
@@ -179,13 +201,16 @@ def own_group_ids(user) -> list[int]:
 
 
 def managed_group_ids(user) -> list[int] | None:
-    """Group Admin tagged to a group is limited to that group and its
-    sub-groups (Report 9 #23) — his own group(s) first; else ``None``."""
+    """A Group Admin is limited to his group and its sub-groups (Report 9
+    #23) — his own group(s) first. ``None`` (no group limit) for everyone
+    else. Code review (3 Oct 2026): a Group Admin tagged to NO group (never
+    set, or his group was deleted) gets ``[]`` — he reaches nothing until his
+    Corp Admin places him in a group — instead of the whole organization."""
     if role_name(user) != "group_admin" or not is_org_manager(user):
         return None
     ids = own_group_ids(user)
     if not ids:
-        return None
+        return []
     return ids + descendant_group_ids(ids)
 
 

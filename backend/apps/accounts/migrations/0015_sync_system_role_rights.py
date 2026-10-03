@@ -210,9 +210,32 @@ ROLE_PERMISSIONS = {
 }
 
 
+# Code review (3 Oct 2026): the system roles, so a FRESH database (production
+# never runs seed_demo) gets them with their rights instead of creating them
+# later with none. Frozen copy of Role.ROLE_CHOICES as of this migration.
+SYSTEM_ROLES = [
+    ("cj_admin", "CareerJudge Admin"),
+    ("helpdesk", "Help Desk"),
+    ("corp_admin", "Corporate Admin"),
+    ("corp_exclusive", "Corporate Exclusive"),
+    ("psychometrician", "Psychometrician"),
+    ("sme", "SME (Subject Matter Expert)"),
+    ("reviewer", "Reviewer"),
+    ("trainer", "Trainer"),
+    ("group_admin", "Group Admin"),
+    ("counsellor", "Counsellor"),
+    ("channel_partner", "Channel Partner"),
+    ("individual", "Individual"),
+]
+
+
 def sync(apps, schema_editor):
     Role = apps.get_model("accounts", "Role")
     ModuleRight = apps.get_model("accounts", "ModuleRight")
+    for name, label in SYSTEM_ROLES:
+        Role.objects.get_or_create(
+            name=name, defaults={"description": label, "is_system": True, "is_frozen": True}
+        )
     for role_name, perms in ROLE_PERMISSIONS.items():
         role = Role.objects.filter(name=role_name).first()
         if role is None:

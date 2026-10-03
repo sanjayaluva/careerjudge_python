@@ -65,6 +65,37 @@ def _is_corporate_member(user) -> bool:
     ).exists()
 
 
+# Fields an organization manager may not change on a user (code review).
+MANAGER_LOCKED_USER_FIELDS = (
+    "email",
+    "password",
+    "is_active",
+    "is_email_verified",
+    "is_trial_user",
+)
+
+
+def _locked_field_changes(instance, data) -> list[str]:
+    """The manager-locked fields ``data`` would actually change (the edit
+    form sends every field, unchanged ones included)."""
+    changed = []
+    for field in MANAGER_LOCKED_USER_FIELDS:
+        if field not in data:
+            continue
+        value = data.get(field)
+        if field == "password":
+            is_change = bool(value)
+        elif field == "email":
+            is_change = str(value or "").strip().lower() != (instance.email or "").lower()
+        else:
+            if isinstance(value, str):
+                value = value.strip().lower() in ("1", "true", "yes", "on")
+            is_change = bool(value) != bool(getattr(instance, field))
+        if is_change:
+            changed.append(field)
+    return changed
+
+
 def _forbidden(message: str):
     return Response(
         {"error": {"code": "forbidden", "message": message, "details": {}}},
@@ -97,7 +128,13 @@ def _manager_target_org(request):
         )
     org_id = request.data.get("organization_id") or request.query_params.get("organization_id")
     if org_id:
-        if int(org_id) not in org_ids:
+        # Code review (3 Oct 2026): a non-numeric id (multipart forms send
+        # strings) used to raise a 500.
+        try:
+            org_id = int(org_id)
+        except (TypeError, ValueError):
+            org_id = None
+        if org_id not in org_ids:
             return None, None, _forbidden("You can add users only to your own organization.")
         org = Organization.objects.get(id=org_id)
     else:
@@ -105,7 +142,18 @@ def _manager_target_org(request):
     group = None
     group_id = request.data.get("group_id")
     allowed_groups = managed_group_ids(request.user)
+    if allowed_groups == []:
+        # Code review (3 Oct 2026): a Group Admin with no group has no scope.
+        return (
+            None,
+            None,
+            _forbidden("You are not placed in a group yet. Please ask your organization's admin."),
+        )
     if group_id:
+        try:
+            group_id = int(group_id)
+        except (TypeError, ValueError):
+            return None, None, _forbidden("You can add users only to your own group.")
         group = Group.objects.filter(id=group_id, organization=org).first()
         if group is None or (allowed_groups is not None and group.id not in allowed_groups):
             return None, None, _forbidden("You can add users only to your own group.")
@@ -126,7 +174,12 @@ class UserViewSet(ModelViewSet):
     POST   /api/accounts/users/<id>/assign-role/
     """
 
-    queryset = User.objects.select_related("role", "profile").all()
+    # Rights are prefetched for module_rights (code review: N+1 per row).
+    queryset = (
+        User.objects.select_related("role", "role__base_role", "profile")
+        .prefetch_related("role__rights", "role__base_role__rights")
+        .all()
+    )
     permission_classes = [IsAuthenticated, HasAccountsPermission]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["email", "full_name", "phone"]
@@ -230,6 +283,20 @@ class UserViewSet(ModelViewSet):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        # Code review (3 Oct 2026): an organization manager edits his members'
+        # name, phone and profile — never their sign-in (email / password) or
+        # account status, which would let him take an account over.
+        from apps.organizations.scoping import is_org_manager
+
+        if is_org_manager(requester):
+            locked = _locked_field_changes(instance, request.data)
+            if locked:
+                return _forbidden(
+                    "You cannot change a user's "
+                    + ", ".join(f.replace("_", " ") for f in locked)
+                    + ". Please contact CJ Admin."
+                )
 
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)

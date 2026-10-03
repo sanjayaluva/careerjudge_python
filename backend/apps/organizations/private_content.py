@@ -28,8 +28,12 @@ def _role(user) -> str | None:
 
 def member_exclusive_org_ids(user) -> list[int]:
     """Corporate Exclusive organizations the user belongs to (any membership),
-    first-joined first."""
-    if not getattr(user, "is_authenticated", False):
+    first-joined first. Code review (3 Oct 2026): CareerJudge staff never
+    count as members of one — tagging a CJ Admin, Trainer, … to an exclusive
+    organization must not open its private content to him (Report 4 §3)."""
+    from .scoping import is_cj_staff
+
+    if not getattr(user, "is_authenticated", False) or is_cj_staff(user):
         return []
     return list(
         OrganizationMember.objects.filter(user=user, organization__type=EXCLUSIVE_ORG_TYPE)

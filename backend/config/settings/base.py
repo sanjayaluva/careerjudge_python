@@ -134,6 +134,13 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "static_collected"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+# Code review (3 Oct 2026): uploaded files on local disk get signed URLs that
+# expire (core.media); prod.py swaps in S3 (pre-signed URLs) when enabled.
+STORAGES = {
+    "default": {"BACKEND": "core.media.SignedMediaStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+MEDIA_URL_MAX_AGE = 12 * 60 * 60  # seconds a signed media URL stays valid (at least)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
