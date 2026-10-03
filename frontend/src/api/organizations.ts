@@ -85,7 +85,8 @@ export interface OrganizationMember {
 export interface OrganizationAssignment {
   id: number;
   organization: number;
-  item_type: "assessment" | "training_course" | "counseling";
+  // Report 9 #97/#99/#102: published profiling solutions are licensed too.
+  item_type: "assessment" | "training_course" | "counseling" | "profiling_solution";
   item_id: number;
   /** Report 9: the licensed item's title ("Counselling services" for counselling). */
   item_title: string;
@@ -270,7 +271,7 @@ export function listAssignments(orgId: number): Promise<OrganizationAssignment[]
 export function createAssignment(
   orgId: number,
   // Counselling is licensed as a whole service: no item_id.
-  payload: { item_type: "assessment" | "training_course" | "counseling"; item_id?: number },
+  payload: { item_type: OrganizationAssignment["item_type"]; item_id?: number },
 ): Promise<OrganizationAssignment> {
   return apiPost<OrganizationAssignment>(`${BASE}/${orgId}/assignments/`, payload);
 }

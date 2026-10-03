@@ -224,9 +224,10 @@ class OrganizationAssignmentSerializer(serializers.ModelSerializer):
         model = _licensable_model(item_type)
         # Report 4 §3: an exclusive organization's private content is never
         # licensed (it is not CJ content).
-        if not model.objects.filter(
-            id=item_id, status="published", owner_organization__isnull=True
-        ).exists():
+        published = model.objects.filter(id=item_id, status="published")
+        if item_type != "profiling_solution":
+            published = published.filter(owner_organization__isnull=True)
+        if not published.exists():
             raise serializers.ValidationError(
                 {"item_id": "Pick a published item — drafts and archived items can't be licensed."}
             )
@@ -266,9 +267,16 @@ class OrganizationAssignmentSerializer(serializers.ModelSerializer):
 
 def _licensable_model(item_type):
     from apps.assessment.models import Assessment
+    from apps.career_profiling.models import ProfilingSolution
     from apps.training.models import TrainingCourse
 
-    return TrainingCourse if item_type == "training_course" else Assessment
+    if item_type == "training_course":
+        return TrainingCourse
+    if item_type == "profiling_solution":
+        # Report 9 #97/#99/#102: profiling solutions are CJ content only
+        # (no private space), licensed when published.
+        return ProfilingSolution
+    return Assessment
 
 
 class AssessmentScheduleSerializer(serializers.ModelSerializer):

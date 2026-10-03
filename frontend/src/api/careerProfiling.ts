@@ -1,7 +1,15 @@
 /**
  * Career Profiling API client.
  */
-import { apiClient, apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import {
+  apiClient,
+  apiDelete,
+  apiGet,
+  apiGetAllPages,
+  apiGetPaged,
+  apiPatch,
+  apiPost,
+} from "./client";
 import { listAssessments } from "./assessment";
 
 const BASE = "/career-profiling";
@@ -198,8 +206,82 @@ export function updateSolution(
   return apiPatch<ProfilingSolution>(`${BASE}/solutions/${id}/`, payload);
 }
 
-export function deleteSolution(id: number): Promise<void> {
-  return apiDelete(`${BASE}/solutions/${id}/`);
+/** Report 9 #97/#99/#102: every page of the catalogue (for licensing). */
+export function listAllSolutions(params?: { status?: string }): Promise<ProfilingSolution[]> {
+  return apiGetAllPages<ProfilingSolution>(`${BASE}/solutions/`, {
+    params: { ...(params?.status ? { status: params.status } : {}) },
+  });
+}
+
+/**
+ * CJ Admin deletes directly; a Psychometrician's delete (with a reason) only
+ * files a deletion request for CJ Admin (Report 9 #107).
+ */
+export function deleteSolution(id: number, reason?: string): Promise<void> {
+  return apiDelete(`${BASE}/solutions/${id}/`, reason ? { data: { reason } } : undefined);
+}
+
+// ---------------------------------------------------------------------------
+// Modification requests (Report 9 #107) — a Psychometrician's edit/delete of
+// a solution is routed to CJ Admin for approval.
+// ---------------------------------------------------------------------------
+
+const PMR_BASE = `${BASE}/modification-requests`;
+
+export interface ProfilingSolutionModificationRequest {
+  id: number;
+  solution: number;
+  solution_title: string;
+  requester: number;
+  requester_name: string | null;
+  action: "edit" | "delete";
+  proposed_title: string | null;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  review_comment: string;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export async function listSolutionModificationRequests(): Promise<
+  ProfilingSolutionModificationRequest[]
+> {
+  const body = await apiGet<
+    ProfilingSolutionModificationRequest[] | { results?: ProfilingSolutionModificationRequest[] }
+  >(`${PMR_BASE}/`);
+  return Array.isArray(body) ? body : (body?.results ?? []);
+}
+
+/** Request an admin-approved title change on a published solution. */
+export function requestSolutionTitleChange(
+  id: number,
+  title: string,
+  reason: string,
+): Promise<ProfilingSolutionModificationRequest> {
+  return apiPatch<ProfilingSolutionModificationRequest>(`${BASE}/solutions/${id}/`, {
+    title,
+    reason,
+  });
+}
+
+export function approveSolutionModificationRequest(
+  id: number,
+  adminNote?: string,
+): Promise<ProfilingSolutionModificationRequest> {
+  return apiPost<ProfilingSolutionModificationRequest>(`${PMR_BASE}/${id}/approve/`, {
+    admin_note: adminNote ?? "",
+  });
+}
+
+export function declineSolutionModificationRequest(
+  id: number,
+  adminNote?: string,
+): Promise<ProfilingSolutionModificationRequest> {
+  return apiPost<ProfilingSolutionModificationRequest>(`${PMR_BASE}/${id}/decline/`, {
+    admin_note: adminNote ?? "",
+  });
 }
 
 export function publishSolution(id: number): Promise<{ id: number; status: string }> {

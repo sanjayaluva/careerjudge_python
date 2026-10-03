@@ -7,7 +7,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import {
   Alert,
@@ -46,6 +46,7 @@ import {
   createPolarMatchRule,
   createRankDefinition,
   deleteRankDefinition,
+  deleteSolution,
   downloadCriteriaTemplate,
   listAssessments,
   listMappingRules,
@@ -72,6 +73,7 @@ export default function ProfilingSolutionDetailPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const navigate = useNavigate();
 
   const canManage = ["cj_admin", "psychometrician"].includes(user?.role ?? "");
 
@@ -86,6 +88,26 @@ export default function ProfilingSolutionDetailPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["career-profiling", "solutions", sid] });
       toast.success("Solution published.");
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  // Report 9 #107: CJ Admin deletes directly; a Psychometrician's delete
+  // (with a reason) only files a request for CJ Admin.
+  const isCjAdmin = user?.role === "cj_admin";
+  const [requestDeleteOpen, setRequestDeleteOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const deleteMutation = useMutation({
+    mutationFn: (reason?: string) => deleteSolution(sid, reason),
+    onSuccess: (_data, reason) => {
+      void queryClient.invalidateQueries({ queryKey: ["career-profiling", "solutions"] });
+      setRequestDeleteOpen(false);
+      if (reason) {
+        toast.success("Deletion request submitted — CJ Admin will review it.");
+      } else {
+        toast.success("Solution deleted.");
+        navigate("/career-profiling");
+      }
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -200,7 +222,66 @@ export default function ProfilingSolutionDetailPage() {
                     Publish Solution
                   </Button>
                 )}
+                {/* Report 9 #107: CJ Admin deletes; the Psychometrician files
+                    a deletion request for CJ Admin to approve or decline. */}
+                {isCjAdmin && (
+                  <Button
+                    variant="danger"
+                    loading={deleteMutation.isPending}
+                    onClick={() => {
+                      if (window.confirm(`Delete "${solution.title}"? This cannot be undone.`))
+                        deleteMutation.mutate(undefined);
+                    }}
+                  >
+                    Delete Solution
+                  </Button>
+                )}
+                {canManage && !isCjAdmin && (
+                  <Button variant="outline" onClick={() => setRequestDeleteOpen(true)}>
+                    Request deletion
+                  </Button>
+                )}
               </div>
+              <Modal
+                open={requestDeleteOpen}
+                onClose={() => setRequestDeleteOpen(false)}
+                title="Request deletion"
+                description="Deleting a profiling solution needs CJ Admin approval (Report 9 #107)."
+              >
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    deleteMutation.mutate(deleteReason);
+                  }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <Label htmlFor="cp-delete-reason" required>
+                      Reason
+                    </Label>
+                    <textarea
+                      id="cp-delete-reason"
+                      rows={2}
+                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                      value={deleteReason}
+                      onChange={(e) => setDeleteReason(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setRequestDeleteOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" loading={deleteMutation.isPending}>
+                      Submit request
+                    </Button>
+                  </div>
+                </form>
+              </Modal>
             </CardContent>
           </Card>
         </TabsContent>

@@ -29,7 +29,10 @@ import {
   useToast,
 } from "@/components/ui";
 import {
+  approveSolutionModificationRequest,
   createSolution,
+  declineSolutionModificationRequest,
+  listSolutionModificationRequests,
   listSolutions,
   SOLUTION_STATUSES,
   type ProfilingSolution,
@@ -80,6 +83,28 @@ export default function CareerProfilingPage() {
 
   const solutions = data?.results ?? [];
 
+  // Report 9 #107: CJ Admin's queue of the Psychometrician's edit/delete
+  // requests (same place as the question-bank and assessment queues).
+  const isCjAdmin = user?.role === "cj_admin";
+  const requestsQuery = useQuery({
+    queryKey: ["cp-modification-requests"],
+    queryFn: listSolutionModificationRequests,
+    enabled: isCjAdmin,
+  });
+  const pendingRequests = (requestsQuery.data ?? []).filter((r) => r.status === "pending");
+  const reviewRequestMutation = useMutation({
+    mutationFn: (v: { id: number; approve: boolean }) =>
+      v.approve
+        ? approveSolutionModificationRequest(v.id)
+        : declineSolutionModificationRequest(v.id),
+    onSuccess: () => {
+      toast.success("Request reviewed.");
+      void queryClient.invalidateQueries({ queryKey: ["cp-modification-requests"] });
+      void queryClient.invalidateQueries({ queryKey: CP_KEY });
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   // Report 9 #76: a candidate (individual or any non-author) is not an
   // author — no status filter or Create button; the server returns only
   // published solutions.
@@ -122,6 +147,50 @@ export default function CareerProfilingPage() {
             ))}
           </select>
         </div>
+
+        {isCjAdmin && pendingRequests.length > 0 && (
+          <div className="mx-6 mb-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-800">
+              Pending change requests ({pendingRequests.length})
+            </p>
+            <ul className="space-y-2">
+              {pendingRequests.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded border border-amber-200 bg-white p-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    <span className="font-medium text-slate-800">
+                      {r.action === "delete"
+                        ? `Delete solution: ${r.solution_title}`
+                        : `Rename "${r.solution_title}" to "${r.proposed_title ?? ""}"`}
+                    </span>
+                    <span className="block text-xs text-slate-500">
+                      {r.requester_name ?? "A user"} — {r.reason}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant={r.action === "delete" ? "danger" : "primary"}
+                      loading={reviewRequestMutation.isPending}
+                      onClick={() => reviewRequestMutation.mutate({ id: r.id, approve: true })}
+                    >
+                      {r.action === "delete" ? "Approve delete" : "Approve"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => reviewRequestMutation.mutate({ id: r.id, approve: false })}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex justify-center py-12">

@@ -47,6 +47,7 @@ import {
 } from "@/api/organizations";
 import { listAllAssessments } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
+import { deleteUser } from "@/api/users";
 import { BulkUploadModal } from "@/components/users/BulkUploadModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuthStore } from "@/stores/auth";
@@ -158,6 +159,13 @@ export default function OrganizationDetailPage() {
     access.isCJAdmin ||
     ((role === "corp_exclusive" || role === "channel_partner") &&
       members.some((m) => m.user.id === myId && m.is_admin));
+  // Rights audit (3 Oct 2026) / Doc 9 §2.4: the organization's own admin
+  // deletes his members' accounts (individuals; Group Admins for corporate
+  // admins). Group Admins add and bulk-upload only (Report 9 #23/#24); CJ
+  // Admin does not delete corporate users (CJ_UC004).
+  const canDeleteAccounts =
+    (role === "corp_admin" || role === "corp_exclusive" || role === "channel_partner") &&
+    members.some((m) => m.user.id === myId && m.is_admin);
 
   return (
     <div className="space-y-6 p-6">
@@ -289,6 +297,14 @@ export default function OrganizationDetailPage() {
                       access.canSetUpGroupAdmins && org.type !== "channel_partner"
                     }
                     allowNoGroup={!access.isGroupAdmin}
+                    canDeleteAccount={
+                      canDeleteAccounts &&
+                      m.user.id !== myId &&
+                      !m.is_admin &&
+                      (m.user.role === "individual" ||
+                        (m.user.role === "group_admin" &&
+                          (role === "corp_admin" || role === "corp_exclusive")))
+                    }
                   />
                 ))}
               </TableBody>
@@ -442,6 +458,7 @@ function MemberRow({
   canEditAdmin,
   canSetUpGroupAdmins,
   allowNoGroup,
+  canDeleteAccount,
 }: {
   orgId: number;
   member: OrganizationMember;
@@ -452,6 +469,8 @@ function MemberRow({
   /** A Group Admin keeps his members inside his groups — "No group" would
    * take them out of his reach (the server refuses it). */
   allowNoGroup: boolean;
+  /** Rights audit (3 Oct 2026): the viewer may delete this member's account. */
+  canDeleteAccount: boolean;
 }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -460,6 +479,18 @@ function MemberRow({
     mutationFn: () => removeMember(orgId, member.id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: [...ORG_KEY(orgId), "members"] });
+    },
+    onError: (err) => setError(extractApiError(err)),
+  });
+  // Rights audit (3 Oct 2026) / Doc 9 §2.4: the organization's own admin
+  // (Corp Admin, Corp Exclusive Admin, Channel Partner) deletes his members'
+  // accounts — never his own, another manager's or staff (the server
+  // refuses those too).
+  const deleteAccountMutation = useMutation({
+    mutationFn: () => deleteUser(member.user.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [...ORG_KEY(orgId), "members"] });
+      void queryClient.invalidateQueries({ queryKey: ORG_KEY(orgId) });
     },
     onError: (err) => setError(extractApiError(err)),
   });
@@ -578,6 +609,25 @@ function MemberRow({
               onClick={() => removeMutation.mutate()}
             >
               Remove
+            </Button>
+          )}
+          {canDeleteAccount && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-danger hover:bg-danger-50"
+              loading={deleteAccountMutation.isPending}
+              title="Delete this user's account (Doc 9 §2.4)"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Delete the account of ${member.user.full_name || member.user.email}? This cannot be undone.`,
+                  )
+                )
+                  deleteAccountMutation.mutate();
+              }}
+            >
+              Delete account
             </Button>
           )}
         </div>
