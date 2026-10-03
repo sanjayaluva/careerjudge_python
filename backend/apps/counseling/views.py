@@ -1268,7 +1268,9 @@ class FollowupSessionViewSet(ModelViewSet):
         # time if he has one (only one live slot per start time is allowed),
         # otherwise create it.
         timeslot = (
-            TimeSlot.objects.select_for_update()
+            # of=("self",): lock only the slot row — PostgreSQL refuses FOR
+            # UPDATE across the outer join that session__isnull adds.
+            TimeSlot.objects.select_for_update(of=("self",))
             .filter(
                 counsellor=followup.counsellor,
                 start_time=followup.proposed_time,
