@@ -92,11 +92,12 @@ echo "→ Starting containers (backend + db + caddy)…"
 docker rm -f cj-backend-dev cj-backend-fast cj-db-dev 2>/dev/null || true
 docker compose -f "$COMPOSE_FILE" up -d --remove-orphans backend db caddy
 
-# `up -d` does not restart Caddy when only its bind-mounted Caddyfile changed,
-# so reload the config explicitly (falls back to a restart if reload fails).
-echo "→ Reloading Caddy config…"
-docker compose -f "$COMPOSE_FILE" exec -T caddy caddy reload --config /etc/caddy/Caddyfile \
-  || docker compose -f "$COMPOSE_FILE" restart caddy
+# `up -d` does not restart Caddy when only its bind-mounted Caddyfile changed.
+# A `caddy reload` is not enough either: rsync replaces the file (new inode)
+# and a single-file bind mount keeps showing the OLD file to the running
+# container. Recreate the Caddy container so it mounts the current file.
+echo "→ Recreating Caddy so it picks up the current Caddyfile…"
+docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate caddy
 
 echo "→ Waiting for backend to be healthy…"
 sleep 5
