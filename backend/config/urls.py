@@ -49,18 +49,20 @@ urlpatterns = [
     path("api/health/", include("core.urls_health")),
 ]
 
-# Uploaded files (training video/audio, avatars, report images, logos) are
-# served by Django whenever they live on local disk — not only in DEBUG,
-# otherwise they 404 as soon as DEBUG is off. Caddy routes /media/* here.
+# Uploaded files (training video/audio, avatars, report images, …) on local
+# disk are served by Django — not only in DEBUG — and Caddy routes /media/*
+# here. Code review (3 Oct 2026): only through the signed, expiring URLs the
+# storage issues (core.media); a bare /media/<path> is refused.
 if not getattr(settings, "MEDIA_ON_S3", False):
     from django.urls import re_path
-    from django.views.static import serve
+
+    from core.media import serve_signed_media
 
     urlpatterns += [
         re_path(
-            rf"^{settings.MEDIA_URL.lstrip('/')}(?P<path>.*)$",
-            serve,
-            {"document_root": settings.MEDIA_ROOT},
+            rf"^{settings.MEDIA_URL.lstrip('/')}(?P<path>.+)$",
+            serve_signed_media,
+            name="signed-media",
         )
     ]
 

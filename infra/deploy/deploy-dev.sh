@@ -43,6 +43,12 @@ echo "→ Ensuring static_collected directory exists…"
 mkdir -p "$DEPLOY_DIR/backend/static_collected"
 chmod 777 "$DEPLOY_DIR/backend/static_collected"
 
+# Same for uploaded files (training media, avatars, logos, report images):
+# the bind-mounted backend/media must be writable by UID 1000 on first use.
+echo "→ Ensuring media directory exists…"
+mkdir -p "$DEPLOY_DIR/backend/media"
+chmod 777 "$DEPLOY_DIR/backend/media"
+
 # Check if we need to rebuild the Docker image.
 # Rebuild ONLY if:
 # 1. The image doesn't exist yet (first deploy), OR

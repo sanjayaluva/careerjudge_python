@@ -319,7 +319,7 @@ class UserSerializer(serializers.ModelSerializer):
         """
         if not obj.role_id:
             return []
-        disabled = obj.org_disabled_modules()
+        disabled = self._disabled_modules(obj)
         return [
             {"module": r.module, "action": r.action}
             for r in obj.role.effective_rights
@@ -328,7 +328,17 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_disabled_modules(self, obj) -> list[str]:
         """Report 9 #96: modules switched off for the user's organization."""
-        return sorted(obj.org_disabled_modules())
+        return sorted(self._disabled_modules(obj))
+
+    def _disabled_modules(self, obj) -> set[str]:
+        """Code review (3 Oct 2026): the organization's switched-off modules
+        matter to the signed-in user's own record (/api/me, login — no request
+        in the context) and are resolved only there; listing other users
+        returns their role's plain rights (it cost several queries per row)."""
+        request = self.context.get("request")
+        if request is not None and getattr(request.user, "pk", None) != obj.pk:
+            return set()
+        return obj.org_disabled_modules()
 
 
 class UserWriteSerializer(serializers.ModelSerializer):
@@ -396,6 +406,14 @@ class UserWriteSerializer(serializers.ModelSerializer):
             return value
         if self.instance is not None and self.instance.role_id == value.id:
             return value
+        if value.name == "group_admin" and not self.context.get("group_admin_flow"):
+            # Code review (3 Oct 2026): a Group Admin is always set up with
+            # his group ("Add Group Admin" / "Make Group Admin" on the
+            # organization page) — a group-less one would have no scope.
+            raise serializers.ValidationError(
+                "Set up Group Admins from the organization page (Add Group Admin or "
+                "Make Group Admin), so they are placed in their group."
+            )
         if value.name not in allowed:
             raise serializers.ValidationError("You cannot give users this role.")
         return value
