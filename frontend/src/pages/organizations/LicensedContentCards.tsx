@@ -240,7 +240,7 @@ function LicenceSection({
     <div>
       <h3 className="mb-2 text-sm font-semibold text-slate-900">{heading}</h3>
       {canLicense && (
-        <div className="mb-3 flex items-center gap-2">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
           <select
             aria-label={`Published ${noun} to license`}
             className={`${SELECT} flex-1`}
