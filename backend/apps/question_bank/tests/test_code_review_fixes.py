@@ -164,3 +164,20 @@ def test_integer_and_root_filters_still_work(roles):
     assert resp.status_code == 200
     resp = client.get(f"/api/question-bank/categories/?parent={root.id}")
     assert resp.status_code == 200
+
+
+def test_non_numeric_exposure_limit_is_refused_before_anything_is_saved(roles):
+    """A bad exposure limit used to raise after the review was stored (500)."""
+    from apps.question_bank.models import Category, QuestionReview
+
+    psy = _user(roles, "psychometrician", "psy-exp@t.com")
+    sme = _user(roles, "sme", "sme-exp@t.com")
+    cat = Category.objects.create(name="Exp")
+    q = _statement(sme, cat, status="pending_psychometric_review")
+    resp = _c(psy).post(
+        f"/api/question-bank/questions/{q.id}/review/",
+        {"review_type": "psychometric", "action": "approve", "rating": 4, "exposure_limit": "abc"},
+        format="json",
+    )
+    assert resp.status_code == 400
+    assert not QuestionReview.objects.filter(question=q).exists()

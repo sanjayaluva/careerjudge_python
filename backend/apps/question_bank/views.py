@@ -1432,6 +1432,28 @@ class QuestionReviewView(APIView):
             space_filter(Question.objects.all(), request.user), id=question_id
         )
 
+        # Validate the optional exposure limit up front, before anything is
+        # saved (a non-number used to raise after the review was stored).
+        exposure_limit = request.data.get("exposure_limit")
+        if exposure_limit not in (None, ""):
+            try:
+                exposure_limit = int(exposure_limit)
+                if exposure_limit < 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return Response(
+                    {
+                        "error": {
+                            "code": "validation_error",
+                            "message": "exposure_limit must be a whole number (0 or more).",
+                            "details": {},
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            exposure_limit = None
+
         # Check permissions based on review_type
         review_type = request.data.get("review_type")
         if not review_type:
@@ -1540,9 +1562,8 @@ class QuestionReviewView(APIView):
 
         # If psychometric review approved with exposure limit, set it
         if review.action == "approve" and review_type == "psychometric":
-            exposure_limit = request.data.get("exposure_limit")
             if exposure_limit:
-                question.exposure_limit = int(exposure_limit)
+                question.exposure_limit = exposure_limit
                 question.save(update_fields=["exposure_limit", "updated_at"])
             question.refresh_from_db()
 
