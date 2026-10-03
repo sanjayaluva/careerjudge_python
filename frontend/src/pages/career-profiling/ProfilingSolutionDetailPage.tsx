@@ -107,13 +107,16 @@ export default function ProfilingSolutionDetailPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
       <div>
-        <Link to="/career-profiling" className="text-sm text-primary-600 hover:underline">
+        <Link
+          to="/career-profiling"
+          className="inline-flex items-center gap-1.5 rounded text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+        >
           ← Back to Career Profiling
         </Link>
-        <div className="mt-2 flex items-center gap-2">
-          <h1 className="text-xl font-bold text-slate-900">{solution.title}</h1>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{solution.title}</h1>
           <Badge variant={STATUS_VARIANTS[solution.status] ?? "default"}>{solution.status}</Badge>
           {solution.has_polar_assessment && <Badge variant="warning">Polar</Badge>}
         </div>
@@ -380,7 +383,7 @@ function AddAssessmentForm({
         </Label>
         <select
           id="sa-assessment"
-          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+          className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           value={assessmentId ?? ""}
           onChange={(e) => setAssessmentId(Number(e.target.value))}
           required
@@ -414,7 +417,7 @@ function AddAssessmentForm({
         />
         This is a Polar assessment
       </label>
-      <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+      <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
@@ -631,7 +634,7 @@ function CreateBandRowModal({
         }}
         className="space-y-3"
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Band #</label>
             <Input
@@ -679,7 +682,7 @@ function CreateBandRowModal({
             placeholder="For polar variables only"
           />
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -741,7 +744,7 @@ function CreateBandDefinitionModal({
           </Label>
           <select
             id="bd-sa"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={saId ?? ""}
             onChange={(e) => setSaId(Number(e.target.value))}
             required
@@ -760,7 +763,7 @@ function CreateBandDefinitionModal({
           </Label>
           <select
             id="bd-section"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm disabled:opacity-50"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25 disabled:opacity-50"
             value={sectionId}
             onChange={(e) => setSectionId(e.target.value)}
             disabled={!assessmentId}
@@ -779,7 +782,7 @@ function CreateBandDefinitionModal({
             Pick the variable (section) to define bands for.
           </p>
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -1014,7 +1017,7 @@ function CreateCriterionModal({
           </Label>
           <select
             id="mc-section"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={sectionId}
             onChange={(e) => {
               setSectionId(e.target.value);
@@ -1041,7 +1044,7 @@ function CreateCriterionModal({
           </Label>
           <select
             id="mc-code"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 disabled:bg-slate-50 disabled:text-slate-400"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25 disabled:bg-slate-50 disabled:text-slate-400"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             disabled={!sectionId || bandCodes.length === 0}
@@ -1067,7 +1070,7 @@ function CreateCriterionModal({
             onChange={(e) => setWeight(e.target.value)}
           />
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -1587,7 +1590,7 @@ function RankChartCreateButton({
                   {polarValues.map((pv, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <select
-                        className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm"
+                        className="cj-select h-10 appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                         value={pv.match_code}
                         onChange={(e) => {
                           const next = [...polarValues];
@@ -1649,7 +1652,7 @@ function RankChartCreateButton({
                 </Button>
               </>
             )}
-            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
@@ -1743,7 +1746,7 @@ function StandardMappingRulesTab({
               <Label htmlFor="mr-bd">Variable</Label>
               <select
                 id="mr-bd"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={activeBd?.id ?? ""}
                 onChange={(e) => setSelectedBd(Number(e.target.value))}
               >
@@ -1981,7 +1984,7 @@ function PolarMatchRuleForm({
           </Label>
           <select
             id="bd"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={bdId}
             onChange={(e) => {
               setBdId(e.target.value);
@@ -2004,7 +2007,7 @@ function PolarMatchRuleForm({
           </Label>
           <select
             id="cb"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={criterionBand}
             onChange={(e) => setCriterionBand(e.target.value)}
             required
@@ -2024,7 +2027,7 @@ function PolarMatchRuleForm({
           </Label>
           <select
             id="ub"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={userBand}
             onChange={(e) => setUserBand(e.target.value)}
             required
@@ -2042,7 +2045,7 @@ function PolarMatchRuleForm({
           <Label htmlFor="mc">Match code</Label>
           <select
             id="mc"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={matchCode}
             onChange={(e) => setMatchCode(e.target.value as "HM" | "MM" | "LM")}
           >

@@ -26,12 +26,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { nameWithExpertise } from "@/lib/profileFields";
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: "bg-slate-100 text-slate-700",
-  in_progress: "bg-info-100 text-info-700",
-  awaiting_review: "bg-warning-100 text-warning-700",
-  completed: "bg-success-100 text-success-700",
-  cancelled: "bg-danger-100 text-danger-700",
-  overdue: "bg-danger-100 text-danger-700",
+  pending: "bg-slate-100 text-slate-700 ring-slate-500/20",
+  in_progress: "bg-info-50 text-info-700 ring-info-600/20",
+  awaiting_review: "bg-warning-50 text-warning-800 ring-warning-600/25",
+  completed: "bg-success-50 text-success-700 ring-success-600/20",
+  cancelled: "bg-danger-50 text-danger-700 ring-danger-600/20",
+  overdue: "bg-danger-50 text-danger-700 ring-danger-600/20",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -155,7 +155,7 @@ export default function TaskDetailPage() {
 
   if (taskQuery.isLoading) {
     return (
-      <div className="flex justify-center py-12">
+      <div className="flex items-center justify-center py-16">
         <Spinner />
       </div>
     );
@@ -165,7 +165,10 @@ export default function TaskDetailPage() {
       <PageCard>
         <div className="p-6">
           <p className="text-sm text-danger-600">Task not found or you don't have access.</p>
-          <Link to="/tasks" className="mt-2 inline-block text-sm text-primary-600">
+          <Link
+            to="/tasks"
+            className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-900"
+          >
             ← Back to Tasks
           </Link>
         </div>
@@ -189,29 +192,32 @@ export default function TaskDetailPage() {
     <div className="space-y-6">
       <PageCard>
         <div className="p-6 pb-4">
-          <Link to="/tasks" className="text-sm text-primary-600">
+          <Link
+            to="/tasks"
+            className="inline-flex items-center gap-1.5 rounded text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+          >
             ← Back to Tasks
           </Link>
-          <div className="mt-2 flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2">
+          <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-xs text-slate-500">{task.task_id}</span>
                 <Badge className={STATUS_BADGE[task.status]}>{STATUS_LABEL[task.status]}</Badge>
                 <Badge variant="outline">{ROLE_LABEL[task.assignee_role]}</Badge>
                 <Badge variant="outline" className="capitalize">
                   {task.priority}
                 </Badge>
-                {task.is_overdue && (
-                  <Badge className="bg-danger-100 text-danger-700">Overdue</Badge>
-                )}
+                {task.is_overdue && <Badge variant="danger">Overdue</Badge>}
               </div>
-              <h1 className="mt-1 text-lg font-bold text-slate-900">{task.title}</h1>
-              <p className="text-sm text-slate-500">
+              <h1 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
+                {task.title}
+              </h1>
+              <p className="mt-1 text-sm text-slate-500">
                 Assigned to <strong>{task.assigned_to_name}</strong> by{" "}
                 <strong>{task.assigned_by_name}</strong>
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex shrink-0 flex-wrap gap-2">
               {canStart && (
                 <Button onClick={() => startMutation.mutate()} disabled={startMutation.isPending}>
                   Start
@@ -367,9 +373,7 @@ export default function TaskDetailPage() {
                         <strong>{u.author_name}</strong>
                         <span>·</span>
                         <span>{new Date(u.created_at).toLocaleString()}</span>
-                        {u.is_admin_request && (
-                          <Badge className="bg-warning-100 text-warning-700">Admin Request</Badge>
-                        )}
+                        {u.is_admin_request && <Badge variant="warning">Admin Request</Badge>}
                       </div>
                       <p className="text-slate-700">{u.message}</p>
                     </div>
@@ -389,7 +393,7 @@ export default function TaskDetailPage() {
                           : "Post a progress update…"
                       }
                       rows={2}
-                      className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                     />
                     <div className="flex justify-end gap-2">
                       {canRequestUpdate && progressMsg && (
@@ -492,7 +496,7 @@ export default function TaskDetailPage() {
                 onChange={(e) => setCancelReason(e.target.value)}
                 rows={3}
                 required
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               />
             </div>
             <div className="flex justify-end gap-2">
@@ -525,7 +529,7 @@ export default function TaskDetailPage() {
                 value={approveComment}
                 onChange={(e) => setApproveComment(e.target.value)}
                 rows={3}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               />
             </div>
             <div className="flex justify-end gap-2">
@@ -568,7 +572,7 @@ export default function TaskDetailPage() {
                 value={extReason}
                 onChange={(e) => setExtReason(e.target.value)}
                 rows={3}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               />
             </div>
             <div className="flex justify-end gap-2">
@@ -639,10 +643,10 @@ function ExtensionRequestCard({
         <Badge
           className={
             ext.status === "approved"
-              ? "bg-success-100 text-success-700"
+              ? "bg-success-50 text-success-700 ring-success-600/20"
               : ext.status === "declined"
-                ? "bg-danger-100 text-danger-700"
-                : "bg-warning-100 text-warning-700"
+                ? "bg-danger-50 text-danger-700 ring-danger-600/20"
+                : "bg-warning-50 text-warning-800 ring-warning-600/25"
           }
         >
           {ext.status}

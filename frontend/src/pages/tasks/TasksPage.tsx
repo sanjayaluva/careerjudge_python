@@ -38,12 +38,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { nameWithExpertise } from "@/lib/profileFields";
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: "bg-slate-100 text-slate-700",
-  in_progress: "bg-info-100 text-info-700",
-  awaiting_review: "bg-warning-100 text-warning-700",
-  completed: "bg-success-100 text-success-700",
-  cancelled: "bg-danger-100 text-danger-700",
-  overdue: "bg-danger-100 text-danger-700",
+  pending: "bg-slate-100 text-slate-700 ring-slate-500/20",
+  in_progress: "bg-info-50 text-info-700 ring-info-600/20",
+  awaiting_review: "bg-warning-50 text-warning-800 ring-warning-600/25",
+  completed: "bg-success-50 text-success-700 ring-success-600/20",
+  cancelled: "bg-danger-50 text-danger-700 ring-danger-600/20",
+  overdue: "bg-danger-50 text-danger-700 ring-danger-600/20",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -56,10 +56,10 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const PRIORITY_BADGE: Record<string, string> = {
-  low: "bg-slate-100 text-slate-700",
-  medium: "bg-info-100 text-info-700",
-  high: "bg-warning-100 text-warning-700",
-  urgent: "bg-danger-100 text-danger-700",
+  low: "bg-slate-100 text-slate-700 ring-slate-500/20",
+  medium: "bg-info-50 text-info-700 ring-info-600/20",
+  high: "bg-warning-50 text-warning-800 ring-warning-600/25",
+  urgent: "bg-danger-50 text-danger-700 ring-danger-600/20",
 };
 
 const ROLE_LABEL: Record<AssigneeRole, string> = {
@@ -102,20 +102,24 @@ export default function TasksPage() {
   return (
     <div className="space-y-6">
       <PageCard>
-        <div className="flex items-start justify-between p-6 pb-4">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900">Task Management</h1>
-            <p className="text-sm text-slate-500">
+        <div className="flex flex-col gap-4 p-6 pb-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">Task Management</h1>
+            <p className="mt-1 text-sm text-slate-500">
               {isAdmin
                 ? "Assign and monitor tasks for SME / Reviewer / Psychometrician / Trainer / Counsellor"
                 : "Tasks assigned to you by the admin"}
             </p>
           </div>
-          {isAdmin && <Button onClick={() => setAssignOpen(true)}>+ Assign Task</Button>}
+          {isAdmin && (
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button onClick={() => setAssignOpen(true)}>+ Assign Task</Button>
+            </div>
+          )}
         </div>
 
         <Tabs defaultValue={isAdmin ? "assigned" : "mine"}>
-          <div className="px-6">
+          <div className="overflow-x-auto px-6">
             <TabsList>
               {isAdmin && (
                 <>
@@ -195,7 +199,11 @@ function TasksTable({
     );
   }
   if (tasks.length === 0) {
-    return <p className="py-8 text-center text-sm text-slate-500">{emptyMessage}</p>;
+    return (
+      <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
+        {emptyMessage}
+      </p>
+    );
   }
   return (
     <Table>
@@ -208,31 +216,33 @@ function TasksTable({
           <TableHead>Status</TableHead>
           <TableHead>Priority</TableHead>
           <TableHead>Due</TableHead>
-          <TableHead></TableHead>
+          <TableHead className="text-right"></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {tasks.map((t) => (
           <TableRow key={t.id}>
-            <TableCell className="font-mono text-xs">{t.task_id}</TableCell>
-            <TableCell className="font-medium">{t.title}</TableCell>
+            <TableCell className="whitespace-nowrap font-mono text-xs text-slate-500">
+              {t.task_id}
+            </TableCell>
+            <TableCell className="font-medium text-slate-900">{t.title}</TableCell>
             <TableCell>{t.assigned_to_name}</TableCell>
             <TableCell>
               <Badge variant="outline">{ROLE_LABEL[t.assignee_role]}</Badge>
             </TableCell>
             <TableCell>
-              <Badge className={STATUS_BADGE[t.status]}>{STATUS_LABEL[t.status]}</Badge>
-              {t.is_overdue && (
-                <Badge className="ml-1 bg-danger-100 text-danger-700">Overdue</Badge>
-              )}
+              <div className="flex flex-wrap items-center gap-1">
+                <Badge className={STATUS_BADGE[t.status]}>{STATUS_LABEL[t.status]}</Badge>
+                {t.is_overdue && <Badge variant="danger">Overdue</Badge>}
+              </div>
             </TableCell>
             <TableCell>
               <Badge className={PRIORITY_BADGE[t.priority]}>{t.priority}</Badge>
             </TableCell>
-            <TableCell className="text-xs text-slate-600">
+            <TableCell className="whitespace-nowrap text-xs tabular-nums text-slate-600">
               {t.due_date ? new Date(t.due_date).toLocaleDateString() : "—"}
             </TableCell>
-            <TableCell>
+            <TableCell className="text-right">
               <Link to={`/tasks/${t.id}`}>
                 <Button variant="ghost" size="sm">
                   Open
@@ -431,11 +441,11 @@ function AssignTaskModal({
             placeholder="Detailed instructions for the assignee"
             required
             rows={3}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="min-h-[6rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="assignee_role">Assignee Role *</Label>
             <select
@@ -445,7 +455,7 @@ function AssignTaskModal({
                 setAssigneeRole(e.target.value as AssigneeRole);
                 setAssignedTo("");
               }}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             >
               <option value="sme">SME</option>
               <option value="reviewer">Reviewer</option>
@@ -461,7 +471,7 @@ function AssignTaskModal({
               value={assignedTo}
               onChange={(e) => setAssignedTo(Number(e.target.value))}
               required
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             >
               <option value="">Select user…</option>
               {users.map((u) => (
@@ -478,14 +488,14 @@ function AssignTaskModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="priority">Priority</Label>
             <select
               id="priority"
               value={priority}
               onChange={(e) => setPriority(e.target.value as typeof priority)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             >
               <option value="low">Low</option>
               <option value="medium">Medium</option>
@@ -514,7 +524,7 @@ function AssignTaskModal({
             {needsParentPicklist ? (
               <select
                 id="parent_task_id"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={parentTaskId}
                 onChange={(e) => setParentTaskId(e.target.value)}
               >
@@ -545,7 +555,7 @@ function AssignTaskModal({
             <Label htmlFor="task_reviewer">Reviewer to send completed questions to</Label>
             <select
               id="task_reviewer"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={taskReviewer}
               onChange={(e) => setTaskReviewer(e.target.value ? Number(e.target.value) : "")}
             >
@@ -582,19 +592,19 @@ function AssignTaskModal({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="text-danger hover:bg-danger-50"
+                        className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                         onClick={() => removeSpecRow(i)}
                       >
                         Remove
                       </Button>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
                     <div>
                       <Label htmlFor={`qb_category-${i}`}>QB Category</Label>
                       <select
                         id={`qb_category-${i}`}
-                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                        className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                         value={row.qb_category}
                         onChange={(e) =>
                           updateSpecRow(i, { qb_category: e.target.value, qb_subcategory: "" })
@@ -612,7 +622,7 @@ function AssignTaskModal({
                       <Label htmlFor={`qb_subcategory-${i}`}>QB Subcategory</Label>
                       <select
                         id={`qb_subcategory-${i}`}
-                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm disabled:opacity-50"
+                        className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25 disabled:opacity-50"
                         value={row.qb_subcategory}
                         disabled={!row.qb_category}
                         onChange={(e) => updateSpecRow(i, { qb_subcategory: e.target.value })}
@@ -632,7 +642,7 @@ function AssignTaskModal({
                     <Label htmlFor={`question_type-${i}`}>Question Type</Label>
                     <select
                       id={`question_type-${i}`}
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                      className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                       value={row.question_type}
                       onChange={(e) => updateSpecRow(i, { question_type: e.target.value })}
                     >
@@ -644,7 +654,7 @@ function AssignTaskModal({
                       ))}
                     </select>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-3 gap-3 sm:gap-4">
                     <div>
                       <Label htmlFor={`num_questions-${i}`}># Questions</Label>
                       <Input
@@ -685,7 +695,7 @@ function AssignTaskModal({
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
                     <div>
                       <Label htmlFor={`difficulty-${i}`}>Difficulty (optional)</Label>
                       <select
@@ -694,7 +704,7 @@ function AssignTaskModal({
                         onChange={(e) =>
                           updateSpecRow(i, { difficulty: e.target.value as SpecRow["difficulty"] })
                         }
-                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                        className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                       >
                         <option value="">—</option>
                         <option value="easy">Easy</option>
@@ -711,7 +721,7 @@ function AssignTaskModal({
                         onChange={(e) =>
                           updateSpecRow(i, { cognitive: e.target.value as SpecRow["cognitive"] })
                         }
-                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                        className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                       >
                         <option value="">—</option>
                         <option value="remember">Remember</option>
@@ -732,8 +742,8 @@ function AssignTaskModal({
           </Card>
         )}
 
-        <div className="flex justify-end gap-2 pt-4">
-          <Button type="button" variant="ghost" onClick={onClose}>
+        <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button type="submit" disabled={createMutation.isPending}>

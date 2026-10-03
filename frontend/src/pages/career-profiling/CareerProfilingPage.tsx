@@ -88,10 +88,12 @@ export default function CareerProfilingPage() {
   return (
     <div className="space-y-6">
       <PageCard>
-        <div className="flex items-center justify-between p-6">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900">Career Profiling</h1>
-            <p className="text-sm text-slate-500">
+        <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">
+              Career Profiling
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
               {data?.count ?? 0} profiling solution{(data?.count ?? 0) !== 1 ? "s" : ""}
             </p>
           </div>
@@ -107,10 +109,10 @@ export default function CareerProfilingPage() {
               setSearch(e.target.value);
               setTimeout(() => setDebouncedSearch(e.target.value), 350);
             }}
-            className="max-w-sm"
+            className="w-full sm:max-w-sm"
           />
           <select
-            className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25 sm:w-44"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -128,7 +130,7 @@ export default function CareerProfilingPage() {
             <Spinner size="lg" />
           </div>
         ) : solutions.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500">
+          <p className="mx-6 mb-6 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
             No profiling solutions yet. Create one to get started.
           </p>
         ) : (
@@ -219,8 +221,8 @@ function PublishedSolutionsView() {
     <div className="space-y-6">
       <PageCard>
         <div className="p-6">
-          <h1 className="text-lg font-bold text-slate-900">Career Profiling</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">Career Profiling</h1>
+          <p className="mt-1 text-sm text-slate-500">
             {solutions.length} profiling solution{solutions.length !== 1 ? "s" : ""} available
           </p>
         </div>
@@ -229,7 +231,7 @@ function PublishedSolutionsView() {
             <Spinner size="lg" />
           </div>
         ) : solutions.length === 0 ? (
-          <p className="px-6 pb-8 text-center text-sm text-slate-500">
+          <p className="mx-6 mb-6 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
             No profiling solutions are available yet.
           </p>
         ) : (
@@ -248,9 +250,11 @@ function PublishedSolutionsView() {
               return (
                 <TabsContent key={t.value} value={t.value} className="px-6 pb-6 pt-4">
                   {rows.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-slate-500">{t.empty}</p>
+                    <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
+                      {t.empty}
+                    </p>
                   ) : (
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                       {rows.map((s) => (
                         <SolutionCard key={s.id} solution={s} />
                       ))}
@@ -355,7 +359,7 @@ function CreateSolutionModal({
           <textarea
             id="cp-purpose"
             rows={2}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={purpose}
             onChange={(e) => setPurpose(e.target.value)}
             placeholder="What this solution measures..."
@@ -366,7 +370,7 @@ function CreateSolutionModal({
           <textarea
             id="cp-desc"
             rows={3}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Detailed description of the solution..."
@@ -381,7 +385,7 @@ function CreateSolutionModal({
           />
           Includes a Polar assessment
         </label>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>

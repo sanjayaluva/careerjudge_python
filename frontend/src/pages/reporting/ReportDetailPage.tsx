@@ -131,13 +131,16 @@ export default function ReportDetailPage() {
     report.stat_conversion;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
       <div>
-        <Link to="/reports" className="text-sm text-primary-600 hover:underline">
+        <Link
+          to="/reports"
+          className="inline-flex items-center gap-1.5 rounded text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+        >
           ← Back to Reports
         </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-bold text-slate-900">{report.title}</h1>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{report.title}</h1>
           <Badge variant="outline">{typeLabel}</Badge>
           <Badge variant="outline">{report.scope}</Badge>
           <Badge variant={STATUS_VARIANTS[report.status] ?? "default"}>{report.status}</Badge>
@@ -273,7 +276,7 @@ export default function ReportDetailPage() {
               )}
 
               {canManage && report.status === "draft" && (
-                <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
+                <div className="mt-6 flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
                   <Button variant="outline" onClick={() => setEditOpen(true)}>
                     Edit configuration
                   </Button>
@@ -404,7 +407,7 @@ function EditConfigModal({ report, onClose }: { report: Report; onClose: () => v
           <textarea
             id="ec-desc"
             rows={2}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
@@ -450,7 +453,7 @@ function EditConfigModal({ report, onClose }: { report: Report; onClose: () => v
             </div>
           </>
         )}
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -516,7 +519,7 @@ function GenerateTab({
               </Label>
               <select
                 id="session"
-                className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                className="cj-select mt-1 h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={selectedSession}
                 onChange={(e) => setSelectedSession(e.target.value)}
               >
@@ -664,7 +667,7 @@ function ReportPreview({ data }: { data: Record<string, unknown> }) {
   return (
     <div className="max-h-[70vh] space-y-5 overflow-auto text-sm">
       <div>
-        <h3 className="text-base font-bold text-slate-900">
+        <h3 className="text-base font-semibold text-slate-900">
           {String(data.report_title ?? "Report")}
         </h3>
         <p className="text-xs text-slate-500">
@@ -1131,12 +1134,12 @@ function HfmiLfmiTab({ reportId }: { reportId: number }) {
               placeholder="e.g., 42"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="dtype">Data type</Label>
               <select
                 id="dtype"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={dataType}
                 onChange={(e) => setDataType(e.target.value as "HFMI" | "LFMI")}
               >
@@ -1148,7 +1151,7 @@ function HfmiLfmiTab({ reportId }: { reportId: number }) {
               <Label htmlFor="emode">Extraction mode</Label>
               <select
                 id="emode"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={extractionMode}
                 onChange={(e) => setExtractionMode(e.target.value as "user" | "system")}
               >
@@ -1158,7 +1161,7 @@ function HfmiLfmiTab({ reportId }: { reportId: number }) {
             </div>
           </div>
           {extractionMode === "user" ? (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="fmin">FMI min</Label>
                 <Input
@@ -1179,7 +1182,7 @@ function HfmiLfmiTab({ reportId }: { reportId: number }) {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="ncat">Number of categories (streams)</Label>
                 <Input
@@ -1287,7 +1290,7 @@ function SectionPicker({
 }) {
   return (
     <select
-      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+      className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       required
@@ -1421,7 +1424,7 @@ function CutoffsTab({ reportId, assessmentId }: { reportId: number; assessmentId
             <textarea
               id="co-a"
               rows={2}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={aboveDesc}
               onChange={(e) => setAboveDesc(e.target.value)}
             />
@@ -1431,7 +1434,7 @@ function CutoffsTab({ reportId, assessmentId }: { reportId: number; assessmentId
             <textarea
               id="co-b"
               rows={2}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={belowDesc}
               onChange={(e) => setBelowDesc(e.target.value)}
             />
@@ -1583,7 +1586,7 @@ function BandsConfigTab({
             </Label>
             <select
               id="bd-t"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={targetType}
               onChange={(e) => {
                 setTargetType(e.target.value as BandTargetType);
@@ -1679,7 +1682,7 @@ function BandsConfigTab({
               type="color"
               value={colourCode}
               onChange={(e) => setColourCode(e.target.value)}
-              className="h-10 w-full rounded-md border border-slate-200"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             />
           </div>
           <div className="sm:col-span-3">
@@ -1687,7 +1690,7 @@ function BandsConfigTab({
             <textarea
               id="bd-d"
               rows={2}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
@@ -2095,7 +2098,7 @@ function LayoutTab({ reportId }: { reportId: number }) {
             </Label>
             <select
               id="ls-t"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={sectionType}
               onChange={(e) => setSectionType(e.target.value)}
             >
@@ -2130,7 +2133,7 @@ function LayoutTab({ reportId }: { reportId: number }) {
             <textarea
               id="ls-content"
               rows={3}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Free text for narrative sections, or JSON config for charts"
@@ -2141,7 +2144,7 @@ function LayoutTab({ reportId }: { reportId: number }) {
             <textarea
               id="ls-desc"
               rows={2}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Short description shown alongside this section"
@@ -2161,7 +2164,7 @@ function LayoutTab({ reportId }: { reportId: number }) {
             <Label htmlFor="ls-layout">Table/Graph layout</Label>
             <select
               id="ls-layout"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={layout}
               onChange={(e) => setLayout(e.target.value as "" | "table" | "graph")}
             >

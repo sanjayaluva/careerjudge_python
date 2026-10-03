@@ -116,10 +116,10 @@ function GeneratedReportsView({
     <div className="space-y-6">
       <PageCard>
         <div className="p-6">
-          <h1 className="text-lg font-bold text-slate-900">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">
             {isOrgAdmin ? "Members' Reports" : "My Reports"}
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-500">
             {isOrgAdmin
               ? `Assessment reports of the members of your ${isGroupAdmin ? "group" : "organization"}.`
               : "Your assessment reports. Open or download any of them as a PDF."}
@@ -130,7 +130,7 @@ function GeneratedReportsView({
             <Spinner size="lg" />
           </div>
         ) : rows.length === 0 ? (
-          <p className="px-6 pb-8 text-center text-sm text-slate-500">
+          <p className="mx-6 mb-6 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
             {reportsWithheld
               ? "Your organization's admin has not given you access to members' reports."
               : isOrgAdmin
@@ -248,14 +248,18 @@ function ReportDesignerView() {
   return (
     <div className="space-y-6">
       <PageCard>
-        <div className="flex items-center justify-between p-6">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900">Reports</h1>
-            <p className="text-sm text-slate-500">
+        <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">Reports</h1>
+            <p className="mt-1 text-sm text-slate-500">
               {data?.count ?? 0} report{(data?.count ?? 0) !== 1 ? "s" : ""}
             </p>
           </div>
-          {canManage && <Button onClick={() => setCreateOpen(true)}>Create report</Button>}
+          {canManage && (
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button onClick={() => setCreateOpen(true)}>Create report</Button>
+            </div>
+          )}
         </div>
         <div className="px-6 pb-4 empty:hidden">
           <PrivateSpaceNote what="reports" />
@@ -269,10 +273,10 @@ function ReportDesignerView() {
               setSearch(e.target.value);
               setTimeout(() => setDebouncedSearch(e.target.value), 350);
             }}
-            className="max-w-sm"
+            className="w-full sm:max-w-sm"
           />
           <select
-            className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25 sm:w-44"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -289,7 +293,7 @@ function ReportDesignerView() {
             <Spinner size="lg" />
           </div>
         ) : reports.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500">
+          <p className="mx-6 mb-6 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
             No reports yet. Create one to get started.
           </p>
         ) : (
@@ -453,17 +457,17 @@ function CreateReportModal({
           <textarea
             id="r-objective"
             rows={2}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="min-h-[5rem] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={objective}
             onChange={(e) => setObjective(e.target.value)}
           />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="r-type">Report type</Label>
             <select
               id="r-type"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={reportType}
               onChange={(e) => setReportType(e.target.value)}
             >
@@ -478,7 +482,7 @@ function CreateReportModal({
             <Label htmlFor="r-scope">Scope</Label>
             <select
               id="r-scope"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={scope}
               onChange={(e) => setScope(e.target.value)}
             >
@@ -496,7 +500,7 @@ function CreateReportModal({
             </Label>
             <select
               id="r-assessment"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={assessmentId}
               onChange={(e) => setAssessmentId(e.target.value)}
               required
@@ -526,7 +530,7 @@ function CreateReportModal({
                   </Label>
                   <select
                     id="r-solution"
-                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                     value={solutionId}
                     onChange={(e) => {
                       setSolutionId(e.target.value);
@@ -594,12 +598,12 @@ function CreateReportModal({
               </div>
             );
           })()}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="r-level">Data input level</Label>
             <select
               id="r-level"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={dataInputLevel}
               onChange={(e) => setDataInputLevel(e.target.value)}
             >
@@ -614,7 +618,7 @@ function CreateReportModal({
             <Label htmlFor="r-conv">Statistical conversion</Label>
             <select
               id="r-conv"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={statConversion}
               onChange={(e) => setStatConversion(e.target.value)}
             >
@@ -626,7 +630,7 @@ function CreateReportModal({
             </select>
           </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -660,7 +664,7 @@ function PmiDField({
     return (
       <select
         id={id}
-        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+        className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
