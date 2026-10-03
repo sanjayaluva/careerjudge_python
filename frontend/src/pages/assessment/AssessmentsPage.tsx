@@ -162,10 +162,10 @@ export default function AssessmentsPage() {
   return (
     <div className="space-y-6">
       <PageCard>
-        <div className="flex items-center justify-between p-6">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900">Assessments</h1>
-            <p className="text-sm text-slate-500">
+        <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">Assessments</h1>
+            <p className="mt-1 text-sm text-slate-500">
               {data?.count ?? 0} assessment{(data?.count ?? 0) !== 1 ? "s" : ""}
             </p>
           </div>
@@ -175,7 +175,7 @@ export default function AssessmentsPage() {
           <PrivateSpaceNote what="assessments" />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 px-6 pb-4">
+        <div className="flex flex-col gap-3 px-6 pb-4 sm:flex-row sm:flex-wrap sm:items-center">
           <Input
             type="search"
             placeholder="Search assessments..."
@@ -184,12 +184,12 @@ export default function AssessmentsPage() {
               setSearch(e.target.value);
               setTimeout(() => setDebouncedSearch(e.target.value), 350);
             }}
-            className="max-w-sm"
+            className="sm:max-w-sm"
           />
           {/* Report 9 #74: only authors see drafts, so only they filter by status. */}
           {(canCreate || viewOnly) && (
             <select
-              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25 sm:w-auto"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -204,11 +204,11 @@ export default function AssessmentsPage() {
         </div>
 
         {isLoading ? (
-          <div className="flex justify-center py-12">
+          <div className="flex justify-center py-16">
             <Spinner size="lg" />
           </div>
         ) : assessments.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500">
+          <p className="px-6 py-12 text-center text-sm text-slate-500">
             {canCreate
               ? "No assessments yet. Create one to get started."
               : "No assessments are available to you yet."}
@@ -251,7 +251,7 @@ export default function AssessmentsPage() {
                   <TableCell>
                     <Badge variant={STATUS_VARIANTS[a.status] ?? "default"}>{a.status}</Badge>
                   </TableCell>
-                  <TableCell className="text-slate-500">
+                  <TableCell className="whitespace-nowrap tabular-nums text-slate-500">
                     {a.total_duration_seconds
                       ? `${Math.floor(a.total_duration_seconds / 60)} min`
                       : "—"}
@@ -259,8 +259,8 @@ export default function AssessmentsPage() {
                   <TableCell className="text-xs text-slate-500">
                     {NAVIGATION_RULES.find((n) => n.value === a.navigation_rule)?.label ?? "—"}
                   </TableCell>
-                  <TableCell className="text-slate-500">{a.section_count}</TableCell>
-                  <TableCell className="text-slate-500">{a.session_count}</TableCell>
+                  <TableCell className="tabular-nums text-slate-500">{a.section_count}</TableCell>
+                  <TableCell className="tabular-nums text-slate-500">{a.session_count}</TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
                       {/* Manager actions: Publish + Delete (draft only) */}
@@ -278,7 +278,7 @@ export default function AssessmentsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-danger hover:bg-danger-50"
+                          className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                           onClick={() => deleteMutation.mutate(a.id)}
                         >
                           Delete
@@ -451,7 +451,7 @@ function CreateAssessmentModal({
           <textarea
             id="objective"
             rows={2}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={objective}
             onChange={(e) => setObjective(e.target.value)}
             placeholder="What this assessment measures..."
@@ -487,7 +487,7 @@ function CreateAssessmentModal({
             <Label htmlFor="nav">Navigation</Label>
             <select
               id="nav"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={navigationRule}
               onChange={(e) => setNavigationRule(e.target.value)}
             >
@@ -502,7 +502,7 @@ function CreateAssessmentModal({
             <Label htmlFor="attempt">Attempt rule</Label>
             <select
               id="attempt"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={attemptRule}
               onChange={(e) => setAttemptRule(e.target.value)}
             >
@@ -517,7 +517,7 @@ function CreateAssessmentModal({
             <Label htmlFor="display_order">Display order</Label>
             <select
               id="display_order"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={displayOrder}
               onChange={(e) => setDisplayOrder(e.target.value as "STATIC" | "RANDOM")}
             >
@@ -529,7 +529,7 @@ function CreateAssessmentModal({
             <Label htmlFor="timer_level">Timer level</Label>
             <select
               id="timer_level"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={timerLevel}
               onChange={(e) => setTimerLevel(e.target.value)}
             >
@@ -544,7 +544,7 @@ function CreateAssessmentModal({
             </p>
           </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>

@@ -308,13 +308,16 @@ export default function AssessmentDetailPage() {
   const sessionCount = a.session_count ?? 0;
 
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <Link to="/assessments" className="text-sm text-primary-600 hover:underline">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
+      <div className="min-w-0">
+        <Link
+          to="/assessments"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-900"
+        >
           ← Back to Assessments
         </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-bold text-slate-900">{a.title}</h1>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{a.title}</h1>
           <Badge variant={STATUS_VARIANTS[a.status] ?? "default"}>{a.status}</Badge>
           {a.total_duration_seconds && (
             <Badge variant="outline">{Math.floor(a.total_duration_seconds / 60)} min</Badge>
@@ -484,7 +487,7 @@ export default function AssessmentDetailPage() {
                 </div>
               )}
 
-              <div className="mt-6 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+              <div className="mt-6 flex flex-wrap gap-2 border-t border-slate-200 pt-4">
                 {/* Edit button — cj_admin can edit any assessment (including
                     published per SRS §2.2 admin-approval path); other roles
                     can only edit draft assessments. */}
@@ -505,7 +508,7 @@ export default function AssessmentDetailPage() {
                     </Button>
                     <Button
                       variant="outline"
-                      className="text-danger hover:bg-danger-50"
+                      className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                       onClick={() => setRequestDeleteOpen(true)}
                     >
                       Request Deletion
@@ -920,7 +923,7 @@ function QuestionAssignmentTab({
             <Label htmlFor="section-select">Select section</Label>
             <select
               id="section-select"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={selectedSectionId ?? ""}
               onChange={(e) => setSelectedSectionId(Number(e.target.value))}
             >
@@ -1040,7 +1043,7 @@ function QuestionAssignmentTab({
                   className="max-w-xs text-sm"
                 />
                 <select
-                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25 sm:w-auto"
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
                 >
@@ -1199,7 +1202,7 @@ function QuestionPreviewModal({
           </div>
         </div>
       )}
-      <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
+      <div className="mt-6 flex justify-end gap-2 border-t border-slate-200 pt-4">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
@@ -1266,7 +1269,7 @@ function SectionTreeRow({
             <Button
               variant="ghost"
               size="sm"
-              className="text-danger hover:bg-danger-50"
+              className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
               onClick={() => onDeleteSection(section)}
             >
               Delete
@@ -1397,7 +1400,7 @@ function CreateSectionModal({
           <textarea
             id="sec-desc"
             rows={2}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What this section covers..."
@@ -1442,7 +1445,7 @@ function CreateSectionModal({
             </p>
           </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -1506,13 +1509,13 @@ function RequestChangeModal({
           <textarea
             id="rc-reason"
             rows={2}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             required
           />
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -1561,13 +1564,13 @@ function RequestDeleteModal({
           <textarea
             id="rd-reason"
             rows={2}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             required
           />
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -1674,7 +1677,7 @@ function EditAssessmentModal({
           <textarea
             id="edit-objective"
             rows={2}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={objective}
             onChange={(e) => setObjective(e.target.value)}
           />
@@ -1731,7 +1734,7 @@ function EditAssessmentModal({
             <Label htmlFor="edit-nav">Navigation</Label>
             <select
               id="edit-nav"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={navigationRule}
               onChange={(e) => setNavigationRule(e.target.value)}
             >
@@ -1746,7 +1749,7 @@ function EditAssessmentModal({
             <Label htmlFor="edit-attempt">Attempt rule</Label>
             <select
               id="edit-attempt"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={attemptRule}
               onChange={(e) => setAttemptRule(e.target.value)}
             >
@@ -1761,7 +1764,7 @@ function EditAssessmentModal({
             <Label htmlFor="edit-timer-level">Timer level</Label>
             <select
               id="edit-timer-level"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={timerLevel}
               onChange={(e) => setTimerLevel(e.target.value)}
             >
@@ -1773,7 +1776,7 @@ function EditAssessmentModal({
             </select>
           </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -2102,14 +2105,14 @@ function PsychometricGroupsTab({
               e.preventDefault();
               createMut.mutate();
             }}
-            className="space-y-3 border-t border-slate-100 pt-4"
+            className="space-y-3 border-t border-slate-200 pt-4"
           >
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="pg-type">Group type</Label>
                 <select
                   id="pg-type"
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   value={groupType}
                   onChange={(e) => setGroupType(e.target.value)}
                 >
@@ -2138,7 +2141,7 @@ function PsychometricGroupsTab({
               {effectiveRows.map((row, i) => (
                 <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <select
-                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                     value={row.statement}
                     onChange={(e) => {
                       const next = [...rows];
@@ -2155,7 +2158,7 @@ function PsychometricGroupsTab({
                     ))}
                   </select>
                   <select
-                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                     value={row.section}
                     onChange={(e) => {
                       const next = [...rows];

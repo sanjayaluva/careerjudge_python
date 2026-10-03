@@ -90,13 +90,18 @@ export default function SessionResultsPage() {
   const hasSectionScores = (sectionScores?.length ?? 0) > 0;
 
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <Link to="/assessments" className="text-sm text-primary-600 hover:underline">
+    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
+      <div className="min-w-0">
+        <Link
+          to="/assessments"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-900"
+        >
           ← Back to Assessments
         </Link>
-        <h1 className="mt-2 text-xl font-bold text-slate-900">Assessment Results</h1>
-        <p className="text-sm text-slate-500">{session.assessment_title}</p>
+        <h1 className="mt-3 text-xl font-semibold tracking-tight text-slate-900">
+          Assessment Results
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">{session.assessment_title}</p>
       </div>
 
       <Tabs defaultValue="results">
@@ -114,23 +119,25 @@ export default function SessionResultsPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="rounded-md border border-slate-200 p-4 text-center">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-5 text-center">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Total Score
                   </p>
-                  <p className="mt-1 text-3xl font-bold text-slate-900">
+                  <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-slate-900">
                     {session.total_score?.toFixed(1) ?? "—"}
                   </p>
                   <p className="text-sm text-slate-400">/ {session.max_score?.toFixed(1) ?? "—"}</p>
                 </div>
-                <div className="rounded-md border border-slate-200 p-4 text-center">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-5 text-center">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Percentage
                   </p>
-                  <p className="mt-1 text-3xl font-bold text-slate-900">{percentage.toFixed(1)}%</p>
+                  <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-slate-900">
+                    {percentage.toFixed(1)}%
+                  </p>
                 </div>
-                <div className="rounded-md border border-slate-200 p-4 text-center">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-5 text-center">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Status
                   </p>
                   <div className="mt-2">

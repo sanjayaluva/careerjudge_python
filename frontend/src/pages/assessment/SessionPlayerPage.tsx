@@ -694,15 +694,17 @@ export default function SessionPlayerPage() {
   return (
     <div className="flex h-screen flex-col bg-slate-50">
       {/* ─── Top bar ─── */}
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-3 shadow-sm">
-        <div>
-          <h1 className="text-sm font-bold text-slate-900">{session.assessment_title}</h1>
-          <p className="text-xs text-slate-500">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-6">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-sm font-semibold text-slate-900">
+            {session.assessment_title}
+          </h1>
+          <p className="mt-0.5 text-xs text-slate-500">
             {positionLabel} · Answered: {answeredCount} / {totalQuestions} · Bookmarked:{" "}
             {bookmarkedCount} · Skipped: {skippedCount}
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Assessment-level timer — bigger box per SRS feedback Common Issue 10 */}
           {timeLeft !== null && timeLeft > 0 && (
             <div
@@ -763,41 +765,41 @@ export default function SessionPlayerPage() {
       </div>
 
       {/* ─── Main area: sidebar + content ─── */}
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Left sidebar — section/question navigation tree + test summary */}
-        <aside className="w-64 shrink-0 overflow-y-auto border-r border-slate-200 bg-white">
+        <aside className="max-h-[38vh] shrink-0 overflow-y-auto border-b border-slate-200 bg-white lg:max-h-none lg:w-64 lg:border-b-0 lg:border-r">
           {/* Test Summary */}
-          <div className="border-b border-slate-100 p-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="border-b border-slate-200 p-4">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Test Summary
             </p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-3 gap-2 text-xs lg:grid-cols-2">
               <div className="rounded-md bg-slate-50 p-2">
                 <span className="text-slate-500">Total</span>
-                <p className="text-lg font-bold text-slate-900">{totalQuestions}</p>
+                <p className="text-lg font-bold tabular-nums text-slate-900">{totalQuestions}</p>
               </div>
               <div className="rounded-md bg-success-50 p-2">
                 <span className="text-success-600">Answered</span>
-                <p className="text-lg font-bold text-success-700">{answeredCount}</p>
+                <p className="text-lg font-bold tabular-nums text-success-700">{answeredCount}</p>
               </div>
               <div className="rounded-md bg-warning-50 p-2">
                 <span className="text-warning-600">Bookmarked</span>
-                <p className="text-lg font-bold text-warning-700">{bookmarkedCount}</p>
+                <p className="text-lg font-bold tabular-nums text-warning-700">{bookmarkedCount}</p>
               </div>
               <div className="rounded-md bg-warning-50 p-2">
                 <span className="text-warning-600">Skipped</span>
-                <p className="text-lg font-bold text-warning-700">{skippedCount}</p>
+                <p className="text-lg font-bold tabular-nums text-warning-700">{skippedCount}</p>
               </div>
               <div className="rounded-md bg-slate-50 p-2">
                 <span className="text-slate-500">Remaining</span>
-                <p className="text-lg font-bold text-slate-700">{remainingCount}</p>
+                <p className="text-lg font-bold tabular-nums text-slate-700">{remainingCount}</p>
               </div>
             </div>
           </div>
 
           {/* Section / Question navigation tree */}
           <div className="p-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Test Progress
             </p>
             {sectionEntries.map(([sid, items], secIdx) => (
@@ -848,7 +850,7 @@ export default function SessionPlayerPage() {
                                 ? "Backward navigation is not allowed this far back for this assessment"
                                 : `Question ${label}`
                         }
-                        className={`h-7 w-7 rounded-md text-xs font-medium transition-colors ${
+                        className={`h-7 w-7 rounded-md text-xs font-medium tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1 ${
                           isCurrent
                             ? "bg-primary-600 text-white"
                             : isAnswered
@@ -872,15 +874,15 @@ export default function SessionPlayerPage() {
 
         {/* Center content — question card */}
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl px-6 py-8">
-            <div className="rounded-lg border border-slate-200 bg-white p-6">
+          <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-card sm:p-8">
               {/* Bookmark button only — hide backend details (question type,
                   difficulty level, cognitive level) from the test taker
                   per SRS feedback Common Issue 9 */}
               <div className="mb-4 flex items-center justify-end">
                 <button
                   onClick={handleBookmark}
-                  className={`text-sm ${bookmarked.has(answerKey) ? "text-primary-600" : "text-slate-400 hover:text-slate-600"}`}
+                  className={`rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 ${bookmarked.has(answerKey) ? "text-primary-600" : "text-slate-400 hover:text-slate-600"}`}
                 >
                   {bookmarked.has(answerKey) ? "★ Bookmarked" : "☆ Bookmark"}
                 </button>
@@ -1131,7 +1133,7 @@ export default function SessionPlayerPage() {
       </div>
 
       {/* ─── Footer — navigation buttons ─── */}
-      <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white px-6 py-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
         {/* Retest G2: Previous must stay ACTIVE even during timed
             presentations (the presentation is already in flight); on
             revisit the media replay stays blocked via viewedQuestions. */}
@@ -1147,7 +1149,7 @@ export default function SessionPlayerPage() {
         >
           ← Previous
         </Button>
-        <p className="text-xs text-slate-400">
+        <p className="order-last w-full text-center text-xs text-slate-400 sm:order-none sm:w-auto">
           {positionLabel}
           {subQuestionCount > 1 && (
             <span className="ml-2 text-primary-600">
@@ -1333,10 +1335,10 @@ function AnswerInput({
           .map((opt) => (
             <label
               key={opt.id}
-              className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+              className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-sm transition-colors ${
                 selectedIds.includes(opt.id)
-                  ? "border-primary-500 bg-primary-50"
-                  : "border-slate-200 hover:bg-slate-50"
+                  ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500"
+                  : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
               }`}
             >
               <input
@@ -1392,7 +1394,7 @@ function AnswerInput({
               newAnswers[i] = e.target.value;
               onChange({ answers: newAnswers });
             }}
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             placeholder="Type your answer..."
           />
         ))}
@@ -1428,7 +1430,7 @@ function AnswerInput({
             <button
               type="button"
               onClick={() => onChange({ rating: p + 1 })}
-              className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-medium ${
+              className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 ${
                 rating === p + 1
                   ? "border-primary-600 bg-primary-100 text-primary-700"
                   : "border-slate-300 text-slate-500 hover:border-primary-300"
@@ -1538,8 +1540,8 @@ function AnswerInput({
                   onClick={() => toggleRank(opt.id)}
                   className={`flex w-full items-center gap-2 rounded-md border px-3 py-2 text-sm ${
                     rank > 0
-                      ? "border-primary-500 bg-primary-50"
-                      : "border-slate-200 hover:bg-slate-50"
+                      ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500"
+                      : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                   }`}
                 >
                   <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-medium">
@@ -1577,7 +1579,7 @@ function AnswerInput({
                           key={p}
                           type="button"
                           onClick={() => setRating(optId, p + 1)}
-                          className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-medium ${
+                          className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 ${
                             rating === p + 1
                               ? "border-primary-600 bg-primary-100 text-primary-700"
                               : "border-slate-300 text-slate-500 hover:border-primary-300"
@@ -1619,8 +1621,8 @@ function AnswerInput({
               key={opt.id}
               className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ${
                 selectedId === opt.id
-                  ? "border-primary-500 bg-primary-50"
-                  : "border-slate-200 hover:bg-slate-50"
+                  ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500"
+                  : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
               }`}
             >
               <input
@@ -1645,7 +1647,7 @@ function AnswerInput({
                   key={p}
                   type="button"
                   onClick={() => onChange({ selected_option_id: selectedId, rating: p + 1 })}
-                  className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-medium ${
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 ${
                     rating === p + 1
                       ? "border-primary-600 bg-primary-100 text-primary-700"
                       : "border-slate-300 text-slate-500"

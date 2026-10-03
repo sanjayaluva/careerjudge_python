@@ -76,9 +76,9 @@ export function CandidateAssessments({
         </TabsList>
       </div>
 
-      <TabsContent value="mine" className="pt-4">
+      <TabsContent value="mine" className="mt-0 pt-4">
         {mine.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500">
+          <p className="px-6 py-12 text-center text-sm text-slate-500">
             You have no assessments yet. Pay for one under Browse Assessments to take it.
           </p>
         ) : (
@@ -100,7 +100,9 @@ export function CandidateAssessments({
                   <TableRow key={a.id}>
                     <TableCell className="font-medium text-slate-900">{titleLink(a)}</TableCell>
                     <TableCell>{typeBadge(a)}</TableCell>
-                    <TableCell className="text-slate-500">{duration(a)}</TableCell>
+                    <TableCell className="whitespace-nowrap tabular-nums text-slate-500">
+                      {duration(a)}
+                    </TableCell>
                     <TableCell>
                       {!session ? (
                         <Badge variant="default">Not started</Badge>
@@ -147,9 +149,9 @@ export function CandidateAssessments({
         )}
       </TabsContent>
 
-      <TabsContent value="browse" className="pt-4">
+      <TabsContent value="browse" className="mt-0 pt-4">
         {published.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500">
+          <p className="px-6 py-12 text-center text-sm text-slate-500">
             No assessments are available to you yet.
           </p>
         ) : (
@@ -168,8 +170,10 @@ export function CandidateAssessments({
                 <TableRow key={a.id}>
                   <TableCell className="font-medium text-slate-900">{titleLink(a)}</TableCell>
                   <TableCell>{typeBadge(a)}</TableCell>
-                  <TableCell className="text-slate-500">{duration(a)}</TableCell>
-                  <TableCell className="text-slate-700">
+                  <TableCell className="whitespace-nowrap tabular-nums text-slate-500">
+                    {duration(a)}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap tabular-nums text-slate-700">
                     {isPaidAssessment(a) ? formatPrice(a.price, currency) : "Free"}
                   </TableCell>
                   <TableCell>

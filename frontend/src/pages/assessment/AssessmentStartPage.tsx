@@ -11,7 +11,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { Alert, AlertDescription, Button, PageCard, Spinner, useToast } from "@/components/ui";
+import { Alert, AlertDescription, Button, Card, Spinner, useToast } from "@/components/ui";
 import { retrieveAssessment, startSession } from "@/api/assessment";
 import { extractApiError, extractApiErrorCode } from "@/api/client";
 import { useAuthStore } from "@/stores/auth";
@@ -24,7 +24,7 @@ function DefinitionSection({ heading, value }: { heading: string; value: string 
   if (!hasRichContent(value)) return null;
   return (
     <section>
-      <h2 className="mb-2 border-b border-slate-200 pb-1 text-lg font-semibold text-slate-900">
+      <h2 className="mb-3 border-b border-slate-200 pb-2 text-base font-semibold text-slate-900">
         {heading}
       </h2>
       <DefinitionText value={value} />
@@ -85,14 +85,19 @@ export default function AssessmentStartPage() {
   const minutes = a.total_duration_seconds ? Math.floor(a.total_duration_seconds / 60) : null;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <Link to="/assessments" className="text-sm text-primary-600 hover:underline">
+    <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
+      <Link
+        to="/assessments"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-900"
+      >
         ← Back to Assessments
       </Link>
-      <PageCard>
+      <Card>
         <div className="space-y-8 p-6 sm:p-10">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-primary-700 sm:text-4xl">{a.title}</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-primary-700 sm:text-4xl">
+              {a.title}
+            </h1>
             {minutes !== null && (
               <p className="mt-2 text-sm text-slate-500">Duration: {minutes} minutes</p>
             )}
@@ -102,7 +107,7 @@ export default function AssessmentStartPage() {
           <DefinitionSection heading="Description of the Assessment" value={a.description} />
           <DefinitionSection heading="Instructions" value={a.instructions} />
 
-          <div className="flex flex-col items-center gap-2 border-t border-slate-100 pt-6">
+          <div className="flex flex-col items-center gap-2 border-t border-slate-200 pt-6">
             {isHelpdesk ? (
               <p className="text-sm text-slate-500">
                 View only — Help Desk does not take assessments.
@@ -122,7 +127,7 @@ export default function AssessmentStartPage() {
             )}
           </div>
         </div>
-      </PageCard>
+      </Card>
       {take.prompt}
     </div>
   );
