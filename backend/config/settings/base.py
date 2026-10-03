@@ -219,6 +219,10 @@ CACHES = {
 ROLEPERMISSIONS_MODULE = "apps.accounts.roles"
 
 SECURE_BROWSER_XSS_FILTER = True
+# Behind Caddy (TLS terminated there; it sets X-Forwarded-Proto), so absolute
+# URLs Django builds — e.g. an uploaded avatar's link — use https, not http
+# (an http link on the https site is a redirect / mixed-content problem).
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 X_FRAME_OPTIONS = "DENY"
 
 LOGGING = {

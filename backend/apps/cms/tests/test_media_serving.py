@@ -139,3 +139,37 @@ def test_avatar_url_from_the_api_is_signed_and_works(client):
     assert fetched.status_code == 200
     assert _body(fetched) == PNG
     assert client.get(path).status_code == 403
+
+
+def test_absolute_media_links_use_https_behind_the_proxy(
+    client, django_user_model, tmp_path, settings
+):
+    """Behind Caddy (X-Forwarded-Proto: https) the avatar upload returns an
+    https link, not http (which the https site would block or redirect)."""
+    import base64
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from apps.accounts.models import Role
+
+    settings.MEDIA_ROOT = tmp_path
+    role, _ = Role.objects.get_or_create(name="individual", defaults={"is_system": True})
+    user = django_user_model.objects.create_user(
+        email="https@t.com", password="pw", is_active=True, role=role
+    )
+    from rest_framework.test import APIClient
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    resp = client.post(
+        "/api/me/avatar",
+        {"avatar": SimpleUploadedFile("a.png", png, content_type="image/png")},
+        format="multipart",
+        HTTP_X_FORWARDED_PROTO="https",
+    )
+    assert resp.status_code in (200, 201), resp.content
+    assert "http://" not in resp.content.decode()
+    assert "https://" in resp.content.decode()
