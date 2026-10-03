@@ -18,10 +18,12 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         ref={ref}
         disabled={disabled}
         className={cn(
-          "h-10 w-full rounded-md border bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors",
-          "focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-1",
-          hasError ? "border-danger focus:ring-danger" : "border-slate-200 hover:border-slate-300",
-          disabled && "cursor-not-allowed bg-slate-50 opacity-60",
+          "cj-select h-10 w-full appearance-none rounded-md border bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors",
+          "focus:outline-none focus:ring-2 focus:ring-primary-500/25",
+          hasError
+            ? "border-danger-500 focus:border-danger-500 focus:ring-danger-500/25"
+            : "border-slate-300 hover:border-slate-400 focus:border-primary-500 focus:hover:border-primary-500",
+          disabled && "cursor-not-allowed bg-slate-50 text-slate-500 opacity-70",
           className,
         )}
         aria-invalid={hasError || undefined}

@@ -84,7 +84,11 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
   }, [value, editor]);
 
   if (!editor) {
-    return <div className="rounded-md border border-slate-200 p-4">Loading editor...</div>;
+    return (
+      <div className="rounded-md border border-slate-300 bg-white p-4 text-sm text-slate-500">
+        Loading editor...
+      </div>
+    );
   }
 
   const insertImageFromUrl = () => {
@@ -119,14 +123,14 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
   };
 
   const btnClass =
-    "px-2 py-1 text-sm rounded hover:bg-slate-100 transition-colors disabled:opacity-30";
-  const activeClass = "bg-slate-200 font-semibold";
+    "inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-sm text-slate-600 transition-colors hover:bg-slate-200/70 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-30";
+  const activeClass = "bg-white font-semibold text-primary-700 shadow-sm ring-1 ring-slate-200";
 
   return (
     // No overflow-hidden: the image menu may extend past a short editor.
-    <div className="rounded-md border border-slate-200">
+    <div className="rounded-md border border-slate-300 bg-white shadow-sm transition-colors focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/25">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-1 rounded-t-md border-b border-slate-100 bg-slate-50 p-2">
+      <div className="flex flex-wrap items-center gap-0.5 rounded-t-md border-b border-slate-200 bg-slate-50 p-1.5">
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBold().run()}
@@ -299,7 +303,7 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
       {imageError && (
         <p
           role="alert"
-          className="border-b border-red-100 bg-red-50 px-3 py-1.5 text-xs text-red-700"
+          className="border-b border-danger-200 bg-danger-50 px-3 py-1.5 text-xs text-danger-700"
         >
           {imageError}
         </p>

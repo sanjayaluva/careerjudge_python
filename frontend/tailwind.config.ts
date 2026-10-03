@@ -90,6 +90,22 @@ const config: Config = {
           900: "#78350f",
           950: "#451a03",
         },
+        // Info (sky) — neutral-positive status / informational tone
+        info: {
+          DEFAULT: "#0ea5e9",
+          foreground: "#ffffff",
+          50: "#f0f9ff",
+          100: "#e0f2fe",
+          200: "#bae6fd",
+          300: "#7dd3fc",
+          400: "#38bdf8",
+          500: "#0ea5e9",
+          600: "#0284c7",
+          700: "#0369a1",
+          800: "#075985",
+          900: "#0c4a6e",
+          950: "#082f49",
+        },
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
@@ -109,10 +125,22 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
-        mono: ["JetBrains Mono", "monospace"],
+        sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+      },
+      // Elevation scale — three levels only: resting surface, floating
+      // (popovers/dropdowns/toasts), and modal.
+      boxShadow: {
+        card: "0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)",
+        popover:
+          "0 0 0 1px rgb(15 23 42 / 0.04), 0 4px 6px -2px rgb(15 23 42 / 0.08), 0 12px 24px -6px rgb(15 23 42 / 0.12)",
+        modal: "0 0 0 1px rgb(15 23 42 / 0.05), 0 24px 48px -12px rgb(15 23 42 / 0.3)",
       },
       keyframes: {
+        "fade-in": {
+          from: { opacity: "0", transform: "translateY(4px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
         "accordion-down": {
           from: { height: "0" },
           to: { height: "var(--radix-accordion-content-height)" },
@@ -123,6 +151,7 @@ const config: Config = {
         },
       },
       animation: {
+        "fade-in": "fade-in 150ms ease-out",
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
       },

@@ -52,21 +52,30 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Header */}
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link to="/" className="flex items-center gap-2">
-            <span className="text-lg font-bold text-primary-600">CareerJudge</span>
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+          <Link
+            to="/"
+            className="flex items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+          >
+            <span
+              aria-hidden="true"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600 text-sm font-bold text-white shadow-sm"
+            >
+              CJ
+            </span>
+            <span className="text-[17px] font-bold tracking-tight text-slate-900">CareerJudge</span>
           </Link>
 
           {/* CMS-driven header navigation */}
-          <nav className="flex items-center gap-4">
+          <nav className="flex items-center gap-5">
             {(headerMenu ?? []).map((item: MenuItem) => (
               <a
                 key={item.id}
                 href={item.url}
                 target={item.opens_new_tab ? "_blank" : undefined}
                 rel={item.opens_new_tab ? "noopener noreferrer" : undefined}
-                className="text-sm text-slate-600 hover:text-primary-600"
+                className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
               >
                 {item.label}
               </a>
@@ -74,18 +83,21 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             {user ? (
               <Link
                 to="/dashboard"
-                className="text-sm font-medium text-primary-600 hover:underline"
+                className="text-sm font-medium text-primary-600 transition-colors hover:text-primary-700 hover:underline"
               >
                 Dashboard →
               </Link>
             ) : (
               <>
-                <Link to="/login" className="text-sm text-slate-600 hover:text-primary-600">
+                <Link
+                  to="/login"
+                  className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+                >
                   Login
                 </Link>
                 <Link
                   to="/signup"
-                  className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+                  className="inline-flex h-9 items-center rounded-md bg-primary-600 px-3.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
                 >
                   Sign up
                 </Link>
@@ -101,11 +113,11 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       {/* Footer banners (from CMS) */}
       {(footerBanners?.results ?? []).length > 0 && (
         <div className="bg-slate-50 py-6">
-          <div className="mx-auto max-w-6xl px-4">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
             {(footerBanners?.results ?? []).map((banner: Banner) => (
               <div
                 key={banner.id}
-                className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4"
+                className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-card"
               >
                 <div>
                   <div className="font-semibold text-slate-900">{banner.title}</div>
@@ -116,7 +128,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                     href={banner.link_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                    className="inline-flex h-10 shrink-0 items-center rounded-md bg-primary-600 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
                   >
                     {banner.link_text || "Learn more"}
                   </a>
@@ -128,21 +140,21 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white py-6">
-        <div className="mx-auto max-w-6xl px-4">
+      <footer className="border-t border-slate-200 bg-white py-8">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="text-sm text-slate-500">
               © {new Date().getFullYear()} CareerJudge. All rights reserved.
             </div>
             {/* CMS-driven footer navigation + policy pages (E-X6) */}
-            <nav className="flex flex-wrap items-center gap-4">
+            <nav className="flex flex-wrap items-center gap-x-5 gap-y-2">
               {(footerMenu ?? []).map((item: MenuItem) => (
                 <a
                   key={item.id}
                   href={item.url}
                   target={item.opens_new_tab ? "_blank" : undefined}
                   rel={item.opens_new_tab ? "noopener noreferrer" : undefined}
-                  className="text-sm text-slate-500 hover:text-primary-600"
+                  className="text-sm text-slate-500 transition-colors hover:text-slate-900"
                 >
                   {item.label}
                 </a>
@@ -151,7 +163,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 <Link
                   key={p.id}
                   to={`/${p.slug}`}
-                  className="text-sm text-slate-500 hover:text-primary-600"
+                  className="text-sm text-slate-500 transition-colors hover:text-slate-900"
                 >
                   {POLICY_LABEL[p.page_type] ?? p.title}
                 </Link>

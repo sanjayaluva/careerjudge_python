@@ -23,7 +23,7 @@ export const TableHeader = forwardRef<
 >(({ className, ...props }, ref) => (
   <thead
     ref={ref}
-    className={cn("[&_tr]:border-b [&_tr]:border-slate-200", className)}
+    className={cn("bg-slate-50/80 [&_tr]:border-b [&_tr]:border-slate-200", className)}
     {...props}
   />
 ));
@@ -46,7 +46,7 @@ export const TableRow = forwardRef<HTMLTableRowElement, HTMLAttributes<HTMLTable
     <tr
       ref={ref}
       className={cn(
-        "transition-colors hover:bg-slate-50/60 data-[state=selected]:bg-primary-50",
+        "transition-colors hover:bg-slate-50 data-[state=selected]:bg-primary-50",
         className,
       )}
       {...props}
@@ -60,7 +60,7 @@ export const TableHead = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLT
     <th
       ref={ref}
       className={cn(
-        "h-11 px-4 text-left align-middle text-xs font-semibold uppercase tracking-wide text-slate-500",
+        "h-10 whitespace-nowrap px-4 text-left align-middle text-[11px] font-semibold uppercase tracking-wider text-slate-500",
         className,
       )}
       {...props}
@@ -71,7 +71,7 @@ TableHead.displayName = "TableHead";
 
 export const TableCell = forwardRef<HTMLTableCellElement, TdHTMLAttributes<HTMLTableCellElement>>(
   ({ className, ...props }, ref) => (
-    <td ref={ref} className={cn("p-4 align-middle text-slate-700", className)} {...props} />
+    <td ref={ref} className={cn("px-4 py-3 align-middle text-slate-700", className)} {...props} />
   ),
 );
 TableCell.displayName = "TableCell";
@@ -79,7 +79,7 @@ TableCell.displayName = "TableCell";
 export function TableEmpty({ colSpan, children }: { colSpan: number; children: React.ReactNode }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="p-8 text-center text-slate-500">
+      <td colSpan={colSpan} className="px-6 py-12 text-center text-sm text-slate-500">
         {children}
       </td>
     </tr>

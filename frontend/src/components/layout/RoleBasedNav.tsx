@@ -76,8 +76,8 @@ export function RoleBasedNav({ onNavigate, className }: RoleBasedNavProps) {
             onClick={onNavigate}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-1",
+                "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1",
                 isActive
                   ? "bg-primary-50 text-primary-700"
                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
@@ -85,8 +85,18 @@ export function RoleBasedNav({ onNavigate, className }: RoleBasedNavProps) {
             }
             aria-current="page"
           >
-            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="truncate">{labelFor(item)}</span>
+            {({ isActive }) => (
+              <>
+                <Icon
+                  className={cn(
+                    "h-[18px] w-[18px] shrink-0 transition-colors",
+                    isActive ? "text-primary-600" : "text-slate-400 group-hover:text-slate-600",
+                  )}
+                  aria-hidden="true"
+                />
+                <span className="truncate">{labelFor(item)}</span>
+              </>
+            )}
           </NavLink>
         );
       })}

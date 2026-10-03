@@ -29,7 +29,11 @@ import { Card } from "./Card";
 
 export const PageCard = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <Card ref={ref} className={cn("border-l-0 border-r-0 border-t-0", className)} {...props} />
+    <Card
+      ref={ref}
+      className={cn("rounded-none border-l-0 border-r-0 border-t-0 shadow-none", className)}
+      {...props}
+    />
   ),
 );
 PageCard.displayName = "PageCard";

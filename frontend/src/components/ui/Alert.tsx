@@ -4,14 +4,15 @@ import { forwardRef, type HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 const alertVariants = cva(
-  "relative w-full rounded-md border p-4 [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:h-5 [&>svg]:w-5",
+  "relative w-full rounded-md border p-4 text-sm [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:h-5 [&>svg]:w-5 [&>svg~*]:pl-7",
   {
     variants: {
       variant: {
-        default: "border-slate-200 bg-slate-50 text-slate-800 [&>svg]:text-slate-500",
-        error: "border-danger-100 bg-danger-50 text-danger-700 [&>svg]:text-danger-600",
-        success: "border-success-100 bg-success-50 text-success-700 [&>svg]:text-success-600",
-        warning: "border-warning-100 bg-warning-50 text-warning-700 [&>svg]:text-warning-600",
+        default: "border-slate-200 bg-slate-50 text-slate-700 [&>svg]:text-slate-500",
+        error: "border-danger-200 bg-danger-50 text-danger-800 [&>svg]:text-danger-600",
+        success: "border-success-200 bg-success-50 text-success-800 [&>svg]:text-success-600",
+        warning: "border-warning-200 bg-warning-50 text-warning-800 [&>svg]:text-warning-600",
+        info: "border-info-200 bg-info-50 text-info-800 [&>svg]:text-info-600",
       },
     },
     defaultVariants: {
@@ -32,7 +33,11 @@ Alert.displayName = "Alert";
 
 export const AlertTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
-    <h5 ref={ref} className={cn("mb-1 font-semibold leading-none", className)} {...props} />
+    <h5
+      ref={ref}
+      className={cn("mb-1 font-semibold leading-none tracking-tight", className)}
+      {...props}
+    />
   ),
 );
 AlertTitle.displayName = "AlertTitle";

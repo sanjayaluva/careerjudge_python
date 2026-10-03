@@ -134,11 +134,11 @@ export function Topbar({ onOpenSidebar, title, subtitle }: TopbarProps) {
   const notifList = (notifications ?? []).slice(0, 20);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/95 px-4 backdrop-blur lg:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur lg:px-6">
       <button
         type="button"
         onClick={onOpenSidebar}
-        className="rounded-md p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
+        className="-ml-1 rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 lg:hidden"
         aria-label="Open sidebar"
       >
         <svg
@@ -160,8 +160,8 @@ export function Topbar({ onOpenSidebar, title, subtitle }: TopbarProps) {
       <PortalTopbarBrand />
 
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-lg font-semibold text-slate-900">{title}</h1>
-        {subtitle && <p className="truncate text-xs text-slate-500">{subtitle}</p>}
+        <h1 className="truncate text-base font-semibold leading-tight text-slate-900">{title}</h1>
+        {subtitle && <p className="mt-0.5 truncate text-xs text-slate-500">{subtitle}</p>}
       </div>
 
       {/* Notification bell with dropdown */}
@@ -169,12 +169,12 @@ export function Topbar({ onOpenSidebar, title, subtitle }: TopbarProps) {
         <button
           type="button"
           onClick={() => setNotifOpen((v) => !v)}
-          className="relative rounded-md p-2 text-slate-500 hover:bg-slate-100"
+          className="relative rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           aria-label={`Notifications${unreadCount ? ` (${unreadCount} unread)` : ""}`}
         >
           <Bell className="h-5 w-5" />
           {unreadCount !== undefined && unreadCount > 0 && (
-            <span className="absolute right-0.5 top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+            <span className="absolute right-0.5 top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-danger-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
@@ -186,13 +186,13 @@ export function Topbar({ onOpenSidebar, title, subtitle }: TopbarProps) {
             <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
 
             {/* Notification dropdown panel */}
-            <div className="absolute right-0 top-full z-50 mt-2 w-96 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white shadow-lg">
-              <div className="flex items-center justify-between border-b border-slate-100 p-3">
+            <div className="absolute right-0 top-full z-50 mt-2 w-96 max-w-[calc(100vw-2rem)] animate-fade-in overflow-hidden rounded-lg border border-slate-200 bg-white shadow-popover">
+              <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
                 <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
                 {unreadCount !== undefined && unreadCount > 0 && (
                   <button
                     onClick={() => markAllReadMutation.mutate()}
-                    className="text-xs text-primary-600 hover:underline"
+                    className="rounded text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                   >
                     Mark all read
                   </button>
@@ -201,32 +201,36 @@ export function Topbar({ onOpenSidebar, title, subtitle }: TopbarProps) {
 
               <div className="max-h-96 overflow-y-auto">
                 {notifList.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-slate-400">No notifications yet.</p>
+                  <p className="px-4 py-10 text-center text-sm text-slate-500">
+                    No notifications yet.
+                  </p>
                 ) : (
                   notifList.map((notif) => (
                     <div
                       key={notif.id}
-                      className={`flex items-start gap-3 border-b border-slate-50 p-3 transition-colors hover:bg-slate-50 ${
-                        !notif.is_read ? "bg-blue-50/40" : ""
+                      className={`flex items-start gap-3 border-b border-slate-100 px-4 py-3 transition-colors last:border-b-0 hover:bg-slate-50 ${
+                        !notif.is_read ? "bg-primary-50/40" : ""
                       }`}
                     >
                       <span
-                        className={`mt-0.5 text-lg ${NOTIF_TYPE_COLORS[notif.notification_type] ?? "text-slate-400"}`}
+                        className={`mt-0.5 text-base leading-5 ${NOTIF_TYPE_COLORS[notif.notification_type] ?? "text-slate-400"}`}
                       >
                         {NOTIF_TYPE_ICONS[notif.notification_type] ?? "•"}
                       </span>
                       <div
-                        className="flex-1 cursor-pointer"
+                        className="min-w-0 flex-1 cursor-pointer"
                         onClick={() => handleNotificationClick(notif)}
                       >
                         <div className="flex items-center gap-2">
                           {!notif.is_read && (
-                            <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-primary-500" />
                           )}
-                          <p className="text-sm font-medium text-slate-900">{notif.title}</p>
+                          <p className="text-sm font-medium leading-5 text-slate-900">
+                            {notif.title}
+                          </p>
                         </div>
-                        <p className="mt-0.5 text-xs text-slate-600">{notif.message}</p>
-                        <p className="mt-1 text-[10px] text-slate-400">
+                        <p className="mt-0.5 text-xs leading-5 text-slate-600">{notif.message}</p>
+                        <p className="mt-1 text-[11px] text-slate-400">
                           {new Date(notif.created_at).toLocaleString()}
                         </p>
                       </div>
@@ -235,7 +239,7 @@ export function Topbar({ onOpenSidebar, title, subtitle }: TopbarProps) {
                           e.stopPropagation();
                           deleteMutation.mutate(notif.id);
                         }}
-                        className="text-slate-300 hover:text-red-500"
+                        className="rounded p-0.5 text-lg leading-none text-slate-300 transition-colors hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                         aria-label="Delete notification"
                       >
                         ×
@@ -253,11 +257,11 @@ export function Topbar({ onOpenSidebar, title, subtitle }: TopbarProps) {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex items-center gap-2 rounded-full border border-transparent p-1 pr-2 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+            className="flex items-center gap-2 rounded-full border border-transparent p-1 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 sm:pr-2.5"
             aria-label="Open user menu"
           >
             <Avatar name={user?.full_name} email={user?.email} size="sm" />
-            <span className="hidden text-sm font-medium text-slate-700 sm:inline">
+            <span className="hidden max-w-[12rem] truncate text-sm font-medium text-slate-700 sm:inline">
               {user?.full_name || user?.email}
             </span>
             <ChevronDown className="hidden h-4 w-4 text-slate-400 sm:inline" aria-hidden="true" />

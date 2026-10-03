@@ -34,10 +34,10 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 const VARIANT_STYLES: Record<ToastVariant, string> = {
-  success: "border-green-200 bg-green-50 text-green-800",
-  error: "border-red-200 bg-red-50 text-red-800",
-  info: "border-blue-200 bg-blue-50 text-blue-800",
-  warning: "border-amber-200 bg-amber-50 text-amber-800",
+  success: "border-success-200 bg-success-50 text-success-800",
+  error: "border-danger-200 bg-danger-50 text-danger-800",
+  info: "border-info-200 bg-info-50 text-info-800",
+  warning: "border-warning-200 bg-warning-50 text-warning-800",
 };
 
 const VARIANT_ICONS: Record<ToastVariant, string> = {
@@ -119,25 +119,25 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
 
   return (
     <div
-      className={`flex items-start gap-3 rounded-lg border p-4 shadow-lg transition-all duration-200 ${
+      className={`flex animate-fade-in items-start gap-3 rounded-lg border p-4 shadow-popover transition-all duration-200 ${
         VARIANT_STYLES[toast.variant]
       } ${isLeaving ? "translate-x-full opacity-0" : "translate-x-0 opacity-100"}`}
       role="alert"
     >
-      <span className="mt-0.5 text-lg font-bold">{VARIANT_ICONS[toast.variant]}</span>
+      <span className="mt-0.5 text-base font-bold leading-5">{VARIANT_ICONS[toast.variant]}</span>
       <div className="flex-1">
-        <p className="text-sm font-medium">{toast.message}</p>
+        <p className="text-sm font-medium leading-5">{toast.message}</p>
         {toast.onConfirm && (
           <div className="mt-3 flex gap-2">
             <button
               onClick={handleConfirm}
-              className="rounded-md bg-slate-900 px-3 py-1 text-xs font-medium text-white hover:bg-slate-700"
+              className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
             >
               {toast.confirmLabel}
             </button>
             <button
               onClick={handleClose}
-              className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
             >
               Cancel
             </button>
@@ -147,7 +147,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
       {!toast.onConfirm && (
         <button
           onClick={handleClose}
-          className="text-lg leading-none text-slate-400 hover:text-slate-600"
+          className="-mr-1 -mt-1 rounded-md p-1 text-lg leading-none text-slate-400 transition-colors hover:bg-slate-900/5 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           aria-label="Dismiss"
         >
           ×

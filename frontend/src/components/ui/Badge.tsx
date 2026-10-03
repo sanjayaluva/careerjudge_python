@@ -4,16 +4,17 @@ import { forwardRef, type HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium transition-colors",
+  "inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium leading-5 ring-1 ring-inset transition-colors",
   {
     variants: {
       variant: {
-        default: "border-transparent bg-slate-100 text-slate-700",
-        success: "border-transparent bg-success-100 text-success-700",
-        warning: "border-transparent bg-warning-100 text-warning-700",
-        danger: "border-transparent bg-danger-100 text-danger-700",
-        outline: "border-slate-200 bg-transparent text-slate-700",
-        primary: "border-transparent bg-primary-100 text-primary-700",
+        default: "bg-slate-100 text-slate-700 ring-slate-500/20",
+        success: "bg-success-50 text-success-700 ring-success-600/20",
+        warning: "bg-warning-50 text-warning-800 ring-warning-600/25",
+        danger: "bg-danger-50 text-danger-700 ring-danger-600/20",
+        info: "bg-info-50 text-info-700 ring-info-600/20",
+        outline: "bg-white text-slate-600 ring-slate-300",
+        primary: "bg-primary-50 text-primary-700 ring-primary-600/20",
       },
     },
     defaultVariants: {

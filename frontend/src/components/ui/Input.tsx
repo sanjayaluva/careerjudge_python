@@ -27,10 +27,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         id={id}
         className={cn(
           "w-full rounded-md border bg-white px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400",
-          "focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-1",
+          "focus:outline-none focus:ring-2 focus:ring-primary-500/25",
           inputSizeClasses[inputSize],
-          hasError ? "border-danger focus:ring-danger" : "border-slate-200 hover:border-slate-300",
-          disabled && "cursor-not-allowed bg-slate-50 opacity-60",
+          hasError
+            ? "border-danger-500 focus:border-danger-500 focus:ring-danger-500/25"
+            : "border-slate-300 hover:border-slate-400 focus:border-primary-500 focus:hover:border-primary-500",
+          disabled && "cursor-not-allowed bg-slate-50 text-slate-500 opacity-70",
           className,
         )}
         aria-invalid={hasError || undefined}

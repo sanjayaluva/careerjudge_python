@@ -64,31 +64,36 @@ export function Modal({
       aria-modal="true"
     >
       <div
-        className="animate-fade-in absolute inset-0 bg-slate-900/50"
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px]"
         onClick={closeOnBackdrop ? onClose : undefined}
         aria-hidden="true"
       />
       <div
         className={cn(
-          "animate-fade-in relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl bg-white shadow-lg",
+          "relative z-10 flex max-h-[calc(100vh-2rem)] w-full animate-fade-in flex-col overflow-hidden rounded-xl bg-white shadow-modal",
           sizeClasses[size],
           className,
         )}
         role="document"
       >
         {(title || description) && (
-          <div className="shrink-0 border-b border-slate-200 p-6 pb-4">
+          <div className="shrink-0 border-b border-slate-200 px-6 pb-4 pt-5">
             {title && (
-              <h2 className="text-lg font-semibold text-slate-900" id="modal-title">
+              <h2
+                className="text-lg font-semibold leading-tight tracking-tight text-slate-900"
+                id="modal-title"
+              >
                 {title}
               </h2>
             )}
-            {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+            {description && (
+              <p className="mt-1.5 text-sm leading-snug text-slate-500">{description}</p>
+            )}
           </div>
         )}
-        <div className="overflow-y-auto p-6">{children}</div>
+        <div className="overflow-y-auto px-6 py-5">{children}</div>
         {footer && (
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4">
             {footer}
           </div>
         )}

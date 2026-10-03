@@ -44,7 +44,7 @@ export function TabsList({ children, className }: { children: ReactNode; classNa
     <div
       role="tablist"
       className={cn(
-        "inline-flex h-10 items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-1",
+        "flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-slate-200",
         className,
       )}
     >
@@ -73,8 +73,10 @@ export function TabsTrigger({
       aria-controls={`${baseId}-panel-${value}`}
       onClick={() => setValue(value)}
       className={cn(
-        "inline-flex h-8 items-center justify-center whitespace-nowrap rounded-sm px-3 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600",
-        selected ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700",
+        "-mb-px inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-sm border-b-2 px-1 pb-3 pt-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
+        selected
+          ? "border-primary-600 text-primary-700"
+          : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700",
         className,
       )}
     >
@@ -99,7 +101,7 @@ export function TabsContent({
       role="tabpanel"
       id={`${baseId}-panel-${value}`}
       aria-labelledby={`${baseId}-tab-${value}`}
-      className={cn("animate-fade-in mt-4", className)}
+      className={cn("mt-5 animate-fade-in", className)}
     >
       {children}
     </div>

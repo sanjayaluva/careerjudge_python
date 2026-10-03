@@ -58,19 +58,19 @@ export function WysiwygEditorLite({
 
   if (!editor) {
     return (
-      <div className="rounded-md border border-slate-200 p-4 text-sm text-slate-500">
+      <div className="rounded-md border border-slate-300 bg-white p-4 text-sm text-slate-500">
         Loading editor…
       </div>
     );
   }
 
   const btnClass =
-    "px-2 py-1 text-xs rounded hover:bg-slate-100 transition-colors disabled:opacity-30";
-  const activeClass = "bg-slate-200 font-semibold";
+    "inline-flex h-7 min-w-7 items-center justify-center rounded-md px-1.5 text-xs text-slate-600 transition-colors hover:bg-slate-200/70 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-30";
+  const activeClass = "bg-white font-semibold text-primary-700 shadow-sm ring-1 ring-slate-200";
 
   return (
-    <div className="overflow-hidden rounded-md border border-slate-200">
-      <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 bg-slate-50 p-1.5">
+    <div className="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm transition-colors focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/25">
+      <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-slate-50 p-1">
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBold().run()}
