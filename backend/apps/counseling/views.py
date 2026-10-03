@@ -271,7 +271,11 @@ class CounsellorProfileViewSet(ActionSerializerMixin, ModelViewSet):
                 "data": {
                     "counsellor": CounsellorProfileSerializer(counsellor).data,
                     "upcoming_timeslots": TimeSlotSerializer(
-                        counsellor.timeslots.filter(start_time__gte=now).order_by("start_time"),
+                        # Cancelled slots stay attached to their sessions
+                        # (shown under cancellations), not as timeslots.
+                        counsellor.timeslots.filter(start_time__gte=now)
+                        .exclude(status="cancelled")
+                        .order_by("start_time"),
                         many=True,
                     ).data,
                     "sessions": CounselingSessionSerializer(sessions, many=True).data,

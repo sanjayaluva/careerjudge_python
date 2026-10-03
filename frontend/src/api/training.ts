@@ -431,12 +431,13 @@ export interface CourseUpdateRequest {
   id: number;
   course: number;
   course_title: string;
-  requested_by: number;
-  requested_by_name: string | null;
+  trainer_name: string | null;
   request_type: "update" | "delete";
   reason: string;
-  status: "pending" | "approved" | "declined";
-  admin_note: string;
+  /** The server stores a declined request as "rejected". */
+  status: "pending" | "approved" | "rejected";
+  /** CJ Admin's note on approve/decline (sent as `admin_note`). */
+  review_comment: string;
   reviewed_by_name: string | null;
   reviewed_at: string | null;
   created_at: string;

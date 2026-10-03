@@ -1952,12 +1952,12 @@ function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
                       variant={
                         r.status === "approved"
                           ? "success"
-                          : r.status === "declined"
+                          : r.status === "rejected"
                             ? "danger"
                             : "warning"
                       }
                     >
-                      {r.status}
+                      {r.status === "rejected" ? "declined" : r.status}
                     </Badge>
                   </span>
                   <span className="text-xs text-slate-400">
@@ -1965,8 +1965,8 @@ function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
                   </span>
                 </div>
                 <p className="mt-1 text-slate-600">{r.reason}</p>
-                {r.admin_note && (
-                  <p className="mt-1 text-xs text-slate-500">Admin note: {r.admin_note}</p>
+                {r.review_comment && (
+                  <p className="mt-1 text-xs text-slate-500">Admin note: {r.review_comment}</p>
                 )}
                 {r.edit_window_open && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
