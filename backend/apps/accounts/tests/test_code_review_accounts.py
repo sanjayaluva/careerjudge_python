@@ -217,3 +217,36 @@ def test_sync_migration_creates_missing_system_roles():
     # Idempotent.
     migration.sync(django_apps, None)
     assert Role.objects.count() == len(Role.ROLE_CHOICES)
+
+
+def test_manager_bulk_upload_cannot_create_group_admins():
+    """Group Admins come from the Add Group Admin form (tied to a group),
+    never from a CSV where they would have no group."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from rest_framework.test import APIClient
+
+    from apps.accounts.models import ModuleRight, Role, User
+    from apps.accounts.role_rights import ROLE_PERMISSIONS, sync_role_rights
+    from apps.accounts.services import get_or_create_default_roles
+    from apps.organizations.models import Organization, OrganizationMember
+
+    roles = get_or_create_default_roles()
+    sync_role_rights(Role, ModuleRight, ROLE_PERMISSIONS)
+    org = Organization.objects.create(name="Bulk Org", type="corporate")
+    mgr = User.objects.create_user(
+        email="bulkmgr@t.com", password="pw", is_active=True, role=roles["corp_admin"]
+    )
+    OrganizationMember.objects.create(organization=org, user=mgr, is_admin=True)
+    c = APIClient()
+    c.force_authenticate(user=mgr)
+    csv = (
+        b"full_name,email,role_name\nGA One,ga1@t.com,group_admin\nInd One,ind1@t.com,individual\n"
+    )
+    resp = c.post(
+        "/api/accounts/users/bulk-upload/",
+        {"file": SimpleUploadedFile("u.csv", csv, content_type="text/csv")},
+        format="multipart",
+    )
+    assert resp.status_code == 200, resp.data
+    assert not User.objects.filter(email="ga1@t.com").exists()
+    assert User.objects.filter(email="ind1@t.com").exists()

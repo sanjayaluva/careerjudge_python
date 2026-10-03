@@ -744,6 +744,11 @@ class BulkUserUploadView(APIView):
         from apps.organizations.scoping import creatable_role_names
 
         allowed_roles = creatable_role_names(request.user)
+        if allowed_roles is not None:
+            # Group Admins are created through the organization page's
+            # "Add Group Admin" form (which ties them to a group) — never in
+            # bulk, where they would end up without a group.
+            allowed_roles = tuple(r for r in allowed_roles if r != "group_admin")
         email_failed = 0
 
         for row_num, row in enumerate(reader, start=2):  # start=2 (1=header)
