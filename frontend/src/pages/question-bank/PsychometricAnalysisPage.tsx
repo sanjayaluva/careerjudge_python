@@ -11,7 +11,7 @@
  * them and goes back to filtering/selecting (Doc 1 §4.1.1).
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -81,6 +81,8 @@ export default function PsychometricAnalysisPage() {
   // filters so the analysis matches the response counts shown in the list.
   const [extractedWith, setExtractedWith] = useState<PsychometricAnalysisFilters | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  // Set while the list is re-extracted after Submit, so the selection stays.
+  const keepSelection = useRef(false);
   // Doc 1 §4.1.1: "User selects relevant analyses" — all three by default.
   const [analyses, setAnalyses] = useState<Set<PsychometricAnalysisKind>>(
     new Set(PSYCHOMETRIC_ANALYSES.map((a) => a.value)),
@@ -99,12 +101,22 @@ export default function PsychometricAnalysisPage() {
 
   const extractMutation = useMutation({
     mutationFn: (filters: PsychometricAnalysisFilters) => extractPsychometricQuestions(filters),
-    onSuccess: (_rows, filters) => {
+    onSuccess: (rows, filters) => {
       setExtractedWith(filters);
-      setSelected(new Set());
+      if (keepSelection.current) {
+        // A refresh after Submit keeps the ticked questions (those still listed).
+        const ids = new Set(rows.map((r) => r.id));
+        setSelected((cur) => new Set([...cur].filter((id) => ids.has(id))));
+      } else {
+        setSelected(new Set());
+      }
+      keepSelection.current = false;
       runMutation.reset();
     },
-    onError: (err) => toast.error(extractApiError(err)),
+    onError: (err) => {
+      keepSelection.current = false;
+      toast.error(extractApiError(err));
+    },
   });
 
   // Submit: store the inspected outputs against their questions.
@@ -114,7 +126,10 @@ export default function PsychometricAnalysisPage() {
       toast.success(`Results saved for ${res.updated_ids.length} question(s).`);
       runMutation.reset();
       // Refresh the list so "Last analysed" shows the new date.
-      if (extractedWith) extractMutation.mutate(extractedWith);
+      if (extractedWith) {
+        keepSelection.current = true;
+        extractMutation.mutate(extractedWith);
+      }
     },
     onError: (err) => toast.error(extractApiError(err)),
   });

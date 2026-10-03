@@ -2,14 +2,19 @@
  * Payment success/cancel pages — shown after Stripe redirect.
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { Button, PageCard, Spinner } from "@/components/ui";
 import { verifyPayment } from "@/api/payments";
+import { clearPaymentReturn, readPaymentReturn } from "@/lib/paymentReturn";
 
 export function PaymentSuccessPage() {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get("session_id");
+  // Set by the page that sent the user to Stripe (Report 9: the candidate
+  // goes straight on to his assessment).
+  const [returnTo] = useState(() => readPaymentReturn());
 
   const verifyMut = useMutation({
     mutationFn: () => verifyPayment(sessionId!),
@@ -43,9 +48,17 @@ export function PaymentSuccessPage() {
               <p className="mt-2 text-sm text-slate-500">
                 Your payment has been confirmed. You now have access.
               </p>
-              <Link to="/dashboard" className="mt-4 inline-block">
-                <Button>Go to Dashboard</Button>
-              </Link>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                {/* Back to where the payment started (e.g. the assessment). */}
+                {returnTo && (
+                  <Link to={returnTo.path} onClick={clearPaymentReturn}>
+                    <Button>{returnTo.label}</Button>
+                  </Link>
+                )}
+                <Link to="/dashboard">
+                  <Button variant={returnTo ? "outline" : "primary"}>Go to Dashboard</Button>
+                </Link>
+              </div>
             </>
           ) : (
             <>

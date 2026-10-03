@@ -18,6 +18,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { Button, Modal, useToast } from "@/components/ui";
 import { extractApiError } from "@/api/client";
+import { stashPaymentReturn } from "@/lib/paymentReturn";
 import {
   createCheckout,
   getPaymentConfig,
@@ -121,6 +122,8 @@ export function useTakeAssessment(opts?: {
         return;
       }
       if (res.checkout_url) {
+        // Stripe returns to /payments/success — offer the way back from there.
+        stashPaymentReturn(`/assessments/${target.id}/start`, "Continue to the assessment");
         window.location.href = res.checkout_url;
         return;
       }
@@ -208,9 +211,22 @@ export function useTakeAssessment(opts?: {
     </Modal>
   );
 
+  // After a 402 the payment may already be waiting for CJ Admin's approval —
+  // look it up so the pop-up says "awaiting approval" instead of asking the
+  // candidate to pay again.
+  const promptPayment = async (a: TakeableAssessment) => {
+    let status: string | undefined;
+    try {
+      status = (await getPaymentStatus("assessment", a.id)).status;
+    } catch {
+      status = undefined;
+    }
+    await openPrompt(a, status);
+  };
+
   return {
     begin: (a) => void begin(a),
-    promptPayment: (a) => void openPrompt(a),
+    promptPayment: (a) => void promptPayment(a),
     checkingId,
     prompt,
   };

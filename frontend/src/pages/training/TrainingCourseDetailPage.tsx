@@ -117,6 +117,8 @@ export default function TrainingCourseDetailPage() {
   // read-only for him.
   const { isPrivateAuthor, ownsItem } = usePrivateSpace();
   const canManage = ["cj_admin", "trainer"].includes(user?.role ?? "") || ownsItem(course);
+  // Report 9 #116: only learners (and CJ Admin, for testing) register.
+  const canRegister = ["individual", "cj_admin"].includes(user?.role ?? "");
 
   // Live session consent modal — shown when ?live_session=ID is in the URL
   const liveSessionId = searchParams.get("live_session");
@@ -132,11 +134,12 @@ export default function TrainingCourseDetailPage() {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
-  // Student's registration for this course (to show correct button state)
+  // Student's registration for this course (to show correct button state).
+  // CJ Admin may register too, so his own registration is looked up as well.
   const { data: myCourses } = useQuery({
     queryKey: ["training", "my-courses"],
     queryFn: () => listMyCourses(),
-    enabled: !canManage,
+    enabled: !canManage || canRegister,
   });
   const myRegistration = myCourses?.find((r) => r.course === cid);
 
@@ -323,19 +326,14 @@ export default function TrainingCourseDetailPage() {
                   </Button>
                 )}
                 {/* Report 9 #116: only learners (and CJ Admin, for testing) register. */}
-                {["individual", "cj_admin"].includes(user?.role ?? "") &&
-                  course.status === "published" &&
-                  !myRegistration && (
-                    <Button
-                      onClick={() => setShowRegForm(true)}
-                      loading={registerMutation.isPending}
-                    >
-                      {parseFloat(course.price) === 0
-                        ? "Enroll for free"
-                        : `Register for $${course.price}`}
-                    </Button>
-                  )}
-                {!canManage && myRegistration && (
+                {canRegister && course.status === "published" && !myRegistration && (
+                  <Button onClick={() => setShowRegForm(true)} loading={registerMutation.isPending}>
+                    {parseFloat(course.price) === 0
+                      ? "Enroll for free"
+                      : `Register for $${course.price}`}
+                  </Button>
+                )}
+                {myRegistration && (
                   <Badge variant={myRegistration.payment_status === "paid" ? "success" : "warning"}>
                     {myRegistration.payment_status === "paid" ? "✓ Enrolled" : "Payment pending"}
                   </Badge>
@@ -348,7 +346,11 @@ export default function TrainingCourseDetailPage() {
         {/* === LEARN TAB (course delivery player) === */}
         {course.status === "published" && (
           <TabsContent value="learn">
-            <CoursePlayer course={course} onRegister={() => setShowRegForm(true)} />
+            {/* Report 9 #116: "Register now" only for roles that may register. */}
+            <CoursePlayer
+              course={course}
+              onRegister={canRegister ? () => setShowRegForm(true) : undefined}
+            />
           </TabsContent>
         )}
 
@@ -511,9 +513,26 @@ export default function TrainingCourseDetailPage() {
         {/* === ASSIGNMENTS TAB (Report 9 #80) === */}
         <TabsContent value="assignments">
           {canManage ? (
-            <AssignmentSubmissionsTab course={course} />
+            <div className="space-y-4">
+              <AssignmentSubmissionsTab course={course} />
+              {/* A CJ Admin who registered himself submits his own reports too. */}
+              {myRegistration && (
+                <h3 className="text-sm font-semibold text-slate-900">Your own submissions</h3>
+              )}
+              {myRegistration && (
+                <MyAssignmentsTab
+                  course={course}
+                  registration={myRegistration}
+                  canRegister={canRegister}
+                />
+              )}
+            </div>
           ) : (
-            <MyAssignmentsTab course={course} registration={myRegistration} />
+            <MyAssignmentsTab
+              course={course}
+              registration={myRegistration}
+              canRegister={canRegister}
+            />
           )}
         </TabsContent>
         <TabsContent value="assessments">
@@ -618,10 +637,29 @@ function useCourseProgress(courseId: number) {
   });
 }
 
+/** A failed progress load must not read as "nobody registered". */
+function ProgressLoadError({ title, error }: { title: string; error: unknown }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Alert variant="error">
+          <AlertDescription>
+            Could not load the learners of this course. {extractApiError(error)}
+          </AlertDescription>
+        </Alert>
+      </CardContent>
+    </Card>
+  );
+}
+
 function RegistrationsTab({ courseId }: { courseId: number }) {
-  const { data: rows, isLoading } = useCourseProgress(courseId);
+  const { data: rows, isLoading, isError, error } = useCourseProgress(courseId);
 
   if (isLoading) return <Spinner />;
+  if (isError) return <ProgressLoadError title="Student Registrations" error={error} />;
   const list = rows ?? [];
 
   return (
@@ -660,9 +698,13 @@ function courseAssignments(course: TrainingCourse) {
 function MyAssignmentsTab({
   course,
   registration,
+  canRegister,
 }: {
   course: TrainingCourse;
   registration?: CourseRegistration;
+  /** Whether the viewer's role may register (Report 9 #116) — others just
+   * see the list of assignments, without a "Register" prompt. */
+  canRegister: boolean;
 }) {
   const sessions = courseAssignments(course);
   const canSubmit =
@@ -683,7 +725,9 @@ function MyAssignmentsTab({
           <p>
             {registration
               ? "Complete payment for this course to submit its assignments."
-              : "Register for this course to submit its assignments."}
+              : canRegister
+                ? "Register for this course to submit its assignments."
+                : "The assignments of this course:"}
           </p>
           <ul className="list-disc pl-5 text-slate-500">
             {sessions.flatMap(({ session, where }) =>
@@ -716,11 +760,12 @@ function MyAssignmentsTab({
 // submitted what, its status and score, with Review opening the existing
 // review pop-up for that learner.
 function AssignmentSubmissionsTab({ course }: { course: TrainingCourse }) {
-  const { data: rows, isLoading } = useCourseProgress(course.id);
+  const { data: rows, isLoading, isError, error } = useCourseProgress(course.id);
   const [reviewing, setReviewing] = useState<number | null>(null);
   const sessions = courseAssignments(course);
 
   if (isLoading) return <Spinner />;
+  if (isError) return <ProgressLoadError title="Assignment Submissions" error={error} />;
   const learners = rows ?? [];
 
   return (

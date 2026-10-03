@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import { retrieveUser } from "@/api/users";
 import { extractApiError } from "@/api/client";
+import { usePermissions } from "@/hooks/usePermissions";
 import { ROLE_LABELS } from "@/lib/constants";
 import { expertiseList } from "@/lib/profileFields";
 import { formatDate } from "@/lib/utils";
@@ -22,6 +23,7 @@ export default function UserViewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const userId = Number(id);
+  const canChange = usePermissions().canPerform("users", "change");
 
   const {
     data: user,
@@ -60,7 +62,10 @@ export default function UserViewPage() {
           <h1 className="mt-1 text-2xl font-bold text-slate-900">{user.full_name || "—"}</h1>
           <p className="text-sm text-slate-500">{user.email}</p>
         </div>
-        <Button onClick={() => navigate(`/admin/users?edit=${user.id}`)}>Edit user</Button>
+        {/* Report 9 #110/#111: only those who may change users get the button. */}
+        {canChange && (
+          <Button onClick={() => navigate(`/admin/users?edit=${user.id}`)}>Edit user</Button>
+        )}
       </div>
 
       <Card>

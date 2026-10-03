@@ -2,7 +2,7 @@
  * Admin user-management API functions.
  * Endpoints live under /api/accounts/.
  */
-import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { apiDelete, apiGet, apiGetAllPages, apiGetPaged, apiPatch, apiPost } from "./client";
 import type {
   AdminCreateUserPayload,
   AdminUpdateUserPayload,
@@ -24,6 +24,14 @@ export function listUsers(params: AdminUserListParams = {}): Promise<{
       ...(params.role ? { role: params.role } : {}),
       ...(params.page_size ? { page_size: params.page_size } : {}),
     },
+  });
+}
+
+/** Every user with the given role (all pages) — for pickers that must not
+ * stop at the first 100. */
+export function listAllUsers(params: { role?: string } = {}): Promise<User[]> {
+  return apiGetAllPages<User>("/accounts/users/", {
+    params: { ...(params.role ? { role: params.role } : {}) },
   });
 }
 

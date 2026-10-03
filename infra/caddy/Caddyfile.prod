@@ -7,8 +7,10 @@
 careerjudge.pp.ua {
 	encode gzip zstd
 
-	# Backend API
-	handle_path /api/* {
+	# Backend API — `handle`, not `handle_path`: Django's routes include the
+	# /api prefix (same fix as Caddyfile.dev); handle_path stripped it and
+	# every API call 404'd.
+	handle /api/* {
 		reverse_proxy backend:8000 {
 			header_up X-Forwarded-Proto {scheme}
 			header_up X-Forwarded-Host {host}

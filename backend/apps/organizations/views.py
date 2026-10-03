@@ -120,6 +120,12 @@ def _is_own_org_admin(user, organization_id) -> bool:
     )
 
 
+def _can_set_org_admin(user) -> bool:
+    """CJ Admin or the organization's own admin (Corp Admin / Corp Exclusive
+    Admin) — the nested routes already limit him to his organization."""
+    return is_cj_admin(user) or role_name(user) in ("corp_admin", "corp_exclusive")
+
+
 def _manager_org_data(request):
     data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
     for field in CJ_ADMIN_ORG_FIELDS:
@@ -292,7 +298,7 @@ class GroupViewSet(ManagedOrgMixin, ActionSerializerMixin, ModelViewSet):
         if (
             request.method not in ("GET", "HEAD", "OPTIONS")
             and role_name(request.user) == "group_admin"
-            and managed_group_ids(request.user) is None
+            and not managed_group_ids(request.user)
         ):
             raise PermissionDenied("Group Admins cannot change the organization's groups.")
 
@@ -411,33 +417,49 @@ class OrganizationMemberViewSet(ManagedOrgMixin, ModelViewSet):
     def perform_create(self, serializer):
         org_id = self.kwargs.get("organization_id")
         org = get_object_or_404(Organization, id=org_id)
+        user = self.request.user
+        requested = serializer.validated_data.get("group_id")
+        # Code review (3 Oct 2026): the member update's guards apply when
+        # adding too — the group must be one of this organization's (within
+        # his own group and sub-groups for a Group Admin) ...
+        if (
+            requested is not None
+            and not Group.objects.filter(id=requested, organization_id=org.id).exists()
+        ):
+            raise ValidationError({"group_id": "Choose a group of this organization."})
+        group_ids = managed_group_ids(user)
         extra = {}
-        group_ids = managed_group_ids(self.request.user)
         if group_ids is not None:
+            if not group_ids:
+                raise PermissionDenied(
+                    "You are not placed in a group yet. Please ask your organization's admin."
+                )
+            if requested is not None and requested not in group_ids:
+                raise PermissionDenied(
+                    "You can place members only in your own group or sub-groups."
+                )
             # A Group Admin's new members always join his own group.
-            requested = serializer.validated_data.get("group_id")
-            extra["group_id"] = requested if requested in group_ids else group_ids[0]
+            extra["group_id"] = requested if requested is not None else group_ids[0]
+        # ... and only CJ Admin or the organization's own admin makes a member
+        # an organization admin (not a Group Admin or Channel Partner).
+        if serializer.validated_data.get("is_admin") and not _can_set_org_admin(user):
+            raise PermissionDenied("Only the organization's admin can give admin rights.")
         serializer.save(organization=org, **extra)
 
     def _check_existing_user(self, email):
-        """Report 9: an organization manager may add an EXISTING account only
-        if it is a plain individual who belongs to no other organization —
-        otherwise he could pull anyone (even staff) into his organization."""
+        """Code review (3 Oct 2026): an organization manager adds NEW people
+        only (they are emailed an invitation). Adding an EXISTING account by
+        email let a manager pull any plain individual into his organization
+        and then change that person's email and password — so existing
+        accounts are added by CJ Admin only."""
         if managed_org_ids(self.request.user) is None or not email:
             return
         from apps.accounts.models import User
 
-        existing = User.objects.filter(email__iexact=email).first()
-        if existing is None:
-            return
-        if (
-            role_name(existing) != "individual"
-            or OrganizationMember.objects.filter(user=existing)
-            .exclude(organization_id=self.kwargs.get("organization_id"))
-            .exists()
-        ):
+        if User.objects.filter(email__iexact=email).exists():
             raise PermissionDenied(
-                "This email belongs to an account you cannot add. Please contact CJ Admin."
+                "An account with this email already exists. Only CJ Admin can add an "
+                "existing account to an organization — please contact CJ Admin."
             )
 
     def list(self, request, *args, **kwargs):
@@ -476,6 +498,22 @@ class OrganizationMemberViewSet(ManagedOrgMixin, ModelViewSet):
         requester_is_ga = role_name(request.user) == "group_admin"
         if "group_id" in data:
             group_id = data.get("group_id") or None
+            if group_id is not None:
+                try:
+                    group_id = int(group_id)
+                except (TypeError, ValueError) as exc:
+                    raise ValidationError(
+                        {"group_id": "Choose a group of this organization."}
+                    ) from exc
+            elif role_name(instance.user) == "group_admin":
+                # Code review (3 Oct 2026): a Group Admin always has a group —
+                # without one he would have no scope at all.
+                raise ValidationError(
+                    {
+                        "group_id": "A Group Admin must belong to a group. "
+                        "Remove his Group Admin role first."
+                    }
+                )
             if (
                 group_id is not None
                 and not Group.objects.filter(id=group_id, organization_id=org_id).exists()
@@ -489,7 +527,7 @@ class OrganizationMemberViewSet(ManagedOrgMixin, ModelViewSet):
                 )
             instance.group_id = int(group_id) if group_id is not None else None
         if data.get("is_admin") is not None:
-            if requester_is_ga:
+            if requester_is_ga or not _can_set_org_admin(request.user):
                 raise PermissionDenied("Only the organization's admin can change admin rights.")
             instance.is_admin = _as_bool(data.get("is_admin"))
         if "is_group_admin" in data:
@@ -584,7 +622,7 @@ class OrganizationMemberViewSet(ManagedOrgMixin, ModelViewSet):
         with transaction.atomic():
             user_serializer = UserWriteSerializer(
                 data={"email": d["email"], "full_name": d["full_name"], "role": role.pk},
-                context={"request": request},
+                context={"request": request, "group_admin_flow": True},
             )
             user_serializer.is_valid(raise_exception=True)
             user = user_serializer.save()
@@ -605,6 +643,16 @@ class OrganizationMemberViewSet(ManagedOrgMixin, ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
+        # Code review (3 Oct 2026): a Group Admin removes members of his group
+        # only — never himself, an organization admin or another Group Admin.
+        if role_name(request.user) == "group_admin" and (
+            instance.user_id == request.user.id
+            or instance.is_admin
+            or role_name(instance.user) == "group_admin"
+        ):
+            raise PermissionDenied(
+                "Only the organization's admin can remove admins and Group Admins."
+            )
         instance.delete()
         return Response(
             {"message": "Member removed.", "data": {}},
@@ -1001,7 +1049,8 @@ class CorporateSiteLogoView(APIView):
     authentication_classes = []
 
     def get(self, request, slug):
-        website = CorporateWebsite.objects.filter(slug=slug).first()
+        # Code review (3 Oct 2026): like the portal itself, only while active.
+        website = CorporateWebsite.objects.filter(slug=slug, is_active=True).first()
         if website is None or not website.logo:
             raise NotFound("Logo not found.")
         try:

@@ -116,9 +116,13 @@ export function canAccessModule(
   role: RoleName | null,
   module: ModuleKey,
   moduleRights?: ModuleRightGrant[],
+  // Report 9 #96: modules switched off for the user's organization — the
+  // same rule `can()` applies, so a route guard never lets in a module the
+  // menu hides.
+  disabledModules?: string[],
 ): boolean {
   if (!role) return false;
-  return isModuleVisible(module, role, moduleRights);
+  return isModuleVisible(module, role, moduleRights, disabledModules);
 }
 
 export function isAdminOnly(module: ModuleKey): boolean {

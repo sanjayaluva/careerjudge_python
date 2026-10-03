@@ -6,7 +6,7 @@
  * and whether an item is his to change (licensed CJ items are not).
  */
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { listOrganizations } from "@/api/organizations";
 import { getPrivateOrgId, setPrivateOrgId } from "@/lib/privateSpace";
@@ -35,6 +35,17 @@ export function usePrivateSpace(): PrivateSpace {
     .filter((o) => o.type === "corp_exclusive")
     .map((o) => ({ id: o.id, name: o.name }));
   const selectedOrgId = orgs.some((o) => o.id === selected) ? selected : (orgs[0]?.id ?? null);
+  // A remembered choice that is no longer one of his organizations would be
+  // refused by the server on every create — fall back to the first one.
+  const loaded = data !== undefined;
+  useEffect(() => {
+    if (!isPrivateAuthor || !loaded) return;
+    const stored = getPrivateOrgId();
+    if (stored !== null && stored !== selectedOrgId) {
+      setPrivateOrgId(selectedOrgId);
+      setSelected(selectedOrgId);
+    }
+  }, [isPrivateAuthor, loaded, selectedOrgId]);
   return {
     isPrivateAuthor,
     orgs,

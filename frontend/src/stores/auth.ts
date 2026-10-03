@@ -8,6 +8,7 @@
 import { create } from "zustand";
 
 import type { AuthUser, LoginResponse } from "@/api/types";
+import { clearPrivateOrgId } from "@/lib/privateSpace";
 
 const STORAGE_KEY = "cj_auth_v1";
 
@@ -105,6 +106,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   clear: () => {
     clearPersisted();
+    // Report 9 #39-#47: the Corporate Exclusive Admin's chosen organization
+    // belongs to his session only.
+    clearPrivateOrgId();
     set({ user: null, accessToken: "", refreshToken: "", isAuthenticated: false });
   },
 

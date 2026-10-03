@@ -14,7 +14,7 @@ import { Link, useParams } from "react-router-dom";
 
 import { getPublicSite, type PublicSite } from "@/api/organizations";
 import { Spinner } from "@/components/ui";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthStore } from "@/stores/auth";
 import { APP_NAME } from "@/lib/constants";
 
 import { PortalLogo, textOn } from "./PortalLogo";
@@ -69,16 +69,19 @@ const WELCOME =
 
 /** "Sign in" (or "Go to dashboard" when already signed in), in the portal colour. */
 function SignInButton({ site, inverted = false }: { site: PublicSite; inverted?: boolean }) {
-  const { user } = useAuth();
+  // Read the store only: useAuth() would call /api/me/ on this public page,
+  // and with stale tokens the 401 handler bounced the visitor to a plain
+  // /login (losing the portal branding).
+  const signedIn = useAuthStore((s) => s.isAuthenticated);
   const bg = inverted ? textOn(site.primary_color) : site.primary_color;
   const fg = inverted ? site.primary_color : textOn(site.primary_color);
   return (
     <Link
-      to={user ? "/dashboard" : `/login?site=${encodeURIComponent(site.slug)}`}
+      to={signedIn ? "/dashboard" : `/login?site=${encodeURIComponent(site.slug)}`}
       className="inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-md px-5 text-sm font-semibold shadow-sm transition-opacity hover:opacity-90 sm:px-6"
       style={{ backgroundColor: bg, color: fg }}
     >
-      {user ? "Go to dashboard" : "Sign in"}
+      {signedIn ? "Go to dashboard" : "Sign in"}
     </Link>
   );
 }

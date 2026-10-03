@@ -27,6 +27,7 @@ import {
 } from "@/components/ui";
 import { NAV_ITEMS, ROLE_LABELS, type ModuleKey, type RoleName } from "@/lib/constants";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import {
   dashboardCardDescription,
   dashboardCardLabel,
@@ -51,19 +52,20 @@ const ICONS: Record<string, LucideIcon> = {
 
 export default function DashboardPage() {
   const { user, me } = useAuth();
+  const { can } = usePermissions();
   const [searchParams] = useSearchParams();
   const denied = searchParams.get("denied");
 
   const roleLabel = user?.role ? ROLE_LABELS[user.role] : null;
 
-  // Filter modules by the user's role — only show what they can actually access.
+  // Only show what the user can actually open — the same `can()` rule as the
+  // side menu, so modules switched off for his organization (Report 9 #96)
+  // are left out and a custom role gets the cards its rights allow.
   // Exclude 'dashboard' (we're on it) and 'profile' (shown in topbar avatar menu).
   const userRole = (user?.role ?? "individual") as RoleName;
   const visibleModules = orderDashboardModules(
     userRole,
-    NAV_ITEMS.filter(
-      (item) => item.key !== "dashboard" && item.key !== "profile" && item.roles.includes(userRole),
-    ),
+    NAV_ITEMS.filter((item) => item.key !== "dashboard" && item.key !== "profile" && can(item.key)),
   );
 
   return (

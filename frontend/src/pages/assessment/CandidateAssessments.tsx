@@ -7,7 +7,7 @@
  * it is his.
  */
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import {
   Badge,
@@ -62,9 +62,9 @@ export function CandidateAssessments({
   const published = assessments.filter((a) => a.status === "published");
   const mine = published.filter((a) => isMine(a, sessionByAssessment.has(a.id)));
   const titleLink = (a: Assessment) => (
-    <a href={`/assessments/${a.id}`} className="text-primary-600 hover:underline">
+    <Link to={`/assessments/${a.id}`} className="text-primary-600 hover:underline">
       {a.title}
-    </a>
+    </Link>
   );
 
   return (

@@ -45,7 +45,7 @@ import {
   type OrganizationMember,
   type UpdateMemberPayload,
 } from "@/api/organizations";
-import { listAssessments } from "@/api/assessment";
+import { listAllAssessments } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
 import { BulkUploadModal } from "@/components/users/BulkUploadModal";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -151,7 +151,9 @@ export default function OrganizationDetailPage() {
   }
 
   // Report 9 #34/#53: CJ Admin, and the organization's own Corporate
-  // Exclusive Admin / Channel Partner, edit its details.
+  // Exclusive Admin / Channel Partner, edit its details. `members` holds
+  // every page, so his own admin row is always found (it used to be missed
+  // once the organization had more than 20 members).
   const canEditDetails =
     access.isCJAdmin ||
     ((role === "corp_exclusive" || role === "channel_partner") &&
@@ -286,6 +288,7 @@ export default function OrganizationDetailPage() {
                     canSetUpGroupAdmins={
                       access.canSetUpGroupAdmins && org.type !== "channel_partner"
                     }
+                    allowNoGroup={!access.isGroupAdmin}
                   />
                 ))}
               </TableBody>
@@ -329,18 +332,21 @@ export default function OrganizationDetailPage() {
         invalidateKeys={[[...ORG_KEY(orgId), "members"], [...ORG_KEY(orgId)]]}
       />
 
-      <GroupModal
-        key={editingGroup ? `edit-${editingGroup.id}` : "new"}
-        orgId={orgId}
-        open={groupModalOpen}
-        group={editingGroup}
-        groups={org.groups}
-        requireParent={access.isGroupAdmin}
-        onClose={() => {
-          setGroupModalOpen(false);
-          setEditingGroup(null);
-        }}
-      />
+      {/* Mounted only while open, so a cancelled form starts afresh next time. */}
+      {groupModalOpen && (
+        <GroupModal
+          key={editingGroup ? `edit-${editingGroup.id}` : "new"}
+          orgId={orgId}
+          open
+          group={editingGroup}
+          groups={org.groups}
+          requireParent={access.isGroupAdmin}
+          onClose={() => {
+            setGroupModalOpen(false);
+            setEditingGroup(null);
+          }}
+        />
+      )}
       <AddMemberModal
         orgId={orgId}
         open={memberModalOpen}
@@ -435,6 +441,7 @@ function MemberRow({
   canEdit,
   canEditAdmin,
   canSetUpGroupAdmins,
+  allowNoGroup,
 }: {
   orgId: number;
   member: OrganizationMember;
@@ -442,6 +449,9 @@ function MemberRow({
   canEdit: boolean;
   canEditAdmin: boolean;
   canSetUpGroupAdmins: boolean;
+  /** A Group Admin keeps his members inside his groups — "No group" would
+   * take them out of his reach (the server refuses it). */
+  allowNoGroup: boolean;
 }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -494,7 +504,7 @@ function MemberRow({
           onChange={(e) => update({ group_id: e.target.value ? Number(e.target.value) : null })}
           disabled={!canEdit || updateMutation.isPending}
         >
-          <option value="">No group</option>
+          {(allowNoGroup || member.group === null) && <option value="">No group</option>}
           {member.group !== null && !groups.some((g) => g.id === member.group) && (
             <option value={member.group}>{member.group_name ?? `#${member.group}`}</option>
           )}
@@ -602,24 +612,27 @@ function SchedulesCard({
     queryFn: () => listSchedules(orgId),
     enabled: !Number.isNaN(orgId),
   });
-  const { data: assessmentsPage } = useQuery({
-    queryKey: ["assessments", "published", "for-assign"],
-    queryFn: () => listAssessments({ status: "published" }),
+  const { data: catalogue = [] } = useQuery({
+    queryKey: ["assessments", "published", "all"],
+    queryFn: () => listAllAssessments({ status: "published" }),
   });
   // Only assessments CJ Admin assigned to this organization can be scheduled
-  // (Report 9 #8).
+  // (Report 9 #8) — taken from the licences themselves, not from a page of
+  // the catalogue (which used to miss anything past its first 20 rows).
   const { data: assignments = [] } = useQuery({
     queryKey: [...ORG_KEY(orgId), "assignments"],
     queryFn: () => listAssignments(orgId),
     enabled: !Number.isNaN(orgId),
   });
-  const assignedIds = new Set(
-    assignments.filter((a) => a.item_type === "assessment").map((a) => a.item_id),
-  );
+  const assessments: { id: number; title: string }[] = assignments
+    .filter((a) => a.item_type === "assessment")
+    .map((a) => ({ id: a.item_id, title: a.item_title }));
   // Report 9 #46/#51: plus the organization's own published private assessments.
-  const assessments = (assessmentsPage?.results ?? []).filter(
-    (a) => assignedIds.has(a.id) || a.owner_organization === orgId,
-  );
+  for (const a of catalogue) {
+    if (a.owner_organization === orgId && !assessments.some((x) => x.id === a.id)) {
+      assessments.push({ id: a.id, title: a.title });
+    }
+  }
 
   const rescheduleMutation = useMutation({
     mutationFn: (m: { id: number; when: string }) =>
@@ -1176,8 +1189,12 @@ function GroupModal({
   const [name, setName] = useState(group?.name ?? "");
   const [regionDivision, setRegionDivision] = useState(group?.region_division ?? "");
   const [description, setDescription] = useState(group?.description ?? "");
+  // A Group Admin sees only his own group and its sub-groups, so his own
+  // group is the one whose parent is not in the list — the natural default
+  // parent for a new sub-group (not simply the first group listed).
+  const ownGroup = groups.find((g) => g.parent === null || !groups.some((x) => x.id === g.parent));
   const [parent, setParent] = useState(
-    group?.parent ? String(group.parent) : requireParent && groups[0] ? String(groups[0].id) : "",
+    group?.parent ? String(group.parent) : requireParent && ownGroup ? String(ownGroup.id) : "",
   );
   const [error, setError] = useState<string | null>(null);
 

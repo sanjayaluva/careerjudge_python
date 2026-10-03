@@ -257,7 +257,10 @@ export default function QuestionDetailPage() {
     isAdmin ||
     ownsPrivate ||
     (canEditAnyQuestion && (q.status === "draft" || q.status === "sent_back"));
+  // A private organization's question never goes through CJ review, so it
+  // has no "Submit for Review".
   const canSubmit =
+    !q.owner_organization &&
     (q.status === "draft" || q.status === "sent_back") &&
     ["sme", "cj_admin", "trainer"].includes(user?.role ?? "");
   const canReviewContent =

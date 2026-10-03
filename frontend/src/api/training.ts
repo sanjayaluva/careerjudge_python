@@ -1,7 +1,7 @@
 /**
  * Training API client.
  */
-import { apiDelete, apiGet, apiGetPaged, apiPatch, apiPost } from "./client";
+import { apiDelete, apiGet, apiGetAllPages, apiGetPaged, apiPatch, apiPost } from "./client";
 import { withPrivateOwner } from "@/lib/privateSpace";
 
 const BASE = "/training";
@@ -366,6 +366,13 @@ export function listCourses(params?: {
       ...(params?.category ? { category: params.category } : {}),
       ...(params?.course_type ? { course_type: params.course_type } : {}),
     },
+  });
+}
+
+/** Every course matching the filters (all pages) — for pickers. */
+export function listAllCourses(params?: { status?: string }): Promise<TrainingCourseListItem[]> {
+  return apiGetAllPages<TrainingCourseListItem>(`${BASE}/courses/`, {
+    params: { ...(params?.status ? { status: params.status } : {}) },
   });
 }
 

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import {
   Alert,
@@ -29,6 +29,7 @@ import {
   createUser as apiCreateUser,
   deleteUser as apiDeleteUser,
   listUsers,
+  retrieveUser,
   updateUser as apiUpdateUser,
 } from "@/api/users";
 import { listRoles } from "@/api/roles";
@@ -61,6 +62,28 @@ export default function UsersPage() {
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
   const [assignTarget, setAssignTarget] = useState<User | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // "Edit user" on a user's own page links here with ?edit=<id> — open the
+  // edit form for that user, then drop the parameter.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const editParam = Number(searchParams.get("edit"));
+  const { data: userToEdit } = useQuery({
+    queryKey: [...USERS_KEY, editParam],
+    queryFn: () => retrieveUser(editParam),
+    enabled: canChange && Number.isInteger(editParam) && editParam > 0,
+  });
+  useEffect(() => {
+    if (!userToEdit) return;
+    setEditUser(userToEdit);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("edit");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [userToEdit, setSearchParams]);
 
   // Debounce search input.
   useEffect(() => {
