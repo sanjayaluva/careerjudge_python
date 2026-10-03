@@ -328,7 +328,7 @@ export default function TrainingPage() {
           Delete <strong>{deleting?.title}</strong>? This removes its structure, content and
           registrations and cannot be undone.
           {deleting && deleting.registration_count > 0 && (
-            <span className="mt-2 block text-amber-700">
+            <span className="mt-2 block text-warning-700">
               ⚠ {deleting.registration_count} student(s) are registered.
             </span>
           )}

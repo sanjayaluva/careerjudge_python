@@ -378,7 +378,7 @@ export default function TrainingCourseDetailPage() {
             </CardHeader>
             <CardContent>
               {canManage && (
-                <div className="mb-3 rounded-md bg-blue-50 p-3 text-xs text-blue-800">
+                <div className="mb-3 rounded-md bg-info-50 p-3 text-xs text-info-800">
                   <strong>Zoom integration:</strong> Create a meeting at{" "}
                   <a
                     href="https://zoom.us/start/videomeeting"
@@ -1551,7 +1551,7 @@ function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: C
             ))}
           </select>
           {targetOptions.length === 0 && (
-            <p className="mt-1 text-xs text-amber-600">
+            <p className="mt-1 text-xs text-warning-600">
               Add lessons, topics and sessions to the course structure first, then link the
               assessment to a specific {targetKind}.
             </p>
@@ -1970,7 +1970,7 @@ function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
                 )}
                 {r.edit_window_open && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-emerald-700">
+                    <span className="text-xs text-success-700">
                       Editing open
                       {r.edit_until ? ` until ${new Date(r.edit_until).toLocaleString()}` : ""}.
                     </span>
@@ -2227,11 +2227,11 @@ function RescheduleRequestsPanel({ courseId }: { courseId: number }) {
   const pending = (data ?? []).filter((r) => r.status === "pending");
   if (pending.length === 0) return null;
   return (
-    <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3">
-      <p className="text-sm font-medium text-amber-900">
+    <div className="mt-4 rounded-md border border-warning-200 bg-warning-50 p-3">
+      <p className="text-sm font-medium text-warning-900">
         Requests from students ({pending.length})
       </p>
-      <p className="text-xs text-amber-800">
+      <p className="text-xs text-warning-800">
         Use Reschedule on the session to move it — the request is then marked done and the student
         is notified.
       </p>

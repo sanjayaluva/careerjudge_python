@@ -71,7 +71,7 @@ export function FlashItemsEditor({
   };
 
   return (
-    <div className="space-y-4 rounded-md border border-amber-200 bg-amber-50/50 p-4">
+    <div className="space-y-4 rounded-md border border-warning-200 bg-warning-50/50 p-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-slate-900">Flash Items</p>
@@ -162,7 +162,7 @@ export function FlashItemsEditor({
               key={i}
               className="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3"
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-medium text-amber-700">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning-100 text-xs font-medium text-warning-700">
                 {i + 1}
               </span>
               <div className="flex-1 space-y-2">

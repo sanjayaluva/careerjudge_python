@@ -96,7 +96,7 @@ export function InteractiveVideoPlayer({
               <div
                 key={q.id}
                 className={`h-2 w-2 rounded-full ${
-                  answeredQuestions.has(q.id) ? "bg-emerald-500" : "bg-amber-500"
+                  answeredQuestions.has(q.id) ? "bg-success-500" : "bg-warning-500"
                 }`}
                 title={`Question at ${q.trigger_timestamp.toFixed(0)}s`}
               />
@@ -144,8 +144,8 @@ export function InteractiveVideoPlayer({
               <div
                 className={`rounded-md p-3 text-sm ${
                   feedback.correct
-                    ? "bg-emerald-50 text-emerald-800"
-                    : "bg-orange-50 text-orange-800"
+                    ? "bg-success-50 text-success-800"
+                    : "bg-warning-50 text-warning-800"
                 }`}
               >
                 {feedback.correct

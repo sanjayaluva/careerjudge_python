@@ -116,7 +116,7 @@ export default function CounselingPage() {
         </div>
 
         {paymentSuccess && (
-          <div className="mx-6 mb-2 rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+          <div className="mx-6 mb-2 rounded-md border border-success-200 bg-success-50 p-4 text-sm text-success-900">
             <p className="font-medium">Payment received — your booking is confirmed.</p>
             <p className="mt-1">
               Your appointment will be confirmed by the counsellor within 6 hours (SRS §2.1). If you
@@ -325,7 +325,7 @@ export default function CounselingPage() {
                         {/* Report 8 #49: the counsellor cancelled and asks the
                             counselee to reschedule. */}
                         {s.status === "cancelled" && s.cancelled_by === "counsellor" && (
-                          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                          <div className="mt-2 rounded-md border border-warning-200 bg-warning-50 p-2 text-xs text-warning-800">
                             {s.counsellor_name} cancelled
                             {s.cancellation_reason ? ` (${s.cancellation_reason})` : ""} and asks
                             you to book another timeslot.
@@ -458,7 +458,7 @@ function BookingModal({
       <div className="space-y-4">
         {booked ? (
           <div className="space-y-4 py-2">
-            <div className="rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+            <div className="rounded-md border border-success-200 bg-success-50 p-4 text-sm text-success-900">
               <p className="font-medium">Your booking is confirmed.</p>
               <p className="mt-1">
                 Your appointment will be confirmed by the counsellor within 6 hours. If the
@@ -886,13 +886,13 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
 
       {/* Follow-up proposals (Report 3 §2.7/§2.8: reminder + payment via confirm) */}
       {pendingFollowups.length > 0 && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-2">
-          <div className="text-xs font-medium text-amber-800">
+        <div className="rounded-md border border-warning-200 bg-warning-50 p-2">
+          <div className="text-xs font-medium text-warning-800">
             Follow-up proposed — confirm and pay to lock it in:
           </div>
           {pendingFollowups.map((fu) => (
             <div key={fu.id} className="mt-1 flex items-center gap-2">
-              <span className="text-xs text-amber-700">
+              <span className="text-xs text-warning-700">
                 {new Date(fu.proposed_time).toLocaleString()}
               </span>
               <FollowupCountdown target={fu.proposed_time} />
@@ -1113,12 +1113,12 @@ function FollowupCountdown({ target }: { target: string }) {
   }, []);
   const diff = new Date(target).getTime() - now;
   if (Number.isNaN(diff)) return null;
-  if (diff <= 0) return <span className="text-xs font-medium text-amber-800">now</span>;
+  if (diff <= 0) return <span className="text-xs font-medium text-warning-800">now</span>;
   const days = Math.floor(diff / 86_400_000);
   const hours = Math.floor((diff % 86_400_000) / 3_600_000);
   const mins = Math.floor((diff % 3_600_000) / 60_000);
   const parts = [days ? `${days}d` : "", hours ? `${hours}h` : "", `${mins}m`].filter(Boolean);
-  return <span className="text-xs font-medium text-amber-800">in {parts.join(" ")}</span>;
+  return <span className="text-xs font-medium text-warning-800">in {parts.join(" ")}</span>;
 }
 
 // ---------------------------------------------------------------------------

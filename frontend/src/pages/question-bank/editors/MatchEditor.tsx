@@ -100,7 +100,7 @@ export function MatchEditor({ data, onChange }: MatchEditorProps) {
       </div>
 
       {/* Dummy options — added to Group B at delivery time to increase difficulty */}
-      <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50/40 p-3">
+      <div className="space-y-3 rounded-md border border-warning-200 bg-warning-50/40 p-3">
         <div className="flex items-center justify-between">
           <div>
             <Label>Dummy Options (optional)</Label>
@@ -172,7 +172,7 @@ export function MatchEditor({ data, onChange }: MatchEditorProps) {
             {data.dummyOptions.map((d, i) => (
               <div
                 key={`d-${i}`}
-                className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm italic text-amber-800"
+                className="rounded-md border border-warning-300 bg-warning-50 px-3 py-1.5 text-sm italic text-warning-800"
               >
                 {d.text_value || `(dummy ${i + 1})`}
               </div>

@@ -495,7 +495,7 @@ export default function QuestionDetailPage() {
                       key={opt.id}
                       className={
                         opt.is_correct
-                          ? "rounded-md border border-l-4 border-green-200 border-l-green-500 bg-green-50 p-3"
+                          ? "rounded-md border border-l-4 border-success-200 border-l-green-500 bg-success-50 p-3"
                           : "rounded-md border border-slate-200 p-3"
                       }
                     >
@@ -515,7 +515,7 @@ export default function QuestionDetailPage() {
                       </div>
                       {opt.text_value && (
                         <p
-                          className={`mt-2 text-sm ${opt.is_correct ? "font-medium text-green-900" : "text-slate-900"}`}
+                          className={`mt-2 text-sm ${opt.is_correct ? "font-medium text-success-900" : "text-slate-900"}`}
                         >
                           {opt.text_value}
                         </p>
@@ -564,8 +564,8 @@ export default function QuestionDetailPage() {
                         <span
                           className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-medium ${
                             ha.is_correct
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
+                              ? "bg-success-100 text-success-700"
+                              : "bg-danger-100 text-danger-700"
                           }`}
                         >
                           {i + 1}
@@ -580,7 +580,7 @@ export default function QuestionDetailPage() {
                           {ha.x}, {ha.y})
                         </span>
                         <span
-                          className={`ml-auto ${ha.is_correct ? "text-green-600" : "text-red-600"}`}
+                          className={`ml-auto ${ha.is_correct ? "text-success-600" : "text-danger-600"}`}
                         >
                           {ha.is_correct ? "✓ Correct" : "✗ Distractor"}
                         </span>

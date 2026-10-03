@@ -457,7 +457,7 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
                     <span className="text-slate-400">({c.duration_seconds}s)</span>
                   )}
                   {c.interactive_questions?.length > 0 && (
-                    <span className="text-amber-600">({c.interactive_questions.length} Q)</span>
+                    <span className="text-warning-600">({c.interactive_questions.length} Q)</span>
                   )}
                   {canManage && c.content_format === "text" && (
                     <EditTextContentButton content={c} />
@@ -1059,7 +1059,7 @@ function EditMediaContentButton({ content }: { content: SessionContent }) {
               />
             </div>
             {hasQuestions && (
-              <p className="text-xs text-amber-600">
+              <p className="text-xs text-warning-600">
                 This {kind} keeps its {content.interactive_questions.length} Timeliner question(s).
                 If the new {kind} is cut differently, check their timings in 🎬 Timeliner.
               </p>

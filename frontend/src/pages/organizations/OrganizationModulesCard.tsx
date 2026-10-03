@@ -67,7 +67,7 @@ export function OrganizationModulesCard({ org }: { org: Organization }) {
         {/* The server reads an empty list as "every module", so at least one
             module must stay ticked. */}
         {selected.length === 0 && (
-          <p className="mb-3 text-sm text-amber-700" role="status">
+          <p className="mb-3 text-sm text-warning-700" role="status">
             Tick at least one module — an organization cannot have every module switched off.
           </p>
         )}

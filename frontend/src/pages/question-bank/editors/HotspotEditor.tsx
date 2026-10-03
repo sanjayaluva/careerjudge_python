@@ -751,7 +751,9 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
             >
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium ${
-                  area.is_correct ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                  area.is_correct
+                    ? "bg-success-100 text-success-700"
+                    : "bg-danger-100 text-danger-700"
                 }`}
               >
                 {i + 1}

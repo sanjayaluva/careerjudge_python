@@ -441,7 +441,7 @@ function CreateAssessmentModal({
               </label>
             ))}
           </div>
-          <p className="mt-2 text-xs text-amber-700">
+          <p className="mt-2 text-xs text-warning-700">
             ⚠ Once created, only matching question types can be attached to this assessment. Normal
             and psychometric questions cannot be mixed.
           </p>

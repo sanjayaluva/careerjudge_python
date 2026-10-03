@@ -160,7 +160,7 @@ export function FlashPresentation({
 
       {/* Phase 1: Flashing items */}
       {phase === "flashing" && (
-        <div className="mb-4 flex min-h-[200px] items-center justify-center rounded-lg border-2 border-amber-300 bg-amber-50 p-8">
+        <div className="mb-4 flex min-h-[200px] items-center justify-center rounded-lg border-2 border-warning-300 bg-warning-50 p-8">
           {currentIndex < itemsToShow.length ? (
             <div key={currentIndex} className="text-center">
               {itemsToShow[currentIndex].item_type === "IMAGE" &&
@@ -175,7 +175,7 @@ export function FlashPresentation({
                   {itemsToShow[currentIndex].text_value || "(empty)"}
                 </span>
               )}
-              <p className="mt-4 text-xs text-amber-700">
+              <p className="mt-4 text-xs text-warning-700">
                 Item {currentIndex + 1} / {itemsToShow.length}
               </p>
             </div>

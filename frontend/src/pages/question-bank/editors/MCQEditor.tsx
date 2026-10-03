@@ -312,7 +312,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
           multiple sub-questions under the same media. Each sub-question has
           its own Text 2 + options; the media is shared. */}
       {isMultiSubQuestion && (
-        <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3">
+        <div className="rounded-md border border-info-200 bg-info-50/50 p-3">
           <Label htmlFor="subq_count">Number of Sub-Questions (pooled under one media)</Label>
           <div className="mt-2 flex items-center gap-2">
             <input
@@ -424,7 +424,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
           Per the Multiple Questions Display Style spec: each sub-question has
           its own question text + option fields. This is SEPARATE from Text 2. */}
       {isMultiSubQuestion && (data.sub_question_count ?? 1) > 1 && (
-        <div className="rounded-md border border-blue-200 bg-blue-50/30 p-3">
+        <div className="rounded-md border border-info-200 bg-info-50/30 p-3">
           <Label htmlFor="subq_text">
             Sub-Question {(data.active_sub_question ?? 0) + 1} Text
             <span className="ml-2 text-xs font-normal text-slate-500">
@@ -534,8 +534,8 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
 
           {/* 2. Media — passage, flash, image, audio, video */}
           {isFlashType && data.flashItems.length > 0 && (
-            <div className="rounded border border-amber-300 bg-amber-50 p-2">
-              <p className="mb-1 text-xs font-medium text-amber-700">
+            <div className="rounded border border-warning-300 bg-warning-50 p-2">
+              <p className="mb-1 text-xs font-medium text-warning-700">
                 Flash items ({data.flashIntervalMs || "?"}ms each · {data.flashDisplayCount || "?"}{" "}
                 shown)
               </p>
@@ -563,8 +563,8 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
           )}
 
           {isPassageType && (data.passage_title || data.passage_body) && (
-            <div className="rounded border border-blue-300 bg-blue-50 p-2">
-              <p className="mb-1 text-xs font-medium text-blue-700">
+            <div className="rounded border border-info-300 bg-info-50 p-2">
+              <p className="mb-1 text-xs font-medium text-info-700">
                 Passage
                 {data.display_duration_seconds && ` · ${data.display_duration_seconds}s display`}
               </p>

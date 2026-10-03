@@ -710,7 +710,7 @@ export default function SessionPlayerPage() {
                 timeLeft < 60
                   ? "bg-danger-100 text-danger-700"
                   : timeLeft < 300
-                    ? "bg-amber-100 text-amber-700"
+                    ? "bg-warning-100 text-warning-700"
                     : "bg-slate-100 text-slate-700"
               }`}
               title="Assessment time remaining"
@@ -725,7 +725,7 @@ export default function SessionPlayerPage() {
               className={`flex items-center gap-1 rounded-lg px-3 py-1.5 font-mono text-base font-bold ${
                 sectionTimeLeft < 30
                   ? "bg-danger-100 text-danger-700"
-                  : "bg-amber-100 text-amber-700"
+                  : "bg-warning-100 text-warning-700"
               }`}
               title="Section time remaining"
             >
@@ -739,7 +739,7 @@ export default function SessionPlayerPage() {
               className={`flex items-center gap-1 rounded-lg px-3 py-1.5 font-mono text-base font-bold ${
                 questionTimeLeft < 10
                   ? "bg-danger-100 text-danger-700"
-                  : "bg-amber-100 text-amber-700"
+                  : "bg-warning-100 text-warning-700"
               }`}
               title="Question time remaining"
             >
@@ -776,17 +776,17 @@ export default function SessionPlayerPage() {
                 <span className="text-slate-500">Total</span>
                 <p className="text-lg font-bold text-slate-900">{totalQuestions}</p>
               </div>
-              <div className="rounded-md bg-green-50 p-2">
-                <span className="text-green-600">Answered</span>
-                <p className="text-lg font-bold text-green-700">{answeredCount}</p>
+              <div className="rounded-md bg-success-50 p-2">
+                <span className="text-success-600">Answered</span>
+                <p className="text-lg font-bold text-success-700">{answeredCount}</p>
               </div>
-              <div className="rounded-md bg-amber-50 p-2">
-                <span className="text-amber-600">Bookmarked</span>
-                <p className="text-lg font-bold text-amber-700">{bookmarkedCount}</p>
+              <div className="rounded-md bg-warning-50 p-2">
+                <span className="text-warning-600">Bookmarked</span>
+                <p className="text-lg font-bold text-warning-700">{bookmarkedCount}</p>
               </div>
-              <div className="rounded-md bg-orange-50 p-2">
-                <span className="text-orange-600">Skipped</span>
-                <p className="text-lg font-bold text-orange-700">{skippedCount}</p>
+              <div className="rounded-md bg-warning-50 p-2">
+                <span className="text-warning-600">Skipped</span>
+                <p className="text-lg font-bold text-warning-700">{skippedCount}</p>
               </div>
               <div className="rounded-md bg-slate-50 p-2">
                 <span className="text-slate-500">Remaining</span>
@@ -852,11 +852,11 @@ export default function SessionPlayerPage() {
                           isCurrent
                             ? "bg-primary-600 text-white"
                             : isAnswered
-                              ? "bg-green-100 text-green-700 hover:bg-green-200"
+                              ? "bg-success-100 text-success-700 hover:bg-success-200"
                               : isBookmarked
-                                ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                                ? "bg-warning-100 text-warning-700 hover:bg-warning-200"
                                 : isSkipped
-                                  ? "bg-orange-100 text-orange-700 hover:bg-orange-200"
+                                  ? "bg-warning-100 text-warning-700 hover:bg-warning-200"
                                   : "bg-slate-100 text-slate-500 hover:bg-slate-200"
                         } ${isDisabled ? "cursor-not-allowed opacity-50" : ""}`}
                       >
@@ -1214,13 +1214,13 @@ export default function SessionPlayerPage() {
           You have answered <strong>{answeredCount}</strong> of <strong>{totalQuestions}</strong>{" "}
           questions.
           {answeredCount < totalQuestions && (
-            <span className="mt-2 block text-amber-600">
+            <span className="mt-2 block text-warning-600">
               ⚠ {remainingCount} question(s) are unanswered and will score 0.
             </span>
           )}
         </p>
         {bookmarkedCount > 0 && (
-          <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800">
             <span>
               You have bookmarked <strong>{bookmarkedCount}</strong> question
               {bookmarkedCount === 1 ? "" : "s"}. Do you want to go back and attempt?
@@ -1231,7 +1231,7 @@ export default function SessionPlayerPage() {
           </div>
         )}
         {skippedCount > 0 && (
-          <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800">
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800">
             <span>
               You have skipped <strong>{skippedCount}</strong> question
               {skippedCount === 1 ? "" : "s"}. Do you want to go back and attempt?
@@ -1594,7 +1594,7 @@ function AnswerInput({
           </div>
         )}
         {!allRanked && ranking.length > 0 && (
-          <p className="text-xs text-amber-600">
+          <p className="text-xs text-warning-600">
             ⚠ Rank all {rankOptions.length} items to proceed to rating. ({ranking.length}/
             {rankOptions.length} ranked)
           </p>
@@ -1790,8 +1790,8 @@ function AnswerInput({
                 : "Click on the image to select your answer. Only your latest click counts."}
             </p>
             {isMulti && pendingClick && (
-              <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-sm">
-                <span className="text-amber-800">Confirm your selection?</span>
+              <div className="mt-2 flex items-center gap-2 rounded-md border border-warning-200 bg-warning-50 p-2 text-sm">
+                <span className="text-warning-800">Confirm your selection?</span>
                 <Button
                   size="sm"
                   onClick={() => {
@@ -1855,7 +1855,7 @@ function AnswerInput({
         <p className="mb-3 text-xs text-slate-500">
           Click an item from Group A, then click the matching item from Group B.
           {dummyB.length > 0 && (
-            <span className="ml-1 italic text-amber-600">
+            <span className="ml-1 italic text-warning-600">
               (Some Group B items are dummy — they don't match any Group A item.)
             </span>
           )}
@@ -1876,13 +1876,15 @@ function AnswerInput({
                     isSelected
                       ? "border-primary-500 bg-primary-50"
                       : matchedBOpt
-                        ? "border-green-300 bg-green-50"
+                        ? "border-success-300 bg-success-50"
                         : "border-slate-200 hover:bg-slate-50"
                   }`}
                 >
                   {opt.text_value}
                   {matchedBOpt && (
-                    <span className="ml-2 text-xs text-green-600">→ {matchedBOpt.text_value}</span>
+                    <span className="ml-2 text-xs text-success-600">
+                      → {matchedBOpt.text_value}
+                    </span>
                   )}
                 </button>
               );
@@ -1902,7 +1904,7 @@ function AnswerInput({
                   disabled={selectedA === null}
                   className={`mb-1 w-full rounded-md border px-3 py-2 text-left text-sm ${
                     isMatched
-                      ? "border-green-300 bg-green-50"
+                      ? "border-success-300 bg-success-50"
                       : selectedA !== null
                         ? "cursor-pointer border-slate-200 hover:bg-slate-50"
                         : "cursor-not-allowed border-slate-200 opacity-50"
@@ -2087,11 +2089,11 @@ function FlashSimulation({
   // Show only status messages, not technical details like '1000ms each'.
 
   return (
-    <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3">
+    <div className="mb-4 rounded-md border border-warning-200 bg-warning-50 p-3">
       {/* Big centred Play button — only visible before play starts or after
           replay is permitted (SRS feedback §11 Issue 3) */}
       {!playing && currentIndex === null && !replayLocked && (
-        <div className="flex h-40 items-center justify-center rounded-md border border-amber-200 bg-white">
+        <div className="flex h-40 items-center justify-center rounded-md border border-warning-200 bg-white">
           <button
             type="button"
             onClick={play}
@@ -2099,7 +2101,7 @@ function FlashSimulation({
             className={`flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold shadow-md transition-colors ${
               playedOnce && replayMode === "not_permitted"
                 ? "cursor-not-allowed bg-slate-200 text-slate-400"
-                : "bg-amber-500 text-white hover:bg-amber-600"
+                : "bg-warning-500 text-white hover:bg-warning-600"
             }`}
             aria-label="Play flash sequence"
           >
@@ -2110,7 +2112,7 @@ function FlashSimulation({
 
       {/* Flashing area */}
       {playing && currentIndex !== null && sequence[currentIndex] && (
-        <div className="flex h-48 items-center justify-center rounded-md border border-amber-200 bg-white">
+        <div className="flex h-48 items-center justify-center rounded-md border border-warning-200 bg-white">
           <div className="text-center">
             {sequence[currentIndex].item_type === "IMAGE" && sequence[currentIndex].image_file ? (
               <img
@@ -2147,7 +2149,7 @@ function FlashSimulation({
 
       {/* Replay-locked case (Previous button + not_permitted) */}
       {replayLocked && (
-        <div className="flex h-40 items-center justify-center rounded-md border border-amber-200 bg-white">
+        <div className="flex h-40 items-center justify-center rounded-md border border-warning-200 bg-white">
           <p className="text-sm text-slate-500">
             Flash presentation already viewed. Replay is not permitted for this question.
           </p>
@@ -2235,7 +2237,7 @@ function PassageDisplay({
   // Unlimited mode: always visible
   if (displayMode === "unlimited") {
     return (
-      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3">
+      <div className="mb-4 rounded-md border border-info-200 bg-info-50 p-3">
         <div className="mb-1 flex items-center justify-between">
           <p className="font-semibold text-slate-900">{title}</p>
         </div>
@@ -2252,7 +2254,7 @@ function PassageDisplay({
   // Timed mode — passage not yet started
   if (!presentationStarted && replayMode === "not_permitted" && !hasBeenViewed) {
     return (
-      <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-center">
+      <div className="mb-4 rounded-md border border-warning-300 bg-warning-50 p-4 text-center">
         <p className="text-sm font-medium text-slate-700">Passage ready to view</p>
         <p className="mt-1 text-xs text-slate-600">
           When you click the button below, the passage will be displayed
@@ -2269,7 +2271,7 @@ function PassageDisplay({
   // Timed mode — passage was viewed but cannot be replayed
   if (!visible && replayMode === "not_permitted") {
     return (
-      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+      <div className="mb-4 rounded-md border border-info-200 bg-info-50 p-3 text-center">
         <p className="text-sm text-slate-600">
           Passage display time has elapsed. The passage is no longer visible.
         </p>
@@ -2280,7 +2282,7 @@ function PassageDisplay({
   // Timed mode — replay permitted
   if (!visible && replayMode === "permitted") {
     return (
-      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+      <div className="mb-4 rounded-md border border-info-200 bg-info-50 p-3 text-center">
         <p className="text-sm text-slate-600">
           Passage display time has elapsed. You can replay it again.
         </p>
@@ -2292,11 +2294,11 @@ function PassageDisplay({
   }
 
   return (
-    <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3">
+    <div className="mb-4 rounded-md border border-info-200 bg-info-50 p-3">
       <div className="mb-1 flex items-center justify-between">
         <p className="font-semibold text-slate-900">{title}</p>
         {secondsLeft !== null && secondsLeft > 0 && (
-          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+          <span className="rounded-full bg-info-100 px-2 py-0.5 text-xs font-medium text-info-700">
             {secondsLeft}s left
           </span>
         )}
@@ -2339,7 +2341,7 @@ function GridCell({
     <td className="border border-slate-200 p-1 text-center align-top">
       <div
         className={`flex flex-col items-center gap-1 rounded-md p-1 ${
-          selected ? "bg-green-50 ring-1 ring-green-300" : "bg-white"
+          selected ? "bg-success-50 ring-1 ring-success-300" : "bg-white"
         }`}
       >
         {/* Retest 14-2: bigger cell numbers, highlighted with the same amber
@@ -2349,8 +2351,8 @@ function GridCell({
           onClick={() => setPopupOpen(true)}
           className={`flex h-10 w-10 items-center justify-center rounded-md text-base font-bold ${
             selected
-              ? "bg-amber-500 text-white ring-2 ring-amber-400"
-              : "bg-amber-100 text-amber-900 ring-1 ring-amber-300 hover:bg-amber-200"
+              ? "bg-warning-500 text-white ring-2 ring-warning-400"
+              : "bg-warning-100 text-warning-900 ring-1 ring-warning-300 hover:bg-warning-200"
           }`}
           aria-label={`View cell ${cellIndex + 1}`}
         >
@@ -2463,7 +2465,7 @@ function ImageDisplayTimed({
 
   if (replayLocked && !visible) {
     return (
-      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-6 text-center">
+      <div className="mb-4 rounded-md border border-info-200 bg-info-50 p-6 text-center">
         <p className="text-sm text-slate-600">
           Image was already displayed. It cannot be viewed again.
         </p>
@@ -2473,7 +2475,7 @@ function ImageDisplayTimed({
 
   if (!started && !visible) {
     return (
-      <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-center">
+      <div className="mb-4 rounded-md border border-warning-300 bg-warning-50 p-4 text-center">
         <p className="text-sm font-medium text-slate-700">Image ready to view</p>
         <p className="mt-1 text-xs text-slate-600">
           When you click the button below, the image will be displayed for {durationSeconds}{" "}
@@ -2488,7 +2490,7 @@ function ImageDisplayTimed({
 
   if (!visible && replayMode === "not_permitted") {
     return (
-      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+      <div className="mb-4 rounded-md border border-info-200 bg-info-50 p-3 text-center">
         <p className="text-sm text-slate-600">
           Image display time has elapsed. The image is no longer visible.
         </p>
@@ -2498,7 +2500,7 @@ function ImageDisplayTimed({
 
   if (!visible && replayMode === "permitted") {
     return (
-      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+      <div className="mb-4 rounded-md border border-info-200 bg-info-50 p-3 text-center">
         <p className="text-sm text-slate-600">
           Image display time has elapsed. You can view it again.
         </p>
@@ -2517,7 +2519,7 @@ function ImageDisplayTimed({
         className="max-h-[500px] w-full rounded-md border border-slate-200 object-contain"
       />
       {secondsLeft !== null && secondsLeft > 0 && (
-        <p className="mt-1 text-center text-xs text-amber-700">{secondsLeft}s remaining</p>
+        <p className="mt-1 text-center text-xs text-warning-700">{secondsLeft}s remaining</p>
       )}
     </div>
   );
@@ -2602,7 +2604,7 @@ function AudioPlayerControlled({
 
   if (replayLocked) {
     return (
-      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+      <div className="mb-4 rounded-md border border-info-200 bg-info-50 p-3 text-center">
         <p className="text-sm text-slate-600">
           Audio was already played. Replay is not permitted for this question.
         </p>
@@ -2613,7 +2615,7 @@ function AudioPlayerControlled({
   // Not-permitted mode after playback — show "already played" message
   if (hasPlayed && replayMode === "not_permitted") {
     return (
-      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+      <div className="mb-4 rounded-md border border-info-200 bg-info-50 p-3 text-center">
         <p className="text-sm text-slate-600">Audio has been played. Replay is not permitted.</p>
       </div>
     );
@@ -2746,7 +2748,7 @@ function VideoPlayerControlled({
 
   if (replayLocked) {
     return (
-      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+      <div className="mb-4 rounded-md border border-info-200 bg-info-50 p-3 text-center">
         <p className="text-sm text-slate-600">
           Video was already played. Replay is not permitted for this question.
         </p>
@@ -2756,7 +2758,7 @@ function VideoPlayerControlled({
 
   if (hasPlayed && replayMode === "not_permitted") {
     return (
-      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+      <div className="mb-4 rounded-md border border-info-200 bg-info-50 p-3 text-center">
         <p className="text-sm text-slate-600">Video has been played. Replay is not permitted.</p>
       </div>
     );
@@ -2833,7 +2835,7 @@ function ViewAllGridItemsButton({ dragPoolOptions }: { dragPoolOptions: GridCell
           noticeable; grid cell numbers use the same highlight. */}
       <Button
         onClick={() => setOpen(true)}
-        className="bg-amber-100 px-4 py-2 text-base font-bold text-amber-900 ring-2 ring-amber-400 hover:bg-amber-200"
+        className="bg-warning-100 px-4 py-2 text-base font-bold text-warning-900 ring-2 ring-warning-400 hover:bg-warning-200"
       >
         View Complete Grid Items ({dragPoolOptions.length})
       </Button>

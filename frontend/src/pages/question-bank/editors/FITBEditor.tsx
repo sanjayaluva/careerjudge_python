@@ -221,8 +221,8 @@ export function FITBEditor({ questionType, data, onChange }: FITBEditorProps) {
         <div className="space-y-2">
           {/* Flash items (shown first at delivery time) */}
           {isFlashType && data.flashItems.length > 0 && (
-            <div className="rounded border border-amber-300 bg-amber-50 p-2">
-              <p className="mb-1 text-xs font-medium text-amber-700">
+            <div className="rounded border border-warning-300 bg-warning-50 p-2">
+              <p className="mb-1 text-xs font-medium text-warning-700">
                 Flash items ({data.flash_interval_ms || "?"}ms each ·{" "}
                 {data.flash_display_count || "?"} shown)
               </p>

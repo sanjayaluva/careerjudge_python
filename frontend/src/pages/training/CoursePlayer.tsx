@@ -325,7 +325,7 @@ export function CoursePlayer({
                   </Button>
                 </div>
                 {contentSequencingEnabled && !currentCompleted && (
-                  <p className="mt-2 text-xs text-amber-600">
+                  <p className="mt-2 text-xs text-warning-600">
                     Sequential mode: mark this content as completed to unlock the next.
                   </p>
                 )}
@@ -383,7 +383,7 @@ export function CoursePlayer({
                     >
                       <div className="flex items-center justify-between font-medium">
                         <span>{item.content.title}</span>
-                        {completed && <span className="text-emerald-500">✓</span>}
+                        {completed && <span className="text-success-500">✓</span>}
                         {locked && <span title="Locked">🔒</span>}
                       </div>
                       <div className="text-slate-400">
@@ -739,7 +739,7 @@ function ProgressDashboard({ summary, loading }: { summary?: ProgressSummary; lo
                   key={`${r.content_type}-${r.content_id}`}
                   className="flex items-center gap-2 text-xs text-slate-700"
                 >
-                  <span className={r.completed ? "text-green-600" : "text-slate-400"}>
+                  <span className={r.completed ? "text-success-600" : "text-slate-400"}>
                     {r.completed ? "✓" : "○"}
                   </span>
                   {r.title}
@@ -931,7 +931,7 @@ export function AssignmentsPanel({
 
               {/* Show trainer feedback if reviewed */}
               {existingReport?.status === "reviewed" && existingReport.trainer_feedback && (
-                <div className="mt-2 rounded-md bg-emerald-50 p-2 text-xs text-emerald-800">
+                <div className="mt-2 rounded-md bg-success-50 p-2 text-xs text-success-800">
                   <strong>Trainer feedback:</strong> {existingReport.trainer_feedback}
                 </div>
               )}

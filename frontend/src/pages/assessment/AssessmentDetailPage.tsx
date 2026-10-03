@@ -445,8 +445,8 @@ export default function AssessmentDetailPage() {
                 <div
                   className={`mt-4 rounded-md border p-4 ${
                     readiness.ready
-                      ? "border-green-200 bg-green-50"
-                      : "border-amber-200 bg-amber-50"
+                      ? "border-success-200 bg-success-50"
+                      : "border-warning-200 bg-warning-50"
                   }`}
                 >
                   <p className="mb-2 text-sm font-semibold text-slate-900">
@@ -455,24 +455,28 @@ export default function AssessmentDetailPage() {
                       : "⚠ Complete the following before publishing:"}
                   </p>
                   <ul className="space-y-1 text-xs">
-                    <li className={readiness.has_title ? "text-green-600" : "text-amber-700"}>
+                    <li className={readiness.has_title ? "text-success-600" : "text-warning-700"}>
                       {readiness.has_title ? "✓" : "✗"} Title is set
                     </li>
                     <li
-                      className={readiness.section_count > 0 ? "text-green-600" : "text-amber-700"}
+                      className={
+                        readiness.section_count > 0 ? "text-success-600" : "text-warning-700"
+                      }
                     >
                       {readiness.section_count > 0 ? "✓" : "✗"} At least 1 section created (
                       {readiness.section_count} current)
                     </li>
                     <li
-                      className={readiness.question_count > 0 ? "text-green-600" : "text-amber-700"}
+                      className={
+                        readiness.question_count > 0 ? "text-success-600" : "text-warning-700"
+                      }
                     >
                       {readiness.question_count > 0 ? "✓" : "✗"} At least 1 question assigned (
                       {readiness.question_count} current)
                     </li>
                     {readiness.errors.length > 0 &&
                       readiness.errors.map((err: string, i: number) => (
-                        <li key={i} className="text-amber-700">
+                        <li key={i} className="text-warning-700">
                           ✗ {err}
                         </li>
                       ))}
@@ -552,7 +556,7 @@ export default function AssessmentDetailPage() {
           {/* ASM-2: admin approve/decline queue for pending title-change /
               deletion requests on this assessment. */}
           {isCjAdmin && pendingRequests.length > 0 && (
-            <Card className="mt-4 border-amber-200">
+            <Card className="mt-4 border-warning-200">
               <CardHeader>
                 <CardTitle>Pending change requests ({pendingRequests.length})</CardTitle>
               </CardHeader>
@@ -1015,7 +1019,7 @@ function QuestionAssignmentTab({
           {/* Question bank browser */}
           {canManage && (
             <div>
-              <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+              <div className="mb-3 rounded-md border border-warning-200 bg-warning-50 p-2 text-xs text-warning-800">
                 This is a{" "}
                 <strong>{assessmentType === "psychometric" ? "psychometric" : "normal"}</strong>{" "}
                 assessment — only{" "}
@@ -1065,7 +1069,7 @@ function QuestionAssignmentTab({
                     const hidden = total - bankQuestions.length;
                     if (hidden > 0) {
                       return (
-                        <p className="mt-1 text-amber-600">
+                        <p className="mt-1 text-warning-600">
                           {hidden} question{hidden === 1 ? "" : "s"} hidden — wrong category for
                           this {assessmentType} assessment.
                         </p>
@@ -1083,7 +1087,7 @@ function QuestionAssignmentTab({
                         key={q.id}
                         className={`flex items-center gap-2 rounded-md border p-2 text-xs ${
                           isAssigned
-                            ? "border-green-200 bg-green-50"
+                            ? "border-success-200 bg-success-50"
                             : "border-slate-200 hover:bg-slate-50"
                         }`}
                       >
@@ -1098,7 +1102,7 @@ function QuestionAssignmentTab({
                           Preview
                         </Button>
                         {isAssigned ? (
-                          <span className="text-green-600">✓ Assigned</span>
+                          <span className="text-success-600">✓ Assigned</span>
                         ) : (
                           <Button
                             size="sm"
@@ -1867,10 +1871,10 @@ function MySessionsTab({
                 const isBest =
                   s.status === "completed" && s.percentage === bestPercentage && bestPercentage > 0;
                 return (
-                  <TableRow key={s.id} className={isBest ? "bg-green-50" : ""}>
+                  <TableRow key={s.id} className={isBest ? "bg-success-50" : ""}>
                     <TableCell className="text-slate-500">
                       Attempt {idx + 1}
-                      {isBest && <span className="ml-1 text-xs text-green-600">★ Best</span>}
+                      {isBest && <span className="ml-1 text-xs text-success-600">★ Best</span>}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -2182,7 +2186,7 @@ function PsychometricGroupsTab({
             )}
 
             {statements.length === 0 && (
-              <p className="text-xs text-amber-600">
+              <p className="text-xs text-warning-600">
                 No confirmed psychometric statements in the Question Bank yet. Author statements
                 (question type “Psychometric Statement”) first.
               </p>

@@ -105,7 +105,7 @@ export default function LiveChatPage() {
               "Connecting…"
             ) : agent ? (
               <>
-                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="inline-block h-2 w-2 rounded-full bg-success-500" />
                 {agent.full_name || agent.email}
                 <Badge variant="outline">
                   {ROLE_LABELS[agent.role__name as RoleName] ?? agent.role__name}

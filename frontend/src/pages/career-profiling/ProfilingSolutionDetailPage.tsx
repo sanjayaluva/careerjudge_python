@@ -1030,7 +1030,7 @@ function CreateCriterionModal({
             ))}
           </select>
           {variableOptions.length === 0 && (
-            <p className="mt-1 text-xs text-amber-600">
+            <p className="mt-1 text-xs text-warning-600">
               No banded variables yet — define bands first (Bands tab).
             </p>
           )}

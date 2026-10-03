@@ -163,7 +163,7 @@ export default function ConcernsPage() {
                         <div className="font-medium text-slate-900">{c.subject}</div>
                         <div className="max-w-md truncate text-xs text-slate-500">{c.message}</div>
                         {c.status === "resolved" && c.resolution_comment && (
-                          <div className="mt-1 text-xs text-green-700">
+                          <div className="mt-1 text-xs text-success-700">
                             Resolved: {c.resolution_comment}
                           </div>
                         )}

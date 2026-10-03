@@ -27,11 +27,11 @@ import { nameWithExpertise } from "@/lib/profileFields";
 
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-slate-100 text-slate-700",
-  in_progress: "bg-blue-100 text-blue-700",
-  awaiting_review: "bg-amber-100 text-amber-700",
-  completed: "bg-emerald-100 text-emerald-700",
-  cancelled: "bg-red-100 text-red-700",
-  overdue: "bg-red-100 text-red-700",
+  in_progress: "bg-info-100 text-info-700",
+  awaiting_review: "bg-warning-100 text-warning-700",
+  completed: "bg-success-100 text-success-700",
+  cancelled: "bg-danger-100 text-danger-700",
+  overdue: "bg-danger-100 text-danger-700",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -164,7 +164,7 @@ export default function TaskDetailPage() {
     return (
       <PageCard>
         <div className="p-6">
-          <p className="text-sm text-red-600">Task not found or you don't have access.</p>
+          <p className="text-sm text-danger-600">Task not found or you don't have access.</p>
           <Link to="/tasks" className="mt-2 inline-block text-sm text-primary-600">
             ← Back to Tasks
           </Link>
@@ -201,7 +201,9 @@ export default function TaskDetailPage() {
                 <Badge variant="outline" className="capitalize">
                   {task.priority}
                 </Badge>
-                {task.is_overdue && <Badge className="bg-red-100 text-red-700">Overdue</Badge>}
+                {task.is_overdue && (
+                  <Badge className="bg-danger-100 text-danger-700">Overdue</Badge>
+                )}
               </div>
               <h1 className="mt-1 text-lg font-bold text-slate-900">{task.title}</h1>
               <p className="text-sm text-slate-500">
@@ -355,9 +357,9 @@ export default function TaskDetailPage() {
                       key={u.id}
                       className={`rounded-md border p-3 text-sm ${
                         u.is_admin_request
-                          ? "border-amber-200 bg-amber-50"
+                          ? "border-warning-200 bg-warning-50"
                           : u.author_role === "admin"
-                            ? "border-blue-200 bg-blue-50"
+                            ? "border-info-200 bg-info-50"
                             : "border-slate-200"
                       }`}
                     >
@@ -366,7 +368,7 @@ export default function TaskDetailPage() {
                         <span>·</span>
                         <span>{new Date(u.created_at).toLocaleString()}</span>
                         {u.is_admin_request && (
-                          <Badge className="bg-amber-100 text-amber-700">Admin Request</Badge>
+                          <Badge className="bg-warning-100 text-warning-700">Admin Request</Badge>
                         )}
                       </div>
                       <p className="text-slate-700">{u.message}</p>
@@ -637,10 +639,10 @@ function ExtensionRequestCard({
         <Badge
           className={
             ext.status === "approved"
-              ? "bg-emerald-100 text-emerald-700"
+              ? "bg-success-100 text-success-700"
               : ext.status === "declined"
-                ? "bg-red-100 text-red-700"
-                : "bg-amber-100 text-amber-700"
+                ? "bg-danger-100 text-danger-700"
+                : "bg-warning-100 text-warning-700"
           }
         >
           {ext.status}

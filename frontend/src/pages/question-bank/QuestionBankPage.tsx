@@ -272,8 +272,8 @@ export default function QuestionBankPage() {
               pending their review so they don't have to dig through the status
               dropdown. Hidden for SMEs and roles with no review permission. */}
           {canReviewAny && (
-            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <span className="text-sm font-medium text-amber-900">Quick filters:</span>
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-warning-200 bg-warning-50 p-3">
+              <span className="text-sm font-medium text-warning-900">Quick filters:</span>
               {canReviewContent && (
                 <Button
                   variant={statusFilter === "pending_content_review" ? "primary" : "outline"}
@@ -304,7 +304,7 @@ export default function QuestionBankPage() {
                   Pending Psychometric Review
                 </Button>
               )}
-              <span className="ml-auto text-xs text-amber-700">
+              <span className="ml-auto text-xs text-warning-700">
                 Click a status to filter; click again to clear.
               </span>
             </div>
@@ -397,15 +397,15 @@ export default function QuestionBankPage() {
 
           {/* QB-1: admin deletion-request queue (D1 §4.3) */}
           {isAdmin && pendingDeletionRequests.length > 0 && (
-            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-800">
+            <div className="mb-3 rounded-md border border-warning-200 bg-warning-50 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-warning-800">
                 Pending deletion requests ({pendingDeletionRequests.length})
               </p>
               <ul className="space-y-2">
                 {pendingDeletionRequests.map((r) => (
                   <li
                     key={r.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-amber-200 bg-white p-2 text-sm"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-warning-200 bg-white p-2 text-sm"
                   >
                     <div className="min-w-0">
                       <span className="font-medium text-slate-800">

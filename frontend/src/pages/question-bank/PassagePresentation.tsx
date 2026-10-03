@@ -109,8 +109,8 @@ export function PassagePresentation({
 
       {/* Phase 1: Passage display */}
       {phase === "passage" && (
-        <div className="mb-4 rounded-lg border-2 border-blue-300 bg-blue-50 p-6">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-700">
+        <div className="mb-4 rounded-lg border-2 border-info-300 bg-info-50 p-6">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-info-700">
             Passage (displayed for {duration} seconds)
           </p>
           {passageTitle && <h3 className="text-lg font-bold text-slate-900">{passageTitle}</h3>}
@@ -118,9 +118,9 @@ export function PassagePresentation({
             <RichText html={passageBody} className="mt-2 text-sm leading-relaxed text-slate-700" />
           )}
           {/* Countdown progress bar */}
-          <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-blue-200">
+          <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-info-200">
             <div
-              className="h-full bg-blue-600 transition-all duration-1000 ease-linear"
+              className="h-full bg-info-600 transition-all duration-1000 ease-linear"
               style={{ width: `${(timeLeft / duration) * 100}%` }}
             />
           </div>

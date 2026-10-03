@@ -104,7 +104,7 @@ export function TimelinerEditor({
                 <button
                   key={q.id}
                   onClick={() => seekTo(q.trigger_timestamp)}
-                  className="absolute top-0 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border-2 border-amber-500 bg-amber-100 text-xs font-bold text-amber-700 hover:bg-amber-200"
+                  className="absolute top-0 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border-2 border-warning-500 bg-warning-100 text-xs font-bold text-warning-700 hover:bg-warning-200"
                   style={{ left: `${(q.trigger_timestamp / duration) * 100}%` }}
                   title={`Q${i + 1} at ${formatTime(q.trigger_timestamp)}: ${q.question_text}`}
                 >
@@ -145,10 +145,10 @@ export function TimelinerEditor({
                       <span className="text-xs text-slate-500">
                         Trigger: {formatTime(q.trigger_timestamp)}
                       </span>
-                      <span className="text-xs text-emerald-600">
+                      <span className="text-xs text-success-600">
                         ✓ → {formatTime(q.correct_jump_to)}
                       </span>
-                      <span className="text-xs text-orange-600">
+                      <span className="text-xs text-warning-600">
                         ✗ → {formatTime(q.incorrect_jump_to)}
                       </span>
                     </div>
@@ -254,7 +254,7 @@ function QuestionForm({
               <label
                 className={`flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-medium ${
                   opt.is_correct
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                    ? "border-success-300 bg-success-50 text-success-700"
                     : "border-slate-200 text-slate-500"
                 }`}
               >
@@ -317,7 +317,7 @@ function QuestionForm({
             value={correctJump}
             onChange={(e) => setCorrectJump(e.target.value)}
           />
-          <span className="text-xs text-emerald-600">{fmt(correctJump)}</span>
+          <span className="text-xs text-success-600">{fmt(correctJump)}</span>
         </div>
         <div>
           <Label htmlFor="incorrect-jump" required>
@@ -331,7 +331,7 @@ function QuestionForm({
             value={incorrectJump}
             onChange={(e) => setIncorrectJump(e.target.value)}
           />
-          <span className="text-xs text-orange-600">{fmt(incorrectJump)}</span>
+          <span className="text-xs text-warning-600">{fmt(incorrectJump)}</span>
         </div>
       </div>
 

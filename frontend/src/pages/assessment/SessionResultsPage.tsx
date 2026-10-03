@@ -413,7 +413,7 @@ function ScoringDebugView({ data }: { data: SessionDebugData }) {
                     ? "border-danger-200 bg-danger-50"
                     : att.status === "attempted"
                       ? "border-slate-200"
-                      : "border-amber-200 bg-amber-50"
+                      : "border-warning-200 bg-warning-50"
                 }`}
               >
                 {/* Header row */}
@@ -454,7 +454,7 @@ function ScoringDebugView({ data }: { data: SessionDebugData }) {
                     <p className="mb-1 text-xs font-semibold uppercase text-slate-500">
                       Candidate's Answer
                     </p>
-                    <pre className="overflow-x-auto rounded-md bg-slate-900 p-2 text-xs text-green-400">
+                    <pre className="overflow-x-auto rounded-md bg-slate-900 p-2 text-xs text-success-400">
                       {att.raw_answer ? JSON.stringify(att.raw_answer, null, 2) : "(no answer)"}
                     </pre>
                   </div>

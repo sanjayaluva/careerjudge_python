@@ -179,7 +179,7 @@ export function useTakeAssessment(opts?: {
               opens and you can start.
             </p>
           ) : (
-            <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-800">
+            <p className="rounded-md border border-warning-200 bg-warning-50 p-3 text-warning-800">
               Online payment is not available at the moment. When you confirm, your payment is sent
               to the Career Judge admin for approval. You can start the assessment once it is
               approved.

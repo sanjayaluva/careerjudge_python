@@ -965,22 +965,22 @@ function GroupReportView({ data }: { data: GroupReportData }) {
             <DistBox
               label="Fail (0-40)"
               count={data.distribution["fail (0-40)"]}
-              color="bg-red-100 text-red-800"
+              color="bg-danger-100 text-danger-800"
             />
             <DistBox
               label="Below avg (40-60)"
               count={data.distribution["below_avg (40-60)"]}
-              color="bg-orange-100 text-orange-800"
+              color="bg-warning-100 text-warning-800"
             />
             <DistBox
               label="Average (60-80)"
               count={data.distribution["average (60-80)"]}
-              color="bg-yellow-100 text-yellow-800"
+              color="bg-warning-100 text-warning-800"
             />
             <DistBox
               label="Above avg (80-100)"
               count={data.distribution["above_avg (80-100)"]}
-              color="bg-emerald-100 text-emerald-800"
+              color="bg-success-100 text-success-800"
             />
           </div>
         </div>
