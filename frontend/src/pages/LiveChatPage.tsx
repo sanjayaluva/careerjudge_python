@@ -91,21 +91,24 @@ export default function LiveChatPage() {
     <div className="space-y-6">
       <PageCard>
         <div className="p-6">
-          <h1 className="text-lg font-bold text-slate-900">Live Chat</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">Live Chat</h1>
+          <p className="mt-1 text-sm text-slate-500">
             Chat live with our support team. Replies appear here automatically.
           </p>
         </div>
       </PageCard>
 
-      <Card>
+      <Card className="mx-4 mb-6 sm:mx-6">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex flex-wrap items-center gap-2">
             {contactsLoading ? (
               "Connecting…"
             ) : agent ? (
               <>
-                <span className="inline-block h-2 w-2 rounded-full bg-success-500" />
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-2.5 w-2.5 rounded-full bg-success-500 ring-2 ring-success-100"
+                />
                 {agent.full_name || agent.email}
                 <Badge variant="outline">
                   {ROLE_LABELS[agent.role__name as RoleName] ?? agent.role__name}
@@ -118,19 +121,23 @@ export default function LiveChatPage() {
         </CardHeader>
         <CardContent>
           {contactsLoading ? (
-            <Spinner />
+            <div className="flex justify-center py-8">
+              <Spinner />
+            </div>
           ) : !agent ? (
-            <p className="py-8 text-center text-sm text-slate-500">
+            <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
               No support agent is available right now. Please try again later or use Contact Admin.
             </p>
           ) : (
             <>
               <div
                 ref={scrollRef}
-                className="mb-3 h-[50vh] space-y-2 overflow-auto rounded-md bg-slate-50 p-3"
+                className="mb-3 h-[50vh] min-h-[16rem] space-y-2 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3"
               >
                 {threadLoading && !messages ? (
-                  <Spinner />
+                  <div className="flex justify-center py-8">
+                    <Spinner />
+                  </div>
                 ) : (messages ?? []).length === 0 ? (
                   <p className="py-8 text-center text-sm text-slate-500">
                     Say hello 👋 — send a message to start the chat.
@@ -141,15 +148,17 @@ export default function LiveChatPage() {
                     return (
                       <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                         <div
-                          className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
+                          className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm sm:max-w-[75%] ${
                             mine
                               ? "rounded-br-sm bg-primary-600 text-white"
-                              : "rounded-bl-sm bg-white text-slate-900 shadow-sm"
+                              : "rounded-bl-sm bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
                           }`}
                         >
-                          <div className="whitespace-pre-wrap">{m.body}</div>
+                          <div className="whitespace-pre-wrap break-words leading-relaxed">
+                            {m.body}
+                          </div>
                           <div
-                            className={`mt-1 text-[10px] ${mine ? "text-primary-100" : "text-slate-400"}`}
+                            className={`mt-1 text-[11px] ${mine ? "text-primary-100" : "text-slate-400"}`}
                           >
                             {new Date(m.created_at).toLocaleTimeString([], {
                               hour: "2-digit",
@@ -167,16 +176,21 @@ export default function LiveChatPage() {
                   e.preventDefault();
                   if (body.trim()) sendMutation.mutate();
                 }}
-                className="flex gap-2"
+                className="flex items-center gap-2"
               >
                 <input
-                  className="flex-1 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm"
+                  className="h-10 min-w-0 flex-1 rounded-full border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   placeholder="Type a message…"
                   autoFocus
                 />
-                <Button type="submit" loading={sendMutation.isPending} disabled={!body.trim()}>
+                <Button
+                  type="submit"
+                  className="rounded-full"
+                  loading={sendMutation.isPending}
+                  disabled={!body.trim()}
+                >
                   Send
                 </Button>
               </form>

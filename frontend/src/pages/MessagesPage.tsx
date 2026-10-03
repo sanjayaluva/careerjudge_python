@@ -62,27 +62,31 @@ export default function MessagesPage() {
   return (
     <div className="space-y-6">
       <PageCard>
-        <div className="flex items-center justify-between p-6">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900">Messages</h1>
-            <p className="text-sm text-slate-500">
+        <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">Messages</h1>
+            <p className="mt-1 text-sm text-slate-500">
               {list.length} conversation{list.length !== 1 ? "s" : ""}
             </p>
           </div>
-          <Button onClick={() => setComposeOpen(true)}>New message</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setComposeOpen(true)}>New message</Button>
+          </div>
         </div>
       </PageCard>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 px-4 pb-6 sm:px-6 lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle>Conversations</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
             {isLoading ? (
-              <Spinner />
+              <div className="flex justify-center py-8">
+                <Spinner />
+              </div>
             ) : list.length === 0 ? (
-              <p className="py-6 text-center text-sm text-slate-500">
+              <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-4 py-10 text-center text-sm text-slate-500">
                 No conversations yet. Start one with “New message”.
               </p>
             ) : (
@@ -92,19 +96,21 @@ export default function MessagesPage() {
                   <button
                     key={c.id}
                     onClick={() => setActiveId(c.id)}
-                    className={`flex w-full flex-col items-start gap-0.5 rounded-md border px-3 py-2 text-left transition ${
+                    className={`flex w-full flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
                       c.id === activeId
-                        ? "border-primary-300 bg-primary-50"
+                        ? "border-primary-200 bg-primary-50"
                         : "border-transparent hover:bg-slate-50"
                     }`}
                   >
-                    <div className="flex w-full items-center justify-between">
-                      <span className="text-sm font-medium text-slate-900">{other.name}</span>
-                      {c.unread_count > 0 && <Badge variant="success">{c.unread_count}</Badge>}
+                    <div className="flex w-full items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium text-slate-900">
+                        {other.name}
+                      </span>
+                      {c.unread_count > 0 && <Badge variant="primary">{c.unread_count}</Badge>}
                     </div>
                     <span className="text-xs text-slate-400">{roleLabel(other.role)}</span>
                     {c.last_message_preview && (
-                      <span className="line-clamp-1 text-xs text-slate-500">
+                      <span className="line-clamp-1 w-full text-xs text-slate-500">
                         {c.last_message_preview}
                       </span>
                     )}
@@ -119,7 +125,7 @@ export default function MessagesPage() {
           {active ? (
             <ThreadPanel key={active.id} conversation={active} other={otherOf(active)} />
           ) : (
-            <CardContent className="flex min-h-[300px] items-center justify-center text-sm text-slate-500">
+            <CardContent className="flex min-h-[300px] items-center justify-center p-6 text-center text-sm text-slate-500">
               Select a conversation to read and reply.
             </CardContent>
           )}
@@ -186,33 +192,37 @@ function ThreadPanel({
   return (
     <>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex flex-wrap items-center gap-2">
           {other.name}
           <Badge variant="outline">{roleLabel(other.role)}</Badge>
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="mb-3 max-h-[50vh] space-y-2 overflow-auto">
+        <div className="mb-3 max-h-[50vh] space-y-2 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
           {isLoading ? (
-            <Spinner />
+            <div className="flex justify-center py-8">
+              <Spinner />
+            </div>
           ) : (messages ?? []).length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-500">No messages yet.</p>
+            <p className="py-8 text-center text-sm text-slate-500">No messages yet.</p>
           ) : (
             (messages ?? []).map((m) => {
               const mine = m.sender === user?.id;
               return (
                 <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                   <div
-                    className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
-                      mine ? "bg-primary-600 text-white" : "bg-slate-100 text-slate-900"
+                    className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm sm:max-w-[75%] ${
+                      mine
+                        ? "rounded-br-sm bg-primary-600 text-white"
+                        : "rounded-bl-sm bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
                     }`}
                   >
                     {m.subject && (
                       <div className="mb-0.5 text-xs font-semibold opacity-80">{m.subject}</div>
                     )}
-                    <div className="whitespace-pre-wrap">{m.body}</div>
+                    <div className="whitespace-pre-wrap break-words leading-relaxed">{m.body}</div>
                     <div
-                      className={`mt-1 text-[10px] ${mine ? "text-primary-100" : "text-slate-400"}`}
+                      className={`mt-1 text-[11px] ${mine ? "text-primary-100" : "text-slate-400"}`}
                     >
                       {new Date(m.created_at).toLocaleString()}
                     </div>
@@ -227,11 +237,11 @@ function ThreadPanel({
             e.preventDefault();
             if (body.trim()) sendMutation.mutate();
           }}
-          className="flex gap-2 border-t border-slate-100 pt-3"
+          className="flex items-end gap-2 border-t border-slate-200 pt-3"
         >
           <textarea
             rows={2}
-            className="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Write a reply…"
@@ -284,14 +294,16 @@ function ComposeModal({
           e.preventDefault();
           if (recipient && body.trim()) sendMutation.mutate();
         }}
-        className="space-y-4"
+        className="space-y-5"
       >
         <div>
           <Label htmlFor="msg-to" required>
             To
           </Label>
           {isLoading ? (
-            <Spinner />
+            <div className="flex h-10 items-center">
+              <Spinner size="sm" />
+            </div>
           ) : (
             <Select
               id="msg-to"
@@ -312,7 +324,7 @@ function ComposeModal({
             </Select>
           )}
           {!isLoading && (contacts ?? []).length === 0 && (
-            <p className="mt-1 text-xs text-slate-500">No contacts available for your role.</p>
+            <p className="mt-1.5 text-xs text-slate-500">No contacts available for your role.</p>
           )}
         </div>
         <div>
@@ -322,13 +334,13 @@ function ComposeModal({
           <textarea
             id="msg-body"
             rows={4}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={body}
             onChange={(e) => setBody(e.target.value)}
             required
           />
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>

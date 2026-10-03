@@ -13,19 +13,19 @@ export default function PermissionsPage() {
     <div className="space-y-6">
       <PageCard>
         <CardHeader>
-          <CardTitle>Permissions catalog</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-xl">Permissions catalog</CardTitle>
+          <CardDescription className="mt-1">
             All module/action combinations known to the system. Read-only view.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {PERMISSION_CATALOG.map((entry) => (
               <div
                 key={entry.module}
-                className="rounded-md border border-slate-200 bg-slate-50 p-4"
+                className="rounded-lg border border-slate-200 bg-slate-50 p-4"
               >
-                <div className="mb-2 flex items-center justify-between">
+                <div className="mb-3 flex items-start justify-between gap-2">
                   <h3 className="text-sm font-semibold text-slate-900">{entry.label}</h3>
                   <Badge variant="outline" className="text-xs">
                     {entry.module}

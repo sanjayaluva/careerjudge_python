@@ -137,17 +137,17 @@ export default function UsersPage() {
     <div className="space-y-6">
       <PageCard>
         <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>Users</CardTitle>
-              <CardDescription>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="text-xl">Users</CardTitle>
+              <CardDescription className="mt-1">
                 {count > 0
                   ? `${count} user${count === 1 ? "" : "s"} total`
                   : "Manage user accounts"}
               </CardDescription>
             </div>
             {canAdd && (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => setBulkUploadOpen(true)}>
                   Bulk upload
                 </Button>
@@ -157,18 +157,18 @@ export default function UsersPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <Input
               type="search"
               placeholder="Search by email or name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="max-w-sm"
+              className="sm:max-w-sm"
               aria-label="Search users"
             />
             <select
               aria-label="Filter by role"
-              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25 sm:w-52"
               value={roleFilter}
               onChange={(e) => {
                 setRoleFilter(e.target.value);
@@ -222,12 +222,12 @@ export default function UsersPage() {
                       <TableCell className="font-medium text-slate-900">
                         <Link
                           to={`/admin/users/${u.id}`}
-                          className="text-primary-600 hover:underline"
+                          className="rounded text-primary-600 hover:text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                         >
                           {u.full_name || "—"}
                         </Link>
                       </TableCell>
-                      <TableCell>{u.email}</TableCell>
+                      <TableCell className="text-slate-600">{u.email}</TableCell>
                       <TableCell>
                         {u.role ? (
                           <Badge variant="primary">{ROLE_LABELS[u.role]}</Badge>
@@ -246,8 +246,10 @@ export default function UsersPage() {
                           {u.is_trial_user && <Badge variant="outline">Trial</Badge>}
                         </div>
                       </TableCell>
-                      <TableCell className="text-slate-500">{formatDate(u.created_at)}</TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums text-slate-500">
+                        {formatDate(u.created_at)}
+                      </TableCell>
+                      <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           {isSuperAdmin && (
                             <Button variant="ghost" size="sm" onClick={() => setAssignTarget(u)}>
@@ -263,7 +265,7 @@ export default function UsersPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-danger hover:bg-danger-50"
+                              className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                               onClick={() => {
                                 setDeleteError(null);
                                 setDeleteUser(u);
@@ -501,9 +503,9 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
           <AlertDescription>{success}</AlertDescription>
         </Alert>
       )}
-      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+      <form onSubmit={onSubmit} className="space-y-5" noValidate>
         {/* 2-column grid for wider forms — fits within viewport */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <Label htmlFor="uf-name" required>
               Full name
@@ -538,7 +540,9 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
           <div>
             <Label htmlFor="uf-password">
               Password{" "}
-              {isEdit && <span className="text-slate-400">(leave blank to keep current)</span>}
+              {isEdit && (
+                <span className="font-normal text-slate-400">(leave blank to keep current)</span>
+              )}
             </Label>
             <Input
               id="uf-password"
@@ -549,7 +553,7 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
               autoComplete="new-password"
             />
             {!isEdit && (
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1.5 text-xs leading-snug text-slate-500">
                 {isActive
                   ? "Leave blank to auto-generate a password. Share it with the user manually."
                   : "Leave blank to auto-generate a password and email the user an activation link."}
@@ -562,7 +566,7 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
             </Label>
             <select
               id="uf-role"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={roleId}
               onChange={(e) => setRoleId(e.target.value === "" ? "" : Number(e.target.value))}
             >
@@ -576,13 +580,13 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+        <div className="flex flex-wrap gap-x-6 gap-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
               type="checkbox"
               checked={isActive}
               onChange={(e) => setIsActive(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
             />
             Active
           </label>
@@ -591,7 +595,7 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
               type="checkbox"
               checked={isVerified}
               onChange={(e) => setIsVerified(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
             />
             Email verified
           </label>
@@ -600,7 +604,7 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
               type="checkbox"
               checked={isTrial}
               onChange={(e) => setIsTrial(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
             />
             Trial account
           </label>
@@ -610,11 +614,11 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
             agency/allocated region/etc — same field set as the self-service
             Profile page, see @/lib/profileFields). */}
         {roleFields.length > 0 && (
-          <div className="rounded-md border border-slate-200 p-3">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="rounded-lg border border-slate-200 p-4">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               {ROLE_LABELS[selectedRoleName as RoleName] ?? selectedRoleName} details
             </p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2">
               {roleFields.map((field) => (
                 <div key={field.name} className={field.type === "textarea" ? "sm:col-span-2" : ""}>
                   <Label htmlFor={`uf-profile-${field.name}`} required={field.required}>
@@ -623,7 +627,7 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
                   {field.type === "select" ? (
                     <select
                       id={`uf-profile-${field.name}`}
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                      className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                       value={profileValues[field.name] ?? ""}
                       onChange={(e) =>
                         setProfileValues((prev) => ({ ...prev, [field.name]: e.target.value }))
@@ -639,7 +643,7 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
                     <textarea
                       id={`uf-profile-${field.name}`}
                       rows={3}
-                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                      className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                       value={profileValues[field.name] ?? ""}
                       onChange={(e) =>
                         setProfileValues((prev) => ({ ...prev, [field.name]: e.target.value }))
@@ -661,7 +665,7 @@ function UserFormModal({ mode, open, user, onClose, roles }: UserFormModalProps)
           </div>
         )}
 
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -731,7 +735,7 @@ function AssignRoleModal({ user, onClose }: AssignRoleModalProps) {
           <Label htmlFor="ar-role">Role</Label>
           <select
             id="ar-role"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={roleName}
             onChange={(e) => setRoleName(e.target.value as RoleName)}
           >
@@ -742,7 +746,7 @@ function AssignRoleModal({ user, onClose }: AssignRoleModalProps) {
             ))}
           </select>
         </div>
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -782,11 +786,11 @@ function DeleteUserModal({ user, error, loading, onClose, onConfirm }: DeleteUse
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <p className="text-sm text-slate-600">
+      <p className="text-sm leading-relaxed text-slate-600">
         Are you sure you want to delete <strong>{user.email}</strong>? Their data will be
         permanently removed.
       </p>
-      <div className="mt-6 flex justify-end gap-2">
+      <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>

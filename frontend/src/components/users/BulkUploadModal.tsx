@@ -136,9 +136,12 @@ export function BulkUploadModal({
               <p className="mb-2 text-sm font-semibold text-slate-900">
                 Created ({result.created_count})
               </p>
-              <div className="max-h-32 overflow-y-auto rounded-md border border-slate-200">
+              <div className="max-h-32 overflow-y-auto rounded-lg border border-slate-200">
                 {result.created.map((c, i) => (
-                  <div key={i} className="border-b border-slate-100 px-3 py-1.5 text-xs">
+                  <div
+                    key={i}
+                    className="border-b border-slate-100 px-3 py-1.5 text-xs last:border-b-0"
+                  >
                     <span className="font-medium text-slate-900">{c.full_name}</span>
                     <span className="mx-2 text-slate-400">—</span>
                     <span className="text-slate-500">{c.email}</span>
@@ -153,9 +156,12 @@ export function BulkUploadModal({
               <p className="mb-2 text-sm font-semibold text-slate-600">
                 Skipped ({result.skipped_count})
               </p>
-              <div className="max-h-32 overflow-y-auto rounded-md border border-slate-200">
+              <div className="max-h-32 overflow-y-auto rounded-lg border border-slate-200">
                 {result.skipped.map((s, i) => (
-                  <div key={i} className="border-b border-slate-100 px-3 py-1.5 text-xs">
+                  <div
+                    key={i}
+                    className="border-b border-slate-100 px-3 py-1.5 text-xs last:border-b-0"
+                  >
                     <span className="text-slate-600">{s.email}</span>
                     <span className="ml-2 text-slate-400">— {s.reason}</span>
                   </div>
@@ -166,33 +172,36 @@ export function BulkUploadModal({
 
           {result.errors.length > 0 && (
             <div>
-              <p className="mb-2 text-sm font-semibold text-danger">
+              <p className="mb-2 text-sm font-semibold text-danger-700">
                 Errors ({result.error_count})
               </p>
-              <div className="max-h-32 overflow-y-auto rounded-md border border-danger-200">
+              <div className="max-h-32 overflow-y-auto rounded-lg border border-danger-200">
                 {result.errors.map((er, i) => (
-                  <div key={i} className="border-b border-danger-100 px-3 py-1.5 text-xs">
+                  <div
+                    key={i}
+                    className="border-b border-danger-100 px-3 py-1.5 text-xs last:border-b-0"
+                  >
                     <span className="text-slate-600">
                       Row {er.row}: {er.email}
                     </span>
-                    <span className="ml-2 text-danger">— {er.error}</span>
+                    <span className="ml-2 text-danger-600">— {er.error}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="flex justify-end border-t border-slate-100 pt-4">
+          <div className="flex justify-end border-t border-slate-200 pt-4">
             <Button type="button" onClick={handleClose}>
               Done
             </Button>
           </div>
         </div>
       ) : (
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-            <p className="mb-2 text-sm font-medium text-slate-700">Instructions</p>
-            <ol className="ml-4 list-decimal space-y-1 text-xs text-slate-600">
+        <form onSubmit={onSubmit} className="space-y-5" noValidate>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="mb-2 text-sm font-semibold text-slate-900">Instructions</p>
+            <ol className="ml-4 list-decimal space-y-1 text-xs leading-relaxed text-slate-600">
               <li>Download the CSV template using the button below</li>
               <li>Fill in user details (full_name and email are required)</li>
               <li>
@@ -225,7 +234,7 @@ export function BulkUploadModal({
               <Label htmlFor="bulk-group">Add the users to group</Label>
               <select
                 id="bulk-group"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={groupId}
                 onChange={(e) => setGroupId(e.target.value)}
               >
@@ -246,16 +255,16 @@ export function BulkUploadModal({
               type="file"
               accept=".csv"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-md file:border-0 file:bg-primary-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-primary-700"
+              className="block w-full rounded-md text-sm text-slate-500 file:mr-4 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white file:shadow-sm file:transition-colors hover:file:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
             />
             {file && (
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1.5 text-xs text-slate-500">
                 Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
               </p>
             )}
           </div>
 
-          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={handleClose}>
               Cancel
             </Button>

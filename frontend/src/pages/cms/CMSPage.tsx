@@ -59,12 +59,12 @@ export default function CMSPage() {
   return (
     <PageCard>
       <div className="p-6 pb-4">
-        <h1 className="text-lg font-bold text-slate-900">Content Management</h1>
-        <p className="text-sm text-slate-500">Manage pages, banners, and navigation</p>
+        <h1 className="text-xl font-semibold tracking-tight text-slate-900">Content Management</h1>
+        <p className="mt-1 text-sm text-slate-500">Manage pages, banners, and navigation</p>
       </div>
 
       <Tabs defaultValue="pages">
-        <div className="px-6">
+        <div className="overflow-x-auto px-6">
           <TabsList>
             <TabsTrigger value="pages">Pages</TabsTrigger>
             <TabsTrigger value="banners">Banners</TabsTrigger>
@@ -113,9 +113,13 @@ function PagesTab() {
         <Button onClick={() => setEditing("new")}>+ New page</Button>
       </div>
       {isLoading ? (
-        <Spinner />
+        <div className="flex justify-center py-12">
+          <Spinner size="lg" />
+        </div>
       ) : pages.length === 0 ? (
-        <p className="py-8 text-center text-sm text-slate-500">No pages yet.</p>
+        <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
+          No pages yet.
+        </p>
       ) : (
         <Table>
           <TableHeader>
@@ -124,7 +128,7 @@ function PagesTab() {
               <TableHead>Slug</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Updated</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -136,7 +140,7 @@ function PagesTab() {
                     href={`/${p.slug}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary-600 hover:underline"
+                    className="rounded text-primary-600 hover:text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                   >
                     /{p.slug} ↗
                   </a>
@@ -154,18 +158,18 @@ function PagesTab() {
                     {p.status}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-slate-500">
+                <TableCell className="whitespace-nowrap tabular-nums text-slate-500">
                   {new Date(p.updated_at).toLocaleDateString()}
                 </TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
                     <Button size="sm" variant="outline" onClick={() => setEditing(p)}>
                       Edit
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="text-danger-600"
+                      className="text-danger-600 hover:text-danger-700"
                       onClick={() => deleteMut.mutate(p.id)}
                     >
                       ✕
@@ -230,9 +234,9 @@ function PageEditor({ page, onClose }: { page: PageListItem | null; onClose: () 
           e.preventDefault();
           saveMut.mutate();
         }}
-        className="space-y-4"
+        className="space-y-5"
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <Label htmlFor="p-title" required>
               Title
@@ -262,19 +266,19 @@ function PageEditor({ page, onClose }: { page: PageListItem | null; onClose: () 
               placeholder="about-us"
               required
             />
-            <p className="mt-1 text-xs text-slate-400">Accessible at /{slug || "slug"}</p>
+            <p className="mt-1.5 text-xs text-slate-500">Accessible at /{slug || "slug"}</p>
           </div>
         </div>
         <div>
           <Label required>Body content</Label>
           <WysiwygEditor value={body} onChange={setBody} minHeight={300} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <Label htmlFor="p-status">Status</Label>
             <select
               id="p-status"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             >
@@ -287,7 +291,7 @@ function PageEditor({ page, onClose }: { page: PageListItem | null; onClose: () 
             <Label htmlFor="p-type">Page type</Label>
             <select
               id="p-type"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={pageType}
               onChange={(e) => setPageType(e.target.value as PageType)}
             >
@@ -297,12 +301,12 @@ function PageEditor({ page, onClose }: { page: PageListItem | null; onClose: () 
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1.5 text-xs text-slate-500">
               Policy types (Terms / Refund / Privacy) are linked from the site footer.
             </p>
           </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -354,9 +358,13 @@ function BannersTab() {
         <Button onClick={() => setEditing("new")}>+ New banner</Button>
       </div>
       {isLoading ? (
-        <Spinner />
+        <div className="flex justify-center py-12">
+          <Spinner size="lg" />
+        </div>
       ) : banners.length === 0 ? (
-        <p className="py-8 text-center text-sm text-slate-500">No banners yet.</p>
+        <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
+          No banners yet.
+        </p>
       ) : (
         <Table>
           <TableHeader>
@@ -364,7 +372,7 @@ function BannersTab() {
               <TableHead>Title</TableHead>
               <TableHead>Position</TableHead>
               <TableHead>Active</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -390,15 +398,15 @@ function BannersTab() {
                     {b.is_active ? "Active" : "Inactive"}
                   </Button>
                 </TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
                     <Button size="sm" variant="outline" onClick={() => setEditing(b)}>
                       Edit
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="text-danger-600"
+                      className="text-danger-600 hover:text-danger-700"
                       onClick={() => deleteMut.mutate(b.id)}
                     >
                       ✕
@@ -464,7 +472,7 @@ function BannerEditor({ banner, onClose }: { banner: Banner | null; onClose: () 
           e.preventDefault();
           saveMut.mutate();
         }}
-        className="space-y-4"
+        className="space-y-5"
       >
         <div>
           <Label htmlFor="b-title" required>
@@ -489,7 +497,7 @@ function BannerEditor({ banner, onClose }: { banner: Banner | null; onClose: () 
             placeholder="https://... or base64 data URL"
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <Label htmlFor="b-link-url">Link URL</Label>
             <Input id="b-link-url" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
@@ -503,12 +511,12 @@ function BannerEditor({ banner, onClose }: { banner: Banner | null; onClose: () 
             />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <Label htmlFor="b-position">Position</Label>
             <select
               id="b-position"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={position}
               onChange={(e) => setPosition(e.target.value as Banner["position"])}
             >
@@ -520,18 +528,18 @@ function BannerEditor({ banner, onClose }: { banner: Banner | null; onClose: () 
             </select>
           </div>
           <div className="flex items-end">
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex h-10 items-center gap-2 text-sm text-slate-700">
               <input
                 type="checkbox"
                 checked={isActive}
                 onChange={(e) => setIsActive(e.target.checked)}
-                className="h-4 w-4"
+                className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
               />
               Active
             </label>
           </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>

@@ -113,16 +113,16 @@ export default function InvoicingPage() {
   return (
     <div className="space-y-6">
       <PageCard>
-        <div className="flex items-center justify-between p-6 pb-4">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900">Invoicing</h1>
-            <p className="text-sm text-slate-500">
+        <div className="flex flex-col gap-4 p-6 pb-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">Invoicing</h1>
+            <p className="mt-1 text-sm text-slate-500">
               {canCreate
                 ? "Raise invoices for your work and track their approval."
                 : "Track invoice status across the platform."}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {isSuperAdmin && (
               <Link to="/admin/payments">
                 <Button variant="outline">Authorise payments</Button>
@@ -133,7 +133,7 @@ export default function InvoicingPage() {
         </div>
 
         <Tabs defaultValue="mine">
-          <div className="px-6">
+          <div className="overflow-x-auto px-6">
             <TabsList>
               <TabsTrigger value="mine">My Invoices ({myInvoices.length})</TabsTrigger>
               {isSuperAdmin && (
@@ -153,7 +153,7 @@ export default function InvoicingPage() {
                 invoices={myInvoices}
                 renderActions={(inv) =>
                   inv.creator === user?.id ? (
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap justify-end gap-1">
                       {inv.status === "draft" && (
                         <Button size="sm" variant="outline" onClick={() => setItemsInvoice(inv)}>
                           Line items ({inv.items.length})
@@ -172,7 +172,7 @@ export default function InvoicingPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="text-danger-600"
+                          className="text-danger-600 hover:text-danger-700"
                           onClick={() => cancelMut.mutate(inv.id)}
                           loading={cancelMut.isPending}
                         >
@@ -293,52 +293,64 @@ function LineItemsModal({
     <Modal open onClose={onClose} title={`Line items — ${invoice.invoice_number}`} size="lg">
       <div className="space-y-4">
         {items.length === 0 ? (
-          <p className="py-4 text-center text-sm text-slate-500">No line items yet.</p>
+          <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-4 py-8 text-center text-sm text-slate-500">
+            No line items yet.
+          </p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
-                <th className="py-1">Description</th>
-                <th className="py-1 text-right">Qty</th>
-                <th className="py-1 text-right">Unit</th>
-                <th className="py-1 text-right">Total</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it) => (
-                <tr key={it.id} className="border-b border-slate-100">
-                  <td className="py-1">{it.description}</td>
-                  <td className="py-1 text-right">{it.quantity}</td>
-                  <td className="py-1 text-right">{it.unit_price}</td>
-                  <td className="py-1 text-right">{it.total}</td>
-                  <td className="py-1 text-right">
-                    <button
-                      className="text-xs text-danger-600 hover:underline"
-                      onClick={() => delMut.mutate(it.id)}
-                      disabled={delMut.isPending}
-                    >
-                      Remove
-                    </button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="py-2 font-semibold">Description</th>
+                  <th className="py-2 text-right font-semibold">Qty</th>
+                  <th className="py-2 text-right font-semibold">Unit</th>
+                  <th className="py-2 text-right font-semibold">Total</th>
+                  <th></th>
                 </tr>
-              ))}
-              <tr className="font-medium">
-                <td className="py-1" colSpan={3}>
-                  Items total
-                </td>
-                <td className="py-1 text-right">{itemsTotal.toFixed(2)}</td>
-                <td></td>
-              </tr>
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {items.map((it) => (
+                  <tr key={it.id} className="border-b border-slate-100">
+                    <td className="py-2 text-slate-700">{it.description}</td>
+                    <td className="whitespace-nowrap py-2 text-right tabular-nums text-slate-700">
+                      {it.quantity}
+                    </td>
+                    <td className="whitespace-nowrap py-2 text-right tabular-nums text-slate-700">
+                      {it.unit_price}
+                    </td>
+                    <td className="whitespace-nowrap py-2 text-right tabular-nums text-slate-900">
+                      {it.total}
+                    </td>
+                    <td className="py-2 pl-3 text-right">
+                      <button
+                        className="rounded text-xs font-medium text-danger-600 transition-colors hover:text-danger-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-50"
+                        onClick={() => delMut.mutate(it.id)}
+                        disabled={delMut.isPending}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                <tr className="font-semibold text-slate-900">
+                  <td className="py-2" colSpan={3}>
+                    Items total
+                  </td>
+                  <td className="whitespace-nowrap py-2 text-right tabular-nums">
+                    {itemsTotal.toFixed(2)}
+                  </td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             if (description.trim() && unitPrice) addMut.mutate();
           }}
-          className="grid grid-cols-1 gap-2 border-t border-slate-100 pt-4 sm:grid-cols-4"
+          className="grid gap-4 border-t border-slate-200 pt-4 sm:grid-cols-4"
         >
           <div className="sm:col-span-2">
             <Label htmlFor="li-desc" required>
@@ -400,7 +412,11 @@ function InvoiceTable({
   renderActions: (invoice: Invoice) => React.ReactNode;
 }) {
   if (invoices.length === 0) {
-    return <p className="py-8 text-center text-sm text-slate-500">No invoices yet.</p>;
+    return (
+      <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
+        No invoices yet.
+      </p>
+    );
   }
   return (
     <Table>
@@ -412,25 +428,27 @@ function InvoiceTable({
           <TableHead>Description</TableHead>
           <TableHead>Amount</TableHead>
           <TableHead>Status</TableHead>
-          <TableHead>Actions</TableHead>
+          <TableHead className="text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {invoices.map((inv) => (
           <TableRow key={inv.id}>
-            <TableCell className="font-medium text-slate-900">{inv.invoice_number}</TableCell>
+            <TableCell className="whitespace-nowrap font-medium tabular-nums text-slate-900">
+              {inv.invoice_number}
+            </TableCell>
             <TableCell className="text-slate-500">{inv.creator_name || inv.creator_role}</TableCell>
-            <TableCell className="text-slate-500">
+            <TableCell className="whitespace-nowrap text-slate-500">
               {INVOICE_TYPES.find((t) => t.value === inv.invoice_type)?.label ?? inv.invoice_type}
             </TableCell>
             <TableCell className="max-w-xs truncate text-slate-700">{inv.description}</TableCell>
-            <TableCell className="text-slate-500">
+            <TableCell className="whitespace-nowrap font-medium tabular-nums text-slate-900">
               {inv.amount} {inv.currency}
             </TableCell>
             <TableCell>
               <Badge variant={STATUS_VARIANT[inv.status]}>{inv.status}</Badge>
             </TableCell>
-            <TableCell>{renderActions(inv)}</TableCell>
+            <TableCell className="text-right">{renderActions(inv)}</TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -468,14 +486,14 @@ function CreateInvoiceModal({
 
   return (
     <Modal open onClose={onClose} title="New invoice" size="sm">
-      <div className="space-y-4">
+      <div className="space-y-5">
         <div>
           <Label htmlFor="inv-type" required>
             Invoice type
           </Label>
           <select
             id="inv-type"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={invoiceType}
             onChange={(e) => setInvoiceType(e.target.value as InvoiceType)}
           >
@@ -493,7 +511,7 @@ function CreateInvoiceModal({
           <textarea
             id="inv-desc"
             rows={3}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What this invoice is for…"
@@ -512,7 +530,7 @@ function CreateInvoiceModal({
             onChange={(e) => setAmount(e.target.value)}
           />
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -567,7 +585,7 @@ function AdminReviewActions({ invoice, onDone }: { invoice: Invoice; onDone: () 
   });
 
   return (
-    <div className="flex gap-1">
+    <div className="flex flex-wrap justify-end gap-1">
       {invoice.status === "submitted" && (
         <>
           <Button size="sm" onClick={() => setReviewOpen("approve")}>
@@ -576,7 +594,7 @@ function AdminReviewActions({ invoice, onDone }: { invoice: Invoice; onDone: () 
           <Button
             size="sm"
             variant="outline"
-            className="text-danger-600"
+            className="text-danger-600 hover:text-danger-700"
             onClick={() => setReviewOpen("reject")}
           >
             Reject
@@ -596,18 +614,18 @@ function AdminReviewActions({ invoice, onDone }: { invoice: Invoice; onDone: () 
           title={reviewOpen === "reject" ? "Reject invoice" : "Approve invoice"}
           size="sm"
         >
-          <div className="space-y-3">
+          <div className="space-y-5">
             <div>
               <Label htmlFor="review-comment">Comment (optional)</Label>
               <textarea
                 id="review-comment"
                 rows={3}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
               />
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => setReviewOpen(null)}>
                 Cancel
               </Button>
@@ -625,7 +643,7 @@ function AdminReviewActions({ invoice, onDone }: { invoice: Invoice; onDone: () 
 
       {payOpen && (
         <Modal open onClose={() => setPayOpen(false)} title="Mark invoice as paid" size="sm">
-          <div className="space-y-3">
+          <div className="space-y-5">
             <div>
               <Label htmlFor="pay-ref">Payment reference (optional)</Label>
               <Input
@@ -635,7 +653,7 @@ function AdminReviewActions({ invoice, onDone }: { invoice: Invoice; onDone: () 
                 placeholder="e.g. BANK-REF-001"
               />
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => setPayOpen(false)}>
                 Cancel
               </Button>

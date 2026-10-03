@@ -49,11 +49,16 @@ export default function PendingPaymentsPage() {
     <div className="space-y-6">
       <PageCard>
         <div className="p-6">
-          <Link to="/invoicing" className="text-sm text-primary-600 hover:underline">
+          <Link
+            to="/invoicing"
+            className="inline-flex items-center gap-1.5 rounded text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
             ← Back to Invoicing
           </Link>
-          <h1 className="mt-2 text-lg font-bold text-slate-900">Pending Payments</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
+            Pending Payments
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
             {list.length} payment{list.length !== 1 ? "s" : ""} awaiting manual authorisation.
           </p>
         </div>
@@ -79,15 +84,17 @@ export default function PendingPaymentsPage() {
               ) : (
                 list.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="font-medium capitalize">{p.module}</TableCell>
-                    <TableCell className="text-slate-500">#{p.item_id}</TableCell>
-                    <TableCell>
+                    <TableCell className="font-medium capitalize text-slate-900">
+                      {p.module}
+                    </TableCell>
+                    <TableCell className="tabular-nums text-slate-500">#{p.item_id}</TableCell>
+                    <TableCell className="whitespace-nowrap font-medium tabular-nums text-slate-900">
                       {p.amount} {p.currency}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">{p.provider || "manual"}</Badge>
                     </TableCell>
-                    <TableCell className="text-slate-500">
+                    <TableCell className="whitespace-nowrap tabular-nums text-slate-500">
                       {new Date(p.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">

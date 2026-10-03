@@ -46,25 +46,34 @@ export default function UserViewPage() {
 
   if (isError || !user) {
     return (
-      <Alert variant="error">
-        <AlertDescription>Failed to load user. {extractApiError(error)}</AlertDescription>
-      </Alert>
+      <div className="p-4 sm:p-6">
+        <Alert variant="error">
+          <AlertDescription>Failed to load user. {extractApiError(error)}</AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link to="/admin/users" className="text-sm text-primary-600 hover:underline">
+    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <Link
+            to="/admin/users"
+            className="inline-flex items-center gap-1.5 rounded text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
             ← Back to users
           </Link>
-          <h1 className="mt-1 text-2xl font-bold text-slate-900">{user.full_name || "—"}</h1>
-          <p className="text-sm text-slate-500">{user.email}</p>
+          <h1 className="mt-2 truncate text-xl font-semibold tracking-tight text-slate-900">
+            {user.full_name || "—"}
+          </h1>
+          <p className="mt-1 truncate text-sm text-slate-500">{user.email}</p>
         </div>
         {/* Report 9 #110/#111: only those who may change users get the button. */}
         {canChange && (
-          <Button onClick={() => navigate(`/admin/users?edit=${user.id}`)}>Edit user</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => navigate(`/admin/users?edit=${user.id}`)}>Edit user</Button>
+          </div>
         )}
       </div>
 
@@ -73,23 +82,29 @@ export default function UserViewPage() {
           <CardTitle>Account information</CardTitle>
         </CardHeader>
         <CardContent>
-          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <dl className="grid gap-5 sm:grid-cols-2">
             <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 Full name
               </dt>
               <dd className="mt-1 text-sm text-slate-900">{user.full_name || "—"}</dd>
             </div>
             <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Email</dt>
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Email
+              </dt>
               <dd className="mt-1 text-sm text-slate-900">{user.email}</dd>
             </div>
             <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Phone</dt>
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Phone
+              </dt>
               <dd className="mt-1 text-sm text-slate-900">{user.phone || "—"}</dd>
             </div>
             <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Role</dt>
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Role
+              </dt>
               <dd className="mt-1">
                 {user.role ? (
                   <Badge variant="primary">{ROLE_LABELS[user.role]}</Badge>
@@ -99,7 +114,9 @@ export default function UserViewPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Status</dt>
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Status
+              </dt>
               <dd className="mt-1 flex flex-wrap gap-1">
                 {user.is_active ? (
                   <Badge variant="success">Active</Badge>
@@ -111,7 +128,9 @@ export default function UserViewPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Joined</dt>
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Joined
+              </dt>
               <dd className="mt-1 text-sm text-slate-900">{formatDate(user.created_at)}</dd>
             </div>
           </dl>
@@ -124,9 +143,9 @@ export default function UserViewPage() {
             <CardTitle>Profile details</CardTitle>
           </CardHeader>
           <CardContent>
-            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <dl className="grid gap-5 sm:grid-cols-2">
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   Gender
                 </dt>
                 <dd className="mt-1 text-sm capitalize text-slate-900">
@@ -134,23 +153,25 @@ export default function UserViewPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   Mobile
                 </dt>
                 <dd className="mt-1 text-sm text-slate-900">{user.profile.mobile || "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   Date of birth
                 </dt>
                 <dd className="mt-1 text-sm text-slate-900">{user.profile.date_of_birth || "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">City</dt>
+                <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  City
+                </dt>
                 <dd className="mt-1 text-sm text-slate-900">{user.profile.city || "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   State
                 </dt>
                 <dd className="mt-1 text-sm text-slate-900">
@@ -158,7 +179,7 @@ export default function UserViewPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   Country
                 </dt>
                 <dd className="mt-1 text-sm text-slate-900">
@@ -166,7 +187,7 @@ export default function UserViewPage() {
                 </dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   Address
                 </dt>
                 <dd className="mt-1 text-sm text-slate-900">
@@ -178,7 +199,7 @@ export default function UserViewPage() {
               {/* Report 9 #67/#69: an SME's / Reviewer's domains of expertise. */}
               {(user.role === "sme" || user.role === "reviewer") && (
                 <div className="sm:col-span-2">
-                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Domains of expertise
                   </dt>
                   <dd className="mt-1 flex flex-wrap gap-1 text-sm text-slate-900">
@@ -194,10 +215,12 @@ export default function UserViewPage() {
               )}
               {user.profile.bio && (
                 <div className="sm:col-span-2">
-                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Bio
                   </dt>
-                  <dd className="mt-1 text-sm text-slate-900">{user.profile.bio}</dd>
+                  <dd className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-900">
+                    {user.profile.bio}
+                  </dd>
                 </div>
               )}
             </dl>

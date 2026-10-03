@@ -68,15 +68,17 @@ export default function RolesPage() {
     <div className="space-y-6">
       <PageCard>
         <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>Roles & Permissions</CardTitle>
-              <CardDescription>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="text-xl">Roles & Permissions</CardTitle>
+              <CardDescription className="mt-1">
                 {roles.length} role{roles.length === 1 ? "" : "s"} total. System roles are frozen;
                 custom roles can be modified.
               </CardDescription>
             </div>
-            <Button onClick={() => setCreateOpen(true)}>Create custom role</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => setCreateOpen(true)}>Create custom role</Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -130,12 +132,14 @@ export default function RolesPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-slate-500">{baseRoleDisplay}</TableCell>
-                        <TableCell className="text-slate-500">
+                        <TableCell className="whitespace-nowrap tabular-nums text-slate-500">
                           {r.effective_rights?.length ?? r.rights?.length ?? 0} permission
                           {(r.effective_rights?.length ?? r.rights?.length ?? 0) === 1 ? "" : "s"}
                         </TableCell>
-                        <TableCell className="text-slate-500">{r.user_count}</TableCell>
-                        <TableCell>
+                        <TableCell className="tabular-nums text-slate-500">
+                          {r.user_count}
+                        </TableCell>
+                        <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             {r.is_system ? (
                               <span className="inline-flex items-center px-3 py-1.5 text-xs text-slate-400">
@@ -154,7 +158,7 @@ export default function RolesPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="text-danger hover:bg-danger-50"
+                                className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                                 onClick={() => {
                                   setDeleteError(null);
                                   setDeleteRole(r);
@@ -295,8 +299,8 @@ function CreateCustomRoleModal({ open, onClose, roles }: CreateCustomRoleModalPr
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <form onSubmit={onSubmit} className="space-y-5" noValidate>
+        <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <Label htmlFor="cr-name" required>
               Role name
@@ -308,7 +312,7 @@ function CreateCustomRoleModal({ open, onClose, roles }: CreateCustomRoleModalPr
               placeholder="e.g. Senior Reviewer"
               autoFocus
             />
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1.5 text-xs text-slate-500">
               Must be unique. Cannot use a system role name.
             </p>
           </div>
@@ -316,7 +320,7 @@ function CreateCustomRoleModal({ open, onClose, roles }: CreateCustomRoleModalPr
             <Label htmlFor="cr-base">Base role (optional)</Label>
             <select
               id="cr-base"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={baseRoleId}
               onChange={(e) => setBaseRoleId(e.target.value === "" ? "" : Number(e.target.value))}
             >
@@ -327,7 +331,7 @@ function CreateCustomRoleModal({ open, onClose, roles }: CreateCustomRoleModalPr
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1.5 text-xs text-slate-500">
               Base role permissions are inherited and cannot be removed.
             </p>
           </div>
@@ -347,11 +351,11 @@ function CreateCustomRoleModal({ open, onClose, roles }: CreateCustomRoleModalPr
           <p className="mb-2 text-xs text-slate-500">
             These can be added/removed later via the Permissions button on the roles table.
           </p>
-          <div className="max-h-60 overflow-y-auto rounded-md border border-slate-200 p-3">
-            <div className="space-y-3">
+          <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-200 p-4">
+            <div className="space-y-4">
               {PERMISSION_CATALOG.map((cat) => (
                 <div key={cat.module}>
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     {cat.label}
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -363,10 +367,10 @@ function CreateCustomRoleModal({ open, onClose, roles }: CreateCustomRoleModalPr
                           key={key}
                           type="button"
                           onClick={() => togglePerm(cat.module, action)}
-                          className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
+                          className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1 ${
                             isSelected
-                              ? "border-primary-600 bg-primary-50 text-primary-700"
-                              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                              ? "border-primary-500 bg-primary-50 text-primary-700"
+                              : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                           }`}
                         >
                           {action}
@@ -380,7 +384,7 @@ function CreateCustomRoleModal({ open, onClose, roles }: CreateCustomRoleModalPr
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -483,8 +487,8 @@ function PermissionsModal({ roleId, onClose }: PermissionsModalProps) {
 
       <div className="max-h-[60vh] space-y-4 overflow-y-auto">
         {PERMISSION_CATALOG.map((cat) => (
-          <div key={cat.module} className="rounded-md border border-slate-200 p-3">
-            <p className="mb-2 text-sm font-semibold text-slate-900">{cat.label}</p>
+          <div key={cat.module} className="rounded-lg border border-slate-200 p-4">
+            <p className="mb-2.5 text-sm font-semibold text-slate-900">{cat.label}</p>
             <div className="flex flex-wrap gap-2">
               {cat.actions.map((action) => {
                 const key = `${cat.module}.${action}`;
@@ -506,12 +510,12 @@ function PermissionsModal({ roleId, onClose }: PermissionsModalProps) {
                     type="button"
                     disabled={isInherited || isLoading}
                     onClick={() => togglePerm(cat.module, action)}
-                    className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+                    className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed ${
                       isAssigned
                         ? isInherited
-                          ? "border-slate-300 bg-slate-100 text-slate-500"
-                          : "border-primary-600 bg-primary-50 text-primary-700 hover:bg-primary-100"
-                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                          ? "border-slate-200 bg-slate-100 text-slate-500"
+                          : "border-primary-500 bg-primary-50 text-primary-700 hover:bg-primary-100"
+                        : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     }`}
                     title={
                       isInherited
@@ -531,7 +535,7 @@ function PermissionsModal({ roleId, onClose }: PermissionsModalProps) {
         ))}
       </div>
 
-      <div className="mt-4 flex justify-end border-t border-slate-100 pt-4">
+      <div className="mt-5 flex justify-end border-t border-slate-200 pt-4">
         <Button type="button" variant="outline" onClick={onClose}>
           Done
         </Button>
@@ -567,10 +571,10 @@ function DeleteRoleModal({ role, error, loading, onClose, onConfirm }: DeleteRol
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <p className="text-sm text-slate-600">
+      <p className="text-sm leading-relaxed text-slate-600">
         Are you sure you want to delete <strong>{role.name}</strong>?
       </p>
-      <div className="mt-6 flex justify-end gap-2">
+      <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
