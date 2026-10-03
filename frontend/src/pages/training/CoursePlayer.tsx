@@ -255,7 +255,7 @@ export function CoursePlayer({
       )}
 
       {/* Main Content Player */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Content area (2/3) */}
         <div className="lg:col-span-2">
           {finished ? (
@@ -270,8 +270,8 @@ export function CoursePlayer({
           ) : (
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <CardTitle className="text-lg">{current.content.title}</CardTitle>
                     <p className="mt-1 text-sm text-slate-500">
                       {current.lessonTitle} → {current.topicTitle} → {current.sessionTitle}
@@ -298,7 +298,7 @@ export function CoursePlayer({
                 />
 
                 {/* Navigation */}
-                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
                   <Button
                     variant="outline"
                     onClick={() => setCurrentIdx(Math.max(0, currentIdx - 1))}
@@ -306,7 +306,7 @@ export function CoursePlayer({
                   >
                     ← Previous
                   </Button>
-                  <span className="text-sm text-slate-500">
+                  <span className="text-sm tabular-nums text-slate-500">
                     Content {currentIdx + 1} of {flatContent.length}
                   </span>
                   <Button
@@ -373,12 +373,12 @@ export function CoursePlayer({
                       key={item.content.id}
                       onClick={() => !locked && setCurrentIdx(idx)}
                       disabled={locked}
-                      className={`block w-full rounded-md px-3 py-2 text-left text-xs transition-colors ${
+                      className={`block w-full rounded-md px-3 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
                         idx === currentIdx
                           ? "bg-primary-50 text-primary-900"
                           : locked
                             ? "cursor-not-allowed text-slate-300"
-                            : "hover:bg-slate-50"
+                            : "text-slate-700 hover:bg-slate-100"
                       }`}
                     >
                       <div className="flex items-center justify-between font-medium">
@@ -406,7 +406,7 @@ export function CoursePlayer({
                 {course.live_sessions
                   .filter((s) => s.status === "scheduled")
                   .map((s) => (
-                    <div key={s.id} className="rounded-md border border-slate-100 p-2">
+                    <div key={s.id} className="rounded-lg border border-slate-200 p-2">
                       <div className="text-sm font-medium text-slate-900">{s.title}</div>
                       <div className="text-xs text-slate-500">
                         {new Date(s.scheduled_at).toLocaleString()}
@@ -618,13 +618,15 @@ function ProgressDashboard({ summary, loading }: { summary?: ProgressSummary; lo
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {/* Completion */}
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Completion
             </div>
-            <div className="mt-1 text-2xl font-bold text-slate-900">{pct}%</div>
-            <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+            <div className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-slate-900">
+              {pct}%
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
               <div
-                className="h-full rounded-full bg-primary-500 transition-all"
+                className="h-full rounded-full bg-primary-600 transition-all"
                 style={{ width: `${pct}%` }}
               />
             </div>
@@ -635,20 +637,20 @@ function ProgressDashboard({ summary, loading }: { summary?: ProgressSummary; lo
 
           {/* Time spent */}
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Time Spent
             </div>
-            <div className="mt-1 text-2xl font-bold text-slate-900">
+            <div className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-slate-900">
               {hoursSpent}h {minsSpent}m
             </div>
           </div>
 
           {/* Time left (scheduled courses only) */}
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Time Left
             </div>
-            <div className="mt-1 text-2xl font-bold text-slate-900">
+            <div className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-slate-900">
               {hoursLeft !== null ? `${hoursLeft}h ${minsLeft}m` : "∞"}
             </div>
             {summary.is_expired && (
@@ -660,7 +662,9 @@ function ProgressDashboard({ summary, loading }: { summary?: ProgressSummary; lo
 
           {/* Status */}
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Status</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Status
+            </div>
             <div className="mt-1">
               <Badge variant={completionStatusVariant(summary.completion_status)}>
                 {completionStatusLabel(summary.completion_status)}
@@ -672,9 +676,9 @@ function ProgressDashboard({ summary, loading }: { summary?: ProgressSummary; lo
         {/* D7: score report — assessment + assignment-report scores rolled
             into the progress summary (SRS §6 "Score report"). */}
         {(summary.assessment_scores.length > 0 || summary.assignment_report_scores.length > 0) && (
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 Score Report
               </div>
               {summary.average_assessment_percentage != null && (
@@ -701,7 +705,7 @@ function ProgressDashboard({ summary, loading }: { summary?: ProgressSummary; lo
               ))}
               {summary.assignment_report_scores.map((s) => (
                 <div key={`report-${s.assignment_id}`} className="text-xs text-slate-600">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3">
                     <span>{s.assignment_title} (report)</span>
                     <span>
                       {s.trainer_score != null ? (
@@ -723,7 +727,7 @@ function ProgressDashboard({ summary, loading }: { summary?: ProgressSummary; lo
           </div>
         )}
         {summary.requirements && summary.requirements.length > 0 && (
-          <details className="mt-4 border-t border-slate-100 pt-3">
+          <details className="mt-4 border-t border-slate-200 pt-3">
             <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
               Completion requirements ({summary.requirements.filter((r) => r.completed).length}/
               {summary.requirements.length})
@@ -817,8 +821,8 @@ export function AssignmentsPanel({
         {session.assignments.map((a) => {
           const existingReport = existingReports?.find((r) => r.assignment === a.id);
           return (
-            <div key={a.id} className="rounded-md border border-slate-100 p-3">
-              <div className="flex items-center justify-between">
+            <div key={a.id} className="rounded-lg border border-slate-200 p-3">
+              <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-medium text-slate-900">{a.title}</div>
                   {a.description && <p className="mt-1 text-xs text-slate-500">{a.description}</p>}
@@ -878,12 +882,12 @@ export function AssignmentsPanel({
 
               {/* Report submission form */}
               {submittingFor === a.id && (
-                <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
                   <Label htmlFor={`report-${a.id}`}>Your report (text)</Label>
                   <textarea
                     id={`report-${a.id}`}
                     rows={4}
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                     value={reportText}
                     onChange={(e) => setReportText(e.target.value)}
                     placeholder="Write your report..."
@@ -1015,7 +1019,7 @@ function AssessmentsPanel({
           return (
             <div
               key={a.id}
-              className="flex items-center justify-between rounded-md border border-slate-100 p-3"
+              className="flex items-center justify-between rounded-lg border border-slate-200 p-3"
             >
               <div>
                 <div className="text-sm font-medium text-slate-900">{a.title}</div>
@@ -1146,7 +1150,7 @@ function LiveSessionsAt({
         {sessions.map((ls) => (
           <div
             key={ls.id}
-            className="flex items-center justify-between rounded-md border border-slate-100 p-3"
+            className="flex items-center justify-between rounded-lg border border-slate-200 p-3"
           >
             <div>
               <div className="text-sm font-medium text-slate-900">{ls.title}</div>

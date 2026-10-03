@@ -120,7 +120,7 @@ export function TimelinerEditor({
           )}
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div className="text-sm text-slate-500">
             Current position: <strong>{formatTime(currentTime)}</strong>
             {duration > 0 && <> / {formatTime(duration)}</>}
@@ -137,7 +137,7 @@ export function TimelinerEditor({
               Interactive Questions ({sortedQuestions.length})
             </div>
             {sortedQuestions.map((q, i) => (
-              <div key={q.id} className="rounded-md border border-slate-100 p-3">
+              <div key={q.id} className="rounded-lg border border-slate-200 p-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
@@ -235,7 +235,7 @@ function QuestionForm({
         <textarea
           id="q-text"
           rows={2}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           value={questionText}
           onChange={(e) => setQuestionText(e.target.value)}
           placeholder="e.g., What did the speaker just mention?"
@@ -304,7 +304,7 @@ function QuestionForm({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="correct-jump" required>
             If correct → jump to (seconds)
@@ -335,7 +335,7 @@ function QuestionForm({
         </div>
       </div>
 
-      <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+      <div className="flex justify-end gap-2 border-t border-slate-200 pt-3">
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>

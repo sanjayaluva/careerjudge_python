@@ -126,10 +126,10 @@ export default function TrainingPage() {
   return (
     <div className="space-y-6">
       <PageCard>
-        <div className="flex items-center justify-between p-6 pb-4">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900">Training</h1>
-            <p className="text-sm text-slate-500">
+        <div className="flex flex-col gap-4 p-6 pb-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">Training</h1>
+            <p className="mt-1 text-sm text-slate-500">
               {data?.count ?? 0} published course{(data?.count ?? 0) !== 1 ? "s" : ""}
             </p>
           </div>
@@ -144,8 +144,8 @@ export default function TrainingPage() {
           <PrivateSpaceNote what="training courses" />
         </div>
         <Tabs defaultValue="browse">
-          <div className="px-6">
-            <TabsList>
+          <div className="overflow-x-auto px-6">
+            <TabsList className="flex-nowrap">
               <TabsTrigger value="browse">Browse Courses</TabsTrigger>
               {canManage && (
                 <TabsTrigger value="manage">Manage Courses ({allCourses.length})</TabsTrigger>
@@ -171,7 +171,7 @@ export default function TrainingPage() {
                 <Spinner size="lg" />
               </div>
             ) : courses.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-500">
+              <p className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
                 No published courses available yet.
               </p>
             ) : (
@@ -184,7 +184,7 @@ export default function TrainingPage() {
                     <TableHead>Price</TableHead>
                     {/* Report 9 #83: learners don't see who / how many registered. */}
                     {canManage && <TableHead>Registrations</TableHead>}
-                    <TableHead></TableHead>
+                    <TableHead className="text-right"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -202,11 +202,15 @@ export default function TrainingPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-500">{c.category_name ?? "—"}</TableCell>
-                      <TableCell className="text-slate-500">${c.price}</TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums text-slate-500">
+                        ${c.price}
+                      </TableCell>
                       {canManage && (
-                        <TableCell className="text-slate-500">{c.registration_count}</TableCell>
+                        <TableCell className="tabular-nums text-slate-500">
+                          {c.registration_count}
+                        </TableCell>
                       )}
-                      <TableCell>
+                      <TableCell className="text-right">
                         {myRegs.some((r) => r.course === c.id) ? (
                           <Badge variant="success">Registered</Badge>
                         ) : !canRegister ? null : (
@@ -230,7 +234,7 @@ export default function TrainingPage() {
           {canManage && (
             <TabsContent value="manage" className="px-6 py-4">
               {allCourses.length === 0 ? (
-                <p className="py-8 text-center text-sm text-slate-500">
+                <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
                   No courses yet. Click &quot;Create course&quot; to get started.
                 </p>
               ) : (
@@ -243,7 +247,7 @@ export default function TrainingPage() {
                       <TableHead>Price</TableHead>
                       <TableHead>Registrations</TableHead>
                       <TableHead>Created</TableHead>
-                      <TableHead></TableHead>
+                      <TableHead className="text-right"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -276,13 +280,17 @@ export default function TrainingPage() {
                             {c.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-slate-500">${c.price}</TableCell>
-                        <TableCell className="text-slate-500">{c.registration_count}</TableCell>
-                        <TableCell className="text-slate-500">
+                        <TableCell className="whitespace-nowrap tabular-nums text-slate-500">
+                          ${c.price}
+                        </TableCell>
+                        <TableCell className="tabular-nums text-slate-500">
+                          {c.registration_count}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-slate-500">
                           {new Date(c.created_at).toLocaleDateString()}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
                             <Link to={`/training/${c.id}/edit`}>
                               <Button size="sm" variant="outline">
                                 Edit
@@ -296,7 +304,7 @@ export default function TrainingPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="text-danger-600"
+                                className="text-danger-600 hover:text-danger-700"
                                 onClick={() => setDeleting(c)}
                               >
                                 Delete
@@ -333,7 +341,7 @@ export default function TrainingPage() {
             </span>
           )}
         </p>
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={() => setDeleting(null)}>
             Cancel
           </Button>
@@ -396,7 +404,7 @@ const MY_COURSE_GROUPS: {
 function MyCoursesTabs({ registrations }: { registrations: CourseRegistration[] }) {
   if (registrations.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-slate-500">
+      <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
         You haven&apos;t registered for any courses yet.
       </p>
     );
@@ -407,20 +415,24 @@ function MyCoursesTabs({ registrations }: { registrations: CourseRegistration[] 
     )?.value ?? "new";
   return (
     <Tabs defaultValue={firstWithCourses}>
-      <TabsList>
-        {MY_COURSE_GROUPS.map((g) => (
-          <TabsTrigger key={g.value} value={g.value}>
-            {g.label} (
-            {registrations.filter((r) => g.statuses.includes(r.completion_status)).length})
-          </TabsTrigger>
-        ))}
-      </TabsList>
+      <div className="overflow-x-auto">
+        <TabsList className="flex-nowrap">
+          {MY_COURSE_GROUPS.map((g) => (
+            <TabsTrigger key={g.value} value={g.value}>
+              {g.label} (
+              {registrations.filter((r) => g.statuses.includes(r.completion_status)).length})
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </div>
       {MY_COURSE_GROUPS.map((g) => {
         const rows = registrations.filter((r) => g.statuses.includes(r.completion_status));
         return (
-          <TabsContent key={g.value} value={g.value} className="pt-4">
+          <TabsContent key={g.value} value={g.value} className="mt-4">
             {rows.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-500">{g.empty}</p>
+              <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center text-sm text-slate-500">
+                {g.empty}
+              </p>
             ) : (
               <Table>
                 <TableHeader>
@@ -429,7 +441,7 @@ function MyCoursesTabs({ registrations }: { registrations: CourseRegistration[] 
                     <TableHead>Payment</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Registered</TableHead>
-                    <TableHead></TableHead>
+                    <TableHead className="text-right"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -461,10 +473,10 @@ function MyCoursesTabs({ registrations }: { registrations: CourseRegistration[] 
                           {completionStatusLabel(r.completion_status)}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-slate-500">
+                      <TableCell className="whitespace-nowrap text-slate-500">
                         {new Date(r.registered_at).toLocaleDateString()}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-right">
                         {/* The course opens on Learn: the player starts or
                             resumes it, and shows the results once finished. */}
                         <Link to={`/training/${r.course}`}>

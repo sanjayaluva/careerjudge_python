@@ -214,43 +214,48 @@ export default function TrainingCourseDetailPage() {
   );
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
       <div>
-        <Link to="/training" className="text-sm text-primary-600 hover:underline">
+        <Link
+          to="/training"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-900"
+        >
           ← Back to Training
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-bold text-slate-900">{course.title}</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{course.title}</h1>
           <Badge variant="outline">{typeLabel}</Badge>
           <Badge variant="outline">{scheduleLabel}</Badge>
           <Badge variant={STATUS_VARIANTS[course.status] ?? "default"}>{course.status}</Badge>
           {course.category_name && <Badge variant="outline">{course.category_name}</Badge>}
         </div>
         {course.objective && (
-          <p className="mt-2 max-w-3xl text-sm text-slate-600">{course.objective}</p>
+          <p className="mt-2 max-w-3xl text-sm leading-snug text-slate-600">{course.objective}</p>
         )}
       </div>
 
       <Tabs defaultValue={myRegistration ? "learn" : "overview"}>
-        <TabsList>
-          {/* Report 9 #80: Overview » Structure » Learn » Live Sessions »
+        <div className="overflow-x-auto">
+          <TabsList className="flex-nowrap">
+            {/* Report 9 #80: Overview » Structure » Learn » Live Sessions »
               Assignments » Assessments. The player is "Learn" again (this
               supersedes R8-14's "Run the Course"); R8 #1/#11: CJ Admin and
               trainers can run the course too. */}
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="structure">Structure ({course.lessons.length} lessons)</TabsTrigger>
-          {course.status === "published" && <TabsTrigger value="learn">▶ Learn</TabsTrigger>}
-          <TabsTrigger value="live-sessions">
-            Live Sessions ({course.live_sessions.length})
-          </TabsTrigger>
-          <TabsTrigger value="assignments">Assignments ({assignmentCount})</TabsTrigger>
-          <TabsTrigger value="assessments">Assessments ({course.assessments.length})</TabsTrigger>
-          {canManage && <TabsTrigger value="completion">Completion</TabsTrigger>}
-          {canManage && <TabsTrigger value="registrations">Registrations</TabsTrigger>}
-          {canManage && !isPrivateAuthor && (
-            <TabsTrigger value="update-requests">Update Requests</TabsTrigger>
-          )}
-        </TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="structure">Structure ({course.lessons.length} lessons)</TabsTrigger>
+            {course.status === "published" && <TabsTrigger value="learn">▶ Learn</TabsTrigger>}
+            <TabsTrigger value="live-sessions">
+              Live Sessions ({course.live_sessions.length})
+            </TabsTrigger>
+            <TabsTrigger value="assignments">Assignments ({assignmentCount})</TabsTrigger>
+            <TabsTrigger value="assessments">Assessments ({course.assessments.length})</TabsTrigger>
+            {canManage && <TabsTrigger value="completion">Completion</TabsTrigger>}
+            {canManage && <TabsTrigger value="registrations">Registrations</TabsTrigger>}
+            {canManage && !isPrivateAuthor && (
+              <TabsTrigger value="update-requests">Update Requests</TabsTrigger>
+            )}
+          </TabsList>
+        </div>
 
         {/* === OVERVIEW TAB === */}
         <TabsContent value="overview">
@@ -261,13 +266,13 @@ export default function TrainingCourseDetailPage() {
             <CardContent>
               <dl className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2">
                 <div className="py-1">
-                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Price
                   </dt>
                   <dd className="mt-1 text-sm text-slate-900">${course.price}</dd>
                 </div>
                 <div className="py-1">
-                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Duration
                   </dt>
                   <dd className="mt-1 text-sm text-slate-900">
@@ -277,14 +282,14 @@ export default function TrainingCourseDetailPage() {
                 {/* Report 9 #83: learners see the trainer, not who created the
                     course or how many registered. */}
                 <div className="py-1">
-                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Name of Trainer
                   </dt>
                   <dd className="mt-1 text-sm text-slate-900">{course.trainer_name ?? "—"}</dd>
                 </div>
                 {canManage && (
                   <div className="py-1">
-                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                       Created by
                     </dt>
                     <dd className="mt-1 text-sm text-slate-900">{course.created_by_name ?? "—"}</dd>
@@ -292,7 +297,7 @@ export default function TrainingCourseDetailPage() {
                 )}
                 {canManage && (
                   <div className="py-1">
-                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                       Registrations
                     </dt>
                     <dd className="mt-1 text-sm text-slate-900">{course.registration_count}</dd>
@@ -301,9 +306,9 @@ export default function TrainingCourseDetailPage() {
               </dl>
 
               {course.description && (
-                <div className="mt-4 border-t border-slate-100 pt-4">
+                <div className="mt-4 border-t border-slate-200 pt-4">
                   {/* Report 9 #81 */}
-                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     About the Course
                   </div>
                   {/* E-X4: render the rich-text course description. */}
@@ -311,7 +316,7 @@ export default function TrainingCourseDetailPage() {
                 </div>
               )}
 
-              <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <div className="mt-6 flex justify-end gap-2 border-t border-slate-200 pt-4">
                 {canManage && (
                   <Link to={`/training/${cid}/edit`}>
                     <Button variant="outline">Edit course</Button>
@@ -393,7 +398,7 @@ export default function TrainingCourseDetailPage() {
                 </div>
               )}
               {course.live_sessions.length === 0 ? (
-                <p className="py-4 text-center text-sm text-slate-500">
+                <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-10 text-center text-sm text-slate-500">
                   No live sessions scheduled.
                 </p>
               ) : (
@@ -542,7 +547,7 @@ export default function TrainingCourseDetailPage() {
             </CardHeader>
             <CardContent>
               {course.assessments.length === 0 ? (
-                <p className="py-4 text-center text-sm text-slate-500">
+                <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-10 text-center text-sm text-slate-500">
                   No assessments linked to this course.
                 </p>
               ) : (
@@ -669,7 +674,9 @@ function RegistrationsTab({ courseId }: { courseId: number }) {
       </CardHeader>
       <CardContent>
         {list.length === 0 ? (
-          <p className="py-4 text-center text-sm text-slate-500">No students registered yet.</p>
+          <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-10 text-center text-sm text-slate-500">
+            No students registered yet.
+          </p>
         ) : (
           <CourseProgressTable
             rows={list}
@@ -775,7 +782,7 @@ function AssignmentSubmissionsTab({ course }: { course: TrainingCourse }) {
       </CardHeader>
       <CardContent className="space-y-6">
         {sessions.length === 0 ? (
-          <p className="py-4 text-center text-sm text-slate-500">
+          <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-10 text-center text-sm text-slate-500">
             This course has no assignments. Add them under Structure.
           </p>
         ) : (
@@ -937,7 +944,9 @@ function ReportsReviewModal({
           <Spinner />
         </div>
       ) : list.length === 0 ? (
-        <p className="py-4 text-center text-sm text-slate-500">No reports submitted yet.</p>
+        <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-10 text-center text-sm text-slate-500">
+          No reports submitted yet.
+        </p>
       ) : (
         <div className="space-y-3">
           {list.map((rep) => (
@@ -957,7 +966,7 @@ function ReportsReviewModal({
         </div>
       )}
       {summary && summary.assessment_scores.length > 0 && (
-        <div className="mt-5 border-t border-slate-100 pt-4">
+        <div className="mt-5 border-t border-slate-200 pt-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             Assessment results
           </p>
@@ -1011,7 +1020,7 @@ function ReportReviewRow({
   const [override, setOverride] = useState("");
   return (
     <div className="rounded-md border border-slate-200 p-3 text-sm">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <span className="font-medium text-slate-900">
           {report.student_name || report.student_email}
         </span>
@@ -1126,11 +1135,13 @@ function MessagesModal({
             <Spinner />
           </div>
         ) : list.length === 0 ? (
-          <p className="py-4 text-center text-sm text-slate-500">No messages yet.</p>
+          <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-10 text-center text-sm text-slate-500">
+            No messages yet.
+          </p>
         ) : (
           list.map((m) => (
             <div key={m.id} className="rounded-md border border-slate-100 p-2 text-sm">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <span className="font-medium text-slate-800">
                   {m.sender_name || m.sender_email}
                 </span>
@@ -1243,7 +1254,7 @@ function AddLiveSessionForm({
 
   if (!show) {
     return (
-      <div className="mt-4 border-t border-slate-100 pt-3">
+      <div className="mt-4 border-t border-slate-200 pt-3">
         <Button variant="outline" size="sm" onClick={() => setShow(true)}>
           + Add live session
         </Button>
@@ -1257,7 +1268,7 @@ function AddLiveSessionForm({
         e.preventDefault();
         mutation.mutate();
       }}
-      className="mt-4 space-y-3 border-t border-slate-100 pt-4"
+      className="mt-4 space-y-3 border-t border-slate-200 pt-4"
     >
       <div className="text-sm font-semibold text-slate-900">Add Live Session</div>
       <Input
@@ -1266,12 +1277,12 @@ function AddLiveSessionForm({
         placeholder="Session title (e.g., Week 1 Q&A)"
         required
       />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="ls-mode">Mode</Label>
           <select
             id="ls-mode"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={mode}
             onChange={(e) => setMode(e.target.value as "online" | "offline")}
           >
@@ -1334,7 +1345,7 @@ function AddLiveSessionForm({
           <Label htmlFor="ls-after">Place in the course sequence (optional)</Label>
           <select
             id="ls-after"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={afterContent}
             onChange={(e) => setAfterContent(e.target.value)}
           >
@@ -1351,7 +1362,7 @@ function AddLiveSessionForm({
           </p>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="ls-dur">Duration (minutes)</Label>
           <Input
@@ -1368,7 +1379,7 @@ function AddLiveSessionForm({
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Description (optional)"
         rows={2}
-        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
       />
       <div className="flex gap-2">
         <Button
@@ -1457,7 +1468,7 @@ function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: C
 
   if (!show) {
     return (
-      <div className="mt-4 border-t border-slate-100 pt-3">
+      <div className="mt-4 border-t border-slate-200 pt-3">
         <Button variant="outline" size="sm" onClick={() => setShow(true)}>
           + Link assessment
         </Button>
@@ -1473,7 +1484,7 @@ function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: C
         e.preventDefault();
         mutation.mutate();
       }}
-      className="mt-4 space-y-3 border-t border-slate-100 pt-4"
+      className="mt-4 space-y-3 border-t border-slate-200 pt-4"
     >
       <div className="text-sm font-semibold text-slate-900">Link Assessment to Course</div>
       <p className="text-xs text-slate-500">
@@ -1492,14 +1503,14 @@ function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: C
           required
         />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="as-assessment" required>
             Assessment
           </Label>
           <select
             id="as-assessment"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={assessmentId}
             onChange={(e) => setAssessmentId(e.target.value)}
             required
@@ -1516,7 +1527,7 @@ function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: C
           <Label htmlFor="as-level">Level</Label>
           <select
             id="as-level"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={level}
             onChange={(e) => {
               setLevel(e.target.value);
@@ -1538,7 +1549,7 @@ function AddAssessmentForm({ courseId, lessons }: { courseId: number; lessons: C
           </Label>
           <select
             id="as-target"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={targetId}
             onChange={(e) => setTargetId(e.target.value)}
             required
@@ -1609,13 +1620,15 @@ function ConsentListButton({ liveSessionId }: { liveSessionId: number }) {
               <Spinner />
             </div>
           ) : list.length === 0 ? (
-            <p className="py-4 text-center text-sm text-slate-500">No responses yet.</p>
+            <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-10 text-center text-sm text-slate-500">
+              No responses yet.
+            </p>
           ) : (
             <ul className="space-y-1 text-sm">
               {list.map((c) => (
                 <li
                   key={c.id}
-                  className="flex items-center justify-between rounded border border-slate-100 p-2"
+                  className="flex items-center justify-between rounded-lg border border-slate-200 p-2"
                 >
                   <span className="text-slate-700">
                     {c.student_name || c.student_email || `Student #${c.student}`}
@@ -1840,7 +1853,7 @@ function CompletionParametersTab({ course }: { course: TrainingCourse }) {
           to candidates is computed against these mandatory items.
         </p>
         {allItems.length === 0 ? (
-          <p className="py-4 text-center text-sm text-slate-500">
+          <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-10 text-center text-sm text-slate-500">
             No course content yet. Add content in the Structure tab first.
           </p>
         ) : (
@@ -1945,7 +1958,7 @@ function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
           <div className="space-y-2">
             {courseRequests.map((r: CourseUpdateRequest) => (
               <div key={r.id} className="rounded-md border border-slate-200 p-3 text-sm">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <span className="font-medium capitalize">
                     {r.request_type} request —{" "}
                     <Badge
@@ -2031,7 +2044,7 @@ function CourseUpdateRequestsTab({ courseId }: { courseId: number }) {
             </select>
             <textarea
               rows={2}
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               placeholder="Reason for the change…"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -2188,7 +2201,7 @@ function RequestRescheduleButton({
             <textarea
               id="resched-note"
               rows={3}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />

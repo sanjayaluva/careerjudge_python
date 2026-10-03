@@ -53,15 +53,17 @@ export function LiveSessionConsentModal({
     >
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-bold text-slate-900">{liveSession.title}</h3>
+          <h3 className="text-lg font-semibold tracking-tight text-slate-900">
+            {liveSession.title}
+          </h3>
           {liveSession.description && (
             <p className="mt-1 text-sm text-slate-600">{liveSession.description}</p>
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Scheduled
             </div>
             <div className="mt-1 text-sm font-semibold text-slate-900">
@@ -70,7 +72,7 @@ export function LiveSessionConsentModal({
             </div>
           </div>
           <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Duration
             </div>
             <div className="mt-1 text-sm font-semibold text-slate-900">
@@ -104,7 +106,7 @@ export function LiveSessionConsentModal({
           </AlertDescription>
         </Alert>
 
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button
             variant="outline"
             onClick={() => consentMutation.mutate("declined")}

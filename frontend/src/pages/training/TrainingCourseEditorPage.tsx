@@ -105,12 +105,15 @@ export default function TrainingCourseEditorPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
       <div>
-        <button onClick={() => navigate(-1)} className="text-sm text-primary-600 hover:underline">
+        <button
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-1.5 rounded text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        >
           ← Back
         </button>
-        <h1 className="mt-2 text-xl font-bold text-slate-900">
+        <h1 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
           {isEditMode ? "Edit Course" : "Create Course"}
         </h1>
       </div>
@@ -325,7 +328,7 @@ function CourseForm({
             <textarea
               id="objective"
               rows={2}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={objective}
               onChange={(e) => setObjective(e.target.value)}
               placeholder="What will students learn?"
@@ -342,7 +345,7 @@ function CourseForm({
             <Label htmlFor="category">Category</Label>
             <select
               id="category"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
             >
@@ -360,7 +363,7 @@ function CourseForm({
               <Label htmlFor="trainer">Trainer</Label>
               <select
                 id="trainer"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={trainerId}
                 onChange={(e) => setTrainerId(e.target.value)}
               >
@@ -377,12 +380,12 @@ function CourseForm({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="course-type">Course type</Label>
               <select
                 id="course-type"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={courseType}
                 onChange={(e) => setCourseType(e.target.value)}
               >
@@ -397,7 +400,7 @@ function CourseForm({
               <Label htmlFor="schedule-type">Schedule type</Label>
               <select
                 id="schedule-type"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={scheduleType}
                 onChange={(e) => setScheduleType(e.target.value)}
               >
@@ -469,7 +472,7 @@ function CourseForm({
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={() => window.history.back()}>
               Cancel
             </Button>

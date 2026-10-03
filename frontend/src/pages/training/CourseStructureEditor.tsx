@@ -130,7 +130,11 @@ export function CourseStructureEditor({
   if (!canManage) {
     // Read-only view for students
     if (lessons.length === 0) {
-      return <p className="py-4 text-center text-sm text-slate-500">No lessons defined yet.</p>;
+      return (
+        <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-10 text-center text-sm text-slate-500">
+          No lessons defined yet.
+        </p>
+      );
     }
     return (
       <div className="space-y-4">
@@ -144,7 +148,7 @@ export function CourseStructureEditor({
   return (
     <div className="space-y-4">
       {lessons.length === 0 ? (
-        <p className="py-4 text-center text-sm text-slate-500">
+        <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-10 text-center text-sm text-slate-500">
           No lessons yet. Add your first lesson below.
         </p>
       ) : (
@@ -195,7 +199,7 @@ function LessonTree({
 
   return (
     <div className="rounded-md border border-slate-200 p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button onClick={() => setExpanded(!expanded)}>
             <span className="text-sm text-slate-400">{expanded ? "▼" : "▶"}</span>
@@ -271,8 +275,8 @@ function TopicTree({
   });
 
   return (
-    <div className="border-l-2 border-slate-100 pl-3">
-      <div className="flex items-center justify-between">
+    <div className="border-l-2 border-slate-200 pl-3">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button onClick={() => setExpanded(!expanded)}>
             <span className="text-xs text-slate-400">{expanded ? "▼" : "▶"}</span>
@@ -390,8 +394,8 @@ function SessionTree({ session, canManage }: { session: TopicSession; canManage:
   });
 
   return (
-    <div className="rounded border border-slate-100 p-2">
-      <div className="flex items-center justify-between">
+    <div className="rounded-lg border border-slate-200 p-2">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button onClick={() => setExpanded(!expanded)}>
             <span className="text-xs text-slate-400">{expanded ? "▼" : "▶"}</span>
@@ -589,7 +593,7 @@ function AddLessonForm({ courseId }: { courseId: number }) {
         e.preventDefault();
         mutation.mutate();
       }}
-      className="flex items-end gap-2 border-t border-slate-100 pt-3"
+      className="flex items-end gap-2 border-t border-slate-200 pt-3"
     >
       <div className="flex-1">
         <Label htmlFor="lesson-title" required>
@@ -753,7 +757,7 @@ function AddContentForm({ sessionId, onDone }: { sessionId: number; onDone: () =
         e.preventDefault();
         mutation.mutate();
       }}
-      className="space-y-2 rounded border border-slate-100 p-2"
+      className="space-y-2 rounded-lg border border-slate-200 p-2"
     >
       <div className="flex gap-2">
         <Input
@@ -870,7 +874,7 @@ function AddAssignmentForm({ sessionId, onDone }: { sessionId: number; onDone: (
         e.preventDefault();
         mutation.mutate();
       }}
-      className="space-y-2 rounded border border-slate-100 p-2"
+      className="space-y-2 rounded-lg border border-slate-200 p-2"
     >
       <Input
         value={title}
@@ -883,7 +887,7 @@ function AddAssignmentForm({ sessionId, onDone }: { sessionId: number; onDone: (
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Description (optional)"
         rows={2}
-        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
       />
       <Input
         value={resourceUrl}
@@ -1167,7 +1171,7 @@ function EditAssignmentButton({ assignment }: { assignment: Assignment }) {
                 value={form.description}
                 onChange={(e) => set("description", e.target.value)}
                 rows={4}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               />
             </div>
             <div>
@@ -1190,7 +1194,7 @@ function EditAssignmentButton({ assignment }: { assignment: Assignment }) {
               Enable report submission
             </label>
             {form.report_submission_enabled && (
-              <div className="space-y-3 rounded-md border border-slate-100 p-3">
+              <div className="space-y-3 rounded-lg border border-slate-200 p-3">
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -1216,7 +1220,7 @@ function EditAssignmentButton({ assignment }: { assignment: Assignment }) {
                     value={form.report_instructions}
                     onChange={(e) => set("report_instructions", e.target.value)}
                     rows={3}
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   />
                 </div>
               </div>

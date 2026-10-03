@@ -91,7 +91,7 @@ export function RegistrationFormModal({
               {f.key === "gender" ? (
                 <select
                   id={`reg-${f.key}`}
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   value={form.gender}
                   onChange={(e) => set("gender", e.target.value)}
                   required
@@ -116,7 +116,7 @@ export function RegistrationFormModal({
             </div>
           ))}
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
