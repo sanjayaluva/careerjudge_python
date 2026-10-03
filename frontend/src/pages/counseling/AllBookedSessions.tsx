@@ -50,7 +50,11 @@ export function AllBookedSessions() {
   const sessions = data?.results ?? [];
   const count = data?.count ?? 0;
   if (sessions.length === 0) {
-    return <p className="py-8 text-center text-sm text-slate-500">No sessions have been booked.</p>;
+    return (
+      <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
+        No sessions have been booked.
+      </p>
+    );
   }
 
   return (

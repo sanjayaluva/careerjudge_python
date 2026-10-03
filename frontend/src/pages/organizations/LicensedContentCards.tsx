@@ -56,7 +56,7 @@ import { CourseProgressTable } from "@/pages/training/CourseProgressTable";
 
 const ORG_KEY = (id: number) => ["organizations", id];
 const SELECT =
-  "h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600";
+  "h-10 rounded-md border border-slate-300 bg-white px-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25";
 
 type ItemType = OrganizationAssignment["item_type"];
 
@@ -347,7 +347,7 @@ export function LicensedCoursesCard({
         <ErrorNote error={error} />
         {notice && !error && <p className="mb-3 text-sm text-success-700">{notice}</p>}
         {isLoading ? null : courses.length === 0 ? (
-          <p className="py-2 text-center text-sm text-slate-500">
+          <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
             No courses have been licensed to this organization yet.
           </p>
         ) : (
@@ -486,7 +486,7 @@ function CourseProgressModal({
       ) : error ? (
         <ErrorNote error={extractApiError(error)} />
       ) : !data || data.learners.length === 0 ? (
-        <p className="py-4 text-center text-sm text-slate-500">
+        <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
           None of your members is registered in this course yet.
         </p>
       ) : (
@@ -625,7 +625,9 @@ export function CourseSchedulesCard({
           </div>
         )}
         {schedules.length === 0 ? (
-          <p className="py-2 text-center text-sm text-slate-500">No courses scheduled yet.</p>
+          <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
+            No courses scheduled yet.
+          </p>
         ) : (
           <Table>
             <TableHeader>
@@ -645,7 +647,7 @@ export function CourseSchedulesCard({
                       <input
                         type="datetime-local"
                         aria-label="New date and time"
-                        className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                        className="h-8 rounded-md border border-slate-300 bg-white px-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                         value={moving.when}
                         onChange={(e) => setMoving({ id: s.id, when: e.target.value })}
                       />
@@ -859,7 +861,7 @@ export function MemberCounsellingCard({
                   value={form.topic}
                   onChange={(e) => setForm({ ...form, topic: e.target.value })}
                 />
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <select
                     aria-label="Mode"
                     className={`${SELECT} flex-1`}
@@ -888,7 +890,7 @@ export function MemberCounsellingCard({
               </div>
             )}
             {sessions.length === 0 ? (
-              <p className="py-2 text-center text-sm text-slate-500">
+              <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
                 No sessions booked for members yet.
               </p>
             ) : (

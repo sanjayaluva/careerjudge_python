@@ -177,7 +177,7 @@ function SessionsTab({ counsellorId: _cid }: { counsellorId: number }) {
       )}
 
       {sessions.length === 0 && (
-        <p className="py-8 text-center text-sm text-slate-500">
+        <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
           No sessions yet. Students will appear here after booking.
         </p>
       )}
@@ -413,7 +413,7 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
               <textarea
                 id="client-details"
                 rows={3}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={clientDetails}
                 onChange={(e) => setClientDetails(e.target.value)}
                 placeholder="Client background and the problem presented…"
@@ -427,7 +427,7 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
               <textarea
                 id="summary"
                 rows={4}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
                 placeholder="What was discussed? Key observations?"
@@ -439,7 +439,7 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
               <textarea
                 id="diagnosis"
                 rows={2}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={provisionalDiagnosis}
                 onChange={(e) => setProvisionalDiagnosis(e.target.value)}
               />
@@ -450,7 +450,7 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
               <textarea
                 id="prognosis"
                 rows={2}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={casePrognosis}
                 onChange={(e) => setCasePrognosis(e.target.value)}
               />
@@ -459,7 +459,7 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
             <div>
               <Label required>5. Did the session go smoothly?</Label>
               <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={sessionSmoothly}
                 onChange={(e) =>
                   setSessionSmoothly(e.target.value as SessionSummary["session_smoothness"])
@@ -473,7 +473,7 @@ function SummaryModal({ sessionId, onClose }: { sessionId: number; onClose: () =
               {sessionSmoothly && (
                 <textarea
                   rows={2}
-                  className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   value={smoothlyReason}
                   onChange={(e) => setSmoothlyReason(e.target.value)}
                   placeholder="Reason (required)…"
@@ -736,7 +736,7 @@ function TimeSlotsTab({ counsellorId }: { counsellorId: number }) {
           )}
 
           {slots.length === 0 && (
-            <p className="py-4 text-center text-sm text-slate-500">
+            <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
               No time slots yet. Add your availability above.
             </p>
           )}

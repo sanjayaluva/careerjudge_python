@@ -118,7 +118,7 @@ export default function OrganizationsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <Input
               type="search"
               placeholder="Search by name, email, city..."
@@ -127,12 +127,12 @@ export default function OrganizationsPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="max-w-sm"
+              className="sm:max-w-sm"
               aria-label="Search organizations"
             />
             <select
               aria-label="Filter by type"
-              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
             >
@@ -195,8 +195,12 @@ export default function OrganizationsPage() {
                           {org.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-slate-500">{org.member_count}</TableCell>
-                      <TableCell className="text-slate-500">{org.group_count}</TableCell>
+                      <TableCell className="tabular-nums text-slate-500">
+                        {org.member_count}
+                      </TableCell>
+                      <TableCell className="tabular-nums text-slate-500">
+                        {org.group_count}
+                      </TableCell>
                       <TableCell className="text-slate-500">
                         {new Date(org.created_at).toLocaleDateString()}
                       </TableCell>
@@ -354,7 +358,7 @@ function CreateOrganizationModal({
             </Label>
             <select
               id="org-type"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 disabled:bg-slate-50"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25 disabled:bg-slate-50"
               value={forcedType ?? type}
               disabled={Boolean(forcedType)}
               onChange={(e) => setType(e.target.value)}

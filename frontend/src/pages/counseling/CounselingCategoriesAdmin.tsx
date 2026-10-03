@@ -126,7 +126,9 @@ export function CounselingCategoriesAdmin() {
           <Spinner size="lg" />
         </div>
       ) : categories.length === 0 ? (
-        <p className="py-8 text-center text-sm text-slate-500">No categories yet.</p>
+        <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
+          No categories yet.
+        </p>
       ) : (
         <Table>
           <TableHeader>
@@ -146,8 +148,10 @@ export function CounselingCategoriesAdmin() {
                 <TableRow key={c.id}>
                   <TableCell className="font-medium text-slate-900">{c.label || c.name}</TableCell>
                   <TableCell className="text-slate-600">{c.description || "—"}</TableCell>
-                  <TableCell className="text-slate-600">{c.counsellor_count}</TableCell>
-                  <TableCell className="text-slate-600">{c.session_count}</TableCell>
+                  <TableCell className="tabular-nums text-slate-600">
+                    {c.counsellor_count}
+                  </TableCell>
+                  <TableCell className="tabular-nums text-slate-600">{c.session_count}</TableCell>
                   <TableCell>
                     <Badge variant={c.is_active ? "success" : "default"}>
                       {c.is_active ? "Active" : "Inactive"}

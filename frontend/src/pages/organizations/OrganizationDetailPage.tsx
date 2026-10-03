@@ -160,13 +160,18 @@ export default function OrganizationDetailPage() {
       members.some((m) => m.user.id === myId && m.is_admin));
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
       <div>
-        <Link to="/organizations" className="text-sm text-primary-600 hover:underline">
+        <Link
+          to="/organizations"
+          className="inline-flex items-center gap-1.5 rounded text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        >
           ← Back to organizations
         </Link>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-2xl font-bold text-slate-900">{org.name}</h1>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <h1 className="min-w-0 break-words text-xl font-semibold tracking-tight text-slate-900">
+            {org.name}
+          </h1>
           {canEditDetails && (
             <Button size="sm" variant="outline" onClick={() => setDetailsOpen(true)}>
               Edit details
@@ -187,7 +192,7 @@ export default function OrganizationDetailPage() {
       {/* Groups section */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle>Groups</CardTitle>
             {access.canManageGroups && (!access.isGroupAdmin || org.groups.length > 0) && (
               <Button
@@ -204,7 +209,9 @@ export default function OrganizationDetailPage() {
         </CardHeader>
         <CardContent>
           {org.groups.length === 0 ? (
-            <p className="py-4 text-center text-sm text-slate-500">No groups yet.</p>
+            <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
+              No groups yet.
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -239,10 +246,10 @@ export default function OrganizationDetailPage() {
       {/* Members section */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle>Members</CardTitle>
             {access.canManageMembers && (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {access.canSetUpGroupAdmins && org.type !== "channel_partner" && (
                   <Button size="sm" variant="outline" onClick={() => setGroupAdminModalOpen(true)}>
                     Add Group Admin
@@ -260,7 +267,9 @@ export default function OrganizationDetailPage() {
         </CardHeader>
         <CardContent>
           {members.length === 0 ? (
-            <p className="py-4 text-center text-sm text-slate-500">No members yet.</p>
+            <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
+              No members yet.
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -499,7 +508,7 @@ function MemberRow({
       <TableCell>
         <select
           aria-label={`Group of ${member.user.email}`}
-          className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-600"
+          className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           value={member.group ?? ""}
           onChange={(e) => update({ group_id: e.target.value ? Number(e.target.value) : null })}
           disabled={!canEdit || updateMutation.isPending}
@@ -522,7 +531,7 @@ function MemberRow({
           checked={member.is_admin}
           onChange={(e) => update({ is_admin: e.target.checked })}
           disabled={!canEditAdmin || updateMutation.isPending}
-          className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+          className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
         />
       </TableCell>
       <TableCell>
@@ -558,7 +567,7 @@ function MemberRow({
               checked={member.can_view_member_reports}
               onChange={(e) => update({ can_view_member_reports: e.target.checked })}
               disabled={!canSetUpGroupAdmins || updateMutation.isPending}
-              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
             />
             Can view &amp; download
           </label>
@@ -690,7 +699,7 @@ function SchedulesCard({
         {canSchedule && (
           <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-4">
             <select
-              className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={assessmentId}
               onChange={(e) => setAssessmentId(e.target.value)}
             >
@@ -703,12 +712,12 @@ function SchedulesCard({
             </select>
             <input
               type="datetime-local"
-              className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={when}
               onChange={(e) => setWhen(e.target.value)}
             />
             <select
-              className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={groupId}
               onChange={(e) => setGroupId(e.target.value)}
             >
@@ -729,7 +738,9 @@ function SchedulesCard({
           </div>
         )}
         {schedules.length === 0 ? (
-          <p className="py-2 text-center text-sm text-slate-500">Nothing scheduled yet.</p>
+          <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
+            Nothing scheduled yet.
+          </p>
         ) : (
           <Table>
             <TableHeader>
@@ -749,7 +760,7 @@ function SchedulesCard({
                       <input
                         type="datetime-local"
                         aria-label="New date and time"
-                        className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                        className="h-8 rounded-md border border-slate-300 bg-white px-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                         value={moving.when}
                         onChange={(e) => setMoving({ id: s.id, when: e.target.value })}
                       />
@@ -975,7 +986,7 @@ function WebsiteCard({
                 <Label htmlFor="w-layout">Layout</Label>
                 <select
                   id="w-layout"
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   value={website.layout}
                   disabled={!canCustomize}
                   onChange={(e) => updateMutation.mutate({ layout: e.target.value })}
@@ -991,7 +1002,7 @@ function WebsiteCard({
                   key={`color-${website.primary_color}`}
                   id="w-color"
                   type="color"
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-1"
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-1 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   defaultValue={website.primary_color}
                   disabled={!canCustomize}
                   onBlur={(e) => {
@@ -1104,7 +1115,7 @@ function WebsiteCard({
                 <Label htmlFor="w-new-layout">Layout</Label>
                 <select
                   id="w-new-layout"
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   value={layout}
                   onChange={(e) => setLayout(e.target.value)}
                 >
@@ -1118,7 +1129,7 @@ function WebsiteCard({
                 <input
                   id="w-new-color"
                   type="color"
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-1"
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-1 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   value={color}
                   onChange={(e) => setColor(e.target.value)}
                 />
@@ -1271,7 +1282,7 @@ function GroupModal({
           </Label>
           <select
             id="grp-parent"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={parent}
             onChange={(e) => setParent(e.target.value)}
           >
@@ -1443,7 +1454,7 @@ function AddGroupAdminModal({
             </Label>
             <select
               id="ga-group"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={groupId}
               onChange={(e) => setGroupId(e.target.value)}
             >
@@ -1465,7 +1476,7 @@ function AddGroupAdminModal({
                 type="checkbox"
                 checked={canViewReports}
                 onChange={(e) => setCanViewReports(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+                className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
               />
               Can view &amp; download members&apos; reports
             </label>

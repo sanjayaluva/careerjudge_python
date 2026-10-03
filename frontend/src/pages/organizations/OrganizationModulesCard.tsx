@@ -58,7 +58,7 @@ export function OrganizationModulesCard({ org }: { org: Organization }) {
                 type="checkbox"
                 checked={selected.includes(m.code)}
                 onChange={() => toggle(m.code)}
-                className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+                className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
               />
               {m.label}
             </label>

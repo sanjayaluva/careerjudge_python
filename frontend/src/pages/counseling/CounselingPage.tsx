@@ -109,8 +109,8 @@ export default function CounselingPage() {
     <div className="space-y-6">
       <PageCard>
         <div className="p-6 pb-4">
-          <h1 className="text-lg font-bold text-slate-900">Counseling</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">Counseling</h1>
+          <p className="mt-1 text-sm text-slate-500">
             Book a session with one of our professional counsellors
           </p>
         </div>
@@ -154,7 +154,7 @@ export default function CounselingPage() {
 
           {/* === Browse Tab === */}
           <TabsContent value="browse" className="px-6 py-4">
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <Input
                 type="search"
                 placeholder="Search counsellors..."
@@ -163,10 +163,10 @@ export default function CounselingPage() {
                   setSearch(e.target.value);
                   setTimeout(() => setDebouncedSearch(e.target.value), 350);
                 }}
-                className="max-w-sm"
+                className="sm:max-w-sm"
               />
               <select
-                className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
               >
@@ -184,7 +184,9 @@ export default function CounselingPage() {
                 <Spinner size="lg" />
               </div>
             ) : counsellors.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-500">No counsellors available.</p>
+              <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
+                No counsellors available.
+              </p>
             ) : (
               // Report 8 #43 (client change request): the list shows what a
               // counselee needs to choose; the name opens full details (#42).
@@ -272,7 +274,7 @@ export default function CounselingPage() {
           {/* === My Sessions Tab === */}
           <TabsContent value="my-sessions" className="px-6 py-4">
             {sessions.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-500">
+              <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center text-sm text-slate-500">
                 You haven&apos;t booked any sessions yet.
               </p>
             ) : (
@@ -525,7 +527,7 @@ function BookingModal({
               <textarea
                 id="desc"
                 rows={2}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
@@ -602,7 +604,7 @@ function BookingModal({
                 type="checkbox"
                 checked={termsAccepted}
                 onChange={(e) => setTermsAccepted(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
               />
               <span className="text-slate-700">
                 I accept the{" "}
@@ -729,7 +731,7 @@ function CounsellorDashboardWrapper() {
               <textarea
                 id="cp-bio"
                 rows={3}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 placeholder="Brief introduction about your counselling experience..."
@@ -749,7 +751,7 @@ function CounsellorDashboardWrapper() {
                 required
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button type="submit" loading={createMut.isPending} disabled={!fullName}>
                 Create profile
               </Button>
@@ -927,7 +929,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
               <textarea
                 id="cancel-reason"
                 rows={3}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
                 placeholder="Tell us why you need to cancel…"
@@ -987,7 +989,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
             <div>
               <Label required>1. Was the session useful?</Label>
               <select
-                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={fb.session_usefulness}
                 onChange={set("session_usefulness")}
               >
@@ -1003,7 +1005,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
               <Label>2. A few words on how it was (or wasn&apos;t) useful</Label>
               <textarea
                 rows={2}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={fb.usefulness_text}
                 onChange={set("usefulness_text")}
               />
@@ -1012,7 +1014,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
             <div>
               <Label required>3. Was the counsellor friendly and empathetic?</Label>
               <select
-                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={fb.counsellor_empathy}
                 onChange={set("counsellor_empathy")}
               >
@@ -1026,7 +1028,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
             <div>
               <Label>4. How did the session end?</Label>
               <select
-                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={fb.session_ending}
                 onChange={set("session_ending")}
               >
@@ -1040,7 +1042,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
             <div>
               <Label required>5. Would you choose this counsellor again?</Label>
               <select
-                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={fb.would_rechoose}
                 onChange={set("would_rechoose")}
               >
@@ -1055,7 +1057,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
               <Label>6. Why would you (or wouldn&apos;t you) choose them again?</Label>
               <textarea
                 rows={2}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={fb.rechoose_text}
                 onChange={set("rechoose_text")}
               />
@@ -1065,7 +1067,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
               <Label>7. How can we improve the counselling service?</Label>
               <textarea
                 rows={2}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={fb.improvement_suggestions}
                 onChange={set("improvement_suggestions")}
               />
@@ -1074,7 +1076,7 @@ function SessionActionsForCounselee({ session }: { session: CounselingSession })
             <div>
               <Label required>8. Rate the counsellor (1 = very poor, 10 = excellent)</Label>
               <select
-                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={fb.rating}
                 onChange={set("rating")}
               >
