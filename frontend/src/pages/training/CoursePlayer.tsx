@@ -198,7 +198,9 @@ export function CoursePlayer({
     return (
       <Alert variant="warning">
         <AlertDescription>
-          You need to register for this course before you can start learning.
+          {onRegister
+            ? "You need to register for this course before you can start learning."
+            : "Only learners registered for this course can open its content."}
           {onRegister && (
             <Button size="sm" className="ml-3" onClick={onRegister}>
               Register now

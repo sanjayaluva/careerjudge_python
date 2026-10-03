@@ -14,6 +14,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Alert, AlertDescription, Button, PageCard, Spinner, useToast } from "@/components/ui";
 import { retrieveAssessment, startSession } from "@/api/assessment";
 import { extractApiError, extractApiErrorCode } from "@/api/client";
+import { useAuthStore } from "@/stores/auth";
 
 import { DefinitionText } from "./DefinitionText";
 import { hasRichContent } from "./richDefinition";
@@ -37,6 +38,8 @@ export default function AssessmentStartPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const toast = useToast();
+  // Report 9 #112-#114: Help Desk only views assessments.
+  const isHelpdesk = useAuthStore((s) => s.user?.role) === "helpdesk";
 
   const { data: a, isLoading } = useQuery({
     queryKey: ["assessments", aid],
@@ -100,7 +103,11 @@ export default function AssessmentStartPage() {
           <DefinitionSection heading="Instructions" value={a.instructions} />
 
           <div className="flex flex-col items-center gap-2 border-t border-slate-100 pt-6">
-            {a.status === "published" ? (
+            {isHelpdesk ? (
+              <p className="text-sm text-slate-500">
+                View only — Help Desk does not take assessments.
+              </p>
+            ) : a.status === "published" ? (
               <Button
                 size="lg"
                 loading={startMutation.isPending}

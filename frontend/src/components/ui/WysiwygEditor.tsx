@@ -12,7 +12,7 @@ import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import TextAlign from "@tiptap/extension-text-align";
 import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 
 import { extractApiError } from "@/api/client";
 import { EDITOR_IMAGE_MAX_BYTES, EDITOR_IMAGE_TYPES, uploadEditorImage } from "@/api/uploads";
@@ -52,6 +52,7 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
   // Signed Doc 3 §2.1.2: the image button offers upload or URL.
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageMenuRef = useRef<HTMLDivElement>(null);
+  const imageButtonRef = useRef<HTMLButtonElement>(null);
   const [imageMenuOpen, setImageMenuOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -64,6 +65,16 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [imageMenuOpen]);
+
+  // Keyboard users: Escape closes the image menu and returns focus to its
+  // button — without also closing a dialog the editor sits in.
+  const onImageMenuKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Escape" || !imageMenuOpen) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setImageMenuOpen(false);
+    imageButtonRef.current?.focus();
+  };
 
   // Sync external value changes (e.g., when loading existing content)
   useEffect(() => {
@@ -214,8 +225,9 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
         >
           🔗 Link
         </button>
-        <div className="relative" ref={imageMenuRef}>
+        <div className="relative" ref={imageMenuRef} onKeyDown={onImageMenuKeyDown}>
           <button
+            ref={imageButtonRef}
             type="button"
             onClick={() => setImageMenuOpen((open) => !open)}
             className={btnClass}
@@ -256,6 +268,8 @@ export function WysiwygEditor({ value, onChange, minHeight = 200 }: WysiwygEdito
             type="file"
             accept={EDITOR_IMAGE_TYPES.join(",")}
             className="hidden"
+            aria-label="Upload image from computer"
+            tabIndex={-1}
             onChange={(e) => void uploadImage(e)}
           />
         </div>

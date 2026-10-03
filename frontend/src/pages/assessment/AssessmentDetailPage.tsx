@@ -174,6 +174,8 @@ export default function AssessmentDetailPage() {
   // ASM-2 (SRS §2.2/§2.3): a non-admin's edit/delete of a PUBLISHED assessment
   // is routed to an admin for approval; admins get an approve/decline queue.
   const isCjAdmin = user?.role === "cj_admin";
+  // Report 9 #112-#114: Help Desk only views assessments — he does not take them.
+  const canTake = user?.role !== "helpdesk";
   const [requestChangeOpen, setRequestChangeOpen] = useState(false);
   const [requestDeleteOpen, setRequestDeleteOpen] = useState(false);
 
@@ -530,7 +532,7 @@ export default function AssessmentDetailPage() {
                     Return to draft
                   </Button>
                 )}
-                {a.status === "published" && (
+                {a.status === "published" && canTake && (
                   <div className="flex flex-col items-end gap-1">
                     {isPaid && (
                       <span className="text-xs text-slate-500">
@@ -664,7 +666,7 @@ export default function AssessmentDetailPage() {
           <MySessionsTab
             assessmentId={aid}
             assessmentStatus={a.status}
-            canStartSession={a.status === "published"}
+            canStartSession={a.status === "published" && canTake}
             onStartSession={() => take.begin(a)}
             startingSession={take.checkingId === a.id}
           />
@@ -1835,9 +1837,11 @@ function MySessionsTab({
       <CardContent>
         {mySessions.length === 0 ? (
           <p className="py-8 text-center text-sm text-slate-500">
-            {assessmentStatus === "published"
-              ? 'You have not taken this assessment yet. Click "Start New Session" to begin.'
-              : "This assessment is not yet published."}
+            {assessmentStatus !== "published"
+              ? "This assessment is not yet published."
+              : canStartSession
+                ? 'You have not taken this assessment yet. Click "Start New Session" to begin.'
+                : "No sessions."}
           </p>
         ) : (
           <Table>

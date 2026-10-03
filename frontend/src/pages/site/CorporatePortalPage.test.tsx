@@ -9,6 +9,8 @@ import LoginPage from "@/pages/auth/LoginPage";
 import * as orgApi from "@/api/organizations";
 import type * as OrgApiModule from "@/api/organizations";
 import type { PublicSite } from "@/api/organizations";
+import * as meApi from "@/api/me";
+import type * as MeApiModule from "@/api/me";
 import { useAuthStore } from "@/stores/auth";
 
 // Report 9 #48/#95: the public branded portal. Stub the API so no network
@@ -16,6 +18,10 @@ import { useAuthStore } from "@/stores/auth";
 vi.mock("@/api/organizations", async () => {
   const actual = await vi.importActual<typeof OrgApiModule>("@/api/organizations");
   return { ...actual, getPublicSite: vi.fn() };
+});
+vi.mock("@/api/me", async () => {
+  const actual = await vi.importActual<typeof MeApiModule>("@/api/me");
+  return { ...actual, getMe: vi.fn() };
 });
 
 const SITE: PublicSite = {
@@ -62,6 +68,27 @@ describe("<CorporatePortalPage />", () => {
       expect(orgApi.getPublicSite).toHaveBeenCalledWith("acme");
     },
   );
+
+  it("offers the dashboard to a signed-in visitor without calling /api/me/", async () => {
+    vi.mocked(orgApi.getPublicSite).mockResolvedValue(SITE);
+    useAuthStore.getState().login({
+      access: "a",
+      refresh: "r",
+      user: {
+        id: 1,
+        email: "u@example.com",
+        full_name: "U",
+        role: "individual",
+        is_email_verified: true,
+        is_superuser: false,
+        is_staff: false,
+      },
+    });
+    renderAt("/site/acme");
+    const links = await screen.findAllByRole("link", { name: /go to dashboard/i });
+    expect(links[0]).toHaveAttribute("href", "/dashboard");
+    expect(meApi.getMe).not.toHaveBeenCalled();
+  });
 
   it("shows a not-available message for an unknown or inactive portal", async () => {
     vi.mocked(orgApi.getPublicSite).mockRejectedValue(new Error("404"));

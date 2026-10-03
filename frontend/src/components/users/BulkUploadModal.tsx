@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { apiClient, extractApiError } from "@/api/client";
 import { Alert, AlertDescription, Button, Label, Modal } from "@/components/ui";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // ---------------------------------------------------------------------------
 // Bulk Upload Modal — CSV upload with template download + results display
@@ -37,6 +38,7 @@ export function BulkUploadModal({
   invalidateKeys = [["admin", "users"]],
 }: BulkUploadModalProps) {
   const queryClient = useQueryClient();
+  const { isSuperAdmin } = usePermissions();
   const [file, setFile] = useState<File | null>(null);
   const [groupId, setGroupId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -195,9 +197,14 @@ export function BulkUploadModal({
               <li>Fill in user details (full_name and email are required)</li>
               <li>
                 Optional columns: phone, employee_id
-                {organizationId
-                  ? ", role_name (individual, or group_admin for organization admins)"
-                  : ", role_name (e.g., individual, corp_admin, sme, reviewer)"}
+                {/* An organization manager (Corp Admin, Corp Exclusive, Group
+                    Admin, Channel Partner) bulk-creates individuals only;
+                    Group Admins are set up one by one with "Add Group Admin". */}
+                {!organizationId
+                  ? ", role_name (e.g., individual, corp_admin, sme, reviewer)"
+                  : isSuperAdmin
+                    ? ", role_name (e.g., individual)"
+                    : ", role_name (individual only)"}
               </li>
               <li>Upload the filled CSV file below</li>
               <li>Users will be created with a random password and signup email sent</li>

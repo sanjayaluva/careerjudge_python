@@ -27,7 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
-import { listAssessments } from "@/api/assessment";
+import { listAllAssessments } from "@/api/assessment";
 import { extractApiError } from "@/api/client";
 import type { CounselingSession } from "@/api/counseling";
 import {
@@ -51,7 +51,7 @@ import {
   type OrganizationAssignment,
   type OrganizationMember,
 } from "@/api/organizations";
-import { listCourses } from "@/api/training";
+import { listAllCourses } from "@/api/training";
 import { CourseProgressTable } from "@/pages/training/CourseProgressTable";
 
 const ORG_KEY = (id: number) => ["organizations", id];
@@ -95,15 +95,16 @@ export function LicensedContentCard({ orgId, canLicense }: { orgId: number; canL
   const [error, setError] = useState<string | null>(null);
   const { data: assignments = [] } = useAssignments(orgId);
 
-  // Only CJ Admin picks from the catalogues; managers read item titles.
-  const { data: assessmentsPage } = useQuery({
-    queryKey: ["assessments", "published", "for-assign"],
-    queryFn: () => listAssessments({ status: "published" }),
+  // Only CJ Admin picks from the catalogues (every page of them); managers
+  // read item titles.
+  const { data: catalogueAssessments = [] } = useQuery({
+    queryKey: ["assessments", "published", "all"],
+    queryFn: () => listAllAssessments({ status: "published" }),
     enabled: canLicense,
   });
-  const { data: coursesPage } = useQuery({
-    queryKey: ["training", "courses", "published", "for-licence"],
-    queryFn: () => listCourses({ status: "published" }),
+  const { data: catalogueCourses = [] } = useQuery({
+    queryKey: ["training", "courses", "published", "all"],
+    queryFn: () => listAllCourses({ status: "published" }),
     enabled: canLicense,
   });
 
@@ -140,7 +141,7 @@ export function LicensedContentCard({ orgId, canLicense }: { orgId: number; canL
           heading="Assessments"
           noun="assessment"
           rows={assignments.filter((a) => a.item_type === "assessment")}
-          options={(assessmentsPage?.results ?? []).map((a) => ({ id: a.id, title: a.title }))}
+          options={catalogueAssessments.map((a) => ({ id: a.id, title: a.title }))}
           canLicense={canLicense}
           busy={assignMutation.isPending || removeMutation.isPending}
           onAssign={(id) => assignMutation.mutate({ item_type: "assessment", item_id: id })}
@@ -150,7 +151,7 @@ export function LicensedContentCard({ orgId, canLicense }: { orgId: number; canL
           heading="Courses"
           noun="course"
           rows={assignments.filter((a) => a.item_type === "training_course")}
-          options={(coursesPage?.results ?? []).map((c) => ({ id: c.id, title: c.title }))}
+          options={catalogueCourses.map((c) => ({ id: c.id, title: c.title }))}
           canLicense={canLicense}
           busy={assignMutation.isPending || removeMutation.isPending}
           onAssign={(id) => assignMutation.mutate({ item_type: "training_course", item_id: id })}
@@ -717,7 +718,12 @@ export function MemberCounsellingCard({
   canAct: boolean;
 }) {
   const queryClient = useQueryClient();
-  const { data: assignments = [], isSuccess } = useAssignments(orgId);
+  const {
+    data: assignments = [],
+    isSuccess,
+    isError,
+    error: assignmentsError,
+  } = useAssignments(orgId);
   const licensed = assignments.some((a) => a.item_type === "counseling");
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -766,6 +772,21 @@ export function MemberCounsellingCard({
     onError: (err) => setError(extractApiError(err)),
   });
 
+  // A failed load says so instead of hiding the card silently.
+  if (isError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Counselling for members</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ErrorNote
+            error={`Could not load this organization's counselling licence. ${extractApiError(assignmentsError)}`}
+          />
+        </CardContent>
+      </Card>
+    );
+  }
   if (!isSuccess) return null;
 
   return (
