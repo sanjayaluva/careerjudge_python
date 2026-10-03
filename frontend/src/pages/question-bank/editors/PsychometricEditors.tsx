@@ -98,7 +98,7 @@ export function RatingEditor({ data, onChange }: RatingScaleEditorProps) {
           <Label htmlFor="rdir">Scoring direction</Label>
           <select
             id="rdir"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={data.rating_direction}
             onChange={(e) => onChange({ ...data, rating_direction: e.target.value })}
           >
@@ -261,7 +261,7 @@ export function RankEditor({ data, onChange }: RankEditorProps) {
         <button
           type="button"
           onClick={addOption}
-          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
         >
           + Add item
         </button>
@@ -403,7 +403,7 @@ export function RankRateEditor({ data, onChange }: RankRateEditorProps) {
         <button
           type="button"
           onClick={addOption}
-          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
         >
           + Add item
         </button>
@@ -589,7 +589,7 @@ export function ForcedChoiceEditor({ questionType, data, onChange }: ForcedChoic
           <button
             type="button"
             onClick={addPair}
-            className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
           >
             + Add option pair
           </button>

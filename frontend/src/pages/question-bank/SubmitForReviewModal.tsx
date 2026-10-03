@@ -92,7 +92,7 @@ export function SubmitForReviewModal({
           <Label htmlFor="submit-reviewer">Reviewer</Label>
           <select
             id="submit-reviewer"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm disabled:opacity-70"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-70"
             value={reviewer}
             disabled={locked}
             onChange={(e) => setReviewer(e.target.value ? Number(e.target.value) : "")}

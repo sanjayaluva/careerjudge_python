@@ -871,16 +871,19 @@ export default function QuestionEditorPage() {
   };
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
       {/* Breadcrumb + title */}
       <div>
-        <Link to="/question-bank" className="text-sm text-primary-600 hover:underline">
+        <Link
+          to="/question-bank"
+          className="inline-flex items-center gap-1.5 rounded text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        >
           ← Back to Question Bank
         </Link>
-        <h1 className="mt-2 text-xl font-bold text-slate-900">
+        <h1 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
           {isEditMode ? "Edit Question" : "Create Question"}
         </h1>
-        <p className="text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-500">
           {isEditMode
             ? "Update the question configuration. Child resources (options, media, hotspots) will be re-synced."
             : "Create a new question with full type-specific configuration."}
@@ -902,7 +905,7 @@ export default function QuestionEditorPage() {
           )}
 
           {/* Top form row: type + category + difficulty + cognitive level */}
-          <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-card">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <Label htmlFor="qtype" required>
@@ -910,7 +913,7 @@ export default function QuestionEditorPage() {
                 </Label>
                 <select
                   id="qtype"
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   value={questionType}
                   onChange={(e) => {
                     const newType = e.target.value;
@@ -935,7 +938,7 @@ export default function QuestionEditorPage() {
                 <Label htmlFor="cat">Category</Label>
                 <select
                   id="cat"
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : "")}
                 >
@@ -951,7 +954,7 @@ export default function QuestionEditorPage() {
                 <Label htmlFor="diff">Difficulty</Label>
                 <select
                   id="diff"
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   value={difficulty}
                   onChange={(e) => setDifficulty(e.target.value)}
                 >
@@ -967,7 +970,7 @@ export default function QuestionEditorPage() {
                 <Label htmlFor="cog">Cognitive level</Label>
                 <select
                   id="cog"
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                   value={cognitiveLevel}
                   onChange={(e) => setCognitiveLevel(e.target.value)}
                 >
@@ -1005,7 +1008,7 @@ export default function QuestionEditorPage() {
               <input
                 id="qtitle"
                 type="text"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={questionTitle}
                 onChange={(e) => setQuestionTitle(e.target.value)}
                 placeholder="Short title to identify this question (e.g. 'Capital Cities - Easy MCQ')"
@@ -1022,7 +1025,7 @@ export default function QuestionEditorPage() {
                 Worked-Out Solution
               </label>
               <textarea
-                className="min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                className="min-h-[80px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={workedSolution}
                 onChange={(e) => setWorkedSolution(e.target.value)}
                 placeholder="Model answer / step-by-step solution for reviewers (optional)"
@@ -1187,7 +1190,7 @@ export default function QuestionEditorPage() {
           </div>
 
           {/* Submit bar — sticky at bottom for easy access */}
-          <div className="sticky bottom-0 flex justify-end gap-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 rounded-lg border border-slate-200 bg-white p-4 shadow-popover">
             <Button
               type="button"
               variant="outline"

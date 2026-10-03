@@ -131,7 +131,7 @@ export function FlashItemsEditor({
           <Label htmlFor="flashorder">Flash order</Label>
           <select
             id="flashorder"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={flashOrder}
             onChange={(e) =>
               onChange({
@@ -195,7 +195,7 @@ export function FlashItemsEditor({
               <button
                 type="button"
                 onClick={() => removeItem(i)}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-danger hover:bg-danger-50"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                 aria-label="Remove flash item"
               >
                 <Trash2 className="h-4 w-4" />

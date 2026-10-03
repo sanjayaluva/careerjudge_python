@@ -275,7 +275,7 @@ export default function QuestionDetailPage() {
   const hasOptions = q.options.length > 0;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-4 sm:p-6">
       {error && (
         <Alert variant="error">
           <AlertDescription>{error}</AlertDescription>
@@ -283,11 +283,14 @@ export default function QuestionDetailPage() {
       )}
 
       <div>
-        <Link to="/question-bank" className="text-sm text-primary-600 hover:underline">
+        <Link
+          to="/question-bank"
+          className="inline-flex items-center gap-1.5 rounded text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        >
           ← Back to Question Bank
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-bold text-slate-900">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">
             {q.question_title || stripHtml(q.question_text_1) || "(untitled question)"}
           </h1>
           <Badge variant="outline">{q.question_type_label}</Badge>
@@ -1264,7 +1267,7 @@ function ReviewModal({
           <textarea
             id="comment"
             rows={3}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder={
@@ -1278,7 +1281,7 @@ function ReviewModal({
             <Label htmlFor="rating">Content quality rating (1-5)</Label>
             <select
               id="rating"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={rating}
               onChange={(e) => setRating(Number(e.target.value))}
             >

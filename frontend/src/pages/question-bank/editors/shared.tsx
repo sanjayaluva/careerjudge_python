@@ -61,7 +61,7 @@ export function OptionRow({
                 type="checkbox"
                 checked={option.is_correct}
                 onChange={(e) => onChange(index, { ...option, is_correct: e.target.checked })}
-                className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+                className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
               />
               Correct
             </label>
@@ -91,7 +91,7 @@ export function OptionRow({
                   })),
                 });
               }}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               placeholder="answer1&#10;answer2&#10;answer3"
             />
           </div>
@@ -100,7 +100,7 @@ export function OptionRow({
       <Button
         variant="ghost"
         size="sm"
-        className="text-danger hover:bg-danger-50"
+        className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
         onClick={() => onRemove(index)}
       >
         Remove
@@ -134,7 +134,7 @@ export function MatchPairRow({ pair, index, onChange, onRemove }: MatchPairRowPr
         <Button
           variant="ghost"
           size="sm"
-          className="text-danger hover:bg-danger-50"
+          className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
           onClick={() => onRemove(index)}
         >
           Remove
@@ -200,7 +200,7 @@ export function RankOptionRow({ option, index, onChange, onRemove }: RankOptionR
       <Button
         variant="ghost"
         size="sm"
-        className="text-danger hover:bg-danger-50"
+        className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
         onClick={() => onRemove(index)}
       >
         Remove
@@ -261,7 +261,7 @@ export function RatingRow({
         <Button
           variant="ghost"
           size="sm"
-          className="text-danger hover:bg-danger-50"
+          className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
           onClick={() => onRemove(index)}
         >
           Remove

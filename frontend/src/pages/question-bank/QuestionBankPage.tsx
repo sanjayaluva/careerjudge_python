@@ -240,7 +240,7 @@ export default function QuestionBankPage() {
                   : "Manage assessment questions"}
               </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {canManageQB && (
                 <Button variant="outline" onClick={() => navigate("/question-bank/psychometrics")}>
                   Psychometric Analysis
@@ -319,11 +319,11 @@ export default function QuestionBankPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="max-w-sm"
+              className="w-full sm:max-w-xs"
               aria-label="Search questions"
             />
             <select
-              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25 sm:w-auto"
               value={typeFilter}
               onChange={(e) => {
                 setTypeFilter(e.target.value);
@@ -338,7 +338,7 @@ export default function QuestionBankPage() {
               ))}
             </select>
             <select
-              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25 sm:w-auto"
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
@@ -360,7 +360,7 @@ export default function QuestionBankPage() {
                   setMineOnly(e.target.checked);
                   setPage(1);
                 }}
-                className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+                className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
               />
               My questions
             </label>
@@ -375,7 +375,7 @@ export default function QuestionBankPage() {
                     setAssignedToMe(e.target.checked);
                     setPage(1);
                   }}
-                  className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-600"
+                  className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                 />
                 Assigned to me
               </label>
@@ -525,6 +525,7 @@ export default function QuestionBankPage() {
                             aria-label="Select question"
                             checked={selected.has(q.id)}
                             onChange={() => toggleSelect(q.id)}
+                            className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                           />
                         </TableCell>
                       )}
@@ -546,7 +547,7 @@ export default function QuestionBankPage() {
                       </TableCell>
                       <TableCell className="text-slate-500">{q.difficulty_level || "—"}</TableCell>
                       <TableCell className="text-slate-500">{q.created_by_name || "—"}</TableCell>
-                      <TableCell className="text-slate-500">
+                      <TableCell className="whitespace-nowrap tabular-nums text-slate-500">
                         {new Date(q.created_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
@@ -589,7 +590,7 @@ export default function QuestionBankPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-danger hover:bg-danger-50"
+                              className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                               onClick={() =>
                                 setDeleteQ({
                                   id: q.id,
@@ -740,7 +741,7 @@ function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImpor
         </div>
         <textarea
           rows={10}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs"
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder='[{"question_type": "MCQ_TEXT_IMAGE", "question_title": "Q1", "question_text_1": "First?", "scoring_type": "BINARY"}]'
@@ -824,7 +825,7 @@ function DeleteQuestionModal({
         <textarea
           id="del-reason"
           rows={2}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Why should this question be removed?"

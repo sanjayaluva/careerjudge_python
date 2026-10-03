@@ -236,16 +236,21 @@ export default function PsychometricAnalysisPage() {
   }
 
   return (
-    <PageCard>
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">Psychometric Analysis</h1>
-          <p className="text-sm text-slate-500">
+    <PageCard className="p-4 sm:p-6">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">
+            Psychometric Analysis
+          </h1>
+          <p className="mt-1 text-sm leading-snug text-slate-500">
             Set the filter criteria and extract the questions, select the ones to analyse, choose
             the analyses and run them. Inspect the results, then submit them to save or cancel.
           </p>
         </div>
-        <Link to="/question-bank" className="text-sm text-primary-600 hover:underline">
+        <Link
+          to="/question-bank"
+          className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline"
+        >
           ← Back to Question Bank
         </Link>
       </div>
@@ -260,7 +265,7 @@ export default function PsychometricAnalysisPage() {
               <Label htmlFor="pa-cat">Category</Label>
               <select
                 id="pa-cat"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
               >
@@ -369,6 +374,7 @@ export default function PsychometricAnalysisPage() {
                         checked={allSelected}
                         disabled={extracted.length === 0 || awaitingDecision}
                         onChange={toggleAll}
+                        className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                       />
                     </TableHead>
                     <TableHead>ID</TableHead>
@@ -397,6 +403,7 @@ export default function PsychometricAnalysisPage() {
                             checked={selected.has(q.id)}
                             disabled={awaitingDecision}
                             onChange={() => toggle(q.id)}
+                            className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                           />
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-slate-500">
@@ -420,8 +427,10 @@ export default function PsychometricAnalysisPage() {
                             {q.status_label}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-slate-500">{q.n_candidates}</TableCell>
-                        <TableCell className="text-slate-500">
+                        <TableCell className="tabular-nums text-slate-500">
+                          {q.n_candidates}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums text-slate-500">
                           {q.psychometric_analyzed_at
                             ? new Date(q.psychometric_analyzed_at).toLocaleDateString()
                             : "Never"}
@@ -449,6 +458,7 @@ export default function PsychometricAnalysisPage() {
                   checked={analyses.has(a.value)}
                   disabled={awaitingDecision}
                   onChange={() => toggleAnalysis(a.value)}
+                  className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                 />
                 {a.label}
               </label>
@@ -483,7 +493,7 @@ export default function PsychometricAnalysisPage() {
               )}
             </div>
             {awaitingDecision && (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
                   onClick={handleCancelResults}
@@ -532,17 +542,19 @@ export default function PsychometricAnalysisPage() {
                             {titles.get(r.question_id) ? ` — ${titles.get(r.question_id)}` : ""}
                           </Link>
                         </TableCell>
-                        <TableCell className="text-slate-500">{r.n_candidates}</TableCell>
+                        <TableCell className="tabular-nums text-slate-500">
+                          {r.n_candidates}
+                        </TableCell>
                         {r.error ? (
                           <TableCell
                             colSpan={Math.max(resultColumns.length, 1)}
-                            className="text-xs text-danger"
+                            className="text-xs text-danger-600"
                           >
                             {r.error}
                           </TableCell>
                         ) : (
                           resultColumns.map((c) => (
-                            <TableCell key={c.key}>
+                            <TableCell key={c.key} className="tabular-nums">
                               {fmt(r[c.key as keyof PsychometricAnalysisResult] as number | null)}
                             </TableCell>
                           ))

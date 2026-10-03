@@ -130,7 +130,7 @@ export function MatchEditor({ data, onChange }: MatchEditorProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="text-danger hover:bg-danger-50"
+              className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
               onClick={() => removeDummy(i)}
             >
               Remove

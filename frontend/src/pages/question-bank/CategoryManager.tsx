@@ -276,7 +276,7 @@ function CategoryTreeRow({
             <button
               type="button"
               onClick={() => onDelete(node)}
-              className="flex h-6 w-6 items-center justify-center rounded text-danger hover:bg-danger-50"
+              className="flex h-6 w-6 items-center justify-center rounded text-danger-600 hover:bg-danger-50 hover:text-danger-700"
               aria-label="Delete category"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -427,7 +427,7 @@ function CategoryFormModal({
           <Label htmlFor="cat-parent">Parent category (optional)</Label>
           <select
             id="cat-parent"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={parent}
             onChange={(e) => setParent(e.target.value ? Number(e.target.value) : "")}
           >
@@ -447,7 +447,7 @@ function CategoryFormModal({
             onChange={(e) => setDesc(e.target.value)}
             placeholder="Brief description of what questions in this category cover"
             rows={3}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           />
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
@@ -502,7 +502,7 @@ function DeleteCategoryModal({
         <textarea
           id="del-cat-reason"
           rows={2}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Why remove this category? A non-admin's request is reviewed by a CJ Admin (D1 §4.3)."

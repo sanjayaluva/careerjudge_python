@@ -223,7 +223,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
             <Label htmlFor="display_mode">Display Mode</Label>
             <select
               id="display_mode"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               value={data.display_mode}
               onChange={(e) =>
                 onChange({
@@ -267,7 +267,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
           <Label htmlFor="replay_mode">Replay Mode</Label>
           <select
             id="replay_mode"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             value={data.replay_mode}
             onChange={(e) =>
               onChange({
@@ -289,7 +289,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
         <Label htmlFor="option_layout">Option Layout</Label>
         <select
           id="option_layout"
-          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+          className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           value={data.option_layout}
           onChange={(e) =>
             onChange({
@@ -325,7 +325,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
                 const n = Math.max(1, Math.min(10, Number(e.target.value) || 1));
                 onChange({ ...data, sub_question_count: n });
               }}
-              className="h-10 w-24 rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 w-24 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
             />
             <span className="text-xs text-slate-500">
               {data.sub_question_count && data.sub_question_count > 1
@@ -398,7 +398,7 @@ export function MCQEditor({ questionType, data, onChange }: MCQEditorProps) {
         <Label htmlFor="stype">Scoring type</Label>
         <select
           id="stype"
-          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+          className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           value={data.scoring_type}
           onChange={(e) => onChange({ ...data, scoring_type: e.target.value })}
         >

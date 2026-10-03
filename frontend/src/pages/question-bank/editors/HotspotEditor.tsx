@@ -448,7 +448,7 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
       <div>
         <Label>Scoring type</Label>
         <select
-          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+          className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           value={data.scoring_type}
           onChange={(e) => onChange({ ...data, scoring_type: e.target.value })}
         >
@@ -471,7 +471,7 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
         <Label htmlFor="hotspot_visibility">Hotspot Visibility</Label>
         <select
           id="hotspot_visibility"
-          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+          className="cj-select h-10 w-full appearance-none rounded-md border border-slate-300 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           value={data.hotspot_visibility}
           onChange={(e) =>
             onChange({
@@ -556,7 +556,7 @@ export function HotspotEditor({ questionType, data, onChange }: HotspotEditorPro
                   setDrawMode(null);
                   setDrawingArea(null);
                 }}
-                className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
+                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
               >
                 ✕ Cancel draw
               </button>
